@@ -25,7 +25,12 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
-        <Route index element={<Home />} />
+        <Route index element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
+        <Route path="home" element={<Home />} />
         
         {/* Public Routes */}
         <Route
