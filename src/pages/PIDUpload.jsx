@@ -70,29 +70,104 @@ const PIDUpload = () => {
     setUploading(true);
     setError('');
 
+    // Create FormData with proper type handling
     const formDataToSend = new FormData();
     formDataToSend.append('file', file);
-    formDataToSend.append('drawing_number', formData.drawing_number);
-    formDataToSend.append('drawing_title', formData.drawing_title);
-    formDataToSend.append('revision', formData.revision);
-    formDataToSend.append('project_name', formData.project_name);
-    formDataToSend.append('auto_analyze', formData.auto_analyze);
+    
+    // Only append non-empty optional fields
+    if (formData.drawing_number?.trim()) {
+      formDataToSend.append('drawing_number', formData.drawing_number.trim());
+    }
+    if (formData.drawing_title?.trim()) {
+      formDataToSend.append('drawing_title', formData.drawing_title.trim());
+    }
+    if (formData.revision?.trim()) {
+      formDataToSend.append('revision', formData.revision.trim());
+    }
+    if (formData.project_name?.trim()) {
+      formDataToSend.append('project_name', formData.project_name.trim());
+    }
+    
+    // CRITICAL: Convert boolean to string for DRF BooleanField
+    formDataToSend.append('auto_analyze', formData.auto_analyze ? 'true' : 'false');
 
     try {
+      console.log('[DEBUG] ===== UPLOAD REQUEST =====');
+      console.log('[DEBUG] File:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified).toISOString()
+      });
+      console.log('[DEBUG] FormData fields:');
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(`  ${key}:`, typeof value === 'object' ? `[File: ${value.name}]` : value);
+      }
+      console.log('[DEBUG] API Endpoint:', apiClient.defaults.baseURL + '/pid/drawings/upload/');
+      
       const response = await apiClient.post(
         '/pid/drawings/upload/',
         formDataToSend,
         {
           headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+            // Let axios set Content-Type with boundary automatically
+          },
+          timeout: 120000, // 2 minutes for large file uploads
         }
       );
 
+      console.log('[DEBUG] ===== UPLOAD SUCCESS =====');
+      console.log('[DEBUG] Response:', response.data);
+      
+      // Validate response structure
+      if (!response.data || !response.data.id) {
+        throw new Error('Invalid server response: missing drawing ID');
+      }
+      
       // Navigate to report page
       navigate(`/pid/report/${response.data.id}`);
     } catch (err) {
-      setError(err.response?.data?.error || 'Upload failed. Please try again.');
+      console.error('[ERROR] ===== UPLOAD FAILED =====');
+      console.error('[ERROR] Full error:', err);
+      console.error('[ERROR] Response status:', err.response?.status);
+      console.error('[ERROR] Response data:', err.response?.data);
+      console.error('[ERROR] Request config:', err.config);
+      
+      // Handle different error scenarios with detailed messages
+      let errorMessage = 'Upload failed. Please try again.';
+      
+      if (err.response?.status === 400) {
+        // Validation error - show detailed field errors
+        const validationErrors = err.response.data;
+        if (typeof validationErrors === 'object') {
+          const fieldErrors = Object.entries(validationErrors)
+            .map(([field, errors]) => {
+              const errorMsg = Array.isArray(errors) ? errors[0] : errors;
+              return `${field}: ${errorMsg}`;
+            })
+            .join(', ');
+          errorMessage = `Validation error: ${fieldErrors}`;
+        } else {
+          errorMessage = `Validation error: ${validationErrors}`;
+        }
+      } else if (err.response?.data?.error) {
+        errorMessage = `Analysis failed: ${err.response.data.error}`;
+      } else if (err.response?.status === 401) {
+        errorMessage = 'Authentication required. Please login again.';
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (err.response?.status === 413) {
+        errorMessage = 'File too large. Maximum size is 50MB.';
+      } else if (err.response?.status === 415) {
+        errorMessage = 'Invalid file type. Only PDF files are accepted.';
+      } else if (err.response?.status === 500) {
+        errorMessage = 'Server error. Please check the file and try again.';
+      } else if (err.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timeout. Please try a smaller file or check your connection.';
+      } else if (!err.response) {
+        errorMessage = 'Network error. Please check your connection.';
+      }
+      
+      setError(errorMessage);
       setUploading(false);
     }
   };
