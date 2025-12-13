@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../services/api.service';
 
 const PIDReport = () => {
   const { id } = useParams();
@@ -19,25 +18,13 @@ const PIDReport = () => {
 
   const fetchReport = async () => {
     try {
-      const token = localStorage.getItem('token');
-      
       // Fetch drawing details
-      const drawingResponse = await axios.get(
-        `${API_BASE_URL}/pid/drawings/${id}/`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      );
+      const drawingResponse = await apiClient.get(`/pid/drawings/${id}/`);
       setDrawing(drawingResponse.data);
 
       // Fetch report if available
       if (drawingResponse.data.status === 'completed') {
-        const reportResponse = await axios.get(
-          `${API_BASE_URL}/pid/drawings/${id}/report/`,
-          {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }
-        );
+        const reportResponse = await apiClient.get(`/pid/drawings/${id}/report/`);
         setReport(reportResponse.data);
       }
       
@@ -50,13 +37,9 @@ const PIDReport = () => {
 
   const handleIssueAction = async (issueId, action, remark = '') => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `${API_BASE_URL}/pid/issues/${issueId}/${action}/`,
-        { remark },
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
+      await apiClient.post(
+        `/pid/issues/${issueId}/${action}/`,
+        { remark }
       );
       
       // Refresh report

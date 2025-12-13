@@ -45,6 +45,15 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+        
+        if (!refreshToken) {
+          // No refresh token, redirect to login
+          localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+          localStorage.removeItem(STORAGE_KEYS.USER_DATA)
+          window.location.href = '/login'
+          return Promise.reject(error)
+        }
+        
         const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
           refresh: refreshToken,
         })
@@ -59,17 +68,21 @@ apiClient.interceptors.response.use(
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
         localStorage.removeItem(STORAGE_KEYS.USER_DATA)
+        
+        // Don't show toast when redirecting to login
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }
     }
 
-    // Show error toast
-    const errorMessage = error.response?.data?.detail || 
-                        error.response?.data?.message || 
-                        error.message || 
-                        'An error occurred'
-    toast.error(errorMessage)
+    // Show error toast for other errors (not 401 redirects)
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'An error occurred'
+      toast.error(errorMessage)
+    }
 
     return Promise.reject(error)
   }

@@ -146,7 +146,7 @@ const Login = () => {
                     <Field
                       name="email"
                       type="email"
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all ${
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 transition-all ${
                         errors.email && touched.email ? 'border-red-500 focus:ring-red-500' : 'border-gray-300'
                       }`}
                       placeholder="engineer@company.com"
@@ -172,7 +172,7 @@ const Login = () => {
                     <Field
                       name="password"
                       type="password"
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all ${
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 transition-all ${
                         errors.password && touched.password ? 'border-red-500 focus:ring-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Enter your password"

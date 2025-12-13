@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../services/api.service';
 
 const PIDUpload = () => {
   const navigate = useNavigate();
@@ -80,13 +79,11 @@ const PIDUpload = () => {
     formDataToSend.append('auto_analyze', formData.auto_analyze);
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `${API_BASE_URL}/pid/drawings/upload/`,
+      const response = await apiClient.post(
+        '/pid/drawings/upload/',
         formDataToSend,
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         }
