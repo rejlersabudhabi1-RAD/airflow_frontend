@@ -2,6 +2,7 @@
   "name": "aiflow-frontend",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Smart ReactJS frontend for AIFlow application",
   "dependencies": {
     "react": "^18.2.0",
