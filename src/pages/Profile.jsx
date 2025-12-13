@@ -40,16 +40,16 @@ const Profile = () => {
   }
 
   return (
-    <div className="container-custom py-16">
-      <div className="max-w-2xl mx-auto">
-        <div className="card">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+            <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               My Profile
             </h2>
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="btn-secondary text-sm"
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg transition-all transform hover:scale-105 w-full sm:w-auto"
             >
               {isEditing ? 'Cancel' : 'Edit Profile'}
             </button>
@@ -69,14 +69,14 @@ const Profile = () => {
             {() => (
               <Form className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Email
                   </label>
                   <input
                     type="email"
                     value={user?.email || ''}
                     disabled
-                    className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-100 cursor-not-allowed text-gray-600"
                   />
                 </div>
 

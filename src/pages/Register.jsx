@@ -45,12 +45,15 @@ const Register = () => {
   }
 
   return (
-    <div className="container-custom py-16">
-      <div className="max-w-md mx-auto">
-        <div className="card">
-          <h2 className="text-3xl font-bold text-center mb-6 text-gray-900 dark:text-white">
-            Create Account
-          </h2>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full mx-auto">
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+              Create Account
+            </h2>
+            <p className="text-gray-600">Join REJLERS AIFLOW Platform</p>
+          </div>
 
           <Formik
             initialValues={{
@@ -67,12 +70,12 @@ const Register = () => {
             {({ errors, touched }) => (
               <Form className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Username *
                   </label>
                   <Field
                     name="username"
-                    className={`input-field ${errors.username && touched.username ? 'border-red-500' : ''}`}
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-gray-50 text-gray-900 transition-all ${errors.username && touched.username ? 'border-red-400 focus:ring-red-100' : 'border-gray-200'}`}
                     placeholder="Choose a username"
                   />
                   <ErrorMessage

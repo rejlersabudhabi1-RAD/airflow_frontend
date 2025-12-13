@@ -3,11 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import { toggleTheme } from '../../store/slices/themeSlice'
-import { APP_NAME } from '../../config/app.config'
 
 /**
- * Header Component
- * Smart navigation header with authentication state
+ * Header Component - REJLERS AIFLOW
+ * Premium navigation header with REJLERS branding
  */
 
 const Header = () => {
@@ -26,17 +25,25 @@ const Header = () => {
   }
 
   return (
-    <header className="bg-white dark:bg-gray-800 shadow-md">
-      <nav className="container-custom py-4">
+    <header className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b border-white/10">
+      <nav className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {APP_NAME}
+          <Link to="/" className="flex items-center space-x-3 group">
+            <div className="flex items-center space-x-2">
+              <span className="text-2xl font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                REJLERS
+              </span>
+              <div className="h-6 w-px bg-amber-400"></div>
+              <span className="text-xl font-bold bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
+                AIFLOW
+              </span>
+            </div>
           </Link>
 
           <div className="flex items-center space-x-6">
             <button
               onClick={handleThemeToggle}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all transform hover:scale-110"
               aria-label="Toggle theme"
             >
               {mode === 'light' ? '🌙' : '☀️'}
@@ -46,22 +53,22 @@ const Header = () => {
               <>
                 <Link
                   to="/dashboard"
-                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >
                   Dashboard
                 </Link>
                 <Link
                   to="/profile"
-                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >
                   Profile
                 </Link>
-                <span className="text-gray-600 dark:text-gray-400">
+                <span className="text-blue-200 font-medium">
                   Hello, {user?.username || 'User'}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="btn-secondary text-sm"
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold rounded-lg transition-all transform hover:scale-105"
                 >
                   Logout
                 </button>
@@ -70,11 +77,14 @@ const Header = () => {
               <>
                 <Link
                   to="/login"
-                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >
                   Login
                 </Link>
-                <Link to="/register" className="btn-primary text-sm">
+                <Link 
+                  to="/register" 
+                  className="px-5 py-2 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-gray-900 font-bold rounded-lg shadow-lg hover:shadow-amber-500/50 transition-all transform hover:scale-105"
+                >
                   Register
                 </Link>
               </>
@@ -87,3 +97,4 @@ const Header = () => {
 }
 
 export default Header
+
