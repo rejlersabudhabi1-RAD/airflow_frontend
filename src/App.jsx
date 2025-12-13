@@ -7,6 +7,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import PIDUpload from './pages/PIDUpload'
+import PIDReport from './pages/PIDReport'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -64,6 +66,22 @@ function App() {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pid/upload"
+          element={
+            <ProtectedRoute>
+              <PIDUpload />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pid/report/:id"
+          element={
+            <ProtectedRoute>
+              <PIDReport />
             </ProtectedRoute>
           }
         />
