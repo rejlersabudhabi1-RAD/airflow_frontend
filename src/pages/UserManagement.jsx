@@ -31,8 +31,12 @@ const UserManagement = () => {
   }, [dispatch]);
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         `${user.user.first_name} ${user.user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
+    // Safe access to user properties with fallback
+    const userEmail = user?.email || user?.user?.email || '';
+    const userFullName = user?.full_name || `${user?.user?.first_name || ''} ${user?.user?.last_name || ''}`.trim();
+    
+    const matchesSearch = userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         userFullName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -171,13 +175,13 @@ const UserManagement = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">
-                          {user.user.first_name?.[0]}{user.user.last_name?.[0]}
+                          {(user?.full_name || user?.email || 'U')[0]?.toUpperCase()}
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {user.user.first_name} {user.user.last_name}
+                            {user?.full_name || user?.email || 'Unknown User'}
                           </div>
-                          <div className="text-sm text-gray-500">{user.user.email}</div>
+                          <div className="text-sm text-gray-500">{user?.email || user?.user?.email || 'No email'}</div>
                         </div>
                       </div>
                     </td>
@@ -187,22 +191,12 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
-                        {user.role_ids && user.role_ids.length > 0 ? (
-                          user.role_ids.slice(0, 2).map((roleId) => {
-                            const role = roles.find(r => r.id === roleId);
-                            return role ? (
-                              <span key={roleId} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                                {role.name}
-                              </span>
-                            ) : null;
-                          })
+                        {user?.primary_role ? (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                            {user.primary_role.name}
+                          </span>
                         ) : (
                           <span className="text-sm text-gray-500">No roles</span>
-                        )}
-                        {user.role_ids && user.role_ids.length > 2 && (
-                          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                            +{user.role_ids.length - 2}
-                          </span>
                         )}
                       </div>
                     </td>
