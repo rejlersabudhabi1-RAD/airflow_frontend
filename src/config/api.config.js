@@ -3,13 +3,36 @@
  * Smart configuration for API endpoints and settings
  */
 
-// Prefer explicit env var `VITE_API_URL`. If not provided, derive from the current origin.
-const deriveBaseFromWindow = () => {
-  if (typeof window === 'undefined') return 'http://localhost:8000/api/v1'
-  return `${window.location.origin.replace(/:\d+$/, '')}/api/v1`
+// Production backend URL (Railway)
+const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/v1'
+
+// Determine API base URL
+const getApiBaseUrl = () => {
+  // 1. Check for explicit environment variable (highest priority)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  
+  // 2. If running on Vercel (production), use Railway backend
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return PRODUCTION_API_URL
+  }
+  
+  // 3. For localhost, use local backend
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:8000/api/v1'
+  }
+  
+  // 4. Default fallback to production
+  return PRODUCTION_API_URL
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || deriveBaseFromWindow()
+export const API_BASE_URL = getApiBaseUrl()
+
+// Log API URL for debugging
+console.log('[API Config] API Base URL:', API_BASE_URL)
+console.log('[API Config] Environment:', import.meta.env.MODE)
+console.log('[API Config] VITE_API_URL:', import.meta.env.VITE_API_URL)
 
 export const API_ENDPOINTS = {
   // Auth endpoints
