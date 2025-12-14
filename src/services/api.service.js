@@ -18,7 +18,10 @@ const apiClient = axios.create({
   withCredentials: true, // Enable CORS credentials
 })
 
-console.log('[API Service] Axios client initialized with baseURL:', API_BASE_URL)
+console.log('[API Service] Axios client initialized')
+console.log('[API Service] Base URL:', API_BASE_URL)
+console.log('[API Service] Timeout:', API_TIMEOUT)
+console.log('[API Service] With Credentials:', true)
 
 // Request interceptor - Add auth token to requests
 apiClient.interceptors.request.use(

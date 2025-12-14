@@ -10,24 +10,32 @@ const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/
 const getApiBaseUrl = () => {
   // 1. Check for explicit environment variable (highest priority)
   if (import.meta.env.VITE_API_URL) {
+    console.log('[API Config] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
     return import.meta.env.VITE_API_URL
   }
   
   // 2. If running on Vercel (production), use Railway backend
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    console.log('[API Config] Detected Vercel deployment, using Railway backend:', PRODUCTION_API_URL)
     return PRODUCTION_API_URL
   }
   
   // 3. For localhost, use local backend
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return 'http://localhost:8000/api/v1'
+    const localUrl = 'http://localhost:8000/api/v1'
+    console.log('[API Config] Detected localhost, using local backend:', localUrl)
+    return localUrl
   }
   
   // 4. Default fallback to production
+  console.log('[API Config] Using default production backend:', PRODUCTION_API_URL)
   return PRODUCTION_API_URL
 }
 
 export const API_BASE_URL = getApiBaseUrl()
+
+// Log the final API URL
+console.log('[API Config] Final API_BASE_URL:', API_BASE_URL)
 
 // Log API URL for debugging
 console.log('[API Config] API Base URL:', API_BASE_URL)

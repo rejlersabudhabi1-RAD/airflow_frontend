@@ -27,13 +27,24 @@ const Login = () => {
     dispatch(loginStart())
 
     try {
+      console.log('[Login] Attempting login with email:', values.email)
       const userData = await authService.login(values)
+      console.log('[Login] Login successful, user data:', userData)
       dispatch(loginSuccess(userData))
       toast.success('Login successful!')
       navigate('/dashboard')
     } catch (error) {
-      dispatch(loginFailure(error.response?.data?.detail || 'Login failed'))
-      toast.error('Login failed. Please check your credentials.')
+      console.error('[Login] Login failed:', error)
+      console.error('[Login] Error response:', error.response)
+      console.error('[Login] Error message:', error.message)
+      
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Network error. Please check your connection.'
+      
+      dispatch(loginFailure(errorMessage))
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
