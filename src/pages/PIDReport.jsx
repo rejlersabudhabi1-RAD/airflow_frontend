@@ -49,6 +49,48 @@ const PIDReport = () => {
     }
   };
 
+  const handleIssueUpdate = async (issueId, field, value) => {
+    try {
+      await apiClient.patch(`/pid/issues/${issueId}/`, { [field]: value });
+      // Refresh report
+      fetchReport();
+    } catch (err) {
+      console.error(`Failed to update issue:`, err);
+    }
+  };
+
+  const handleExport = async (format) => {
+    try {
+      const response = await apiClient.get(
+        `/pid/drawings/${id}/export/?format=${format}`,
+        { responseType: 'blob' }
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const filename = `PID_Analysis_${drawing.drawing_number || 'Report'}_${new Date().toISOString().split('T')[0]}`;
+      
+      if (format === 'pdf') {
+        link.setAttribute('download', `${filename}.pdf`);
+      } else if (format === 'excel') {
+        link.setAttribute('download', `${filename}.xlsx`);
+      } else if (format === 'csv') {
+        link.setAttribute('download', `${filename}.csv`);
+      }
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(`Failed to export as ${format}:`, err);
+      alert(`Failed to export report as ${format}. Please try again.`);
+    }
+  };
+
   const getSeverityColor = (severity) => {
     const colors = {
       critical: 'text-red-700 bg-red-100 border-red-300',
@@ -101,11 +143,29 @@ const PIDReport = () => {
   return (
     <div className="max-w-7xl mx-auto p-6">
       
+      {/* Rejlers Professional Header */}
+      <div className="mb-8 bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-lg shadow-xl p-6 text-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-4xl font-black mb-1">REJLERS</h1>
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="h-1 w-16 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"></div>
+              <span className="text-amber-300 text-lg font-semibold">ABU DHABI</span>
+            </div>
+            <p className="text-blue-200 text-sm">Engineering & Design Consultancy</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-blue-200">P&ID Analysis Report</p>
+            <p className="text-xs text-blue-300 mt-1">Generated: {new Date().toLocaleDateString('en-GB')}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate('/dashboard')}
-          className="text-blue-600 hover:text-blue-800 mb-4 flex items-center"
+          className="text-blue-600 hover:text-blue-800 mb-4 flex items-center font-medium"
         >
           <svg className="h-5 w-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
@@ -113,12 +173,54 @@ const PIDReport = () => {
           Back to Dashboard
         </button>
         
-        <h1 className="text-3xl font-bold text-gray-900">P&ID Analysis Report</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">P&ID Design Verification Report</h1>
+          
+          {/* Export Buttons */}
+          {report && (
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleExport('pdf')}
+                className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-md transition-colors"
+              >
+                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                </svg>
+                Export PDF
+              </button>
+              <button
+                onClick={() => handleExport('excel')}
+                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-md transition-colors"
+              >
+                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                Export Excel
+              </button>
+              <button
+                onClick={() => handleExport('csv')}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-md transition-colors"
+              >
+                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
+                  <path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                </svg>
+                Export CSV
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Drawing Information */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Drawing Information</h2>
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6 border-l-4 border-blue-900">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+          <svg className="h-6 w-6 mr-2 text-blue-900" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+            <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+          </svg>
+          Drawing Information
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-500">Drawing Number</p>
@@ -230,79 +332,104 @@ const PIDReport = () => {
           </div>
 
           {/* Issues Table */}
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="bg-white rounded-lg shadow-md overflow-hidden border-l-4 border-amber-500">
+            <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Detailed Issues & Observations</h3>
+              <p className="text-sm text-gray-600 mt-1">Review and manage each identified issue</p>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       #
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       P&ID Reference
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Issue Observed
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Action Required
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Severity
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredIssues.map((issue) => (
-                    <tr key={issue.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {filteredIssues.map((issue, idx) => (
+                    <tr key={issue.id} className={`hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                         {issue.serial_number}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        <span className="font-medium">{issue.pid_reference}</span>
+                      <td className="px-4 py-4 text-sm text-gray-900">
+                        <span className="font-semibold text-blue-900">{issue.pid_reference}</span>
                         {issue.category && (
-                          <span className="block text-xs text-gray-500">{issue.category}</span>
+                          <span className="block text-xs text-gray-500 mt-1 italic">{issue.category}</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
+                      <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
                         {issue.issue_observed}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
+                      <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
                         {issue.action_required}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${getSeverityColor(issue.severity)}`}>
-                          {issue.severity.charAt(0).toUpperCase() + issue.severity.slice(1)}
-                        </span>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <select
+                          value={issue.severity}
+                          onChange={(e) => handleIssueUpdate(issue.id, 'severity', e.target.value)}
+                          className={`w-full px-3 py-1.5 text-xs font-semibold rounded-md border-2 ${getSeverityColor(issue.severity)} cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
+                        >
+                          <option value="critical">Critical</option>
+                          <option value="major">Major</option>
+                          <option value="minor">Minor</option>
+                          <option value="observation">Observation</option>
+                        </select>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(issue.status)}`}>
-                          {issue.status.charAt(0).toUpperCase() + issue.status.slice(1)}
-                        </span>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <select
+                          value={issue.status}
+                          onChange={(e) => handleIssueUpdate(issue.id, 'status', e.target.value)}
+                          className={`w-full px-3 py-1.5 text-xs font-semibold rounded-md ${getStatusColor(issue.status)} cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 border-2 transition-all`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="ignored">Ignored</option>
+                        </select>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {issue.status === 'pending' && (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleIssueAction(issue.id, 'approve')}
-                              className="text-green-600 hover:text-green-800 font-medium"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleIssueAction(issue.id, 'ignore')}
-                              className="text-gray-600 hover:text-gray-800 font-medium"
-                            >
-                              Ignore
-                            </button>
-                          </div>
-                        )}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleIssueAction(issue.id, 'approve')}
+                            className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                              issue.status === 'approved' 
+                                ? 'bg-green-100 text-green-700 cursor-default' 
+                                : 'bg-green-600 text-white hover:bg-green-700'
+                            }`}
+                            disabled={issue.status === 'approved'}
+                          >
+                            {issue.status === 'approved' ? '✓ Approved' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={() => handleIssueAction(issue.id, 'ignore')}
+                            className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                              issue.status === 'ignored' 
+                                ? 'bg-gray-100 text-gray-700 cursor-default' 
+                                : 'bg-gray-600 text-white hover:bg-gray-700'
+                            }`}
+                            disabled={issue.status === 'ignored'}
+                          >
+                            {issue.status === 'ignored' ? '✓ Ignored' : 'Ignore'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -311,9 +438,26 @@ const PIDReport = () => {
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="mt-6 text-center text-sm text-gray-500">
-            Generated from P&ID Analysis System | Confidential Engineering Document
+          {/* Professional Footer */}
+          <div className="mt-8 bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-lg shadow-lg p-6 text-white">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black mb-1">REJLERS ABU DHABI</h3>
+                <p className="text-blue-200 text-sm">Engineering & Design Consultancy</p>
+                <p className="text-blue-300 text-xs mt-2">
+                  This is a confidential engineering document. Unauthorized distribution is prohibited.
+                </p>
+              </div>
+              <div className="text-right text-sm">
+                <p className="text-blue-200">AI-Powered P&ID Verification System</p>
+                <p className="text-blue-300 text-xs mt-1">Generated: {new Date().toLocaleString('en-GB')}</p>
+                <p className="text-blue-400 text-xs mt-2">
+                  <a href="https://www.rejlers.com/ae/" target="_blank" rel="noopener noreferrer" className="hover:text-amber-300 transition-colors">
+                    www.rejlers.com/ae
+                  </a>
+                </p>
+              </div>
+            </div>
           </div>
         </>
       )}
