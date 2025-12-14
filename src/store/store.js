@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import authReducer from './slices/authSlice'
 import userReducer from './slices/userSlice'
 import themeReducer from './slices/themeSlice'
+import rbacReducer from './slices/rbacSlice'
 
 /**
  * Redux Store Configuration
@@ -13,6 +14,7 @@ export const store = configureStore({
     auth: authReducer,
     user: userReducer,
     theme: themeReducer,
+    rbac: rbacReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

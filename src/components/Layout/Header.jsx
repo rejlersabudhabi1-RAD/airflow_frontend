@@ -58,6 +58,12 @@ const Header = () => {
                   Dashboard
                 </Link>
                 <Link
+                  to="/admin"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  Admin
+                </Link>
+                <Link
                   to="/profile"
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >

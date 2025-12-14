@@ -9,6 +9,8 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
+import AdminDashboard from './pages/AdminDashboard'
+import UserManagement from './pages/UserManagement'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -82,6 +84,24 @@ function App() {
           element={
             <ProtectedRoute>
               <PIDReport />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin Routes */}
+        <Route
+          path="admin"
+          element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/users"
+          element={
+            <ProtectedRoute>
+              <UserManagement />
             </ProtectedRoute>
           }
         />
