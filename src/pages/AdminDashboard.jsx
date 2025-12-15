@@ -11,6 +11,7 @@ const AdminDashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { currentUser, stats, loading } = useSelector((state) => state.rbac);
+  const { user: authUser } = useSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -18,12 +19,16 @@ const AdminDashboard = () => {
     dispatch(fetchUserStats());
   }, [dispatch]);
 
-  // Check if user has admin access
-  const hasAdminAccess = currentUser?.roles?.some(
+  // Check if user has admin access via RBAC roles OR Django superuser/staff flags
+  const hasRBACAdminRole = currentUser?.roles?.some(
     role => ['super_admin', 'admin'].includes(role.code)
   );
+  
+  const isDjangoSuperuser = authUser?.is_superuser || authUser?.is_staff;
+  
+  const hasAdminAccess = hasRBACAdminRole || isDjangoSuperuser;
 
-  if (!hasAdminAccess && !loading) {
+  if (!hasAdminAccess && !loading && currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
