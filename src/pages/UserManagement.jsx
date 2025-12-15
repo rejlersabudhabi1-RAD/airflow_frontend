@@ -43,19 +43,37 @@ const UserManagement = () => {
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
+    
+    // Validation
+    if (!formData.email || !formData.password || !formData.first_name || !formData.last_name) {
+      alert('Please fill in all required fields (Email, Password, First Name, Last Name)');
+      return;
+    }
+    
+    if (formData.password.length < 8) {
+      alert('Password must be at least 8 characters long');
+      return;
+    }
+    
+    if (formData.role_ids.length === 0) {
+      alert('Please select at least one role for the user');
+      return;
+    }
+    
     try {
+      // Send flattened data structure
       await rbacService.createUser({
-        user: {
-          email: formData.email,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          password: formData.password
-        },
+        email: formData.email,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        password: formData.password,
         department: formData.department,
         job_title: formData.job_title,
         phone: formData.phone_number,
         role_ids: formData.role_ids
       });
+      
+      alert('User created successfully!');
       setShowCreateModal(false);
       dispatch(fetchUsers());
       setFormData({
@@ -70,6 +88,29 @@ const UserManagement = () => {
       });
     } catch (error) {
       console.error('Failed to create user:', error);
+      
+      // Extract error message
+      let errorMessage = 'Failed to create user. Please try again.';
+      if (error.response?.data) {
+        if (typeof error.response.data === 'object') {
+          // Handle validation errors
+          const errors = [];
+          for (const [field, messages] of Object.entries(error.response.data)) {
+            if (Array.isArray(messages)) {
+              errors.push(`${field}: ${messages.join(', ')}`);
+            } else {
+              errors.push(`${field}: ${messages}`);
+            }
+          }
+          errorMessage = errors.join('\n');
+        } else {
+          errorMessage = error.response.data;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     }
   };
 
