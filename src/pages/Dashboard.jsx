@@ -111,6 +111,59 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* PFD to P&ID Converter Section - NEW FEATURE */}
+        <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl shadow-2xl p-6 sm:p-8 mb-8">
+          <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
+            <div className="flex-1">
+              <h2 className="text-2xl sm:text-3xl font-bold mb-3 text-white flex items-center">
+                <svg className="h-8 w-8 mr-3 text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                PFD to P&ID Converter
+                <span className="ml-3 px-2 py-1 bg-yellow-400 text-purple-900 text-xs font-bold rounded-full">NEW</span>
+              </h2>
+              <p className="text-purple-100 mb-4 text-base sm:text-lg">
+                AI-powered intelligent conversion from Process Flow Diagrams to detailed P&IDs
+              </p>
+              <ul className="text-sm text-purple-50 space-y-2 mb-6">
+                <li className="flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Auto-generate instrumentation & control loops
+                </li>
+                <li className="flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Intelligent piping & valve specifications
+                </li>
+                <li className="flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Standards-compliant safety systems (PSVs, ESD)
+                </li>
+                <li className="flex items-center">
+                  <svg className="h-4 w-4 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  ADNOC DEP & API standard compliance
+                </li>
+              </ul>
+            </div>
+            <button
+              onClick={() => navigate('/pfd/upload')}
+              className="ml-6 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center shadow-lg"
+            >
+              <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Upload PFD
+            </button>
+          </div>
+        </div>
+
         <div className="card">
           <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
             Recent Activity

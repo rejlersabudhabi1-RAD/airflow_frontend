@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
+import PFDUpload from './pages/PFDUpload'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import NotFound from './pages/NotFound'
@@ -84,6 +85,14 @@ function App() {
           element={
             <ProtectedRoute>
               <PIDReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/upload"
+          element={
+            <ProtectedRoute>
+              <PFDUpload />
             </ProtectedRoute>
           }
         />
