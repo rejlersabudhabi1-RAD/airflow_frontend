@@ -63,31 +63,71 @@ const PIDReport = () => {
     try {
       const response = await apiClient.get(
         `/pid/drawings/${id}/export/?format=${format}`,
-        { responseType: 'blob' }
+        { 
+          responseType: 'blob',
+          // Don't transform blob responses
+          transformResponse: [(data) => data]
+        }
       );
       
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      
-      const filename = `PID_Analysis_${drawing.drawing_number || 'Report'}_${new Date().toISOString().split('T')[0]}`;
-      
-      if (format === 'pdf') {
-        link.setAttribute('download', `${filename}.pdf`);
-      } else if (format === 'excel') {
-        link.setAttribute('download', `${filename}.xlsx`);
-      } else if (format === 'csv') {
-        link.setAttribute('download', `${filename}.csv`);
+      // Check if response is actually a blob
+      if (!(response.data instanceof Blob)) {
+        console.error('Response is not a blob:', response.data);
+        alert(`Failed to export report as ${format}. Invalid response format.`);
+        return;
       }
       
+      // Get filename from Content-Disposition header or use default
+      let filename = `PID_Analysis_${drawing.drawing_number || 'Report'}_${new Date().toISOString().split('T')[0]}`;
+      
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      } else {
+        // Add extension if not from header
+        if (format === 'pdf') {
+          filename = `${filename}.pdf`;
+        } else if (format === 'excel') {
+          filename = `${filename}.xlsx`;
+        } else if (format === 'csv') {
+          filename = `${filename}.csv`;
+        }
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      
+      // Trigger download
       document.body.appendChild(link);
       link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
     } catch (err) {
       console.error(`Failed to export as ${format}:`, err);
-      alert(`Failed to export report as ${format}. Please try again.`);
+      
+      // Check if error response is JSON (error message from backend)
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const errorData = JSON.parse(text);
+          alert(`Failed to export: ${errorData.error || errorData.detail || 'Unknown error'}`);
+        } catch {
+          alert(`Failed to export report as ${format}. Please try again.`);
+        }
+      } else {
+        alert(`Failed to export report as ${format}. Please try again.`);
+      }
     }
   };
 
