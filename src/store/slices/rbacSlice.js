@@ -115,32 +115,70 @@ const rbacSlice = createSlice({
       })
       .addCase(fetchUsers.fulfilled, (state, action) => {
         state.loading = false;
-        state.users = action.payload.results || action.payload;
-        state.usersCount = action.payload.count || action.payload.length;
+        const payload = action.payload;
+        state.users = Array.isArray(payload) ? payload : (payload.results || []);
+        state.usersCount = payload.count || (Array.isArray(payload) ? payload.length : 0);
       })
       .addCase(fetchUsers.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+        state.users = []; // Ensure users is always an array
+        state.usersCount = 0;
       })
       
       // Roles
+      .addCase(fetchRoles.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(fetchRoles.fulfilled, (state, action) => {
-        state.roles = action.payload;
+        state.loading = false;
+        state.roles = Array.isArray(action.payload) ? action.payload : (action.payload.results || []);
+      })
+      .addCase(fetchRoles.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.roles = []; // Ensure roles is always an array
       })
       
       // Permissions
+      .addCase(fetchPermissions.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(fetchPermissions.fulfilled, (state, action) => {
-        state.permissions = action.payload;
+        state.loading = false;
+        state.permissions = Array.isArray(action.payload) ? action.payload : (action.payload.results || []);
+      })
+      .addCase(fetchPermissions.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.permissions = []; // Ensure permissions is always an array
       })
       
       // Modules
+      .addCase(fetchModules.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(fetchModules.fulfilled, (state, action) => {
-        state.modules = action.payload;
+        state.loading = false;
+        state.modules = Array.isArray(action.payload) ? action.payload : (action.payload.results || []);
+      })
+      .addCase(fetchModules.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.modules = []; // Ensure modules is always an array
       })
       
       // Stats
+      .addCase(fetchUserStats.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(fetchUserStats.fulfilled, (state, action) => {
+        state.loading = false;
         state.stats = action.payload;
+      })
+      .addCase(fetchUserStats.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   }
 });
