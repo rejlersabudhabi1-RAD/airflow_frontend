@@ -151,7 +151,19 @@ const PIDUpload = () => {
           errorMessage = `Validation error: ${validationErrors}`;
         }
       } else if (err.response?.data?.error) {
-        errorMessage = `Analysis failed: ${err.response.data.error}`;
+        // Backend returned a specific error message
+        const backendError = err.response.data.error;
+        
+        // Check for OpenAI-specific errors
+        if (backendError.includes('OpenAI') || backendError.includes('API key')) {
+          errorMessage = '⚠️ Configuration Error: OpenAI service is not configured on the server. Please contact the administrator.';
+        } else if (backendError.includes('quota') || backendError.includes('credits')) {
+          errorMessage = '⚠️ Service Limit: Analysis service has reached its usage limit. Please contact the administrator.';
+        } else if (backendError.includes('rate limit')) {
+          errorMessage = 'Analysis service is busy. Please wait a moment and try again.';
+        } else {
+          errorMessage = `Analysis failed: ${backendError}`;
+        }
       } else if (err.response?.status === 401) {
         errorMessage = 'Authentication required. Please login again.';
         setTimeout(() => navigate('/login'), 2000);
