@@ -274,7 +274,7 @@ const PIDUpload = () => {
                 value={formData.drawing_number}
                 onChange={handleInputChange}
                 placeholder="e.g., 16-01-08-1678-1"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
               />
             </div>
 
@@ -288,7 +288,7 @@ const PIDUpload = () => {
                 value={formData.revision}
                 onChange={handleInputChange}
                 placeholder="e.g., Rev 01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
               />
             </div>
 
@@ -302,7 +302,7 @@ const PIDUpload = () => {
                 value={formData.drawing_title}
                 onChange={handleInputChange}
                 placeholder="e.g., Compressor Package"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
               />
             </div>
 
@@ -316,7 +316,7 @@ const PIDUpload = () => {
                 value={formData.project_name}
                 onChange={handleInputChange}
                 placeholder="e.g., ADNOC Project XYZ"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
               />
             </div>
           </div>
