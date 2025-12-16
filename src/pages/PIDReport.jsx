@@ -18,19 +18,48 @@ const PIDReport = () => {
 
   const fetchReport = async () => {
     try {
+      console.log('[PIDReport] Fetching drawing with ID:', id);
+      
       // Fetch drawing details
       const drawingResponse = await apiClient.get(`/pid/drawings/${id}/`);
+      console.log('[PIDReport] Drawing response:', drawingResponse.data);
       setDrawing(drawingResponse.data);
 
       // Fetch report if available
       if (drawingResponse.data.status === 'completed') {
+        console.log('[PIDReport] Drawing status is completed, fetching report...');
         const reportResponse = await apiClient.get(`/pid/drawings/${id}/report/`);
+        console.log('[PIDReport] Report response:', reportResponse.data);
         setReport(reportResponse.data);
+      } else {
+        console.log('[PIDReport] Drawing status is:', drawingResponse.data.status, '- not completed yet');
       }
       
       setLoading(false);
     } catch (err) {
-      setError('Failed to load report');
+      console.error('[PIDReport] Error fetching report:', err);
+      console.error('[PIDReport] Error response:', err.response);
+      console.error('[PIDReport] Error data:', err.response?.data);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to load report';
+      
+      if (err.response?.status === 404) {
+        errorMessage = 'Drawing not found. It may have been deleted.';
+      } else if (err.response?.status === 403) {
+        errorMessage = 'Access denied. You do not have permission to view this drawing.';
+      } else if (err.response?.status === 401) {
+        errorMessage = 'Authentication required. Please login again.';
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (!err.response) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      setError(errorMessage);
       setLoading(false);
     }
   };
@@ -353,6 +382,64 @@ const PIDReport = () => {
             <div>
               <h3 className="font-semibold text-yellow-900">Analysis in Progress</h3>
               <p className="text-sm text-yellow-800">AI is reviewing your P&ID drawing. This may take a few minutes...</p>
+              <button
+                onClick={() => fetchReport()}
+                className="mt-2 text-sm text-yellow-600 hover:text-yellow-800 underline"
+              >
+                Refresh Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Failed Analysis Status */}
+      {drawing.status === 'failed' && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center">
+            <svg className="h-6 w-6 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 className="font-semibold text-red-900">Analysis Failed</h3>
+              <p className="text-sm text-red-800">The AI analysis encountered an error. Please try uploading the drawing again.</p>
+              <button
+                onClick={() => navigate('/pid/upload')}
+                className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Upload New Drawing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Uploaded Status - Not Yet Analyzed */}
+      {drawing.status === 'uploaded' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+          <div className="flex items-center">
+            <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 className="font-semibold text-blue-900">Drawing Uploaded</h3>
+              <p className="text-sm text-blue-800">This drawing has been uploaded but not yet analyzed.</p>
+              <button
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await apiClient.post(`/pid/drawings/${id}/analyze/`);
+                    setTimeout(() => fetchReport(), 2000);
+                  } catch (err) {
+                    console.error('Failed to start analysis:', err);
+                    alert('Failed to start analysis. Please try again.');
+                    setLoading(false);
+                  }
+                }}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              >
+                Start Analysis
+              </button>
             </div>
           </div>
         </div>
