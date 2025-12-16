@@ -393,6 +393,15 @@ const PIDReport = () => {
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Action Required
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-amber-50">
+                      <div className="flex items-center space-x-1">
+                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span>Direction</span>
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Severity
                     </th>
@@ -421,6 +430,69 @@ const PIDReport = () => {
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
                         {issue.action_required}
+                      </td>
+                      <td className="px-4 py-4 text-sm">
+                        {issue.location_on_drawing ? (
+                          <div className="space-y-2">
+                            {/* Zone Indicator with Visual Grid */}
+                            <div className="flex items-center space-x-2">
+                              <div className="relative w-12 h-12 border-2 border-gray-300 rounded grid grid-cols-3 grid-rows-3 gap-0.5 bg-gray-100">
+                                {['Top-Left', 'Top-Center', 'Top-Right', 'Middle-Left', 'Middle-Center', 'Middle-Right', 'Bottom-Left', 'Bottom-Center', 'Bottom-Right'].map((zone, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`${
+                                      issue.location_on_drawing.zone === zone
+                                        ? 'bg-amber-500'
+                                        : 'bg-gray-200'
+                                    } transition-colors`}
+                                    title={zone}
+                                  />
+                                ))}
+                              </div>
+                              <div className="text-xs">
+                                <div className="font-semibold text-amber-700">{issue.location_on_drawing.zone}</div>
+                                <div className="text-gray-500 text-xs">{issue.location_on_drawing.drawing_section}</div>
+                              </div>
+                            </div>
+                            
+                            {/* Proximity Description */}
+                            {issue.location_on_drawing.proximity_description && (
+                              <div className="text-xs bg-blue-50 rounded px-2 py-1 border border-blue-200">
+                                <svg className="w-3 h-3 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-blue-800">{issue.location_on_drawing.proximity_description}</span>
+                              </div>
+                            )}
+                            
+                            {/* Visual Cues */}
+                            {issue.location_on_drawing.visual_cues && (
+                              <div className="text-xs bg-green-50 rounded px-2 py-1 border border-green-200">
+                                <svg className="w-3 h-3 inline mr-1 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <span className="text-green-800 italic">{issue.location_on_drawing.visual_cues}</span>
+                              </div>
+                            )}
+                            
+                            {/* Search Keywords */}
+                            {issue.location_on_drawing.search_keywords && issue.location_on_drawing.search_keywords.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {issue.location_on_drawing.search_keywords.slice(0, 3).map((keyword, kidx) => (
+                                  <span key={kidx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">
+                                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    {keyword}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400 italic">Location not specified</div>
+                        )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <select
