@@ -361,7 +361,7 @@ const PIDReport = () => {
       {/* Report Summary */}
       {report && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500 mb-1">Total Issues</p>
               <p className="text-3xl font-bold text-gray-900">{report.total_issues}</p>
@@ -377,6 +377,12 @@ const PIDReport = () => {
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500 mb-1">Ignored</p>
               <p className="text-3xl font-bold text-slate-600">{report.ignored_count}</p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+              <p className="text-sm text-gray-500 mb-1">Spec Breaks</p>
+              <p className="text-3xl font-bold text-purple-600">
+                {report.specification_breaks?.length || 0}
+              </p>
             </div>
           </div>
 
