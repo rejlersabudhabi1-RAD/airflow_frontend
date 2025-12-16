@@ -495,6 +495,164 @@ const PIDReport = () => {
             </div>
           )}
 
+          {/* Specification Breaks Section */}
+          {report.specification_breaks && report.specification_breaks.length > 0 && (
+            <div className="bg-white rounded-lg shadow-md overflow-hidden border-l-4 border-purple-500 mb-6">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4 border-b border-purple-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="h-6 w-6 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  Specification Breaks ({report.specification_breaks.length})
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">Piping specification changes (material, pressure class, special requirements)</p>
+              </div>
+
+              <div className="p-6">
+                <div className="space-y-4">
+                  {report.specification_breaks.map((specBreak, idx) => (
+                    <div key={idx} className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50 hover:shadow-lg transition-shadow">
+                      {/* Header */}
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center space-x-3">
+                          <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                            {specBreak.spec_break_id}
+                          </span>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            specBreak.break_properly_marked === 'Yes' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {specBreak.break_properly_marked === 'Yes' ? '✓ Properly Marked' : '⚠ Not Marked'}
+                          </span>
+                          {specBreak.cost_impact && (
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                              specBreak.cost_impact === 'High' ? 'bg-red-100 text-red-700' :
+                              specBreak.cost_impact === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {specBreak.cost_impact} Cost Impact
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Location */}
+                      <div className="mb-3">
+                        <p className="text-sm font-semibold text-gray-700 mb-1">📍 Location:</p>
+                        <p className="text-sm text-gray-900 bg-white rounded px-3 py-2 border border-purple-200">
+                          {specBreak.location}
+                        </p>
+                      </div>
+
+                      {/* Spec Comparison */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                        {/* Upstream */}
+                        <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3">
+                          <h5 className="text-xs font-bold text-blue-700 mb-2 flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            UPSTREAM SPEC
+                          </h5>
+                          <div className="space-y-1 text-xs">
+                            <div><span className="font-semibold">Line:</span> {specBreak.upstream_spec?.line_number}</div>
+                            <div><span className="font-semibold">Material:</span> <span className="bg-blue-200 px-2 py-0.5 rounded">{specBreak.upstream_spec?.material_spec}</span></div>
+                            <div><span className="font-semibold">Pressure Class:</span> <span className="bg-blue-200 px-2 py-0.5 rounded">{specBreak.upstream_spec?.pressure_class}</span></div>
+                            {specBreak.upstream_spec?.special_requirements && specBreak.upstream_spec.special_requirements !== 'None' && (
+                              <div><span className="font-semibold">Special:</span> {specBreak.upstream_spec.special_requirements}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Downstream */}
+                        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-3">
+                          <h5 className="text-xs font-bold text-green-700 mb-2 flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                            DOWNSTREAM SPEC
+                          </h5>
+                          <div className="space-y-1 text-xs">
+                            <div><span className="font-semibold">Line:</span> {specBreak.downstream_spec?.line_number}</div>
+                            <div><span className="font-semibold">Material:</span> <span className="bg-green-200 px-2 py-0.5 rounded">{specBreak.downstream_spec?.material_spec}</span></div>
+                            <div><span className="font-semibold">Pressure Class:</span> <span className="bg-green-200 px-2 py-0.5 rounded">{specBreak.downstream_spec?.pressure_class}</span></div>
+                            {specBreak.downstream_spec?.special_requirements && specBreak.downstream_spec.special_requirements !== 'None' && (
+                              <div><span className="font-semibold">Special:</span> {specBreak.downstream_spec.special_requirements}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Reason & Details */}
+                      <div className="space-y-2 text-sm">
+                        <div className="bg-white rounded p-2 border border-purple-200">
+                          <span className="font-semibold text-purple-700">Reason:</span>
+                          <span className="ml-2 text-gray-700">{specBreak.reason_for_break}</span>
+                        </div>
+
+                        {specBreak.transition_piece_required === 'Yes' && (
+                          <div className="bg-amber-50 rounded p-2 border border-amber-300">
+                            <span className="font-semibold text-amber-700">⚙️ Transition Required:</span>
+                            <span className="ml-2 text-gray-700">{specBreak.transition_details}</span>
+                          </div>
+                        )}
+
+                        {specBreak.procurement_impact && (
+                          <div className="bg-blue-50 rounded p-2 border border-blue-200">
+                            <span className="font-semibold text-blue-700">📦 Procurement:</span>
+                            <span className="ml-2 text-gray-700">{specBreak.procurement_impact}</span>
+                          </div>
+                        )}
+
+                        {specBreak.installation_notes && (
+                          <div className="bg-indigo-50 rounded p-2 border border-indigo-200">
+                            <span className="font-semibold text-indigo-700">🔧 Installation:</span>
+                            <span className="ml-2 text-gray-700 text-xs">{specBreak.installation_notes}</span>
+                          </div>
+                        )}
+
+                        {/* Issues Found */}
+                        {specBreak.issues_found && specBreak.issues_found.length > 0 && (
+                          <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                            <p className="font-semibold text-red-800 text-xs mb-1">⚠️ Issues Identified:</p>
+                            <ul className="list-disc list-inside text-xs text-red-700 space-y-0.5">
+                              {specBreak.issues_found.map((issue, issueIdx) => (
+                                <li key={issueIdx}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Summary Stats */}
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-purple-100 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-purple-700">
+                      {report.specification_breaks.length}
+                    </p>
+                    <p className="text-sm text-purple-600">Total Spec Breaks</p>
+                  </div>
+                  <div className="bg-green-100 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-green-700">
+                      {report.specification_breaks.filter(sb => sb.break_properly_marked === 'Yes').length}
+                    </p>
+                    <p className="text-sm text-green-600">Properly Marked</p>
+                  </div>
+                  <div className="bg-red-100 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-red-700">
+                      {report.specification_breaks.filter(sb => sb.issues_found && sb.issues_found.length > 0).length}
+                    </p>
+                    <p className="text-sm text-red-600">With Issues</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-6">
             <div className="flex flex-wrap gap-4">
