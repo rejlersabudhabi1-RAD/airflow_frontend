@@ -380,6 +380,121 @@ const PIDReport = () => {
             </div>
           </div>
 
+          {/* HOLDS & NOTES Compliance Section */}
+          {report.holds_and_notes && (report.holds_and_notes.holds_list?.length > 0 || report.holds_and_notes.general_notes_list?.length > 0) && (
+            <div className="bg-white rounded-lg shadow-md overflow-hidden border-l-4 border-red-500 mb-6">
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4 border-b border-red-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <svg className="h-6 w-6 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  HOLDS & NOTES Compliance
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">Drawing requirements and design constraints</p>
+              </div>
+
+              <div className="p-6">
+                {/* HOLDS Section */}
+                {report.holds_and_notes.holds_list && report.holds_and_notes.holds_list.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-md font-semibold text-red-700 mb-3 flex items-center">
+                      <span className="bg-red-100 px-2 py-1 rounded mr-2">HOLDS</span>
+                      Critical Requirements
+                    </h4>
+                    <div className="space-y-3">
+                      {report.holds_and_notes.holds_list.map((hold, idx) => (
+                        <div key={idx} className={`border-l-4 p-4 rounded ${
+                          hold.compliance_status === 'Compliant' ? 'border-green-500 bg-green-50' :
+                          hold.compliance_status === 'Non-Compliant' ? 'border-red-500 bg-red-50' :
+                          'border-yellow-500 bg-yellow-50'
+                        }`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <span className="font-semibold text-sm text-gray-900">{hold.hold_number}</span>
+                              <p className="text-sm text-gray-700 mt-1">{hold.hold_description}</p>
+                              <p className="text-xs text-gray-600 mt-2 italic">{hold.verification_notes}</p>
+                            </div>
+                            <span className={`ml-4 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                              hold.compliance_status === 'Compliant' ? 'bg-green-200 text-green-800' :
+                              hold.compliance_status === 'Non-Compliant' ? 'bg-red-200 text-red-800' :
+                              'bg-yellow-200 text-yellow-800'
+                            }`}>
+                              {hold.compliance_status}
+                            </span>
+                          </div>
+                          {hold.related_issues && hold.related_issues.length > 0 && (
+                            <div className="mt-2 text-xs text-gray-600">
+                              Related Issues: {hold.related_issues.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* General NOTES Section */}
+                {report.holds_and_notes.general_notes_list && report.holds_and_notes.general_notes_list.length > 0 && (
+                  <div>
+                    <h4 className="text-md font-semibold text-blue-700 mb-3 flex items-center">
+                      <span className="bg-blue-100 px-2 py-1 rounded mr-2">NOTES</span>
+                      General Requirements
+                    </h4>
+                    <div className="space-y-2">
+                      {report.holds_and_notes.general_notes_list.slice(0, 10).map((note, idx) => (
+                        <div key={idx} className={`border-l-4 p-3 rounded text-sm ${
+                          note.compliance_status === 'Compliant' ? 'border-blue-400 bg-blue-50' :
+                          note.compliance_status === 'Non-Compliant' ? 'border-orange-500 bg-orange-50' :
+                          'border-gray-400 bg-gray-50'
+                        }`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <span className="font-semibold text-gray-900">{note.note_number}</span>
+                              <span className="ml-2 text-xs bg-gray-200 px-2 py-0.5 rounded">{note.note_category}</span>
+                              <p className="text-gray-700 mt-1">{note.note_text}</p>
+                              {note.verification_notes && (
+                                <p className="text-xs text-gray-600 mt-1 italic">{note.verification_notes}</p>
+                              )}
+                            </div>
+                            <span className={`ml-4 px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${
+                              note.compliance_status === 'Compliant' ? 'bg-green-200 text-green-800' :
+                              note.compliance_status === 'Non-Compliant' ? 'bg-orange-200 text-orange-800' :
+                              'bg-gray-200 text-gray-800'
+                            }`}>
+                              {note.compliance_status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {report.holds_and_notes.general_notes_list.length > 10 && (
+                        <p className="text-sm text-gray-500 italic text-center py-2">
+                          ... and {report.holds_and_notes.general_notes_list.length - 10} more notes
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Critical Violations Alert */}
+                {report.holds_and_notes.critical_violations && report.holds_and_notes.critical_violations.length > 0 && (
+                  <div className="mt-6 bg-red-100 border-2 border-red-500 rounded-lg p-4">
+                    <h5 className="font-bold text-red-800 flex items-center mb-2">
+                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      Critical Violations Detected
+                    </h5>
+                    <ul className="list-disc list-inside text-sm text-red-800 space-y-1">
+                      {report.holds_and_notes.critical_violations.map((violation, idx) => (
+                        <li key={idx}>{violation}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-6">
             <div className="flex flex-wrap gap-4">
