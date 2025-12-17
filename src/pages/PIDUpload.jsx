@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
+import { STORAGE_KEYS } from '../config/app.config';
 
 const PIDUpload = () => {
   const navigate = useNavigate();
@@ -37,8 +38,21 @@ const PIDUpload = () => {
   };
 
   const handleFileSelect = (selectedFile) => {
-    if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
-      setError('Only PDF files are allowed');
+    // Enhanced PDF validation - check both extension and MIME type
+    const fileName = selectedFile.name.toLowerCase();
+    const fileType = selectedFile.type.toLowerCase();
+    
+    console.log('[FileSelect] File name:', selectedFile.name);
+    console.log('[FileSelect] File type:', selectedFile.type);
+    console.log('[FileSelect] File size:', selectedFile.size);
+    
+    // Accept PDF files by extension or MIME type
+    const isPDF = fileName.endsWith('.pdf') || 
+                  fileType === 'application/pdf' || 
+                  fileType === 'application/x-pdf';
+    
+    if (!isPDF) {
+      setError(`Invalid file type. Only PDF files are accepted. Received: ${selectedFile.name} (${selectedFile.type})`);
       return;
     }
     
@@ -107,16 +121,24 @@ const PIDUpload = () => {
       }
       console.log('[DEBUG] API Endpoint:', apiClient.defaults.baseURL + '/pid/drawings/upload/');
       
+      console.log('[DEBUG] Preparing API request...');
+      console.log('[DEBUG] Auth token available:', !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN));
+      
       const response = await apiClient.post(
         '/pid/drawings/upload/',
         formDataToSend,
         {
           headers: {
-            // Remove Content-Type header to let browser set it with boundary
-            // 'Content-Type': 'multipart/form-data', // Browser sets this automatically
+            // Don't set Content-Type - let browser handle multipart boundary
+            // Remove any existing Content-Type to avoid conflicts
           },
           timeout: 120000, // 2 minutes for large file uploads
           withCredentials: true, // Include credentials for CORS
+          // Ensure we don't override Content-Type set by axios for FormData
+          transformRequest: [(data) => {
+            // Let axios handle FormData transformation
+            return data;
+          }],
         }
       );
 
@@ -140,7 +162,15 @@ const PIDUpload = () => {
       // Handle different error scenarios with detailed messages
       let errorMessage = 'Upload failed. Please try again.';
       
-      if (err.response?.status === 400) {
+      if (err.response?.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+        // Redirect to login
+        navigate('/login');
+        return;
+      } else if (err.response?.status === 415) {
+        errorMessage = 'Unsupported media type. Please check file format and try again.';
+        console.error('[ERROR] Content-Type issue - check multipart handling');
+      } else if (err.response?.status === 400) {
         // Validation error - show detailed field errors
         const validationErrors = err.response.data;
         if (typeof validationErrors === 'object') {

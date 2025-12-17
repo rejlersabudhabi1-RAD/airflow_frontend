@@ -23,13 +23,23 @@ console.log('[API Service] Base URL:', API_BASE_URL)
 console.log('[API Service] Timeout:', API_TIMEOUT)
 console.log('[API Service] With Credentials:', true)
 
-// Request interceptor - Add auth token to requests
+// Request interceptor - Add auth token and handle content types
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    
+    // Handle FormData uploads - remove default Content-Type
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+      console.log('[API] FormData detected, removed Content-Type header');
+    }
+    
+    console.log('[API Request]', config.method?.toUpperCase(), config.url);
+    console.log('[API Request] Headers:', config.headers);
+    
     return config
   },
   (error) => {
