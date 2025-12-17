@@ -110,9 +110,11 @@ const PIDUpload = () => {
         formDataToSend,
         {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            // Remove Content-Type header to let browser set it with boundary
+            // 'Content-Type': 'multipart/form-data', // Browser sets this automatically
           },
           timeout: 120000, // 2 minutes for large file uploads
+          withCredentials: true, // Include credentials for CORS
         }
       );
 
