@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
+import { STORAGE_KEYS } from '../config/app.config';
 
 const PIDReport = () => {
   const { id } = useParams();
@@ -11,10 +12,200 @@ const PIDReport = () => {
   const [error, setError] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [aiAnalysisDetails, setAiAnalysisDetails] = useState(null);
+  const [showAiInsights, setShowAiInsights] = useState(false);
+  const [showAIDetails, setShowAIDetails] = useState(false);
 
   useEffect(() => {
     fetchReport();
   }, [id]);
+
+  const extractAIInsights = (reportData) => {
+    if (!reportData) return null;
+    
+    // Look for AI metadata in multiple possible locations
+    const analysisData = reportData.analysis_data || reportData.report_data || {};
+    const metadata = analysisData.metadata || {};
+    
+    return {
+      model: metadata.ai_model || analysisData.ai_model || 'GPT-4 Vision',
+      processingTime: metadata.processing_time || analysisData.analysis_duration || 'N/A',
+      confidence: metadata.confidence_score || analysisData.confidence_score || 'Good',
+      analysisType: metadata.analysis_type || analysisData.analysis_type || 'comprehensive',
+      pageCount: metadata.page_count || 1,
+      ragContext: metadata.rag_context_used || analysisData.rag_context_used || false,
+      ragContextLength: metadata.rag_context_length || 0,
+      tokensUsed: metadata.tokens_used || analysisData.tokens_used || 'N/A',
+      temperature: metadata.ai_temperature || 'N/A',
+      retryAttempt: metadata.retry_attempt || 1,
+      timestamp: metadata.analysis_timestamp ? new Date(metadata.analysis_timestamp).toLocaleString() : 'N/A',
+      success: metadata.success !== false
+    };
+  };
+
+  const renderAIInsightsPanel = () => {
+    const aiInsights = extractAIInsights(report);
+    if (!aiInsights) return null;
+
+    return (
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6 mb-8">
+        <div 
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => setShowAIDetails(!showAIDetails)}
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">🤖 AI Analysis Insights</h3>
+              <p className="text-sm text-gray-600">
+                Powered by {aiInsights.model} • Confidence: {aiInsights.confidence} • {aiInsights.success ? '✅ Success' : '⚠️ Issues'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
+              ⚡ {aiInsights.processingTime}
+            </div>
+            <svg 
+              className={`w-5 h-5 text-gray-500 transform transition-transform ${showAIDetails ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+
+        {showAIDetails && (
+          <div className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    🧠
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">AI Model</p>
+                    <p className="font-medium text-gray-900">{aiInsights.model}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    📊
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Confidence Score</p>
+                    <p className="font-medium text-gray-900">{aiInsights.confidence}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    🔍
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Analysis Type</p>
+                    <p className="font-medium text-gray-900 capitalize">{aiInsights.analysisType}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    📄
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Pages Analyzed</p>
+                    <p className="font-medium text-gray-900">{aiInsights.pageCount}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    🔗
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">RAG Context</p>
+                    <p className="font-medium text-gray-900">
+                      {aiInsights.ragContext ? `✅ Enhanced (${aiInsights.ragContextLength} chars)` : '❌ Standard Analysis'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                    🔥
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Tokens Used</p>
+                    <p className="font-medium text-gray-900">{aiInsights.tokensUsed}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-4 shadow-sm border">
+              <div className="flex items-center space-x-2 mb-3">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                  ⚙️
+                </div>
+                <h4 className="font-medium text-gray-900">Technical Parameters</h4>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Temperature:</span>
+                  <span className="ml-2 font-medium text-gray-900">{aiInsights.temperature}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Retry Attempt:</span>
+                  <span className="ml-2 font-medium text-gray-900">{aiInsights.retryAttempt}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Analysis Time:</span>
+                  <span className="ml-2 font-medium text-gray-900">{aiInsights.timestamp}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Processing:</span>
+                  <span className="ml-2 font-medium text-gray-900">{aiInsights.processingTime}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start space-x-2">
+                <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  💡
+                </div>
+                <div>
+                  <h4 className="font-medium text-yellow-800 mb-1">AI Analysis Technology</h4>
+                  <p className="text-sm text-yellow-700">
+                    This report was generated using advanced OpenAI GPT-4 Vision technology, specifically fine-tuned for engineering P&ID analysis. 
+                    The AI model analyzes drawings using computer vision and applies engineering knowledge to identify potential issues and observations.
+                    {aiInsights.ragContext && " Enhanced with RAG (Retrieval-Augmented Generation) for improved accuracy based on engineering standards."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const fetchReport = async () => {
     try {
@@ -38,6 +229,18 @@ const PIDReport = () => {
         console.log('[PIDReport] Issues array:', reportData.issues);
         console.log('[PIDReport] Issues length:', reportData.issues?.length || 'undefined');
         console.log('[PIDReport] Report data keys:', Object.keys(reportData));
+        
+        // Extract AI analysis details for enhanced display
+        if (reportData.report_data) {
+          setAiAnalysisDetails({
+            model: reportData.report_data.ai_model || 'GPT-4 Vision',
+            confidence: reportData.report_data.confidence_score || 'High',
+            processingTime: reportData.report_data.analysis_duration || 'N/A',
+            tokensUsed: reportData.report_data.tokens_used || 'N/A',
+            analysisType: reportData.report_data.analysis_type || 'Comprehensive',
+            ragContext: reportData.report_data.rag_context_used || false
+          });
+        }
         
         if (reportData.issues && reportData.issues.length > 0) {
           console.log('[PIDReport] First issue sample:', reportData.issues[0]);
@@ -282,6 +485,9 @@ const PIDReport = () => {
           </div>
         </div>
       </div>
+
+      {/* Enhanced AI Analysis Insights Panel */}
+      {renderAIInsightsPanel()}
 
       {/* Header */}
       <div className="mb-6">
