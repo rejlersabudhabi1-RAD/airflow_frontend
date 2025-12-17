@@ -72,6 +72,8 @@ const PIDUpload = () => {
 
     // Create FormData with proper type handling
     const formDataToSend = new FormData();
+    
+    // Add file first - this is critical for proper multipart encoding
     formDataToSend.append('file', file);
     
     // Only append non-empty optional fields
