@@ -4,9 +4,37 @@ import { STORAGE_KEYS } from '../config/app.config'
 import { toast } from 'react-toastify'
 
 /**
- * Smart Axios instance with interceptors
+ * Enhanced Axios instance with CORS error handling and retry logic
  * Handles authentication, errors, and request/response transformations
  */
+
+// CORS Health Check Function
+const testCorsConnection = async (baseURL = API_BASE_URL) => {
+  console.log('[CORS_TEST] 🩺 Testing CORS connection to:', baseURL);
+  
+  try {
+    // Test with simple fetch request to avoid axios interceptors
+    const response = await fetch(`${baseURL}/cors/health/`, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[CORS_TEST] ✅ CORS health check passed:', data);
+      return data;
+    } else {
+      throw new Error(`CORS health check failed: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('[CORS_TEST] ❌ CORS health check failed:', error);
+    throw error;
+  }
+};
 
 // Create axios instance
 const apiClient = axios.create({
@@ -15,13 +43,13 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Enable CORS credentials
+  withCredentials: false, // Set to false for better CORS compatibility
 })
 
-console.log('[API Service] Axios client initialized')
+console.log('[API Service] Enhanced Axios client initialized with CORS support')
 console.log('[API Service] Base URL:', API_BASE_URL)
 console.log('[API Service] Timeout:', API_TIMEOUT)
-console.log('[API Service] With Credentials:', true)
+console.log('[API Service] With Credentials:', false) // Better for CORS
 
 // Request interceptor - Add auth token and handle content types
 apiClient.interceptors.request.use(
@@ -34,26 +62,50 @@ apiClient.interceptors.request.use(
     // Handle FormData uploads - remove default Content-Type
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
-      console.log('[API] FormData detected, removed Content-Type header');
+      console.log('[API] 📎 FormData detected, removed Content-Type header');
     }
     
-    console.log('[API Request]', config.method?.toUpperCase(), config.url);
-    console.log('[API Request] Headers:', config.headers);
+    console.log('[API Request] 📤', config.method?.toUpperCase(), config.url);
+    console.log('[API Request] Headers:', Object.keys(config.headers));
     
     return config
   },
   (error) => {
+    console.error('[API] ❌ Request interceptor error:', error);
     return Promise.reject(error)
   }
 )
 
-// Response interceptor - Handle errors globally
+// Enhanced response interceptor - Handle CORS and network errors
 apiClient.interceptors.response.use(
   (response) => {
+    console.log('[API Response] ✅', response.status, response.config.method?.toUpperCase(), response.config.url);
     return response
   },
   async (error) => {
     const originalRequest = error.config
+    
+    console.error('[API Error] ❌', {
+      message: error.message,
+      status: error.response?.status,
+      url: error.config?.url,
+      method: error.config?.method
+    });
+
+    // Handle CORS/Network errors specifically
+    if (!error.response && (error.message.includes('CORS') || error.message.includes('Network Error') || error.code === 'ERR_NETWORK')) {
+      console.warn('[API] 🌐 CORS/Network error detected, running diagnostics...');
+      
+      // Try to diagnose CORS issues
+      try {
+        await testCorsConnection();
+        console.log('[API] 🩺 CORS diagnostic passed - this might be a temporary network issue');
+      } catch (corsError) {
+        console.error('[API] 🔥 CORS diagnostic failed:', corsError);
+        toast.error('Connection blocked by browser security policy. The server may be starting up - please wait a moment and try again.');
+        return Promise.reject(error);
+      }
+    }
 
     // Handle token refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -91,17 +143,32 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Show error toast for other errors (not 401 redirects)
+    // Enhanced error messages for different error types
     if (error.response?.status !== 401 || originalRequest._retry) {
-      const errorMessage = error.response?.data?.detail || 
-                          error.response?.data?.message || 
-                          error.message || 
-                          'An error occurred'
-      toast.error(errorMessage)
+      let errorMessage = 'An error occurred';
+      
+      if (!error.response) {
+        // Network/CORS error
+        errorMessage = 'Network error. Please check your connection or try again later.';
+      } else if (error.response.status >= 500) {
+        // Server error
+        errorMessage = 'Server error. Please try again in a moment.';
+      } else {
+        // Client error
+        errorMessage = error.response?.data?.detail || 
+                      error.response?.data?.message || 
+                      error.response?.data?.error ||
+                      `Request failed: ${error.response.status}`;
+      }
+      
+      toast.error(errorMessage);
     }
 
     return Promise.reject(error)
   }
 )
+
+// Add CORS test function to the client
+apiClient.testCors = testCorsConnection;
 
 export default apiClient
