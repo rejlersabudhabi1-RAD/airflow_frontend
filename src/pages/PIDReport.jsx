@@ -30,7 +30,23 @@ const PIDReport = () => {
         console.log('[PIDReport] Drawing status is completed, fetching report...');
         const reportResponse = await apiClient.get(`/pid/drawings/${id}/report/`);
         console.log('[PIDReport] Report response:', reportResponse.data);
-        setReport(reportResponse.data);
+        
+        // Enhanced debugging for issues data
+        const reportData = reportResponse.data;
+        console.log('[PIDReport] Report ID:', reportData.id);
+        console.log('[PIDReport] Total issues:', reportData.total_issues);
+        console.log('[PIDReport] Issues array:', reportData.issues);
+        console.log('[PIDReport] Issues length:', reportData.issues?.length || 'undefined');
+        console.log('[PIDReport] Report data keys:', Object.keys(reportData));
+        
+        if (reportData.issues && reportData.issues.length > 0) {
+          console.log('[PIDReport] First issue sample:', reportData.issues[0]);
+        } else {
+          console.warn('[PIDReport] ⚠️ No issues found in report data!');
+          console.log('[PIDReport] Checking report_data field:', reportData.report_data);
+        }
+        
+        setReport(reportData);
       } else {
         console.log('[PIDReport] Drawing status is:', drawingResponse.data.status, '- not completed yet');
       }
@@ -827,7 +843,46 @@ const PIDReport = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredIssues.map((issue, idx) => (
+                  {filteredIssues.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-12 text-center">
+                        <div className="space-y-3">
+                          <div className="flex justify-center">
+                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-lg font-medium text-gray-900">No Issues Found</p>
+                            <div className="text-sm text-gray-600 mt-2 space-y-1">
+                              {report?.total_issues > 0 ? (
+                                <>
+                                  <p>Report indicates {report.total_issues} issues, but they're not displaying.</p>
+                                  <p className="text-blue-600">Please check the browser console for debugging information.</p>
+                                  <p className="text-orange-600">This may be a data serialization issue.</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p>The P&ID analysis completed successfully with no issues identified.</p>
+                                  <p className="text-green-600">Your drawing appears to comply with all standards.</p>
+                                </>
+                              )}
+                            </div>
+                            {report?.total_issues > 0 && (
+                              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-left">
+                                <p className="text-xs text-yellow-800 font-medium">Debug Information:</p>
+                                <p className="text-xs text-yellow-700">Report ID: {report?.id}</p>
+                                <p className="text-xs text-yellow-700">Total Issues: {report?.total_issues}</p>
+                                <p className="text-xs text-yellow-700">Issues Array: {report?.issues ? `Length ${report.issues.length}` : 'undefined'}</p>
+                                <p className="text-xs text-yellow-700">Applied Filters: Severity={filterSeverity}, Status={filterStatus}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredIssues.map((issue, idx) => (
                     <tr key={issue.id} className={`hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
                         {issue.serial_number}
@@ -957,7 +1012,7 @@ const PIDReport = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               </table>
             </div>
