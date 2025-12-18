@@ -56,7 +56,9 @@ export const API_ENDPOINTS = {
   HEALTH: '/health/',
 }
 
-export const API_TIMEOUT = 10000 // 10 seconds
+// Dynamic timeouts based on operation type
+export const API_TIMEOUT = 10000 // 10 seconds (default)
+export const API_TIMEOUT_LONG = 600000 // 10 minutes for file upload/analysis
 
 export const HTTP_STATUS = {
   OK: 200,

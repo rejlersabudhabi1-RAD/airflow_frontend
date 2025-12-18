@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
@@ -14,8 +14,20 @@ const PIDUpload = () => {
     auto_analyze: true
   });
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState('');
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const uploadTimeoutRef = useRef(null);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (uploadTimeoutRef.current) {
+        clearTimeout(uploadTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -83,6 +95,8 @@ const PIDUpload = () => {
 
     setUploading(true);
     setError('');
+    setUploadProgress(0);
+    setAnalysisStage('Preparing upload...');
 
     // Create FormData with proper type handling
     const formDataToSend = new FormData();
@@ -122,42 +136,111 @@ const PIDUpload = () => {
       console.log('[DEBUG] API Endpoint:', apiClient.defaults.baseURL + '/pid/drawings/upload/');
       
       console.log('[DEBUG] Preparing API request...');
-      console.log('[DEBUG] Auth token available:', !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN));
+      const authToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      console.log('[DEBUG] Auth token available:', !!authToken);
+      
+      // SAFEGUARD: Verify token exists before making request
+      if (!authToken) {
+        console.error('[ERROR] No authentication token found - user may not be logged in');
+        setError('Authentication token missing. Please log in again.');
+        setUploading(false);
+        navigate('/login');
+        return;
+      }
+      
+      // Set progress tracking stages
+      setAnalysisStage('Uploading file to server...');
+      setUploadProgress(10);
+      
+      // Simulate progress during upload (since we can't track multipart upload progress easily)
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 20) return prev + 2;
+          if (prev < 40) return prev + 1;
+          return prev; // Stop at 40 until we get response
+        });
+      }, 500);
       
       const response = await apiClient.post(
         '/pid/drawings/upload/',
         formDataToSend,
         {
           headers: {
+            // Authorization is set by interceptor
             // Don't set Content-Type - let browser handle multipart boundary
-            // Remove any existing Content-Type to avoid conflicts
           },
-          timeout: 120000, // 2 minutes for large file uploads
-          // withCredentials not needed - we use JWT Bearer tokens in Authorization header
+          timeout: 600000, // 10 minutes for file upload + AI analysis
           // Ensure we don't override Content-Type set by axios for FormData
           transformRequest: [(data) => {
             // Let axios handle FormData transformation
             return data;
           }],
+          onUploadProgress: (progressEvent) => {
+            // Track actual upload progress if available
+            if (progressEvent.total) {
+              const percentCompleted = Math.round((progressEvent.loaded * 40) / progressEvent.total);
+              setUploadProgress(percentCompleted);
+              if (percentCompleted > 30) {
+                setAnalysisStage('File uploaded, starting AI analysis...');
+              }
+            }
+          }
         }
       );
+      
+      // Clear progress interval
+      clearInterval(progressInterval);
+      
+      // Update progress for analysis phase
+      if (formData.auto_analyze) {
+        setUploadProgress(50);
+        setAnalysisStage('AI analyzing P&ID drawing (this may take 3-8 minutes)...');
+        
+        // Simulate analysis progress
+        const analysisInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev < 90) return prev + 2;
+            return prev;
+          });
+        }, 2000);
+        
+        uploadTimeoutRef.current = analysisInterval;
+      }
 
+      // Clear any progress intervals
+      if (uploadTimeoutRef.current) {
+        clearInterval(uploadTimeoutRef.current);
+      }
+      
       console.log('[DEBUG] ===== UPLOAD SUCCESS =====');
       console.log('[DEBUG] Response:', response.data);
+      
+      setUploadProgress(100);
+      setAnalysisStage('Analysis complete! Redirecting...');
       
       // Validate response structure
       if (!response.data || !response.data.id) {
         throw new Error('Invalid server response: missing drawing ID');
       }
       
-      // Navigate to report page
-      navigate(`/pid/report/${response.data.id}`);
+      // Short delay to show completion before redirect
+      setTimeout(() => {
+        navigate(`/pid/report/${response.data.id}`);
+      }, 500);
     } catch (err) {
+      // Clear any progress intervals
+      if (uploadTimeoutRef.current) {
+        clearInterval(uploadTimeoutRef.current);
+      }
+      
       console.error('[ERROR] ===== UPLOAD FAILED =====');
       console.error('[ERROR] Full error:', err);
       console.error('[ERROR] Response status:', err.response?.status);
       console.error('[ERROR] Response data:', err.response?.data);
       console.error('[ERROR] Request config:', err.config);
+      
+      setUploadProgress(0);
+      setAnalysisStage('');
       
       // Handle different error scenarios with detailed messages
       let errorMessage = 'Upload failed. Please try again.';
@@ -165,7 +248,9 @@ const PIDUpload = () => {
       if (err.response?.status === 401) {
         errorMessage = 'Authentication failed. Please log in again.';
         // Redirect to login
-        navigate('/login');
+        setError(errorMessage);
+        setTimeout(() => navigate('/login'), 2000);
+        setUploading(false);
         return;
       } else if (err.response?.status === 415) {
         errorMessage = 'Unsupported media type. Please check file format and try again.';
@@ -207,10 +292,10 @@ const PIDUpload = () => {
         errorMessage = 'Invalid file type. Only PDF files are accepted.';
       } else if (err.response?.status === 500) {
         errorMessage = 'Server error. Please check the file and try again.';
-      } else if (err.code === 'ECONNABORTED') {
-        errorMessage = 'Upload timeout. Please try a smaller file or check your connection.';
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errorMessage = 'Request timeout. The analysis is taking longer than expected. This can happen with complex drawings. Please check the drawing list in a few minutes - the analysis may still complete in the background.';
       } else if (!err.response) {
-        errorMessage = 'Network error. Please check your connection.';
+        errorMessage = 'Network error. Please check your connection and try again.';
       }
       
       setError(errorMessage);
@@ -370,6 +455,25 @@ const PIDUpload = () => {
             </label>
           </div>
 
+          {/* Upload Progress */}
+          {uploading && formData.auto_analyze && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-blue-900">{analysisStage}</p>
+                <span className="text-sm text-blue-700">{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-blue-700 mt-2">
+                ⏱️ The AI is performing comprehensive analysis with multiple validation passes. This typically takes 3-8 minutes depending on drawing complexity.
+              </p>
+            </div>
+          )}
+          
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3">

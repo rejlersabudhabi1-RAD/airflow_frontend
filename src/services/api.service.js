@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, API_TIMEOUT } from '../config/api.config'
+import { API_BASE_URL, API_TIMEOUT, API_TIMEOUT_LONG } from '../config/api.config'
 import { STORAGE_KEYS } from '../config/app.config'
 import { toast } from 'react-toastify'
 
@@ -54,18 +54,28 @@ console.log('[API Service] With Credentials:', false) // Better for CORS
 // Request interceptor - Add auth token and handle content types
 apiClient.interceptors.request.use(
   (config) => {
+    // CRITICAL: Retrieve token from localStorage
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
     
-    // Handle FormData uploads - remove default Content-Type
+    // CRITICAL: Handle FormData BEFORE setting Authorization
+    // Axios AxiosHeaders object can be corrupted if we delete after setting Authorization
     if (config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
-      console.log('[API] 📎 FormData detected, removed Content-Type header');
+      // Set Authorization explicitly for FormData to avoid header object mutation issues
+      if (token) {
+        config.headers.setAuthorization(`Bearer ${token}`)
+      }
+      // Remove Content-Type to let browser set multipart boundary
+      config.headers.setContentType(false)
+      console.log('[API] 📎 FormData detected, Authorization explicitly set, Content-Type cleared');
+    } else {
+      // For non-FormData requests, set Authorization normally
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
     
     console.log('[API Request] 📤', config.method?.toUpperCase(), config.url);
+    console.log('[API Request] Authorization:', config.headers.Authorization ? '✅ Present' : '❌ Missing');
     console.log('[API Request] Headers:', Object.keys(config.headers));
     
     return config
