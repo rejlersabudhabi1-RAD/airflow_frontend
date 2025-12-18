@@ -580,7 +580,7 @@ const PIDReport = () => {
               drawing.status === 'failed' ? 'bg-red-100 text-red-800' :
               'bg-gray-100 text-gray-800'
             }`}>
-              {drawing.status.charAt(0).toUpperCase() + drawing.status.slice(1)}
+              {drawing.status ? drawing.status.charAt(0).toUpperCase() + drawing.status.slice(1) : 'Unknown'}
             </span>
           </div>
         </div>

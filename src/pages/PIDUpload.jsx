@@ -133,7 +133,7 @@ const PIDUpload = () => {
             // Remove any existing Content-Type to avoid conflicts
           },
           timeout: 120000, // 2 minutes for large file uploads
-          withCredentials: true, // Include credentials for CORS
+          // withCredentials not needed - we use JWT Bearer tokens in Authorization header
           // Ensure we don't override Content-Type set by axios for FormData
           transformRequest: [(data) => {
             // Let axios handle FormData transformation
