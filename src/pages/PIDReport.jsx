@@ -346,9 +346,10 @@ const PIDReport = () => {
 
   const handleExport = async (format) => {
     try {
+      // Using simple-test-pk endpoint (the only working pattern)
       const response = await apiClient.get(
-        `/pid/drawings/${id}/export/?format=${format}`,
-        { 
+        `/pid/simple-test-pk/${id}/?format=${format}`,
+        {
           responseType: 'blob',
           // Don't transform blob responses
           transformResponse: [(data) => data]
@@ -562,7 +563,14 @@ const PIDReport = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-500">Drawing Number</p>
-            <p className="font-medium text-gray-900">{drawing.drawing_number || 'N/A'}</p>
+            <p className="font-medium text-gray-900 font-mono">{drawing.drawing_number || 'N/A'}</p>
+            {drawing.area && drawing.p_area && drawing.doc_code && drawing.serial_number && (
+              <p className="text-xs text-gray-500 mt-1">
+                Area: {drawing.area} | P/Area: {drawing.p_area} | Doc: {drawing.doc_code} | Serial: {drawing.serial_number}
+                {drawing.rev && ` | Rev: ${drawing.rev}`}
+                {drawing.sheet_number && drawing.total_sheets && ` | Sheet: ${drawing.sheet_number}/${drawing.total_sheets}`}
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-gray-500">Title</p>

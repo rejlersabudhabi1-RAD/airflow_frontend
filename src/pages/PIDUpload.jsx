@@ -11,8 +11,17 @@ const PIDUpload = () => {
     drawing_title: '',
     revision: '',
     project_name: '',
-    auto_analyze: true
+    auto_analyze: true,
+    // Structured drawing number fields
+    area: '',
+    p_area: '',
+    doc_code: '',
+    serial_number: '',
+    rev: '',
+    sheet_number: '',
+    total_sheets: ''
   });
+  const [useStructuredNumber, setUseStructuredNumber] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisStage, setAnalysisStage] = useState('');
@@ -383,18 +392,136 @@ const PIDUpload = () => {
 
           {/* Drawing Metadata */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Drawing Number
-              </label>
-              <input
-                type="text"
-                name="drawing_number"
-                value={formData.drawing_number}
-                onChange={handleInputChange}
-                placeholder="e.g., 16-01-08-1678-1"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-              />
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Drawing Number
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setUseStructuredNumber(!useStructuredNumber)}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  {useStructuredNumber ? 'Use Freeform' : 'Use Structured Format'}
+                </button>
+              </div>
+              
+              {!useStructuredNumber ? (
+                <input
+                  type="text"
+                  name="drawing_number"
+                  value={formData.drawing_number}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 16-01-08-1678-1-1/1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+                />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3 bg-gray-50 rounded-md border border-gray-300">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Area (2 digits)
+                    </label>
+                    <input
+                      type="text"
+                      name="area"
+                      value={formData.area}
+                      onChange={handleInputChange}
+                      placeholder="16"
+                      maxLength="2"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      P/Area (2 digits)
+                    </label>
+                    <input
+                      type="text"
+                      name="p_area"
+                      value={formData.p_area}
+                      onChange={handleInputChange}
+                      placeholder="01"
+                      maxLength="2"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Doc Code (2 digits)
+                    </label>
+                    <input
+                      type="text"
+                      name="doc_code"
+                      value={formData.doc_code}
+                      onChange={handleInputChange}
+                      placeholder="08"
+                      maxLength="2"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Serial (4 digits)
+                    </label>
+                    <input
+                      type="text"
+                      name="serial_number"
+                      value={formData.serial_number}
+                      onChange={handleInputChange}
+                      placeholder="1678"
+                      maxLength="4"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Rev (1 digit)
+                    </label>
+                    <input
+                      type="text"
+                      name="rev"
+                      value={formData.rev}
+                      onChange={handleInputChange}
+                      placeholder="1"
+                      maxLength="1"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Sheet (1 digit)
+                    </label>
+                    <input
+                      type="text"
+                      name="sheet_number"
+                      value={formData.sheet_number}
+                      onChange={handleInputChange}
+                      placeholder="1"
+                      maxLength="1"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Total Sheets (1 digit)
+                    </label>
+                    <input
+                      type="text"
+                      name="total_sheets"
+                      value={formData.total_sheets}
+                      onChange={handleInputChange}
+                      placeholder="1"
+                      maxLength="1"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 text-gray-900"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <div className="w-full px-2 py-1 text-sm bg-white border border-gray-400 rounded text-gray-700 font-mono">
+                      {formData.area || '__'}-{formData.p_area || '__'}-{formData.doc_code || '__'}-{formData.serial_number || '____'}-{formData.rev || '_'}-{formData.sheet_number || '_'}/{formData.total_sheets || '_'}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
