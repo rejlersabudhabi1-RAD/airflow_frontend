@@ -454,7 +454,7 @@ const CRSDocuments = () => {
                       required
                       value={formData.document_name}
                       onChange={(e) => setFormData({...formData, document_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                       placeholder="Enter document name"
                     />
                   </div>
@@ -468,7 +468,7 @@ const CRSDocuments = () => {
                         type="text"
                         value={formData.document_number}
                         onChange={(e) => setFormData({...formData, document_number: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                         placeholder="DOC-001"
                       />
                     </div>
@@ -481,7 +481,7 @@ const CRSDocuments = () => {
                         type="text"
                         value={formData.revision_number}
                         onChange={(e) => setFormData({...formData, revision_number: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                         placeholder="Rev 01"
                       />
                     </div>
@@ -495,7 +495,7 @@ const CRSDocuments = () => {
                       type="text"
                       value={formData.project_name}
                       onChange={(e) => setFormData({...formData, project_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                       placeholder="Enter project name"
                     />
                   </div>
@@ -508,7 +508,7 @@ const CRSDocuments = () => {
                       type="text"
                       value={formData.contractor_name}
                       onChange={(e) => setFormData({...formData, contractor_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                       placeholder="Enter contractor name"
                     />
                   </div>
@@ -521,7 +521,7 @@ const CRSDocuments = () => {
                       value={formData.notes}
                       onChange={(e) => setFormData({...formData, notes: e.target.value})}
                       rows={3}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
                       placeholder="Additional notes..."
                     ></textarea>
                   </div>
@@ -569,7 +569,7 @@ const CRSDocuments = () => {
                     accept=".pdf"
                     required
                     onChange={(e) => setPdfFile(e.target.files[0])}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                   />
                   <p className="mt-2 text-sm text-gray-500">
                     PDF will be automatically processed to extract comments
