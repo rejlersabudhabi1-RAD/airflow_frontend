@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice'
 import userReducer from './slices/userSlice'
 import themeReducer from './slices/themeSlice'
 import rbacReducer from './slices/rbacSlice'
+import featureReducer from './featureSlice'
 
 /**
  * Redux Store Configuration
@@ -15,6 +16,7 @@ export const store = configureStore({
     user: userReducer,
     theme: themeReducer,
     rbac: rbacReducer,
+    features: featureReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

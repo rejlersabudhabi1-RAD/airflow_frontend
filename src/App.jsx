@@ -10,6 +10,8 @@ import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PFDUpload from './pages/PFDUpload'
+import CRSDocuments from './pages/CRSDocuments'
+import ProjectControl from './pages/ProjectControl'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import NotFound from './pages/NotFound'
@@ -72,6 +74,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
+        {/* Feature Routes - PID Analysis */}
         <Route
           path="pid/upload"
           element={
@@ -88,11 +92,33 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
+        {/* Feature Routes - PFD Converter */}
         <Route
           path="pfd/upload"
           element={
             <ProtectedRoute>
               <PFDUpload />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Feature Routes - CRS Documents */}
+        <Route
+          path="crs/documents"
+          element={
+            <ProtectedRoute>
+              <CRSDocuments />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Project Control */}
+        <Route
+          path="projects"
+          element={
+            <ProtectedRoute>
+              <ProjectControl />
             </ProtectedRoute>
           }
         />

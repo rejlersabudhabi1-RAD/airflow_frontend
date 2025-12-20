@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchUsers, fetchRoles } from '../store/slices/rbacSlice';
+import { useNavigate } from 'react-router-dom';
+import { fetchUsers, fetchRoles, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 
 /**
@@ -9,17 +10,25 @@ import rbacService from '../services/rbac.service';
  */
 const UserManagement = () => {
   const dispatch = useDispatch();
-  const { users, roles, loading, error } = useSelector((state) => state.rbac);
+  const navigate = useNavigate();
+  const { users, roles, currentUser, loading, error } = useSelector((state) => state.rbac);
+  const { user: authUser } = useSelector((state) => state.auth);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
+  const [organizations, setOrganizations] = useState([]);
+  const [departmentSuggestions, setDepartmentSuggestions] = useState([]);
+  const [jobTitleSuggestions, setJobTitleSuggestions] = useState([]);
+  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
+  const [showJobTitleDropdown, setShowJobTitleDropdown] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     first_name: '',
     last_name: '',
     password: '',
+    organization_id: '',
     department: '',
     job_title: '',
     phone_number: '',
@@ -27,13 +36,83 @@ const UserManagement = () => {
   });
 
   useEffect(() => {
+    dispatch(fetchCurrentUser());
+  }, [dispatch]);
+
+  useEffect(() => {
     const loadData = async () => {
       try {
         setAuthError(false);
+        
+        // Fetch users and roles via Redux
         await Promise.all([
           dispatch(fetchUsers()).unwrap(),
           dispatch(fetchRoles()).unwrap()
         ]);
+        
+        // Load organizations with better error handling
+        try {
+          const orgsResponse = await rbacService.getOrganizations();
+          console.log('Organizations Response:', orgsResponse);
+          
+          let orgsData = [];
+          if (orgsResponse) {
+            if (Array.isArray(orgsResponse)) {
+              orgsData = orgsResponse;
+            } else if (orgsResponse.data) {
+              orgsData = Array.isArray(orgsResponse.data) ? orgsResponse.data : (orgsResponse.data.results || []);
+            } else if (orgsResponse.results) {
+              orgsData = orgsResponse.results;
+            }
+          }
+          setOrganizations(orgsData);
+          console.log('Organizations set to:', orgsData);
+        } catch (error) {
+          console.error('Failed to load organizations:', error);
+          setOrganizations([]);
+        }
+        
+        // Extract departments and job titles with better error handling
+        try {
+          const usersData = await rbacService.getUsers();
+          console.log('Users Data for extraction:', usersData);
+          
+          let allUsers = [];
+          if (usersData) {
+            if (Array.isArray(usersData)) {
+              allUsers = usersData;
+            } else if (usersData.data) {
+              allUsers = Array.isArray(usersData.data) ? usersData.data : (usersData.data.results || []);
+            } else if (usersData.results) {
+              allUsers = usersData.results;
+            }
+          }
+          
+          console.log('All Users array:', allUsers, 'is array:', Array.isArray(allUsers));
+          
+          if (Array.isArray(allUsers) && allUsers.length > 0) {
+            const depts = allUsers
+              .map(u => u?.department)
+              .filter(d => d && typeof d === 'string' && d.trim() !== '');
+            const uniqueDepartments = [...new Set(depts)].sort();
+            
+            const titles = allUsers
+              .map(u => u?.job_title)
+              .filter(j => j && typeof j === 'string' && j.trim() !== '');
+            const uniqueJobTitles = [...new Set(titles)].sort();
+            
+            setDepartmentSuggestions(uniqueDepartments);
+            setJobTitleSuggestions(uniqueJobTitles);
+            console.log('Departments:', uniqueDepartments, 'Job Titles:', uniqueJobTitles);
+          } else {
+            setDepartmentSuggestions([]);
+            setJobTitleSuggestions([]);
+          }
+        } catch (error) {
+          console.error('Failed to extract departments/titles:', error);
+          setDepartmentSuggestions([]);
+          setJobTitleSuggestions([]);
+        }
       } catch (err) {
         console.error('Failed to load data:', err);
         if (err?.status === 401 || err?.message?.includes('401')) {
@@ -44,9 +123,48 @@ const UserManagement = () => {
     loadData();
   }, [dispatch]);
 
+  // Check if user has admin access via RBAC roles OR Django superuser/staff flags
+  const hasRBACAdminRole = currentUser?.roles?.some(
+    role => ['super_admin', 'admin'].includes(role.code)
+  );
+  
+  const isDjangoSuperuser = authUser?.is_superuser || authUser?.is_staff;
+  
+  const hasAdminAccess = hasRBACAdminRole || isDjangoSuperuser;
+
+  // Show access denied if user doesn't have permission
+  if (!hasAdminAccess && !loading && currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600 mb-6">
+            You don't have permission to access User Management.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Ensure users is always an array before filtering
-  const safeUsers = Array.isArray(users) ? users : [];
-  const safeRoles = Array.isArray(roles) ? roles : [];
+  const safeUsers = Array.isArray(users) ? users : (users?.results ? users.results : []);
+  const safeRoles = Array.isArray(roles) ? roles : (roles?.results ? roles.results : []);
+  const safeOrganizations = Array.isArray(organizations) ? organizations : [];
+  
+  console.log('Debug - users:', users, 'safeUsers length:', safeUsers.length);
+  console.log('Debug - roles:', roles, 'safeRoles length:', safeRoles.length);
+  console.log('Debug - organizations:', organizations, 'safeOrganizations length:', safeOrganizations.length);
   
   const filteredUsers = safeUsers.filter(user => {
     // Safe access to user properties with fallback
@@ -78,6 +196,11 @@ const UserManagement = () => {
       return;
     }
     
+    if (!formData.organization_id) {
+      alert('Please select an organization for the user');
+      return;
+    }
+    
     try {
       // Send flattened data structure
       await rbacService.createUser({
@@ -85,6 +208,7 @@ const UserManagement = () => {
         first_name: formData.first_name,
         last_name: formData.last_name,
         password: formData.password,
+        organization_id: formData.organization_id,
         department: formData.department,
         job_title: formData.job_title,
         phone: formData.phone_number,
@@ -99,6 +223,7 @@ const UserManagement = () => {
         first_name: '',
         last_name: '',
         password: '',
+        organization_id: '',
         department: '',
         job_title: '',
         phone_number: '',
@@ -158,6 +283,33 @@ const UserManagement = () => {
       </span>
     );
   };
+
+  const toggleRole = (roleId) => {
+    setFormData(prev => ({
+      ...prev,
+      role_ids: prev.role_ids.includes(roleId)
+        ? prev.role_ids.filter(id => id !== roleId)
+        : [...prev.role_ids, roleId]
+    }));
+  };
+
+  const handleDepartmentInput = (value) => {
+    setFormData({ ...formData, department: value });
+    setShowDepartmentDropdown(value.length > 0);
+  };
+
+  const handleJobTitleInput = (value) => {
+    setFormData({ ...formData, job_title: value });
+    setShowJobTitleDropdown(value.length > 0);
+  };
+
+  const filteredDepartments = departmentSuggestions.filter(dept =>
+    dept.toLowerCase().includes(formData.department.toLowerCase())
+  );
+
+  const filteredJobTitles = jobTitleSuggestions.filter(job =>
+    job.toLowerCase().includes(formData.job_title.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 px-4 sm:px-6 lg:px-8">
@@ -333,108 +485,234 @@ const UserManagement = () => {
               </div>
 
               <form onSubmit={handleCreateUser} className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="space-y-6">
+                  {/* Basic Information Section */}
+                  <div className="border-b border-gray-200 pb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Email <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="user@example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Password <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="Min. 8 characters"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          First Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.first_name}
+                          onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="John"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Last Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.last_name}
+                          onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="Doe"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                        <input
+                          type="tel"
+                          value={formData.phone_number}
+                          onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="+1 (555) 123-4567"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Organization & Work Details Section */}
+                  <div className="border-b border-gray-200 pb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Organization & Work Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Organization <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          required
+                          value={formData.organization_id}
+                          onChange={(e) => setFormData({ ...formData, organization_id: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                        >
+                          <option value="">Select an organization...</option>
+                          {safeOrganizations.map(org => (
+                            <option key={org.id} value={org.id}>
+                              {org.name} {org.is_active ? '' : '(Inactive)'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <input
+                          type="text"
+                          value={formData.department}
+                          onChange={(e) => handleDepartmentInput(e.target.value)}
+                          onFocus={() => setShowDepartmentDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowDepartmentDropdown(false), 200)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="e.g., Engineering, Sales..."
+                        />
+                        {showDepartmentDropdown && filteredDepartments.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredDepartments.map((dept, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setFormData({ ...formData, department: dept });
+                                  setShowDepartmentDropdown(false);
+                                }}
+                                className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-gray-900"
+                              >
+                                {dept}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Job Title</label>
+                        <input
+                          type="text"
+                          value={formData.job_title}
+                          onChange={(e) => handleJobTitleInput(e.target.value)}
+                          onFocus={() => setShowJobTitleDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowJobTitleDropdown(false), 200)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="e.g., Senior Developer..."
+                        />
+                        {showJobTitleDropdown && filteredJobTitles.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredJobTitles.map((job, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setFormData({ ...formData, job_title: job });
+                                  setShowJobTitleDropdown(false);
+                                }}
+                                className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-gray-900"
+                              >
+                                {job}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Roles & Permissions Section */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                    <input
-                      type="email"
-                      required
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
-                    <input
-                      type="password"
-                      required
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                    <input
-                      type="text"
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Job Title</label>
-                    <input
-                      type="text"
-                      value={formData.job_title}
-                      onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                    <input
-                      type="tel"
-                      value={formData.phone_number}
-                      onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-                    <select
-                      multiple
-                      value={formData.role_ids}
-                      onChange={(e) => setFormData({ ...formData, role_ids: Array.from(e.target.selectedOptions, option => option.value) })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                      size="4"
-                    >
-                      {safeRoles.length > 0 ? (
-                        safeRoles.map(role => (
-                          <option key={role.id} value={role.id} className="text-gray-900 bg-white">{role.name}</option>
-                        ))
-                      ) : (
-                        <option disabled className="text-gray-500 bg-white">No roles available. Please ensure you are logged in.</option>
-                      )}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple roles</p>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Roles & Permissions <span className="text-red-500">*</span>
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">Select one or more roles for this user</p>
+                    
+                    {safeRoles.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {safeRoles.map(role => (
+                          <div
+                            key={role.id}
+                            onClick={() => toggleRole(role.id)}
+                            className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                              formData.role_ids.includes(role.id)
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 bg-white hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="flex items-start">
+                              <div className="flex items-center h-5">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.role_ids.includes(role.id)}
+                                  onChange={() => toggleRole(role.id)}
+                                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                              </div>
+                              <div className="ml-3 flex-1">
+                                <label className="font-medium text-gray-900 cursor-pointer">
+                                  {role.name}
+                                </label>
+                                {role.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{role.description}</p>
+                                )}
+                                <div className="flex items-center mt-2 text-xs text-gray-500">
+                                  <span className="px-2 py-1 bg-gray-100 rounded">Level {role.level}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-yellow-800">No roles available. Please ensure you are logged in and have the necessary permissions.</p>
+                      </div>
+                    )}
+                    
+                    {formData.role_ids.length > 0 && (
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          <strong>Selected:</strong> {formData.role_ids.length} role(s)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4">
+                <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-gray-200">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                    className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl flex items-center space-x-2"
                   >
-                    Create User
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span>Create User</span>
                   </button>
                 </div>
               </form>
