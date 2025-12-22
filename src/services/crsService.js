@@ -4,12 +4,11 @@
  */
 
 import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api.config';
 
 // Create axios instance with auth headers
 const crsApi = axios.create({
-  baseURL: `${API_BASE_URL}/api/v1/crs`,
+  baseURL: `${API_BASE_URL}/crs`,
   headers: {
     'Content-Type': 'application/json',
   },
