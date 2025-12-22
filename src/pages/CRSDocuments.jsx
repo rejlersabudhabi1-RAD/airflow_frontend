@@ -6,6 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import crsService from '../services/crsService';
+import { API_BASE_URL } from '../config/api.config';
+import { STORAGE_KEYS } from '../config/app.config';
 
 const CRSDocuments = () => {
   const [documents, setDocuments] = useState([]);
@@ -71,12 +73,11 @@ const CRSDocuments = () => {
       formData.append('revision', fileMetadata.revision);
       formData.append('contractor', fileMetadata.contractor);
       
-      const token = localStorage.getItem('token');
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       // Call unified upload endpoint
       const response = await fetch(
-        `${API_URL}/api/v1/crs/documents/upload-and-process/`,
+        `${API_BASE_URL}/crs/documents/upload-and-process/`,
         {
           method: 'POST',
           headers: {
