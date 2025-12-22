@@ -19,17 +19,17 @@ const CRSDocuments = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Form states
-  const [formData, setFormData] = useState({
-    document_name: '',
-    document_number: '',
+  // Form states - NEW: Upload-based workflow
+  const [uploadFile, setUploadFile] = useState(null);
+  const [fileMetadata, setFileMetadata] = useState({
     project_name: '',
-    contractor_name: '',
-    revision_number: '',
-    notes: '',
+    document_number: '',
+    revision: '',
+    contractor: '',
   });
-  const [pdfFile, setPdfFile] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [pdfFile, setPdfFile] = useState(null); // For old upload modal
 
   useEffect(() => {
     loadData();
@@ -53,28 +53,129 @@ const CRSDocuments = () => {
     }
   };
 
-  const handleCreateDocument = async (e) => {
+  const handleUploadAndProcess = async (e) => {
     e.preventDefault();
+    if (!uploadFile) {
+      alert('Please select a file to upload');
+      return;
+    }
+    
     setProcessing(true);
+    setUploadResult(null);
     
     try {
-      const newDoc = await crsService.createCRSDocument(formData);
-      alert('✅ Document created successfully!');
-      setShowCreateModal(false);
-      setFormData({
-        document_name: '',
-        document_number: '',
-        project_name: '',
-        contractor_name: '',
-        revision_number: '',
-        notes: '',
-      });
-      loadData();
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('project_name', fileMetadata.project_name);
+      formData.append('document_number', fileMetadata.document_number);
+      formData.append('revision', fileMetadata.revision);
+      formData.append('contractor', fileMetadata.contractor);
+      
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      
+      // Call unified upload endpoint
+      const response = await fetch(
+        `${API_URL}/api/v1/crs/documents/upload-and-process/`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        }
+      );
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+      
+      // Check if response is file download (populated CRS) or JSON
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/vnd.openxmlformats')) {
+        // It's an Excel file - download it
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CRS_Populated_${fileMetadata.document_number || 'Document'}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        const commentCount = response.headers.get('X-Comment-Count') || 'unknown';
+        
+        setUploadResult({
+          success: true,
+          message: `Successfully processed! Extracted ${commentCount} comments. Your standardized CRS template is downloading...`
+        });
+        
+        // Close modal after success
+        setTimeout(() => {
+          setShowCreateModal(false);
+          setUploadFile(null);
+          setFileMetadata({
+            project_name: '',
+            document_number: '',
+            revision: '',
+            contractor: '',
+          });
+          setUploadResult(null);
+          loadData();
+        }, 3000);
+      } else {
+        // JSON response
+        const data = await response.json();
+        setUploadResult({
+          success: true,
+          message: data.message || 'File processed successfully',
+          data: data
+        });
+        
+        setTimeout(() => {
+          setShowCreateModal(false);
+          setUploadFile(null);
+          setFileMetadata({
+            project_name: '',
+            document_number: '',
+            revision: '',
+            contractor: '',
+          });
+          setUploadResult(null);
+          loadData();
+        }, 2000);
+      }
+      
     } catch (error) {
-      console.error('Error creating document:', error);
-      alert('Failed to create document. Please try again.');
+      console.error('Error:', error);
+      setUploadResult({
+        success: false,
+        message: error.message || 'Failed to process file'
+      });
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const validTypes = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel'
+      ];
+      
+      if (validTypes.includes(file.type)) {
+        setUploadFile(file);
+        setUploadResult(null);
+      } else {
+        alert('Please select a valid PDF or Excel file');
+        e.target.value = '';
+      }
     }
   };
 
@@ -290,12 +391,15 @@ const CRSDocuments = () => {
             </select>
           </div>
 
-          {/* Create Button */}
+          {/* Upload & Process Button */}
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold flex items-center gap-2"
           >
-            ➕ Create Document
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            📤 Upload & Process CRS
           </button>
         </div>
       </div>
@@ -424,180 +528,309 @@ const CRSDocuments = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">No documents found</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating a new CRS document.</p>
+          <p className="mt-1 text-sm text-gray-500">Get started by uploading and processing a CRS file.</p>
           <div className="mt-6">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              className="inline-flex items-center gap-2 px-6 py-3 shadow-lg text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-xl transition-all"
             >
-              ➕ Create Document
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              📤 Upload & Process CRS
             </button>
           </div>
         </div>
       )}
 
-      {/* Create Document Modal */}
+      {/* Upload & Process Modal - NEW WORKFLOW */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New CRS Document</h2>
-              
-              <form onSubmit={handleCreateDocument}>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Document Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.document_name}
-                      onChange={(e) => setFormData({...formData, document_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                      placeholder="Enter document name"
-                    />
-                  </div>
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">
+                    📋 Upload Comment Resolution Sheet
+                  </h2>
+                  <p className="text-indigo-100 text-sm">
+                    Upload PDF or Excel file - Get standardized CRS template instantly
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setUploadFile(null);
+                    setUploadResult(null);
+                  }}
+                  className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleUploadAndProcess} className="p-6">
+              {/* File Upload Section */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  📄 Select File (PDF or Excel) *
+                </label>
+                <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-500 transition-all bg-gray-50">
+                  <input
+                    type="file"
+                    accept=".pdf,.xlsx,.xls"
+                    onChange={handleFileSelect}
+                    required
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  
+                  {!uploadFile ? (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Document Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.document_number}
-                        onChange={(e) => setFormData({...formData, document_number: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                        placeholder="DOC-001"
-                      />
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <p className="mt-2 text-sm text-gray-600">
+                        <span className="font-semibold text-indigo-600">Click to upload</span> or drag and drop
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        PDF, Excel (.xlsx, .xls) up to 50MB
+                      </p>
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Revision Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.revision_number}
-                        onChange={(e) => setFormData({...formData, revision_number: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                        placeholder="Rev 01"
-                      />
+                  ) : (
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                        {uploadFile.type.includes('pdf') ? (
+                          <svg className="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <p className="font-semibold text-gray-900">{uploadFile.name}</p>
+                        <p className="text-sm text-gray-500">
+                          {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUploadFile(null);
+                        }}
+                        className="ml-4 text-red-600 hover:text-red-800"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-xs text-blue-900">
+                      <p className="font-semibold mb-1">What happens next?</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li>System extracts all comments from your file</li>
+                        <li>Data is validated and cleaned automatically</li>
+                        <li>Standardized CRS template (CRS template.xlsx) is populated</li>
+                        <li>Ready-to-use Excel file downloads instantly</li>
+                      </ul>
                     </div>
                   </div>
+                </div>
+              </div>
 
+              {/* Metadata Section */}
+              <div className="space-y-4 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Document Information
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Project Name
                     </label>
                     <input
                       type="text"
-                      value={formData.project_name}
-                      onChange={(e) => setFormData({...formData, project_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                      placeholder="Enter project name"
+                      value={fileMetadata.project_name}
+                      onChange={(e) => setFileMetadata({...fileMetadata, project_name: e.target.value})}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                      placeholder="e.g., Plant Expansion Phase 2"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Contractor Name
+                      Document Number
                     </label>
                     <input
                       type="text"
-                      value={formData.contractor_name}
-                      onChange={(e) => setFormData({...formData, contractor_name: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                      placeholder="Enter contractor name"
+                      value={fileMetadata.document_number}
+                      onChange={(e) => setFileMetadata({...fileMetadata, document_number: e.target.value})}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                      placeholder="e.g., DOC-12345"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Notes
+                      Revision
                     </label>
-                    <textarea
-                      value={formData.notes}
-                      onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                      rows={3}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder:text-gray-500"
-                      placeholder="Additional notes..."
-                    ></textarea>
+                    <input
+                      type="text"
+                      value={fileMetadata.revision}
+                      onChange={(e) => setFileMetadata({...fileMetadata, revision: e.target.value})}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                      placeholder="e.g., R1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contractor
+                    </label>
+                    <input
+                      type="text"
+                      value={fileMetadata.contractor}
+                      onChange={(e) => setFileMetadata({...fileMetadata, contractor: e.target.value})}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                      placeholder="e.g., XYZ Engineering"
+                    />
                   </div>
                 </div>
+              </div>
 
-                <div className="mt-6 flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={processing}
-                    className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
-                  >
-                    {processing ? 'Creating...' : 'Create Document'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                  >
-                    Cancel
-                  </button>
+              {/* Result Message */}
+              {uploadResult && (
+                <div className={`mb-6 p-4 rounded-xl border-2 ${
+                  uploadResult.success 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      uploadResult.success ? 'bg-green-500' : 'bg-red-500'
+                    }`}>
+                      {uploadResult.success ? (
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`font-semibold ${uploadResult.success ? 'text-green-900' : 'text-red-900'}`}>
+                        {uploadResult.success ? '✅ Success!' : '❌ Error'}
+                      </p>
+                      <p className={`text-sm mt-1 ${uploadResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                        {uploadResult.message}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </form>
-            </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setUploadFile(null);
+                    setUploadResult(null);
+                  }}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!uploadFile || processing}
+                  className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+                    !uploadFile || processing
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:scale-105'
+                  }`}
+                >
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Upload & Process
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Upload PDF Modal */}
+      {/* Old Upload PDF Modal - Keep for backward compatibility */}
       {showUploadModal && selectedDocument && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-lg w-full">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Upload PDF Document</h2>
-              <p className="text-gray-600 mb-4">
-                Upload PDF for: <strong>{selectedDocument.document_name}</strong>
-              </p>
-              
-              <form onSubmit={handleUploadPDF}>
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select PDF File
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    required
-                    onChange={(e) => setPdfFile(e.target.files[0])}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                  />
-                  <p className="mt-2 text-sm text-gray-500">
-                    PDF will be automatically processed to extract comments
-                  </p>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={processing || !pdfFile}
-                    className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
-                  >
-                    {processing ? 'Uploading & Processing...' : 'Upload & Extract'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUploadModal(false);
-                      setPdfFile(null);
-                      setSelectedDocument(null);
-                    }}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Upload PDF for {selectedDocument.document_name}</h3>
+            <form onSubmit={handleUploadPDF}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select PDF File
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setPdfFile(e.target.files[0])}
+                  required
+                  className="w-full"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setSelectedDocument(null);
+                    setPdfFile(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={processing}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {processing ? 'Uploading...' : 'Upload'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

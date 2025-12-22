@@ -13,6 +13,7 @@ const crsApi = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable credentials for CORS with authentication
 });
 
 // Add auth token interceptor
