@@ -11,7 +11,9 @@ import {
   UsersIcon,
   ChartBarIcon,
   XMarkIcon,
-  Bars3Icon
+  Bars3Icon,
+  FolderIcon,
+  BriefcaseIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -26,6 +28,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
     crs: true,
+    projectControl: true,
     admin: false
   })
 
@@ -91,6 +94,22 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           description: 'Centralized CRS repository'
         }
       ]
+    },
+    {
+      id: 'projectControl',
+      title: '3. Project Control',
+      icon: BriefcaseIcon,
+      type: 'section',
+      expanded: expandedSections.projectControl,
+      children: [
+        {
+          id: 'projectManagement',
+          title: '3.1 Project Management',
+          icon: FolderIcon,
+          path: '/projects',
+          description: 'Manage and track projects'
+        }
+      ]
     }
   ]
 
@@ -98,7 +117,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     menuStructure.push({
       id: 'admin',
-      title: '3. Admin Management',
+      title: '4. Admin Management',
       icon: CogIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -106,14 +125,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '3.1 Admin Dashboard',
+          title: '4.1 Admin Dashboard',
           icon: ChartBarIcon,
           path: '/admin',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '3.2 User Management',
+          title: '4.2 User Management',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'Manage users & permissions'
