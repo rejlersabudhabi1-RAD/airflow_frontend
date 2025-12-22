@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { fetchUsers, fetchRoles, fetchCurrentUser } from '../store/slices/rbacSlice';
+import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 
 /**
@@ -11,7 +11,7 @@ import rbacService from '../services/rbac.service';
 const UserManagement = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { users, roles, currentUser, loading, error } = useSelector((state) => state.rbac);
+  const { users, roles, modules, currentUser, loading, error } = useSelector((state) => state.rbac);
   const { user: authUser } = useSelector((state) => state.auth);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -32,7 +32,7 @@ const UserManagement = () => {
     department: '',
     job_title: '',
     phone_number: '',
-    role_ids: []
+    module_ids: []
   });
 
   useEffect(() => {
@@ -44,10 +44,11 @@ const UserManagement = () => {
       try {
         setAuthError(false);
         
-        // Fetch users and roles via Redux
+        // Fetch users, roles, and modules via Redux
         await Promise.all([
           dispatch(fetchUsers()).unwrap(),
-          dispatch(fetchRoles()).unwrap()
+          dispatch(fetchRoles()).unwrap(),
+          dispatch(fetchModules()).unwrap()
         ]);
         
         // Load organizations with better error handling
@@ -160,10 +161,12 @@ const UserManagement = () => {
   // Ensure users is always an array before filtering
   const safeUsers = Array.isArray(users) ? users : (users?.results ? users.results : []);
   const safeRoles = Array.isArray(roles) ? roles : (roles?.results ? roles.results : []);
+  const safeModules = Array.isArray(modules) ? modules : (modules?.results ? modules.results : []);
   const safeOrganizations = Array.isArray(organizations) ? organizations : [];
   
   console.log('Debug - users:', users, 'safeUsers length:', safeUsers.length);
   console.log('Debug - roles:', roles, 'safeRoles length:', safeRoles.length);
+  console.log('Debug - modules:', modules, 'safeModules length:', safeModules.length);
   console.log('Debug - organizations:', organizations, 'safeOrganizations length:', safeOrganizations.length);
   
   const filteredUsers = safeUsers.filter(user => {
@@ -212,7 +215,7 @@ const UserManagement = () => {
         department: formData.department,
         job_title: formData.job_title,
         phone: formData.phone_number,
-        role_ids: formData.role_ids
+        module_ids: formData.module_ids
       });
       
       alert('User created successfully!');
@@ -227,7 +230,7 @@ const UserManagement = () => {
         department: '',
         job_title: '',
         phone_number: '',
-        role_ids: []
+        module_ids: []
       });
     } catch (error) {
       console.error('Failed to create user:', error);
@@ -284,12 +287,12 @@ const UserManagement = () => {
     );
   };
 
-  const toggleRole = (roleId) => {
+  const toggleModule = (moduleId) => {
     setFormData(prev => ({
       ...prev,
-      role_ids: prev.role_ids.includes(roleId)
-        ? prev.role_ids.filter(id => id !== roleId)
-        : [...prev.role_ids, roleId]
+      module_ids: prev.module_ids.includes(moduleId)
+        ? prev.module_ids.filter(id => id !== moduleId)
+        : [...prev.module_ids, moduleId]
     }));
   };
 
@@ -638,21 +641,23 @@ const UserManagement = () => {
                     </div>
                   </div>
 
-                  {/* Roles & Permissions Section */}
+                  {/* Features & Access Section */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Roles & Permissions <span className="text-red-500">*</span>
+                      Features & Access <span className="text-red-500">*</span>
                     </h3>
-                    <p className="text-sm text-gray-600 mb-4">Select one or more roles for this user</p>
+                    <p className="text-sm text-gray-600 mb-4">Select the features this user can access</p>
                     
-                    {safeRoles.length > 0 ? (
+                    {safeModules.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {safeRoles.map(role => (
+                        {safeModules
+                          .filter(module => module.is_active)
+                          .map(module => (
                           <div
-                            key={role.id}
-                            onClick={() => toggleRole(role.id)}
+                            key={module.id}
+                            onClick={() => toggleModule(module.id)}
                             className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                              formData.role_ids.includes(role.id)
+                              formData.module_ids.includes(module.id)
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-gray-200 bg-white hover:border-blue-300'
                             }`}
@@ -661,21 +666,28 @@ const UserManagement = () => {
                               <div className="flex items-center h-5">
                                 <input
                                   type="checkbox"
-                                  checked={formData.role_ids.includes(role.id)}
-                                  onChange={() => toggleRole(role.id)}
+                                  checked={formData.module_ids.includes(module.id)}
+                                  onChange={() => toggleModule(module.id)}
                                   className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                                 />
                               </div>
                               <div className="ml-3 flex-1">
                                 <label className="font-medium text-gray-900 cursor-pointer">
-                                  {role.name}
+                                  {module.name}
                                 </label>
-                                {role.description && (
-                                  <p className="text-sm text-gray-600 mt-1">{role.description}</p>
+                                {module.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{module.description}</p>
                                 )}
-                                <div className="flex items-center mt-2 text-xs text-gray-500">
-                                  <span className="px-2 py-1 bg-gray-100 rounded">Level {role.level}</span>
-                                </div>
+                                {module.icon && (
+                                  <div className="flex items-center mt-2 text-xs text-gray-500">
+                                    <span className="px-2 py-1 bg-gray-100 rounded flex items-center">
+                                      <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                      </svg>
+                                      {module.icon}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -683,14 +695,14 @@ const UserManagement = () => {
                       </div>
                     ) : (
                       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-yellow-800">No roles available. Please ensure you are logged in and have the necessary permissions.</p>
+                        <p className="text-yellow-800">No features available. Please ensure modules are configured properly.</p>
                       </div>
                     )}
                     
-                    {formData.role_ids.length > 0 && (
+                    {formData.module_ids.length > 0 && (
                       <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <p className="text-sm text-blue-800">
-                          <strong>Selected:</strong> {formData.role_ids.length} role(s)
+                          <strong>Selected:</strong> {formData.module_ids.length} feature(s)
                         </p>
                       </div>
                     )}
