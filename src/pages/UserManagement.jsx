@@ -655,7 +655,6 @@ const UserManagement = () => {
                           .map(module => (
                           <div
                             key={module.id}
-                            onClick={() => toggleModule(module.id)}
                             className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                               formData.module_ids.includes(module.id)
                                 ? 'border-blue-500 bg-blue-50'
@@ -667,11 +666,15 @@ const UserManagement = () => {
                                 <input
                                   type="checkbox"
                                   checked={formData.module_ids.includes(module.id)}
-                                  onChange={() => toggleModule(module.id)}
-                                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleModule(module.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                                 />
                               </div>
-                              <div className="ml-3 flex-1">
+                              <div className="ml-3 flex-1" onClick={() => toggleModule(module.id)}>
                                 <label className="font-medium text-gray-900 cursor-pointer">
                                   {module.name}
                                 </label>
