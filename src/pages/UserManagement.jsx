@@ -194,8 +194,8 @@ const UserManagement = () => {
       return;
     }
     
-    if (formData.role_ids.length === 0) {
-      alert('Please select at least one role for the user');
+    if (formData.module_ids.length === 0) {
+      alert('Please select at least one feature for the user');
       return;
     }
     
