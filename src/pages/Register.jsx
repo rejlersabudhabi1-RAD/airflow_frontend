@@ -52,7 +52,7 @@ const Register = () => {
             <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
               Create Account
             </h2>
-            <p className="text-gray-600">Join REJLERS AIFLOW Platform</p>
+            <p className="text-gray-600">Join REJLERS RADAI Platform</p>
           </div>
 
           <Formik

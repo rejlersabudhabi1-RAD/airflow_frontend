@@ -5,7 +5,7 @@ import { logout } from '../../store/slices/authSlice'
 import { toggleTheme } from '../../store/slices/themeSlice'
 
 /**
- * Header Component - REJLERS AIFLOW
+ * Header Component - REJLERS RADAI
  * Premium navigation header with REJLERS branding
  */
 
@@ -35,7 +35,7 @@ const Header = () => {
               </span>
               <div className="h-6 w-px bg-amber-400"></div>
               <span className="text-xl font-bold bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
-                AIFLOW
+                RADAI
               </span>
             </div>
           </Link>

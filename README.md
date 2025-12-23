@@ -1,6 +1,6 @@
-# AIFlow Frontend
+# RADAI Frontend
 
-React 18 frontend application for AIFlow.
+React 18 frontend application for RADAI.
 
 ## Features
 

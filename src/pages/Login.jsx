@@ -69,7 +69,7 @@ const Login = () => {
             </h1>
             <div className="flex items-center space-x-2">
               <div className="h-1 w-16 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"></div>
-              <span className="text-amber-300 text-lg font-semibold">AIFLOW</span>
+              <span className="text-amber-300 text-lg font-semibold">RADAI</span>
             </div>
           </div>
           
@@ -128,7 +128,7 @@ const Login = () => {
             <h1 className="text-4xl font-black text-gray-900 mb-1">REJLERS</h1>
             <div className="flex items-center justify-center space-x-2">
               <div className="h-1 w-12 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"></div>
-              <span className="text-amber-600 text-base font-semibold">AIFLOW</span>
+              <span className="text-amber-600 text-base font-semibold">RADAI</span>
             </div>
           </div>
 
@@ -252,7 +252,7 @@ const Login = () => {
                 <div className="w-full border-t border-gray-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-600 font-medium">New to AIFLOW?</span>
+                <span className="px-4 bg-white text-gray-600 font-medium">New to RADAI?</span>
               </div>
             </div>
             <div className="mt-6 text-center">

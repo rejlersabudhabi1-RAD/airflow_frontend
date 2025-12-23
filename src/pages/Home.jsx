@@ -2,7 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 
 /**
- * Home Page - REJLERS AIFLOW Landing Page
+ * Home Page - REJLERS RADAI Landing Page
  * Premium landing page for P&ID Verification Platform
  */
 

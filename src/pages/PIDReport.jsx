@@ -20,6 +20,16 @@ const PIDReport = () => {
     fetchReport();
   }, [id]);
 
+  // Debug logging for filter changes
+  useEffect(() => {
+    if (report?.issues) {
+      console.log('[Filter Debug] Current filters:', { filterSeverity, filterStatus });
+      console.log('[Filter Debug] Total issues:', report.issues.length);
+      console.log('[Filter Debug] Sample issue severities:', report.issues.slice(0, 3).map(i => i.severity));
+      console.log('[Filter Debug] Sample issue statuses:', report.issues.slice(0, 3).map(i => i.status));
+    }
+  }, [filterSeverity, filterStatus, report]);
+
   const extractAIInsights = (reportData) => {
     if (!reportData) return null;
     
@@ -436,9 +446,20 @@ const PIDReport = () => {
     return colors[status] || colors.pending;
   };
 
+  // Enhanced filtering with robust normalization and console logging for debugging
   const filteredIssues = report?.issues?.filter(issue => {
-    if (filterSeverity !== 'all' && issue.severity !== filterSeverity) return false;
-    if (filterStatus !== 'all' && issue.status !== filterStatus) return false;
+    // Normalize values to handle any case/whitespace inconsistencies  
+    const issueSeverity = (issue.severity || '').toString().toLowerCase().trim();
+    const issueStatus = (issue.status || '').toString().toLowerCase().trim();
+    const filterSev = filterSeverity.toLowerCase().trim();
+    const filterStat = filterStatus.toLowerCase().trim();
+    
+    // Apply severity filter
+    if (filterSev !== 'all' && issueSeverity !== filterSev) return false;
+    
+    // Apply status filter
+    if (filterStat !== 'all' && issueStatus !== filterStat) return false;
+    
     return true;
   }) || [];
 
@@ -983,8 +1004,11 @@ const PIDReport = () => {
                 <label className="text-sm font-medium text-gray-700 mr-2">Severity:</label>
                 <select
                   value={filterSeverity}
-                  onChange={(e) => setFilterSeverity(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-1 text-sm"
+                  onChange={(e) => {
+                    console.log('[Filter] Severity changed to:', e.target.value);
+                    setFilterSeverity(e.target.value);
+                  }}
+                  className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
                 >
                   <option value="all">All</option>
                   <option value="critical">Critical</option>
@@ -998,8 +1022,11 @@ const PIDReport = () => {
                 <label className="text-sm font-medium text-gray-700 mr-2">Status:</label>
                 <select
                   value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-1 text-sm"
+                  onChange={(e) => {
+                    console.log('[Filter] Status changed to:', e.target.value);
+                    setFilterStatus(e.target.value);
+                  }}
+                  className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
                 >
                   <option value="all">All</option>
                   <option value="pending">Pending</option>
@@ -1008,8 +1035,8 @@ const PIDReport = () => {
                 </select>
               </div>
               
-              <div className="ml-auto text-sm text-gray-600">
-                Showing {filteredIssues.length} of {report.total_issues} issues
+              <div className="ml-auto text-sm text-gray-600 flex items-center">
+                Showing <span className="font-semibold mx-1">{filteredIssues.length}</span> of <span className="font-semibold mx-1">{report.total_issues}</span> issues
               </div>
             </div>
           </div>

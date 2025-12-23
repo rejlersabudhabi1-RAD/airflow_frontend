@@ -1,9 +1,9 @@
 {
-  "name": "aiflow-frontend",
+  "name": "radai-frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Smart ReactJS frontend for AIFlow application",
+  "description": "Smart ReactJS frontend for RADAI application",
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@reduxjs/toolkit": "^2.0.1",

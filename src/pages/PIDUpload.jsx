@@ -649,7 +649,11 @@ const PIDUpload = () => {
         <ul className="text-sm text-blue-800 space-y-1">
           <li>✓ Equipment dimensions and datasheet compliance</li>
           <li>✓ Instrumentation tags and fail-safe positions</li>
-          <li>✓ PSV isolation philosophy and safety systems</li>
+          <li>✓ PSV set pressure vs Equipment Design Pressure compliance</li>
+          <li>✓ Pipe class and Trim class consistency for Equipment connections</li>
+          <li>✓ Dissimilar material connections and Insulating gasket requirements</li>
+          <li>✓ Minimum spool length downstream of RO and LTCS compliance</li>
+          <li>✓ Free draining/Slope requirements for horizontal piping</li>
           <li>✓ Piping layout and drainage compliance</li>
           <li>✓ Notes, legends, and project standard adherence</li>
         </ul>

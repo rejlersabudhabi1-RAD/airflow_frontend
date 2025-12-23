@@ -18,7 +18,7 @@ import {
 
 /**
  * Sidebar Navigation Component
- * Professional hierarchical menu for AIFlow platform
+ * Professional hierarchical menu for RADAI platform
  */
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -176,7 +176,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
               <span className="text-white font-bold text-lg">AI</span>
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              AIFlow
+              RADAI
             </span>
           </div>
           <button
