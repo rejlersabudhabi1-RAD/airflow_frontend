@@ -95,26 +95,54 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
     
-    console.error('[API Error] ❌', {
-      message: error.message,
-      status: error.response?.status,
-      url: error.config?.url,
-      method: error.config?.method
-    });
+    // Enhanced error logging for debugging
+    console.group('[API Error] ❌ Detailed Error Information');
+    console.error('Error Message:', error.message);
+    console.error('Error Code:', error.code);
+    console.error('Response Status:', error.response?.status);
+    console.error('Request URL:', error.config?.url);
+    console.error('Request Method:', error.config?.method);
+    console.error('Request Timeout:', error.config?.timeout);
+    console.error('Full Error Object:', error);
+    console.groupEnd();
 
-    // Handle CORS/Network errors specifically
-    if (!error.response && (error.message.includes('CORS') || error.message.includes('Network Error') || error.code === 'ERR_NETWORK')) {
-      console.warn('[API] 🌐 CORS/Network error detected, running diagnostics...');
+    // Detect and handle timeout errors specifically
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      console.error('[API] ⏱️ TIMEOUT ERROR DETECTED');
+      console.error('[API] Request timed out after', error.config?.timeout, 'ms');
+      console.error('[API] Target:', error.config?.url);
       
-      // Try to diagnose CORS issues
-      try {
-        await testCorsConnection();
-        console.log('[API] 🩺 CORS diagnostic passed - this might be a temporary network issue');
-      } catch (corsError) {
-        console.error('[API] 🔥 CORS diagnostic failed:', corsError);
-        toast.error('Connection blocked by browser security policy. The server may be starting up - please wait a moment and try again.');
-        return Promise.reject(error);
+      const timeoutError = new Error('Request timeout - server is not responding');
+      timeoutError.isTimeout = true;
+      timeoutError.originalError = error;
+      
+      toast.error(`Server not responding after ${Math.floor((error.config?.timeout || 60000) / 1000)} seconds. Please check if the backend is running.`);
+      return Promise.reject(timeoutError);
+    }
+
+    // Handle network/connection errors (cannot reach server)
+    if (!error.response) {
+      console.error('[API] 🌐 NETWORK ERROR - No response received from server');
+      
+      // Check if it's a CORS issue
+      if (error.message.includes('CORS') || error.code === 'ERR_NETWORK') {
+        console.warn('[API] 🔥 CORS/Network error detected, running diagnostics...');
+        
+        const networkError = new Error('Cannot connect to server');
+        networkError.isNetworkError = true;
+        networkError.originalError = error;
+        
+        toast.error('Cannot reach server. Please verify the backend is running at ' + API_BASE_URL);
+        return Promise.reject(networkError);
       }
+      
+      // Generic network error
+      const networkError = new Error('Network connection failed');
+      networkError.isNetworkError = true;
+      networkError.originalError = error;
+      
+      toast.error('Network error - please check your internet connection.');
+      return Promise.reject(networkError);
     }
 
     // Handle token refresh
@@ -125,30 +153,55 @@ apiClient.interceptors.response.use(
         const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
         
         if (!refreshToken) {
+          console.warn('[API] No refresh token available, redirecting to login');
           // No refresh token, redirect to login
           localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
           localStorage.removeItem(STORAGE_KEYS.USER_DATA)
-          window.location.href = '/login'
+          
+          // Avoid redirect loop - only redirect if not already on login page
+          if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login'
+          }
           return Promise.reject(error)
         }
         
+        console.log('[API] 🔄 Attempting to refresh access token...');
         const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
           refresh: refreshToken,
+        }, {
+          timeout: 30000, // 30 second timeout for token refresh
         })
 
         const { access } = response.data
+        
+        if (!access) {
+          throw new Error('No access token received from refresh endpoint');
+        }
+        
+        console.log('[API] ✅ Token refresh successful');
         localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access)
 
+        // Update the failed request's authorization header
         originalRequest.headers.Authorization = `Bearer ${access}`
+        
+        // Retry the original request
         return apiClient(originalRequest)
       } catch (refreshError) {
+        console.error('[API] ❌ Token refresh failed:', refreshError.message);
+        
         // Refresh failed, logout user
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
         localStorage.removeItem(STORAGE_KEYS.USER_DATA)
         
-        // Don't show toast when redirecting to login
-        window.location.href = '/login'
+        // Avoid redirect loop - only redirect if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          toast.error('Session expired. Please login again.');
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 1000);
+        }
+        
         return Promise.reject(refreshError)
       }
     }

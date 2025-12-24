@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api.config';
+import { STORAGE_KEYS } from '../config/app.config';
 
 // Create axios instance with auth headers
 const crsApi = axios.create({
@@ -17,7 +18,7 @@ const crsApi = axios.create({
 
 // Add auth token interceptor
 crsApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

@@ -20,10 +20,10 @@ const getApiBaseUrl = () => {
     return PRODUCTION_API_URL
   }
   
-  // 3. For localhost, use local backend
+  // 3. For localhost, use nginx proxy path (relative URL)
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    const localUrl = 'http://localhost:8000/api/v1'
-    console.log('[API Config] Detected localhost, using local backend:', localUrl)
+    const localUrl = '/api/v1'
+    console.log('[API Config] Detected localhost, using nginx proxy:', localUrl)
     return localUrl
   }
   
@@ -56,8 +56,9 @@ export const API_ENDPOINTS = {
   HEALTH: '/health/',
 }
 
-// Dynamic timeouts based on operation type
-export const API_TIMEOUT = 10000 // 10 seconds (default)
+// Dynamic timeouts based on operation type and database location
+// Increased timeout for Railway database connections from local Docker
+export const API_TIMEOUT = 90000 // 90 seconds (increased for Railway database)
 export const API_TIMEOUT_LONG = 600000 // 10 minutes for file upload/analysis
 
 export const HTTP_STATUS = {
