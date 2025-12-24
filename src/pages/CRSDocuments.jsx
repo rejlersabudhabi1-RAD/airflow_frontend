@@ -55,6 +55,11 @@ const CRSDocuments = () => {
     }
   };
 
+  // NEW: State for preview mode
+  const [previewData, setPreviewData] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState(null);
+
   const handleUploadAndProcess = async (e) => {
     e.preventDefault();
     if (!uploadFile) {
@@ -72,10 +77,11 @@ const CRSDocuments = () => {
       formData.append('document_number', fileMetadata.document_number);
       formData.append('revision', fileMetadata.revision);
       formData.append('contractor', fileMetadata.contractor);
+      formData.append('preview', 'true'); // Request preview mode first
       
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
-      // Call unified upload endpoint
+      // Call unified upload endpoint in preview mode
       const response = await fetch(
         `${API_BASE_URL}/crs/documents/upload-and-process/`,
         {
@@ -92,62 +98,29 @@ const CRSDocuments = () => {
         throw new Error(error.error || 'Upload failed');
       }
       
-      // Check if response is file download (populated CRS) or JSON
-      const contentType = response.headers.get('content-type');
+      // Preview mode returns JSON with comments data
+      const data = await response.json();
       
-      if (contentType && contentType.includes('application/vnd.openxmlformats')) {
-        // It's an Excel file - download it
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `CRS_Populated_${fileMetadata.document_number || 'Document'}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        const commentCount = response.headers.get('X-Comment-Count') || 'unknown';
-        
+      if (data.preview && data.comments) {
+        // Store preview data and show preview modal
+        setPreviewData({
+          ...data,
+          file: uploadFile,
+          fileMetadata: { ...fileMetadata }
+        });
+        setShowCreateModal(false);
+        setShowPreviewModal(true);
         setUploadResult({
           success: true,
-          message: `Successfully processed! Extracted ${commentCount} comments. Your standardized CRS template is downloading...`
+          message: `Extracted ${data.comments.length} comments. Review below and choose download format.`
         });
-        
-        // Close modal after success
-        setTimeout(() => {
-          setShowCreateModal(false);
-          setUploadFile(null);
-          setFileMetadata({
-            project_name: '',
-            document_number: '',
-            revision: '',
-            contractor: '',
-          });
-          setUploadResult(null);
-          loadData();
-        }, 3000);
       } else {
-        // JSON response
-        const data = await response.json();
+        // Fallback for non-preview response
         setUploadResult({
           success: true,
           message: data.message || 'File processed successfully',
           data: data
         });
-        
-        setTimeout(() => {
-          setShowCreateModal(false);
-          setUploadFile(null);
-          setFileMetadata({
-            project_name: '',
-            document_number: '',
-            revision: '',
-            contractor: '',
-          });
-          setUploadResult(null);
-          loadData();
-        }, 2000);
       }
       
     } catch (error) {
@@ -159,6 +132,81 @@ const CRSDocuments = () => {
     } finally {
       setProcessing(false);
     }
+  };
+
+  // NEW: Handle download in specific format
+  const handleDownload = async (format) => {
+    if (!previewData || !previewData.file) {
+      alert('No file data available for download');
+      return;
+    }
+    
+    setDownloadingFormat(format);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', previewData.file);
+      formData.append('project_name', previewData.fileMetadata.project_name);
+      formData.append('document_number', previewData.fileMetadata.document_number);
+      formData.append('revision', previewData.fileMetadata.revision);
+      formData.append('contractor', previewData.fileMetadata.contractor);
+      formData.append('preview', 'false');
+      formData.append('format', format);
+      
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      const response = await fetch(
+        `${API_BASE_URL}/crs/documents/upload-and-process/`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        }
+      );
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Download failed');
+      }
+      
+      // Download the file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const docNumber = previewData.fileMetadata.document_number || 'Document';
+      const ext = format === 'xlsx' ? 'xlsx' : format === 'csv' ? 'csv' : 'json';
+      a.download = `CRS_${docNumber}.${ext}`;
+      
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Error downloading:', error);
+      alert('Failed to download: ' + error.message);
+    } finally {
+      setDownloadingFormat(null);
+    }
+  };
+
+  // NEW: Close preview and reset
+  const handleClosePreview = () => {
+    setShowPreviewModal(false);
+    setPreviewData(null);
+    setUploadFile(null);
+    setFileMetadata({
+      project_name: '',
+      document_number: '',
+      revision: '',
+      contractor: '',
+    });
+    setUploadResult(null);
+    loadData();
   };
 
   const handleFileSelect = (e) => {
@@ -789,6 +837,222 @@ const CRSDocuments = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal - Shows extracted comments before download */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">
+                    ✅ Comment Extraction Complete
+                  </h2>
+                  <p className="text-green-100 text-sm">
+                    {previewData.statistics?.total || previewData.comments?.length || 0} comments extracted • Review and download in your preferred format
+                  </p>
+                </div>
+                <button
+                  onClick={handleClosePreview}
+                  className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Statistics Summary */}
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                  <p className="text-3xl font-bold text-indigo-600">{previewData.statistics?.total || previewData.comments?.length || 0}</p>
+                  <p className="text-sm text-gray-500">Total Comments</p>
+                </div>
+                {previewData.statistics?.by_type && Object.keys(previewData.statistics.by_type).length > 0 && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">By Type</p>
+                    <div className="text-xs text-gray-600">
+                      {Object.entries(previewData.statistics.by_type).slice(0, 3).map(([type, count]) => (
+                        <span key={type} className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded mr-1 mb-1">
+                          {type}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {previewData.statistics?.by_discipline && Object.keys(previewData.statistics.by_discipline).length > 0 && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">By Discipline</p>
+                    <div className="text-xs text-gray-600">
+                      {Object.entries(previewData.statistics.by_discipline).slice(0, 3).map(([disc, count]) => (
+                        <span key={disc} className="inline-block bg-purple-100 text-purple-800 px-2 py-0.5 rounded mr-1 mb-1">
+                          {disc}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {previewData.statistics?.by_reviewer && Object.keys(previewData.statistics.by_reviewer).length > 0 && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <p className="text-sm font-semibold text-gray-700 mb-1">By Reviewer</p>
+                    <div className="text-xs text-gray-600">
+                      {Object.entries(previewData.statistics.by_reviewer).slice(0, 3).map(([reviewer, count]) => (
+                        <span key={reviewer} className="inline-block bg-green-100 text-green-800 px-2 py-0.5 rounded mr-1 mb-1">
+                          {reviewer}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Comments Table */}
+            <div className="flex-1 overflow-auto p-4">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Page</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comment</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Reviewer</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {previewData.comments && previewData.comments.map((comment, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{index + 1}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{comment.page_number || comment.page || '-'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                            (comment.comment_type || comment.type) === 'HOLD' ? 'bg-red-100 text-red-800' :
+                            (comment.comment_type || comment.type) === 'ADEQUACY' ? 'bg-yellow-100 text-yellow-800' :
+                            (comment.comment_type || comment.type) === 'RECOMMENDATION' ? 'bg-blue-100 text-blue-800' :
+                            (comment.comment_type || comment.type) === 'CLARIFICATION' ? 'bg-purple-100 text-purple-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {comment.comment_type || comment.type || 'GENERAL'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 max-w-md">
+                          <div className="truncate" title={comment.comment_text || comment.content}>
+                            {comment.comment_text || comment.content || comment.text || '-'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{comment.reviewer_name || comment.reviewer || comment.author || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                {(!previewData.comments || previewData.comments.length === 0) && (
+                  <div className="p-8 text-center text-gray-500">
+                    <p>No comments found in the document.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Download Actions */}
+            <div className="p-4 bg-gray-50 border-t border-gray-200">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <p className="text-sm text-gray-600">
+                  Choose your preferred download format:
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {/* Excel Download */}
+                  <button
+                    onClick={() => handleDownload('xlsx')}
+                    disabled={downloadingFormat !== null}
+                    className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                      downloadingFormat === 'xlsx' 
+                        ? 'bg-green-400 text-white cursor-wait'
+                        : 'bg-green-600 text-white hover:bg-green-700 hover:shadow-lg'
+                    }`}
+                  >
+                    {downloadingFormat === 'xlsx' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                        </svg>
+                        📊 Excel (.xlsx)
+                      </>
+                    )}
+                  </button>
+
+                  {/* CSV Download */}
+                  <button
+                    onClick={() => handleDownload('csv')}
+                    disabled={downloadingFormat !== null}
+                    className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                      downloadingFormat === 'csv' 
+                        ? 'bg-blue-400 text-white cursor-wait'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg'
+                    }`}
+                  >
+                    {downloadingFormat === 'csv' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                        </svg>
+                        📄 CSV
+                      </>
+                    )}
+                  </button>
+
+                  {/* JSON Download */}
+                  <button
+                    onClick={() => handleDownload('json')}
+                    disabled={downloadingFormat !== null}
+                    className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                      downloadingFormat === 'json' 
+                        ? 'bg-purple-400 text-white cursor-wait'
+                        : 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-lg'
+                    }`}
+                  >
+                    {downloadingFormat === 'json' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                        </svg>
+                        🔧 JSON
+                      </>
+                    )}
+                  </button>
+
+                  {/* Cancel/Close */}
+                  <button
+                    onClick={handleClosePreview}
+                    className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
