@@ -28,14 +28,48 @@ const CRSDocuments = () => {
     document_number: '',
     revision: '',
     contractor: '',
+    department: '',
   });
+  
+  // Department options - loaded from API config
+  const [departmentOptions, setDepartmentOptions] = useState([
+    // Default fallback options
+    { id: 'process_control_hse', name: 'Process Control and HSE', code: 'PCH' },
+    { id: 'ict', name: 'I&CT', code: 'ICT' },
+    { id: 'structure_civil', name: 'Structure and Civil', code: 'SC' },
+  ]);
   const [processing, setProcessing] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [pdfFile, setPdfFile] = useState(null); // For old upload modal
 
   useEffect(() => {
     loadData();
+    loadConfig(); // Load configuration including departments
   }, []);
+
+  // Load soft-coded configuration from backend
+  const loadConfig = async () => {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(
+        `${API_BASE_URL}/crs/documents/config/`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.config?.departments) {
+          setDepartmentOptions(data.config.departments);
+        }
+      }
+    } catch (error) {
+      console.log('Using default department options');
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -77,6 +111,7 @@ const CRSDocuments = () => {
       formData.append('document_number', fileMetadata.document_number);
       formData.append('revision', fileMetadata.revision);
       formData.append('contractor', fileMetadata.contractor);
+      formData.append('department', fileMetadata.department);
       formData.append('preview', 'true'); // Request preview mode first
       
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -150,6 +185,7 @@ const CRSDocuments = () => {
       formData.append('document_number', previewData.fileMetadata.document_number);
       formData.append('revision', previewData.fileMetadata.revision);
       formData.append('contractor', previewData.fileMetadata.contractor);
+      formData.append('department', previewData.fileMetadata.department);
       formData.append('preview', 'false');
       formData.append('format', format);
       
@@ -178,7 +214,8 @@ const CRSDocuments = () => {
       a.href = url;
       
       const docNumber = previewData.fileMetadata.document_number || 'Document';
-      const ext = format === 'xlsx' ? 'xlsx' : format === 'csv' ? 'csv' : 'json';
+      const extMap = { xlsx: 'xlsx', csv: 'csv', json: 'json', pdf: 'pdf' };
+      const ext = extMap[format] || format;
       a.download = `CRS_${docNumber}.${ext}`;
       
       document.body.appendChild(a);
@@ -204,6 +241,7 @@ const CRSDocuments = () => {
       document_number: '',
       revision: '',
       contractor: '',
+      department: '',
     });
     setUploadResult(null);
     loadData();
@@ -764,6 +802,25 @@ const CRSDocuments = () => {
                     />
                   </div>
                 </div>
+
+                {/* Department Selection */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={fileMetadata.department}
+                    onChange={(e) => setFileMetadata({...fileMetadata, department: e.target.value})}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                  >
+                    <option value="">Select Department...</option>
+                    {departmentOptions.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Result Message */}
@@ -1039,6 +1096,56 @@ const CRSDocuments = () => {
                           <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
                         </svg>
                         🔧 JSON
+                      </>
+                    )}
+                  </button>
+
+                  {/* PDF Download */}
+                  <button
+                    onClick={() => handleDownload('pdf')}
+                    disabled={downloadingFormat !== null}
+                    className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                      downloadingFormat === 'pdf' 
+                        ? 'bg-red-400 text-white cursor-wait'
+                        : 'bg-red-600 text-white hover:bg-red-700 hover:shadow-lg'
+                    }`}
+                  >
+                    {downloadingFormat === 'pdf' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                        </svg>
+                        📕 PDF
+                      </>
+                    )}
+                  </button>
+
+                  {/* DOCX Download */}
+                  <button
+                    onClick={() => handleDownload('docx')}
+                    disabled={downloadingFormat !== null}
+                    className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
+                      downloadingFormat === 'docx' 
+                        ? 'bg-indigo-400 text-white cursor-wait'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg'
+                    }`}
+                  >
+                    {downloadingFormat === 'docx' ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+                        </svg>
+                        📝 Word
                       </>
                     )}
                   </button>
