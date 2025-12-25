@@ -10,7 +10,9 @@ import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PFDUpload from './pages/PFDUpload'
+import S3PFDBrowser from './pages/S3PFDBrowser'
 import CRSDocuments from './pages/CRSDocuments'
+import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import ProjectControl from './pages/ProjectControl'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
@@ -102,6 +104,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="pfd/s3-browser"
+          element={
+            <ProtectedRoute>
+              <S3PFDBrowser />
+            </ProtectedRoute>
+          }
+        />
         
         {/* Feature Routes - CRS Documents */}
         <Route
@@ -109,6 +119,14 @@ function App() {
           element={
             <ProtectedRoute>
               <CRSDocuments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="crs/documents/history"
+          element={
+            <ProtectedRoute>
+              <CRSDocumentsHistory />
             </ProtectedRoute>
           }
         />

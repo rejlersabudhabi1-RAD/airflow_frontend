@@ -178,7 +178,7 @@ const PFDUpload = () => {
                     type="text"
                     value={formData.document_title}
                     onChange={(e) => setFormData({ ...formData, document_title: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
                     placeholder="e.g., Crude Oil Processing Unit"
                     disabled={uploading}
                   />
@@ -192,7 +192,7 @@ const PFDUpload = () => {
                     type="text"
                     value={formData.document_number}
                     onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
                     placeholder="e.g., PFD-001"
                     disabled={uploading}
                   />
@@ -206,7 +206,7 @@ const PFDUpload = () => {
                     type="text"
                     value={formData.revision}
                     onChange={(e) => setFormData({ ...formData, revision: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
                     placeholder="e.g., A, B, C"
                     disabled={uploading}
                   />
@@ -220,7 +220,7 @@ const PFDUpload = () => {
                     type="text"
                     value={formData.project_name}
                     onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
                     placeholder="e.g., ADNOC Refinery Expansion"
                     disabled={uploading}
                   />
@@ -234,7 +234,7 @@ const PFDUpload = () => {
                     type="text"
                     value={formData.project_code}
                     onChange={(e) => setFormData({ ...formData, project_code: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
                     placeholder="e.g., ADNOC-REF-2024"
                     disabled={uploading}
                   />
