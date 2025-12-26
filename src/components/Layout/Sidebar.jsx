@@ -117,8 +117,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     menuStructure.push({
       id: 'admin',
-      title: '4. Admin Management',
-      icon: CogIcon,
+      title: '4. User Management',
+      icon: UsersIcon,
       type: 'section',
       expanded: expandedSections.admin,
       badge: 'ADMIN',
@@ -132,10 +132,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'userManagement',
-          title: '4.2 User Management',
+          title: '4.2 Manage Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
-          description: 'Manage users & permissions'
+          description: 'User accounts & permissions'
         }
       ]
     })
