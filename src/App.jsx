@@ -10,6 +10,7 @@ import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PFDUpload from './pages/PFDUpload'
+import PFDConvert from './pages/PFDConvert'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
@@ -101,6 +102,14 @@ function App() {
           element={
             <ProtectedRoute>
               <PFDUpload />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/convert/:documentId"
+          element={
+            <ProtectedRoute>
+              <PFDConvert />
             </ProtectedRoute>
           }
         />
