@@ -368,20 +368,20 @@ const CRSDocuments = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-8 px-4 sm:px-6">
       {/* Header */}
-      <div className="mb-8 flex justify-between items-start">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row justify-between items-start gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
             📋 CRS Documents - Comment Resolution Sheet
           </h1>
-          <p className="text-gray-600">
+          <p className="text-sm sm:text-base text-gray-600">
             Professional PDF comment extraction and Google Sheets integration
           </p>
         </div>
         <Link
           to="/crs/documents/history"
-          className="inline-flex items-center px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+          className="inline-flex items-center px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm md:text-base bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors whitespace-nowrap"
         >
           📚 View History
         </Link>

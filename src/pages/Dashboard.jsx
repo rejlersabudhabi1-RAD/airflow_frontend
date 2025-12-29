@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { fetchFeatures } from '../store/featureSlice'
 import FeatureCard from '../components/FeatureCard'
+import ForceRefreshAuth from '../components/ForceRefreshAuth'
 
 /**
  * Dashboard Page
@@ -110,7 +111,7 @@ const Dashboard = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header Section */}
         <div className="mb-8">
@@ -259,6 +260,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      <ForceRefreshAuth />
     </div>
   )
 }

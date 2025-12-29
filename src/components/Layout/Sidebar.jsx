@@ -25,14 +25,64 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useSelector((state) => state.auth)
+  const [userModules, setUserModules] = useState([])
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
     crs: true,
     projectControl: true,
-    admin: false
+    admin: true
   })
 
   const isAdmin = user?.is_staff || user?.is_superuser
+
+  // Fetch user's accessible modules
+  React.useEffect(() => {
+    const fetchUserModules = async () => {
+      try {
+        const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
+        const response = await fetch('/api/v1/rbac/users/me/', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (!response.ok) {
+          console.error('Failed to fetch modules, status:', response.status)
+          return
+        }
+        
+        const data = await response.json()
+        console.log('🔐 Full user data:', data)
+        
+        if (data.modules && Array.isArray(data.modules)) {
+          const moduleCodes = data.modules.map(m => m.code)
+          setUserModules(moduleCodes)
+          console.log('🔐 User accessible modules:', moduleCodes)
+        } else {
+          console.warn('No modules found in response')
+          setUserModules([])
+        }
+      } catch (error) {
+        console.error('Failed to fetch user modules:', error)
+        setUserModules([])
+      }
+    }
+    
+    if (user) {
+      fetchUserModules()
+    }
+  }, [user])
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('=== SIDEBAR DEBUG ===')
+    console.log('User object:', user)
+    console.log('is_staff:', user?.is_staff)
+    console.log('is_superuser:', user?.is_superuser)
+    console.log('isAdmin:', isAdmin)
+    console.log('User Modules:', userModules)
+    console.log('==================')
+  }, [user, isAdmin, userModules])
 
   // Toggle section expansion
   const toggleSection = (section) => {
@@ -54,7 +104,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       title: 'Dashboard',
       icon: HomeIcon,
       path: '/dashboard',
-      type: 'single'
+      type: 'single',
+      requiresModule: false // Dashboard is always accessible
     },
     {
       id: 'processEngineering',
@@ -68,14 +119,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           title: '1.1 P&ID Design Verification',
           icon: DocumentTextIcon,
           path: '/pid/upload',
-          description: 'AI-powered engineering review'
+          description: 'AI-powered engineering review',
+          moduleCode: 'PID'
         },
         {
           id: 'pfd',
           title: '1.2 PFD to P&ID Converter',
           icon: DocumentTextIcon,
           path: '/pfd/upload',
-          description: 'Intelligent conversion'
+          description: 'Intelligent conversion',
+          moduleCode: 'PFD'
         }
       ]
     },
@@ -91,7 +144,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           title: '2.1 CRS Document Management',
           icon: DocumentTextIcon,
           path: '/crs/documents',
-          description: 'Centralized CRS repository'
+          description: 'Centralized CRS repository',
+          moduleCode: 'CRS'
         }
       ]
     },
@@ -107,15 +161,55 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           title: '3.1 Project Management',
           icon: FolderIcon,
           path: '/projects',
-          description: 'Manage and track projects'
+          description: 'Manage and track projects',
+          moduleCode: 'PROJECT_CONTROL'
         }
       ]
     }
   ]
 
+  // Helper function to check if user has access to a menu item
+  const hasModuleAccess = (item) => {
+    // Dashboard and admin sections are handled separately
+    if (item.requiresModule === false) return true
+    if (item.type === 'section') return true // Sections are shown if they have accessible children
+    
+    // Check if user has the required module
+    if (item.moduleCode) {
+      return isAdmin || userModules.includes(item.moduleCode)
+    }
+    
+    return true
+  }
+
+  // Filter menu items based on user's modules
+  const filterMenuByModules = (items) => {
+    return items.map(item => {
+      if (item.type === 'section' && item.children) {
+        // Filter children based on module access
+        const accessibleChildren = item.children.filter(hasModuleAccess)
+        
+        // Only show section if it has accessible children
+        if (accessibleChildren.length > 0) {
+          return { ...item, children: accessibleChildren }
+        }
+        return null
+      }
+      
+      // For single items, check module access
+      if (hasModuleAccess(item)) {
+        return item
+      }
+      
+      return null
+    }).filter(item => item !== null)
+  }
+
+  const filteredMenu = filterMenuByModules(menuStructure)
+
   // Add admin section if user is admin
   if (isAdmin) {
-    menuStructure.push({
+    filteredMenu.push({
       id: 'admin',
       title: '4. User Management',
       icon: UsersIcon,
@@ -162,11 +256,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       {/* Sidebar */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50
+          fixed inset-y-0 left-0 z-50 top-16
           w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          flex flex-col
+          flex flex-col h-[calc(100vh-4rem)]
         `}
       >
         {/* Sidebar Header */}
@@ -189,7 +283,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
         {/* Navigation Menu */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {menuStructure.map((item) => (
+          {filteredMenu.map((item) => (
             <div key={item.id}>
               {item.type === 'single' ? (
                 // Single menu item
