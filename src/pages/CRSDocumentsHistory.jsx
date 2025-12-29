@@ -13,11 +13,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
+import { STORAGE_KEYS } from '../config/app.config';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const CRSDocumentsHistory = () => {
-  const { token, user } = useSelector((state) => state.auth);
+  const { user } = useSelector((state) => state.auth);
   
   // State
   const [activeTab, setActiveTab] = useState('overview');
@@ -32,6 +33,7 @@ const CRSDocumentsHistory = () => {
   
   // Fetch history overview
   const fetchHistoryOverview = useCallback(async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (!token) return;
     
     setLoading(true);
@@ -59,10 +61,11 @@ const CRSDocumentsHistory = () => {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
   
   // Fetch all uploads
   const fetchAllUploads = useCallback(async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (!token) return;
     
     try {
@@ -81,10 +84,11 @@ const CRSDocumentsHistory = () => {
     } catch (err) {
       console.error('Error fetching uploads:', err);
     }
-  }, [token]);
+  }, []);
   
   // Fetch all exports
   const fetchAllExports = useCallback(async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (!token) return;
     
     try {
@@ -103,10 +107,11 @@ const CRSDocumentsHistory = () => {
     } catch (err) {
       console.error('Error fetching exports:', err);
     }
-  }, [token]);
+  }, []);
   
   // Fetch all activities
   const fetchAllActivities = useCallback(async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (!token) return;
     
     try {
@@ -125,10 +130,11 @@ const CRSDocumentsHistory = () => {
     } catch (err) {
       console.error('Error fetching activities:', err);
     }
-  }, [token]);
+  }, []);
   
   // Download file from history
   const downloadFromHistory = async (s3Key, filename) => {
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (!token) return;
     
     try {
