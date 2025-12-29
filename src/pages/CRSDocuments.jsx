@@ -52,7 +52,7 @@ const CRSDocuments = () => {
     try {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       const response = await fetch(
-        `${API_BASE_URL}/crs/documents/config/`,
+        `${API_BASE_URL}/api/v1/crs/documents/config/`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -118,7 +118,7 @@ const CRSDocuments = () => {
       
       // Call unified upload endpoint in preview mode
       const response = await fetch(
-        `${API_BASE_URL}/crs/documents/upload-and-process/`,
+        `${API_BASE_URL}/api/v1/crs/documents/upload-and-process/`,
         {
           method: 'POST',
           headers: {
@@ -192,7 +192,7 @@ const CRSDocuments = () => {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       const response = await fetch(
-        `${API_BASE_URL}/crs/documents/upload-and-process/`,
+        `${API_BASE_URL}/api/v1/crs/documents/upload-and-process/`,
         {
           method: 'POST',
           headers: {

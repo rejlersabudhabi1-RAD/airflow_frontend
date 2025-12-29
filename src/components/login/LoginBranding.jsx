@@ -1,6 +1,5 @@
 import React from 'react'
-import { BRANDING, PAGE_CONTENT, THEME } from '../../config/login.config'
-import { LOGIN_RESPONSIVE, ICON } from '../../config/responsive.config'
+import { BRANDING, PAGE_CONTENT, THEME, LOGIN_RESPONSIVE, ICON } from '../../config/login.config'
 
 /**
  * LoginBranding Component

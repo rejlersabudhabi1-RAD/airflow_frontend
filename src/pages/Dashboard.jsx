@@ -3,7 +3,6 @@ import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { fetchFeatures } from '../store/featureSlice'
 import FeatureCard from '../components/FeatureCard'
-import ForceRefreshAuth from '../components/ForceRefreshAuth'
 
 /**
  * Dashboard Page
@@ -260,7 +259,6 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-      <ForceRefreshAuth />
     </div>
   )
 }

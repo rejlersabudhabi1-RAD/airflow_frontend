@@ -9,7 +9,7 @@ import { STORAGE_KEYS } from '../config/app.config';
 
 // Create axios instance with auth headers
 const crsApi = axios.create({
-  baseURL: `${API_BASE_URL}/crs`,
+  baseURL: `${API_BASE_URL}/api/v1/crs`,
   headers: {
     'Content-Type': 'application/json',
   },

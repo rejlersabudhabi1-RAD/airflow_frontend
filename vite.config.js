@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      host: '0.0.0.0', // Listen on all interfaces for Docker
       port: 3000,
       proxy: {
         '/api': {

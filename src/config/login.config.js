@@ -173,3 +173,29 @@ export const HTTP_STATUS = {
   FORBIDDEN: 403,
   SERVER_ERROR_START: 500,
 }
+
+// Responsive Design Configuration
+export const LOGIN_RESPONSIVE = {
+  container: 'min-h-screen flex flex-col lg:flex-row',
+  branding: {
+    wrapper: 'hidden lg:flex lg:w-1/2 xl:w-3/5',
+    padding: 'p-8 lg:p-12 xl:p-16',
+    title: 'text-3xl sm:text-4xl lg:text-5xl xl:text-6xl',
+    subtitle: 'text-base sm:text-lg lg:text-xl xl:text-2xl',
+  },
+  form: {
+    wrapper: 'flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 lg:w-1/2 xl:w-2/5',
+    maxWidth: 'max-w-md',
+    container: 'bg-white rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10',
+    title: 'text-2xl sm:text-3xl md:text-4xl',
+    input: 'py-2.5 sm:py-3 md:py-3.5',
+    button: 'py-2.5 sm:py-3 md:py-3.5',
+  },
+}
+
+// Icon Size Configuration
+export const ICON = {
+  sm: 'w-5 h-5',
+  md: 'w-6 h-6',
+  lg: 'w-8 h-8',
+}

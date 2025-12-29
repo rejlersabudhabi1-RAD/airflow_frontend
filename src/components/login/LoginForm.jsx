@@ -1,7 +1,6 @@
 import React from 'react'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
-import { BRANDING, PAGE_CONTENT, FORM_CONFIG, THEME } from '../../config/login.config'
-import { LOGIN_RESPONSIVE, ICON } from '../../config/responsive.config'
+import { BRANDING, PAGE_CONTENT, FORM_CONFIG, THEME, LOGIN_RESPONSIVE, ICON } from '../../config/login.config'
 
 /**
  * LoginForm Component

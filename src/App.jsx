@@ -6,9 +6,7 @@ import Layout from './components/Layout/Layout'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import VerifyEmail from './pages/VerifyEmail'
 import Dashboard from './pages/Dashboard'
-import UserDashboard from './pages/Dashboard/UserDashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
@@ -16,7 +14,7 @@ import PFDUpload from './pages/PFDUpload'
 import PFDConvert from './pages/PFDConvert'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import CRSDocuments from './pages/CRSDocuments'
-import CRSHistory from './pages/CRSHistory'
+import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import ProjectControl from './pages/ProjectControl'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
@@ -161,15 +159,12 @@ function App() {
           }
         />
         
-        {/* Email Verification (Public) */}
-        <Route path="verify-email" element={<VerifyEmail />} />
-
         {/* Protected Routes */}
         <Route
           path="dashboard"
           element={
             <ProtectedRoute>
-              <UserDashboard />
+              <Dashboard />
             </ProtectedRoute>
           }
         />
@@ -239,10 +234,11 @@ function App() {
           path="crs/documents/history"
           element={
             <ModuleProtectedRoute moduleCode="CRS">
-              <CRSHistory />
+              <CRSDocumentsHistory />
             </ModuleProtectedRoute>
           }
         />
+
 
         {/* Project Control */}
         <Route

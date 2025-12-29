@@ -15,8 +15,8 @@ import {
   LOGGING,
   HTTP_STATUS,
   THEME,
+  LOGIN_RESPONSIVE,
 } from '../config/login.config'
-import { LOGIN_RESPONSIVE } from '../config/responsive.config'
 
 /**
  * Login Page
