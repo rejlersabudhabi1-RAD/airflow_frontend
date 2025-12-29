@@ -6,6 +6,7 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "env": {
+    "VITE_API_URL": "https://aiflowbackend-production.up.railway.app/api/v1",
     "VITE_API_TIMEOUT": "600000",
     "VITE_API_TIMEOUT_LONG": "600000"
   },
