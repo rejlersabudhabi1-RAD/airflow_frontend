@@ -14,8 +14,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { STORAGE_KEYS } from '../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api.config';
 
 const CRSDocumentsHistory = () => {
   const { user } = useSelector((state) => state.auth);
@@ -41,7 +40,7 @@ const CRSDocumentsHistory = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/crs/documents/history/`,
+        `${API_BASE_URL}/crs/documents/history/`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -70,7 +69,7 @@ const CRSDocumentsHistory = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/crs/documents/history/uploads/?limit=100`,
+        `${API_BASE_URL}/crs/documents/history/uploads/?limit=100`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -93,7 +92,7 @@ const CRSDocumentsHistory = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/crs/documents/history/exports/?limit=100`,
+        `${API_BASE_URL}/crs/documents/history/exports/?limit=100`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -116,7 +115,7 @@ const CRSDocumentsHistory = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/crs/documents/history/activity/?days=30`,
+        `${API_BASE_URL}/crs/documents/history/activity/?days=30`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -139,7 +138,7 @@ const CRSDocumentsHistory = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/crs/documents/history/download/?key=${encodeURIComponent(s3Key)}`,
+        `${API_BASE_URL}/crs/documents/history/download/?key=${encodeURIComponent(s3Key)}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
