@@ -22,6 +22,37 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Soft-coded: Action button states and configuration
+  const [actionLoading, setActionLoading] = useState({});
+  const [notification, setNotification] = useState({ show: false, type: '', message: '' });
+  
+  // Soft-coded: Action button configuration
+  const ACTION_CONFIG = {
+    EDIT: {
+      label: 'Edit',
+      color: 'text-blue-600 hover:text-blue-900',
+      icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+    },
+    DEACTIVATE: {
+      label: 'Deactivate',
+      color: 'text-red-600 hover:text-red-900',
+      icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'
+    },
+    ACTIVATE: {
+      label: 'Activate',
+      color: 'text-green-600 hover:text-green-900',
+      icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+    },
+    DELETE: {
+      label: 'Delete',
+      color: 'text-red-600 hover:text-red-900',
+      icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
+    }
+  };
+  
+  // Soft-coded: Notification auto-dismiss timeout
+  const NOTIFICATION_TIMEOUT = 5000;
   const [editFormData, setEditFormData] = useState({
     email: '',
     first_name: '',
@@ -82,6 +113,16 @@ const UserManagement = () => {
       dispatch(fetchCurrentUser());
     }
   }, [dispatch, isAuthenticated]);
+  
+  // Soft-coded: Auto-dismiss notification
+  useEffect(() => {
+    if (notification.show) {
+      const timer = setTimeout(() => {
+        setNotification({ show: false, type: '', message: '' });
+      }, NOTIFICATION_TIMEOUT);
+      return () => clearTimeout(timer);
+    }
+  }, [notification.show]);
 
   useEffect(() => {
     // Only load data if authenticated
@@ -366,16 +407,91 @@ const UserManagement = () => {
     }
   };
 
+  // Soft-coded: Enhanced status toggle with loading states and notifications
   const handleStatusToggle = async (userId, currentStatus) => {
-    try {
-      if (currentStatus === 'active') {
-        await rbacService.deactivateUser(userId, 'Manual deactivation');
-      } else {
-        await rbacService.activateUser(userId);
+    // Soft-coded: Confirmation dialog configuration
+    const CONFIRM_CONFIG = {
+      active: {
+        title: 'Deactivate User',
+        message: 'Are you sure you want to deactivate this user? They will lose access to the system.',
+        action: 'deactivate'
+      },
+      inactive: {
+        title: 'Activate User',
+        message: 'Are you sure you want to activate this user? They will regain access to the system.',
+        action: 'activate'
       }
-      dispatch(fetchUsers());
+    };
+    
+    const config = CONFIRM_CONFIG[currentStatus] || CONFIRM_CONFIG.inactive;
+    const confirmed = window.confirm(`${config.title}\n\n${config.message}`);
+    
+    if (!confirmed) {
+      console.log('[UserManagement] Status toggle cancelled by user');
+      return;
+    }
+    
+    // Soft-coded: Set loading state for specific user action
+    setActionLoading(prev => ({ ...prev, [`${userId}_status`]: true }));
+    
+    try {
+      console.log(`[UserManagement] ${config.action === 'deactivate' ? 'Deactivating' : 'Activating'} user: ${userId}`);
+      
+      let response;
+      if (currentStatus === 'active') {
+        response = await rbacService.deactivateUser(userId, 'Manual deactivation via User Management');
+      } else {
+        response = await rbacService.activateUser(userId);
+      }
+      
+      console.log('[UserManagement] Status toggle response:', response);
+      
+      // Soft-coded: Success notification
+      setNotification({
+        show: true,
+        type: 'success',
+        message: `User ${config.action === 'deactivate' ? 'deactivated' : 'activated'} successfully! Database updated.`
+      });
+      
+      // Soft-coded: Refresh users list to reflect database changes
+      await dispatch(fetchUsers()).unwrap();
+      console.log('[UserManagement] Users list refreshed from database');
+      
     } catch (error) {
-      console.error('Failed to toggle status:', error);
+      console.error('[UserManagement] Failed to toggle status:', error);
+      console.error('[UserManagement] Error details:', {
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: error?.response?.data,
+        message: error?.message
+      });
+      
+      // Soft-coded: Error notification with details
+      let errorMessage = `Failed to ${config.action} user. `;
+      if (error?.response?.data) {
+        if (typeof error.response.data === 'object') {
+          errorMessage += Object.values(error.response.data).flat().join(', ');
+        } else {
+          errorMessage += error.response.data;
+        }
+      } else if (error?.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      
+      setNotification({
+        show: true,
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      // Soft-coded: Clear loading state
+      setActionLoading(prev => {
+        const newState = { ...prev };
+        delete newState[`${userId}_status`];
+        return newState;
+      });
     }
   };
 
@@ -398,53 +514,123 @@ const UserManagement = () => {
     setShowEditModal(true);
   };
 
+  // Soft-coded: Enhanced user update with comprehensive validation and database confirmation
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     
+    // Soft-coded: Validation configuration
+    const VALIDATION_CONFIG = {
+      required: [
+        { field: 'first_name', label: 'First Name', value: editFormData.first_name },
+        { field: 'last_name', label: 'Last Name', value: editFormData.last_name },
+        { field: 'email', label: 'Email', value: editFormData.email }
+      ],
+      minLength: [
+        { field: 'first_name', label: 'First Name', value: editFormData.first_name, min: 2 },
+        { field: 'last_name', label: 'Last Name', value: editFormData.last_name, min: 2 }
+      ],
+      array: [
+        { field: 'module_ids', label: 'Features', value: editFormData.module_ids, minCount: 1 }
+      ]
+    };
+    
+    // Soft-coded: Validate selected user
     if (!selectedUser) {
-      alert('No user selected for update');
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'No user selected for update. Please try again.'
+      });
       return;
     }
     
-    if (!editFormData.email) {
-      alert('Email is required');
-      return;
+    // Soft-coded: Validate required fields
+    for (const field of VALIDATION_CONFIG.required) {
+      if (!field.value || field.value.trim() === '') {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: `${field.label} is required. Please fill in all required fields.`
+        });
+        return;
+      }
     }
     
-    if (!editFormData.first_name || !editFormData.last_name) {
-      alert('First name and last name are required');
-      return;
+    // Soft-coded: Validate minimum length
+    for (const field of VALIDATION_CONFIG.minLength) {
+      if (field.value && field.value.trim().length < field.min) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: `${field.label} must be at least ${field.min} characters long.`
+        });
+        return;
+      }
     }
     
-    if (editFormData.module_ids.length === 0) {
-      alert('Please select at least one feature for the user');
-      return;
+    // Soft-coded: Validate arrays
+    for (const field of VALIDATION_CONFIG.array) {
+      if (!Array.isArray(field.value) || field.value.length < field.minCount) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: `Please select at least ${field.minCount} ${field.label.toLowerCase()} for the user.`
+        });
+        return;
+      }
     }
+    
+    // Soft-coded: Set loading state
+    setActionLoading(prev => ({ ...prev, updateUser: true }));
     
     try {
+      // Soft-coded: Prepare update payload (excluding email as it's read-only)
       const updateData = {
-        email: editFormData.email,
-        first_name: editFormData.first_name,
-        last_name: editFormData.last_name,
-        organization_id: editFormData.organization_id,
-        department: editFormData.department,
-        job_title: editFormData.job_title,
-        phone: editFormData.phone_number,
+        first_name: editFormData.first_name.trim(),
+        last_name: editFormData.last_name.trim(),
+        department: editFormData.department?.trim() || '',
+        job_title: editFormData.job_title?.trim() || '',
+        phone: editFormData.phone_number?.trim() || '',
         module_ids: editFormData.module_ids
       };
       
-      console.log('🚀 Updating user with data:', updateData);
+      // Soft-coded: Only include organization_id if provided
+      if (editFormData.organization_id) {
+        updateData.organization_id = editFormData.organization_id;
+      }
       
-      // Update user via API
-      await rbacService.updateUser(selectedUser.id, updateData);
+      console.log('[UserManagement] 🚀 Updating user:', selectedUser.id);
+      console.log('[UserManagement] 📝 Update payload:', updateData);
+      console.log('[UserManagement] 📋 Data types:', {
+        first_name: typeof updateData.first_name,
+        last_name: typeof updateData.last_name,
+        organization_id: typeof updateData.organization_id,
+        module_ids: Array.isArray(updateData.module_ids),
+        module_ids_count: updateData.module_ids?.length
+      });
       
-      console.log('✅ User updated successfully');
-      alert('User updated successfully!');
+      // Soft-coded: Call API to update user in database
+      const response = await rbacService.updateUser(selectedUser.id, updateData);
+      
+      console.log('[UserManagement] ✅ User updated successfully:', response);
+      console.log('[UserManagement] 💾 Database updated with new values');
+      
+      // Soft-coded: Success notification
+      setNotification({
+        show: true,
+        type: 'success',
+        message: `User "${editFormData.first_name} ${editFormData.last_name}" updated successfully! Changes saved to database.`
+      });
+      
+      // Soft-coded: Close modal and reset state
       setShowEditModal(false);
       setSelectedUser(null);
-      dispatch(fetchUsers());
       
-      // Reset edit form
+      // Soft-coded: Refresh users list from database
+      await dispatch(fetchUsers()).unwrap();
+      console.log('[UserManagement] 🔄 Users list refreshed from database');
+      
+      // Soft-coded: Reset edit form
       setEditFormData({
         email: '',
         first_name: '',
@@ -455,29 +641,49 @@ const UserManagement = () => {
         phone_number: '',
         module_ids: []
       });
+      
     } catch (error) {
-      console.error('Failed to update user:', error);
-      let errorMessage = 'Failed to update user';
+      console.error('[UserManagement] ❌ Failed to update user:', error);
+      console.error('[UserManagement] Error response:', error.response);
+      console.error('[UserManagement] Error data:', error.response?.data);
+      console.error('[UserManagement] Error status:', error.response?.status);
+      
+      // Soft-coded: Parse and display error message
+      let errorMessage = 'Failed to update user. ';
       
       if (error.response?.data) {
         if (typeof error.response.data === 'object') {
           const errors = [];
           for (const [field, messages] of Object.entries(error.response.data)) {
+            const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
             if (Array.isArray(messages)) {
-              errors.push(`${field}: ${messages.join(', ')}`);
+              errors.push(`${fieldLabel}: ${messages.join(', ')}`);
             } else {
-              errors.push(`${field}: ${messages}`);
+              errors.push(`${fieldLabel}: ${messages}`);
             }
           }
-          errorMessage = errors.join('\n');
+          errorMessage += errors.join('. ');
         } else {
-          errorMessage = error.response.data;
+          errorMessage += error.response.data;
         }
       } else if (error.message) {
-        errorMessage = error.message;
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your input and try again.';
       }
       
-      alert(errorMessage);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      // Soft-coded: Clear loading state
+      setActionLoading(prev => {
+        const newState = { ...prev };
+        delete newState.updateUser;
+        return newState;
+      });
     }
   };
 
@@ -534,6 +740,56 @@ const UserManagement = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
+        {/* Soft-coded: Notification Toast */}
+        {notification.show && (
+          <div className="fixed top-4 right-4 z-50 max-w-md w-full animate-slide-in-right">
+            <div className={`rounded-lg shadow-2xl p-4 border-l-4 ${
+              notification.type === 'success' 
+                ? 'bg-green-50 border-green-500' 
+                : notification.type === 'error'
+                ? 'bg-red-50 border-red-500'
+                : 'bg-blue-50 border-blue-500'
+            }`}>
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  {notification.type === 'success' ? (
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : notification.type === 'error' ? (
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="ml-3 flex-1">
+                  <p className={`text-sm font-medium ${
+                    notification.type === 'success' 
+                      ? 'text-green-800' 
+                      : notification.type === 'error'
+                      ? 'text-red-800'
+                      : 'text-blue-800'
+                  }`}>
+                    {notification.message}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setNotification({ show: false, type: '', message: '' })}
+                  className="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Authentication Error Alert */}
         {authError && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
@@ -658,19 +914,61 @@ const UserManagement = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never'}
                     </td>
+                    {/* Soft-coded: Enhanced Actions Column with Loading States */}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEditClick(user)}
-                        className="text-blue-600 hover:text-blue-900 mr-4 font-medium transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleStatusToggle(user.id, user.status)}
-                        className={`font-medium transition-colors ${user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
-                      >
-                        {user.status === 'active' ? 'Deactivate' : 'Activate'}
-                      </button>
+                      <div className="flex items-center justify-end space-x-3">
+                        {/* Soft-coded: Edit Button */}
+                        <button
+                          onClick={() => handleEditClick(user)}
+                          disabled={actionLoading[`${user.id}_status`]}
+                          className={`${ACTION_CONFIG.EDIT.color} font-medium transition-all flex items-center space-x-1 ${
+                            actionLoading[`${user.id}_status`] ? 'opacity-50 cursor-not-allowed' : 'hover:underline'
+                          }`}
+                          title="Edit user details"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={ACTION_CONFIG.EDIT.icon} />
+                          </svg>
+                          <span>{ACTION_CONFIG.EDIT.label}</span>
+                        </button>
+                        
+                        {/* Soft-coded: Activate/Deactivate Button with Loading Spinner */}
+                        <button
+                          onClick={() => handleStatusToggle(user.id, user.status)}
+                          disabled={actionLoading[`${user.id}_status`] || actionLoading.updateUser}
+                          className={`${
+                            user.status === 'active' 
+                              ? ACTION_CONFIG.DEACTIVATE.color 
+                              : ACTION_CONFIG.ACTIVATE.color
+                          } font-medium transition-all flex items-center space-x-1 ${
+                            actionLoading[`${user.id}_status`] || actionLoading.updateUser
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:underline'
+                          }`}
+                          title={user.status === 'active' ? 'Deactivate user account' : 'Activate user account'}
+                        >
+                          {actionLoading[`${user.id}_status`] ? (
+                            <>
+                              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <span>Processing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
+                                  user.status === 'active' 
+                                    ? ACTION_CONFIG.DEACTIVATE.icon 
+                                    : ACTION_CONFIG.ACTIVATE.icon
+                                } />
+                              </svg>
+                              <span>{user.status === 'active' ? ACTION_CONFIG.DEACTIVATE.label : ACTION_CONFIG.ACTIVATE.label}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1130,18 +1428,39 @@ const UserManagement = () => {
                       setShowEditModal(false);
                       setSelectedUser(null);
                     }}
-                    className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    disabled={actionLoading.updateUser}
+                    className={`px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg transition-colors font-medium ${
+                      actionLoading.updateUser ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                    }`}
                   >
                     Cancel
                   </button>
+                  {/* Soft-coded: Update button with loading state */}
                   <button
                     type="submit"
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl flex items-center space-x-2"
+                    disabled={actionLoading.updateUser}
+                    className={`px-6 py-2.5 bg-blue-600 text-white rounded-lg transition-colors font-medium shadow-lg flex items-center space-x-2 ${
+                      actionLoading.updateUser 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-blue-700 hover:shadow-xl'
+                    }`}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Update User</span>
+                    {actionLoading.updateUser ? (
+                      <>
+                        <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Update User</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
