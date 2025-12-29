@@ -51,6 +51,10 @@ const UserManagement = () => {
     }
   };
   
+  // Debug logging
+  console.log('[UserManagement] Component loaded');
+  console.log('[UserManagement] ACTION_CONFIG.DELETE:', ACTION_CONFIG.DELETE);
+  
   // Soft-coded: Notification auto-dismiss timeout
   const NOTIFICATION_TIMEOUT = 5000;
   const [editFormData, setEditFormData] = useState({
@@ -497,6 +501,8 @@ const UserManagement = () => {
 
   // Soft-coded: Enhanced delete with confirmation, loading states, and database soft delete
   const handleDelete = async (userId, userEmail) => {
+    console.log('[UserManagement] handleDelete called for user:', userId, userEmail);
+    
     // Soft-coded: Delete confirmation configuration
     const DELETE_CONFIRM_CONFIG = {
       title: '⚠️ Delete User',
