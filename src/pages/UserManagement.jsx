@@ -3,10 +3,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
+import { STORAGE_KEYS } from '../config/app.config';
 
 /**
  * User Management Page
  * CRUD operations for users with role assignment
+ * Soft-coded authentication check and redirect
  */
 const UserManagement = () => {
   const dispatch = useDispatch();
@@ -19,6 +21,7 @@ const UserManagement = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [editFormData, setEditFormData] = useState({
     email: '',
     first_name: '',
@@ -46,14 +49,52 @@ const UserManagement = () => {
     module_ids: []
   });
 
+  // Soft-coded: Check authentication before loading data
   useEffect(() => {
-    dispatch(fetchCurrentUser());
-  }, [dispatch]);
+    const checkAuth = () => {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      
+      console.log('[UserManagement] Checking authentication...');
+      console.log('[UserManagement] Access token exists:', !!token);
+      console.log('[UserManagement] Refresh token exists:', !!refreshToken);
+      
+      if (!token && !refreshToken) {
+        console.warn('[UserManagement] No authentication tokens found - redirecting to login');
+        setIsAuthenticated(false);
+        navigate('/login', { 
+          replace: true,
+          state: { from: '/admin/users', message: 'Please login to access User Management' }
+        });
+      } else {
+        console.log('[UserManagement] Authentication tokens found - proceeding');
+        setIsAuthenticated(true);
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
 
   useEffect(() => {
+    // Only fetch current user if authenticated
+    if (isAuthenticated) {
+      console.log('[UserManagement] Fetching current user...');
+      dispatch(fetchCurrentUser());
+    }
+  }, [dispatch, isAuthenticated]);
+
+  useEffect(() => {
+    // Only load data if authenticated
+    if (!isAuthenticated) {
+      console.log('[UserManagement] Skipping data load - not authenticated');
+      return;
+    }
+    
     const loadData = async () => {
       try {
         setAuthError(false);
+        
+        console.log('[UserManagement] Loading data...');
         
         // Fetch users, roles, and modules via Redux
         await Promise.all([
@@ -135,14 +176,26 @@ const UserManagement = () => {
           setJobTitleSuggestions([]);
         }
       } catch (err) {
-        console.error('Failed to load data:', err);
+        console.error('[UserManagement] Failed to load data:', err);
+        console.error('[UserManagement] Error status:', err?.status);
+        console.error('[UserManagement] Error message:', err?.message);
+        
+        // Soft-coded: Handle authentication errors
         if (err?.status === 401 || err?.message?.includes('401')) {
+          console.warn('[UserManagement] Authentication error detected - redirecting to login');
           setAuthError(true);
+          localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+          localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+          localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+          navigate('/login', { 
+            replace: true,
+            state: { from: '/admin/users', message: 'Session expired. Please login again.' }
+          });
         }
       }
     };
     loadData();
-  }, [dispatch]);
+  }, [dispatch, isAuthenticated, navigate]);
 
   // Check if user has admin access via RBAC roles OR Django superuser/staff flags
   const hasRBACAdminRole = currentUser?.roles?.some(
@@ -152,6 +205,23 @@ const UserManagement = () => {
   const isDjangoSuperuser = authUser?.is_superuser || authUser?.is_staff;
   
   const hasAdminAccess = hasRBACAdminRole || isDjangoSuperuser;
+
+  // Soft-coded: Show loading while checking authentication
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Checking Authentication...</h2>
+          <p className="text-gray-600">Please wait while we verify your credentials</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show access denied if user doesn't have permission
   if (!hasAdminAccess && !loading && currentUser) {
