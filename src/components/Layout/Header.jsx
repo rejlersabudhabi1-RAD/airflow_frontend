@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import { toggleTheme } from '../../store/slices/themeSlice'
+import { Bars3Icon } from '@heroicons/react/24/outline'
 
 /**
  * Header Component - REJLERS RADAI
  * Premium navigation header with REJLERS branding
  */
 
-const Header = () => {
+const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -25,11 +26,21 @@ const Header = () => {
   }
 
   return (
-    <header className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b border-white/10">
+    <header className="fixed top-0 left-0 right-0 z-40 bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b border-white/10">
       <nav className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center space-x-3 group">
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-4">
+            {showSidebar && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all"
+                aria-label="Toggle sidebar"
+              >
+                <Bars3Icon className="w-6 h-6 text-white" />
+              </button>
+            )}
+            <Link to="/" className="flex items-center space-x-3 group">
+              <div className="flex items-center space-x-2">
               <span className="text-2xl font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
                 REJLERS
               </span>
@@ -39,6 +50,7 @@ const Header = () => {
               </span>
             </div>
           </Link>
+          </div>
 
           <div className="flex items-center space-x-6">
             <button
@@ -56,12 +68,6 @@ const Header = () => {
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >
                   Dashboard
-                </Link>
-                <Link
-                  to="/admin"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Admin
                 </Link>
                 <Link
                   to="/profile"

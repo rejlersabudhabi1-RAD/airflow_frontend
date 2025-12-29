@@ -13,20 +13,30 @@ import Sidebar from './Sidebar'
 const Layout = () => {
   const location = useLocation()
   const { isAuthenticated } = useSelector((state) => state.auth)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Routes where sidebar should be hidden
   const publicRoutes = ['/', '/login', '/register', '/home']
   const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname)
+  
+  // Log sidebar state for debugging
+  React.useEffect(() => {
+    console.log('📐 Layout State:', {
+      isAuthenticated,
+      currentPath: location.pathname,
+      showSidebar,
+      sidebarOpen
+    })
+  }, [isAuthenticated, location.pathname, showSidebar, sidebarOpen])
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-      <Header />
-      <div className="flex flex-1">
+      <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} showSidebar={showSidebar} />
+      <div className="flex flex-1 pt-16">
         {showSidebar && (
           <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
         )}
-        <main className={`flex-grow ${showSidebar ? 'lg:ml-0' : ''}`}>
+        <main className={`flex-grow transition-all duration-300 ${showSidebar && sidebarOpen ? 'lg:ml-72' : ''} overflow-x-hidden`}>
           <Outlet />
         </main>
       </div>

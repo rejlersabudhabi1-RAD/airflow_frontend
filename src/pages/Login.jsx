@@ -16,11 +16,13 @@ import {
   HTTP_STATUS,
   THEME,
 } from '../config/login.config'
+import { LOGIN_RESPONSIVE } from '../config/responsive.config'
 
 /**
  * Login Page
  * Soft-coded login form with validation
  * All configuration moved to login.config.js
+ * Fully responsive for all devices
  */
 
 // Validation schema from configuration
@@ -105,7 +107,7 @@ const Login = () => {
   }
 
   return (
-    <div className={`min-h-screen flex bg-gradient-to-br ${THEME.gradients.background}`}>
+    <div className={`${LOGIN_RESPONSIVE.container} bg-gradient-to-br ${THEME.gradients.background}`}>
       <LoginBranding />
       <LoginForm 
         loginSchema={loginSchema}

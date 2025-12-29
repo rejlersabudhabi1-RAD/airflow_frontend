@@ -58,26 +58,26 @@ const PIDReport = () => {
     if (!aiInsights) return null;
 
     return (
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6 mb-8">
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-4 sm:p-5 md:p-6 mb-6 sm:mb-8">
         <div 
-          className="flex items-center justify-between cursor-pointer"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between cursor-pointer gap-3"
           onClick={() => setShowAIDetails(!showAIDetails)}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">🤖 AI Analysis Insights</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">🤖 AI Analysis Insights</h3>
+              <p className="text-xs sm:text-sm text-gray-600">
                 Powered by {aiInsights.model} • Confidence: {aiInsights.confidence} • {aiInsights.success ? '✅ Success' : '⚠️ Issues'}
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-3">
-            <div className="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 text-xs sm:text-sm font-medium rounded-full whitespace-nowrap">
               ⚡ {aiInsights.processingTime}
             </div>
             <svg 
@@ -92,8 +92,8 @@ const PIDReport = () => {
         </div>
 
         {showAIDetails && (
-          <div className="mt-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="mt-4 sm:mt-5 md:mt-6 space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div className="bg-white rounded-lg p-4 shadow-sm border">
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -488,21 +488,22 @@ const PIDReport = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto">
       
       {/* Rejlers Professional Header */}
-      <div className="mb-8 bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-lg shadow-xl p-6 text-white">
-        <div className="flex justify-between items-start">
+      <div className="mb-6 sm:mb-8 bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 rounded-xl shadow-xl p-5 sm:p-6 text-white">
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
           <div>
-            <h1 className="text-4xl font-black mb-1">REJLERS</h1>
+            <h1 className="text-3xl sm:text-4xl font-black mb-1">REJLERS</h1>
             <div className="flex items-center space-x-3 mb-2">
-              <div className="h-1 w-16 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"></div>
-              <span className="text-amber-300 text-lg font-semibold">ABU DHABI</span>
+              <div className="h-1 w-12 sm:w-16 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"></div>
+              <span className="text-amber-300 text-base sm:text-lg font-semibold">ABU DHABI</span>
             </div>
-            <p className="text-blue-200 text-sm">Engineering & Design Consultancy</p>
+            <p className="text-blue-200 text-xs sm:text-sm">Engineering & Design Consultancy</p>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-blue-200">P&ID Analysis Report</p>
+          <div className="text-left sm:text-right">
+            <p className="text-xs sm:text-sm text-blue-200">P&ID Analysis Report</p>
             <p className="text-xs text-blue-300 mt-1">Generated: {new Date().toLocaleDateString('en-GB')}</p>
           </div>
         </div>
@@ -1295,6 +1296,7 @@ const PIDReport = () => {
           </button>
         </div>
       )}
+    </div>
     </div>
   );
 };

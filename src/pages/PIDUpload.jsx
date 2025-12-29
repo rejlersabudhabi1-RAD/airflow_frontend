@@ -313,28 +313,29 @@ const PIDUpload = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
           P&ID Design Verification
         </h1>
-        <p className="text-gray-600">
+        <p className="text-sm sm:text-base text-gray-600">
           Upload your P&ID drawing for AI-powered engineering review and compliance verification
         </p>
       </div>
 
       {/* Upload Form */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-white rounded-xl shadow-lg p-5 sm:p-6 md:p-8">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 md:space-y-6">
           
           {/* File Upload Area */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
               P&ID Drawing (PDF) *
             </label>
             <div
-              className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              className={`relative border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-colors ${
                 dragActive 
                   ? 'border-blue-500 bg-blue-50' 
                   : 'border-gray-300 hover:border-gray-400'
@@ -658,6 +659,7 @@ const PIDUpload = () => {
           <li>✓ Notes, legends, and project standard adherence</li>
         </ul>
       </div>
+    </div>
     </div>
   );
 };

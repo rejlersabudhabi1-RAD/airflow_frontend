@@ -69,6 +69,21 @@ class RBACService {
     return apiService.get(`${RBAC_BASE_URL}/users/stats/`);
   }
 
+  // ==================== Bulk Operations ====================
+  async bulkUploadUsers(formData) {
+    return apiService.post(`${RBAC_BASE_URL}/users/bulk_upload/`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
+
+  async downloadBulkUploadTemplate() {
+    return apiService.get(`${RBAC_BASE_URL}/users/download_template/`, {
+      responseType: 'blob'
+    });
+  }
+
   // ==================== Roles ====================
   async getRoles() {
     return apiService.get(`${RBAC_BASE_URL}/roles/`);

@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
+import BulkUploadModal from '../components/BulkUploadModal';
 
 /**
  * User Management Page
@@ -16,6 +17,7 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
   const [organizations, setOrganizations] = useState([]);
@@ -55,6 +57,8 @@ const UserManagement = () => {
         try {
           const orgsResponse = await rbacService.getOrganizations();
           console.log('Organizations Response:', orgsResponse);
+          console.log('Organizations Response Type:', typeof orgsResponse);
+          console.log('Organizations Response Keys:', orgsResponse ? Object.keys(orgsResponse) : 'null');
           
           let orgsData = [];
           if (orgsResponse) {
@@ -67,9 +71,16 @@ const UserManagement = () => {
             }
           }
           setOrganizations(orgsData);
-          console.log('Organizations set to:', orgsData);
+          console.log('✅ Organizations set to:', orgsData);
+          console.log('✅ Organizations count:', orgsData.length);
         } catch (error) {
-          console.error('Failed to load organizations:', error);
+          console.error('❌ Failed to load organizations:', error);
+          console.error('❌ Error details:', {
+            status: error?.response?.status,
+            statusText: error?.response?.statusText,
+            data: error?.response?.data,
+            message: error?.message
+          });
           setOrganizations([]);
         }
         
@@ -205,8 +216,8 @@ const UserManagement = () => {
     }
     
     try {
-      // Send flattened data structure
-      await rbacService.createUser({
+      // Prepare data to send
+      const userData = {
         email: formData.email,
         first_name: formData.first_name,
         last_name: formData.last_name,
@@ -216,8 +227,20 @@ const UserManagement = () => {
         job_title: formData.job_title,
         phone: formData.phone_number,
         module_ids: formData.module_ids
+      };
+      
+      console.log('🚀 Creating user with data:', userData);
+      console.log('📋 Data types:', {
+        email: typeof userData.email,
+        organization_id: typeof userData.organization_id,
+        module_ids: Array.isArray(userData.module_ids),
+        module_ids_length: userData.module_ids?.length
       });
       
+      // Send flattened data structure
+      const response = await rbacService.createUser(userData);
+      
+      console.log('✅ User created successfully:', response);
       alert('User created successfully!');
       setShowCreateModal(false);
       dispatch(fetchUsers());
@@ -233,7 +256,10 @@ const UserManagement = () => {
         module_ids: []
       });
     } catch (error) {
-      console.error('Failed to create user:', error);
+      console.error('❌ Failed to create user:', error);
+      console.error('❌ Error response:', error.response);
+      console.error('❌ Error response data:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
       
       // Extract error message
       let errorMessage = 'Failed to create user. Please try again.';
@@ -249,6 +275,7 @@ const UserManagement = () => {
             }
           }
           errorMessage = errors.join('\n');
+          console.error('❌ Validation errors:', errors);
         } else {
           errorMessage = error.response.data;
         }
@@ -315,7 +342,7 @@ const UserManagement = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Authentication Error Alert */}
         {authError && (
@@ -342,15 +369,26 @@ const UserManagement = () => {
             <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
             <p className="text-gray-600 mt-1">Manage system users and their roles</p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors shadow-lg hover:shadow-xl"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            <span>Create User</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowBulkUploadModal(true)}
+              className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 flex items-center space-x-2 transition-all shadow-lg hover:shadow-xl"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Bulk Upload</span>
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors shadow-lg hover:shadow-xl"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>Create User</span>
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -734,6 +772,17 @@ const UserManagement = () => {
             </div>
           </div>
         )}
+
+        {/* Bulk Upload Modal */}
+        <BulkUploadModal
+          isOpen={showBulkUploadModal}
+          onClose={() => setShowBulkUploadModal(false)}
+          onSuccess={() => {
+            dispatch(fetchUsers());
+            setShowBulkUploadModal(false);
+          }}
+          organizations={organizations}
+        />
       </div>
     </div>
   );

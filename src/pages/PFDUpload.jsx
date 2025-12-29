@@ -91,9 +91,9 @@ const PFDUpload = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50 py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl mx-auto">
+        <div className="mb-6 sm:mb-8">
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center text-purple-600 hover:text-purple-800 mb-4"

@@ -94,33 +94,33 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
             Super Admin Dashboard
           </h1>
-          <p className="text-gray-600">
+          <p className="text-sm sm:text-base text-gray-600">
             Manage users, roles, permissions, and system settings
           </p>
         </div>
 
         {/* AI-Powered Stats Cards */}
         {analyticsData && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 md:gap-6 mb-6 sm:mb-8">
             {/* Total Users */}
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-blue-100 hover:border-blue-300 transition-all">
+            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-5 md:p-6 border-2 border-blue-100 hover:border-blue-300 transition-all">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-1">Total Users</h3>
-                  <p className="text-3xl font-bold text-blue-600">{analyticsData.total_users || 0}</p>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-1">Total Users</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-blue-600">{analyticsData.total_users || 0}</p>
                   <p className="text-xs text-green-600 mt-1">
                     +{analyticsData.user_growth_percentage}% this month
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
                 </div>
@@ -128,17 +128,17 @@ const AdminDashboard = () => {
             </div>
 
             {/* System Health */}
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-green-100 hover:border-green-300 transition-all">
+            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-5 md:p-6 border-2 border-green-100 hover:border-green-300 transition-all">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-1">System Health</h3>
-                  <p className="text-3xl font-bold text-green-600">{analyticsData.system_health_score?.toFixed(1) || 100}%</p>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-1">System Health</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-green-600">{analyticsData.system_health_score?.toFixed(1) || 100}%</p>
                   <p className="text-xs text-gray-600 mt-1">
                     {analyticsData.active_connections || 0} active connections
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
@@ -146,19 +146,19 @@ const AdminDashboard = () => {
             </div>
 
             {/* Security Alerts */}
-            <div className={`bg-white rounded-xl shadow-lg p-6 border-2 ${analyticsData.critical_alerts_count > 0 ? 'border-red-100 hover:border-red-300' : 'border-yellow-100 hover:border-yellow-300'} transition-all`}>
+            <div className={`bg-white rounded-xl shadow-lg p-4 sm:p-5 md:p-6 border-2 ${analyticsData.critical_alerts_count > 0 ? 'border-red-100 hover:border-red-300' : 'border-yellow-100 hover:border-yellow-300'} transition-all`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-1">Security Alerts</h3>
-                  <p className={`text-3xl font-bold ${analyticsData.critical_alerts_count > 0 ? 'text-red-600' : 'text-yellow-600'}`}>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-1">Security Alerts</h3>
+                  <p className={`text-2xl sm:text-3xl font-bold ${analyticsData.critical_alerts_count > 0 ? 'text-red-600' : 'text-yellow-600'}`}>
                     {analyticsData.active_alerts_count || 0}
                   </p>
                   <p className="text-xs text-red-600 mt-1">
                     {analyticsData.critical_alerts_count || 0} critical
                   </p>
                 </div>
-                <div className={`w-12 h-12 ${analyticsData.critical_alerts_count > 0 ? 'bg-red-100' : 'bg-yellow-100'} rounded-full flex items-center justify-center`}>
-                  <svg className={`w-6 h-6 ${analyticsData.critical_alerts_count > 0 ? 'text-red-600' : 'text-yellow-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${analyticsData.critical_alerts_count > 0 ? 'bg-red-100' : 'bg-yellow-100'} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  <svg className={`w-5 h-5 sm:w-6 sm:h-6 ${analyticsData.critical_alerts_count > 0 ? 'text-red-600' : 'text-yellow-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
@@ -166,17 +166,17 @@ const AdminDashboard = () => {
             </div>
 
             {/* AI Insights */}
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-purple-100 hover:border-purple-300 transition-all">
+            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-5 md:p-6 border-2 border-purple-100 hover:border-purple-300 transition-all">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-1">AI Insights</h3>
-                  <p className="text-3xl font-bold text-purple-600">{analyticsData.active_predictions_count || 0}</p>
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-600 mb-1">AI Insights</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-purple-600">{analyticsData.active_predictions_count || 0}</p>
                   <p className="text-xs text-purple-600 mt-1">
                     {analyticsData.high_impact_insights_count || 0} high priority
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                 </div>
@@ -187,7 +187,7 @@ const AdminDashboard = () => {
 
         {/* Navigation Tabs */}
         <div className="bg-white rounded-xl shadow-lg mb-6">
-          <div className="flex border-b border-gray-200 overflow-x-auto">
+          <div className="flex border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             {[
               { id: 'overview', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
               { id: 'activity', label: 'Real-time Activity', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
@@ -201,16 +201,16 @@ const AdminDashboard = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors whitespace-nowrap ${
+                className={`flex items-center space-x-2 px-3 sm:px-4 md:px-6 py-3 sm:py-4 text-xs sm:text-sm md:text-base font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                     : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
                 }`}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
                 </svg>
-                <span>{tab.label}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             ))}
           </div>
