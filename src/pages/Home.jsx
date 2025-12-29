@@ -70,7 +70,7 @@ const Home = () => {
           <div className="flex flex-row items-center justify-center gap-2 sm:gap-3 max-w-2xl mx-auto px-2">
             <Link 
               to="/register" 
-              className="group w-auto px-3 sm:px-8 py-1.5 sm:py-3 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:via-orange-600 hover:to-amber-600 text-gray-900 font-bold rounded-lg shadow-lg hover:shadow-amber-500/50 transition-all duration-300 flex items-center justify-center space-x-1 sm:space-x-2 text-xs sm:text-base">
+              className="group w-auto px-3 sm:px-8 py-1.5 sm:py-3 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-500 hover:via-orange-600 hover:to-amber-600 text-gray-900 font-bold rounded-lg shadow-lg hover:shadow-amber-500/50 transition-all duration-300 flex items-center justify-center space-x-1 sm:space-x-2 text-xs sm:text-base"
             >
               <span>Start Free Trial</span>
               <svg className="w-4 h-4 sm:w-5 sm:h-5 transform group-hover:translate-x-1 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,7 +79,7 @@ const Home = () => {
             </Link>
             <Link 
               to="/login" 
-              className="group w-auto px-3 sm:px-8 py-1.5 sm:py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 hover:bg-white/20 text-white font-bold rounded-lg shadow-lg transition-all duration-300 flex items-center justify-center space-x-1 sm:space-x-2 text-xs sm:text-base">
+              className="group w-auto px-3 sm:px-8 py-1.5 sm:py-3 bg-white/10 backdrop-blur-sm border-2 border-white/30 hover:bg-white/20 text-white font-bold rounded-lg shadow-lg transition-all duration-300 flex items-center justify-center space-x-1 sm:space-x-2 text-xs sm:text-base"
             >
               <span>Sign In</span>
               <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -65,6 +65,10 @@ class RBACService {
     return apiService.post(`${RBAC_BASE_URL}/users/${userId}/activate/`);
   }
 
+  async softDeleteUser(userId) {
+    return apiService.delete(`${RBAC_BASE_URL}/users/${userId}/soft_delete/`);
+  }
+
   async getUserStats() {
     return apiService.get(`${RBAC_BASE_URL}/users/stats/`);
   }

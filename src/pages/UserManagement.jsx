@@ -495,6 +495,90 @@ const UserManagement = () => {
     }
   };
 
+  // Soft-coded: Enhanced delete with confirmation, loading states, and database soft delete
+  const handleDelete = async (userId, userEmail) => {
+    // Soft-coded: Delete confirmation configuration
+    const DELETE_CONFIRM_CONFIG = {
+      title: '⚠️ Delete User',
+      message: `Are you sure you want to delete "${userEmail}"?\n\nThis action will:\n• Soft delete the user from the database\n• Deactivate their account\n• Preserve audit trail\n\nThe user will no longer appear in the active users list.`,
+      confirmText: 'Type DELETE to confirm'
+    };
+    
+    const userConfirmation = window.prompt(
+      `${DELETE_CONFIRM_CONFIG.title}\n\n${DELETE_CONFIRM_CONFIG.message}\n\n${DELETE_CONFIRM_CONFIG.confirmText}:`
+    );
+    
+    if (userConfirmation !== 'DELETE') {
+      console.log('[UserManagement] Delete cancelled - confirmation failed');
+      if (userConfirmation !== null) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: 'Delete cancelled. You must type "DELETE" to confirm.'
+        });
+      }
+      return;
+    }
+    
+    // Soft-coded: Set loading state for specific user delete action
+    setActionLoading(prev => ({ ...prev, [`${userId}_delete`]: true }));
+    
+    try {
+      console.log(`[UserManagement] 🗑️ Soft deleting user: ${userId} (${userEmail})`);
+      
+      const response = await rbacService.softDeleteUser(userId);
+      
+      console.log('[UserManagement] ✅ User soft deleted successfully:', response);
+      
+      // Soft-coded: Success notification
+      setNotification({
+        show: true,
+        type: 'success',
+        message: `User "${userEmail}" deleted successfully! Database updated with soft delete.`
+      });
+      
+      // Soft-coded: Refresh users list to reflect database changes (user should disappear)
+      await dispatch(fetchUsers()).unwrap();
+      console.log('[UserManagement] 🔄 Users list refreshed from database');
+      
+    } catch (error) {
+      console.error('[UserManagement] ❌ Failed to delete user:', error);
+      console.error('[UserManagement] Error details:', {
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: error?.response?.data,
+        message: error?.message
+      });
+      
+      // Soft-coded: Error notification with details
+      let errorMessage = 'Failed to delete user. ';
+      if (error?.response?.data) {
+        if (typeof error.response.data === 'object') {
+          errorMessage += Object.values(error.response.data).flat().join(', ');
+        } else {
+          errorMessage += error.response.data;
+        }
+      } else if (error?.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again or contact support.';
+      }
+      
+      setNotification({
+        show: true,
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      // Soft-coded: Clear loading state
+      setActionLoading(prev => {
+        const newState = { ...prev };
+        delete newState[`${userId}_delete`];
+        return newState;
+      });
+    }
+  };
+
   const handleEditClick = (user) => {
     console.log('📝 Opening edit modal for user:', user);
     setSelectedUser(user);
@@ -920,9 +1004,9 @@ const UserManagement = () => {
                         {/* Soft-coded: Edit Button */}
                         <button
                           onClick={() => handleEditClick(user)}
-                          disabled={actionLoading[`${user.id}_status`]}
+                          disabled={actionLoading[`${user.id}_status`] || actionLoading[`${user.id}_delete`]}
                           className={`${ACTION_CONFIG.EDIT.color} font-medium transition-all flex items-center space-x-1 ${
-                            actionLoading[`${user.id}_status`] ? 'opacity-50 cursor-not-allowed' : 'hover:underline'
+                            actionLoading[`${user.id}_status`] || actionLoading[`${user.id}_delete`] ? 'opacity-50 cursor-not-allowed' : 'hover:underline'
                           }`}
                           title="Edit user details"
                         >
@@ -935,13 +1019,13 @@ const UserManagement = () => {
                         {/* Soft-coded: Activate/Deactivate Button with Loading Spinner */}
                         <button
                           onClick={() => handleStatusToggle(user.id, user.status)}
-                          disabled={actionLoading[`${user.id}_status`] || actionLoading.updateUser}
+                          disabled={actionLoading[`${user.id}_status`] || actionLoading[`${user.id}_delete`] || actionLoading.updateUser}
                           className={`${
                             user.status === 'active' 
                               ? ACTION_CONFIG.DEACTIVATE.color 
                               : ACTION_CONFIG.ACTIVATE.color
                           } font-medium transition-all flex items-center space-x-1 ${
-                            actionLoading[`${user.id}_status`] || actionLoading.updateUser
+                            actionLoading[`${user.id}_status`] || actionLoading[`${user.id}_delete`] || actionLoading.updateUser
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:underline'
                           }`}
@@ -965,6 +1049,35 @@ const UserManagement = () => {
                                 } />
                               </svg>
                               <span>{user.status === 'active' ? ACTION_CONFIG.DEACTIVATE.label : ACTION_CONFIG.ACTIVATE.label}</span>
+                            </>
+                          )}
+                        </button>
+                        
+                        {/* Soft-coded: Delete Button with Loading Spinner */}
+                        <button
+                          onClick={() => handleDelete(user.id, user.email || user.user?.email)}
+                          disabled={actionLoading[`${user.id}_delete`] || actionLoading[`${user.id}_status`] || actionLoading.updateUser}
+                          className={`${ACTION_CONFIG.DELETE.color} font-medium transition-all flex items-center space-x-1 ${
+                            actionLoading[`${user.id}_delete`] || actionLoading[`${user.id}_status`] || actionLoading.updateUser
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:underline'
+                          }`}
+                          title="Soft delete user (preserves audit trail)"
+                        >
+                          {actionLoading[`${user.id}_delete`] ? (
+                            <>
+                              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <span>Deleting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={ACTION_CONFIG.DELETE.icon} />
+                              </svg>
+                              <span>{ACTION_CONFIG.DELETE.label}</span>
                             </>
                           )}
                         </button>
