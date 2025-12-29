@@ -16,8 +16,19 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    organization_id: '',
+    department: '',
+    job_title: '',
+    phone_number: '',
+    module_ids: []
+  });
   const [organizations, setOrganizations] = useState([]);
   const [departmentSuggestions, setDepartmentSuggestions] = useState([]);
   const [jobTitleSuggestions, setJobTitleSuggestions] = useState([]);
@@ -298,6 +309,117 @@ const UserManagement = () => {
     }
   };
 
+  const handleEditClick = (user) => {
+    console.log('📝 Opening edit modal for user:', user);
+    setSelectedUser(user);
+    
+    // Pre-populate the edit form with user data
+    setEditFormData({
+      email: user.email || user.user?.email || '',
+      first_name: user.first_name || user.user?.first_name || '',
+      last_name: user.last_name || user.user?.last_name || '',
+      organization_id: user.organization?.id || '',
+      department: user.department || '',
+      job_title: user.job_title || '',
+      phone_number: user.phone || '',
+      module_ids: user.modules?.map(m => m.id) || []
+    });
+    
+    setShowEditModal(true);
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedUser) {
+      alert('No user selected for update');
+      return;
+    }
+    
+    if (!editFormData.email) {
+      alert('Email is required');
+      return;
+    }
+    
+    if (!editFormData.first_name || !editFormData.last_name) {
+      alert('First name and last name are required');
+      return;
+    }
+    
+    if (editFormData.module_ids.length === 0) {
+      alert('Please select at least one feature for the user');
+      return;
+    }
+    
+    try {
+      const updateData = {
+        email: editFormData.email,
+        first_name: editFormData.first_name,
+        last_name: editFormData.last_name,
+        organization_id: editFormData.organization_id,
+        department: editFormData.department,
+        job_title: editFormData.job_title,
+        phone: editFormData.phone_number,
+        module_ids: editFormData.module_ids
+      };
+      
+      console.log('🚀 Updating user with data:', updateData);
+      
+      // Update user via API
+      await rbacService.updateUser(selectedUser.id, updateData);
+      
+      console.log('✅ User updated successfully');
+      alert('User updated successfully!');
+      setShowEditModal(false);
+      setSelectedUser(null);
+      dispatch(fetchUsers());
+      
+      // Reset edit form
+      setEditFormData({
+        email: '',
+        first_name: '',
+        last_name: '',
+        organization_id: '',
+        department: '',
+        job_title: '',
+        phone_number: '',
+        module_ids: []
+      });
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      let errorMessage = 'Failed to update user';
+      
+      if (error.response?.data) {
+        if (typeof error.response.data === 'object') {
+          const errors = [];
+          for (const [field, messages] of Object.entries(error.response.data)) {
+            if (Array.isArray(messages)) {
+              errors.push(`${field}: ${messages.join(', ')}`);
+            } else {
+              errors.push(`${field}: ${messages}`);
+            }
+          }
+          errorMessage = errors.join('\n');
+        } else {
+          errorMessage = error.response.data;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const toggleEditModule = (moduleId) => {
+    setEditFormData(prev => ({
+      ...prev,
+      module_ids: prev.module_ids.includes(moduleId)
+        ? prev.module_ids.filter(id => id !== moduleId)
+        : [...prev.module_ids, moduleId]
+    }));
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       active: 'bg-green-100 text-green-800',
@@ -468,14 +590,14 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => setSelectedUser(user)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        onClick={() => handleEditClick(user)}
+                        className="text-blue-600 hover:text-blue-900 mr-4 font-medium transition-colors"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleStatusToggle(user.id, user.status)}
-                        className={`${user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
+                        className={`font-medium transition-colors ${user.status === 'active' ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
                       >
                         {user.status === 'active' ? 'Deactivate' : 'Activate'}
                       </button>
@@ -755,6 +877,201 @@ const UserManagement = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                     <span>Create User</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit User Modal */}
+        {showEditModal && selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-900">Edit User</h2>
+                  <button
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setSelectedUser(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateUser} className="p-6">
+                <div className="space-y-6">
+                  {/* Basic Information Section */}
+                  <div className="border-b border-gray-200 pb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                        <input
+                          type="text"
+                          value={editFormData.first_name}
+                          onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                        <input
+                          type="text"
+                          value={editFormData.last_name}
+                          onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                      <input
+                        type="email"
+                        value={editFormData.email}
+                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-100 text-gray-700"
+                        required
+                        disabled
+                        title="Email cannot be changed"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                    </div>
+                  </div>
+
+                  {/* Organization Information */}
+                  <div className="border-b border-gray-200 pb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Organization Details</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Organization</label>
+                        <select
+                          value={editFormData.organization_id}
+                          onChange={(e) => setEditFormData({ ...editFormData, organization_id: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                        >
+                          <option value="">Select Organization</option>
+                          {organizations.map((org) => (
+                            <option key={org.id} value={org.id}>
+                              {org.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <input
+                          type="text"
+                          value={editFormData.department}
+                          onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="e.g., Engineering..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Job Title</label>
+                        <input
+                          type="text"
+                          value={editFormData.job_title}
+                          onChange={(e) => setEditFormData({ ...editFormData, job_title: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="e.g., Senior Developer..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                        <input
+                          type="tel"
+                          value={editFormData.phone_number}
+                          onChange={(e) => setEditFormData({ ...editFormData, phone_number: e.target.value })}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                          placeholder="+971 XX XXX XXXX"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Module Assignment */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Feature Access *</h3>
+                    <p className="text-sm text-gray-600 mb-4">Select the features this user can access</p>
+                    {modules && modules.length > 0 ? (
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {modules.map((module) => (
+                          <div
+                            key={module.id}
+                            className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                              editFormData.module_ids.includes(module.id)
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                            onClick={() => toggleEditModule(module.id)}
+                          >
+                            <div className="flex items-start">
+                              <div className="flex items-center h-5">
+                                <input
+                                  type="checkbox"
+                                  checked={editFormData.module_ids.includes(module.id)}
+                                  onChange={() => toggleEditModule(module.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                                />
+                              </div>
+                              <div className="ml-3 flex-1" onClick={() => toggleEditModule(module.id)}>
+                                <label className="font-medium text-gray-900 cursor-pointer">
+                                  {module.name}
+                                </label>
+                                {module.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{module.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-yellow-800">No features available.</p>
+                      </div>
+                    )}
+                    
+                    {editFormData.module_ids.length > 0 && (
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          <strong>Selected:</strong> {editFormData.module_ids.length} feature(s)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setSelectedUser(null);
+                    }}
+                    className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl flex items-center space-x-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Update User</span>
                   </button>
                 </div>
               </form>
