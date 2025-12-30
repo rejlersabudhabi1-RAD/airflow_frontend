@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
+import { API_BASE_URL } from './config/api.config'
 import Layout from './components/Layout/Layout'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -35,7 +36,9 @@ function App() {
       
       try {
         const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
-        const response = await fetch('/api/v1/rbac/users/me/', {
+        const apiUrl = `${API_BASE_URL}/rbac/users/me/`
+        console.log('🔐 App: Fetching modules from:', apiUrl)
+        const response = await fetch(apiUrl, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
