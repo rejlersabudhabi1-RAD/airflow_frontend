@@ -149,6 +149,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           path: '/crs/documents',
           description: 'Centralized CRS repository',
           moduleCode: 'crs_documents'
+        },
+        {
+          id: 'crsMultipleRevision',
+          title: '2.2 CRS Multiple Revision',
+          icon: DocumentTextIcon,
+          path: '/crs/multiple-revision',
+          description: 'AI-powered revision tracking',
+          moduleCode: 'crs_documents'
         }
       ]
     },

@@ -16,6 +16,7 @@ import PFDConvert from './pages/PFDConvert'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
+import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
@@ -238,6 +239,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="crs_documents">
               <CRSDocumentsHistory />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="crs/multiple-revision"
+          element={
+            <ModuleProtectedRoute moduleCode="crs_documents">
+              <CRSMultipleRevision />
             </ModuleProtectedRoute>
           }
         />
