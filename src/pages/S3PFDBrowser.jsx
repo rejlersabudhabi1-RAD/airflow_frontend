@@ -12,8 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config/api.config';
 
 const S3PFDBrowser = () => {
   const { token } = useSelector((state) => state.auth);

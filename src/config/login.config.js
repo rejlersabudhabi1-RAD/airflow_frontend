@@ -93,11 +93,11 @@ export const VALIDATION_CONFIG = {
 // Error Messages
 export const ERROR_MESSAGES = {
   timeout: {
-    message: '⏱️ Request timeout - Backend server is not responding. Please ensure Docker containers are running.',
+    message: '⏱️ Request timeout - Backend server is not responding. Please check your connection.',
     console: '[Login] 🔥 TIMEOUT: Backend did not respond within 60 seconds',
   },
   network: {
-    message: '🌐 Cannot connect to server. Please verify backend is running at http://localhost:8000',
+    message: '🌐 Cannot connect to server. Please check your internet connection and try again.',
     console: '[Login] 🔥 NETWORK ERROR: Cannot reach backend server',
   },
   unauthorized: {
