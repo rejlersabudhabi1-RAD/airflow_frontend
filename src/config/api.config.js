@@ -6,29 +6,38 @@
 // Production backend URL (Railway)
 const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/v1'
 
-// Determine API base URL
+// Determine API base URL (soft-coded for all environments)
 const getApiBaseUrl = () => {
-  // 1. Check for explicit environment variable (highest priority)
+  // 1. Check if running in browser (client-side)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 2. For localhost/127.0.0.1, use relative path for Vite proxy
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const localUrl = '/api/v1'
+      console.log('[API Config] 🏠 Localhost detected, using Vite proxy:', localUrl)
+      return localUrl
+    }
+    
+    // 3. For Vercel production, use Railway backend
+    if (hostname.includes('vercel.app')) {
+      console.log('[API Config] ☁️ Vercel detected, using Railway backend:', PRODUCTION_API_URL)
+      return PRODUCTION_API_URL
+    }
+  }
+  
+  // 4. SSR or build-time: Check environment variable
   if (import.meta.env.VITE_API_URL) {
-    console.log('[API Config] Using VITE_API_URL:', import.meta.env.VITE_API_URL)
+    console.log('[API Config] 📦 Build-time VITE_API_URL:', import.meta.env.VITE_API_URL)
+    // For Docker internal URLs, convert to relative path
+    if (import.meta.env.VITE_API_URL.includes('backend:8000')) {
+      return '/api/v1'
+    }
     return import.meta.env.VITE_API_URL
   }
   
-  // 2. If running on Vercel (production), use Railway backend
-  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    console.log('[API Config] Detected Vercel deployment, using Railway backend:', PRODUCTION_API_URL)
-    return PRODUCTION_API_URL
-  }
-  
-  // 3. For localhost, use Vite dev server proxy (just /api, Vite will proxy to backend)
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    const localUrl = '/api/v1'
-    console.log('[API Config] Detected localhost, using Vite proxy:', localUrl)
-    return localUrl
-  }
-  
-  // 4. Default fallback to production
-  console.log('[API Config] Using default production backend:', PRODUCTION_API_URL)
+  // 5. Default fallback to production
+  console.log('[API Config] 🌐 Using default production backend:', PRODUCTION_API_URL)
   return PRODUCTION_API_URL
 }
 

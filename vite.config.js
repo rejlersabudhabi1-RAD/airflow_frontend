@@ -5,10 +5,18 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // Load environment variables for this mode
   const env = loadEnv(mode, process.cwd(), '')
-  // Default to production backend if not specified
-  const apiUrl = env.VITE_API_URL || 'https://aiflowbackend-production.up.railway.app'
+  
+  // Smart API URL detection (soft-coded for Docker and production)
+  let apiUrl = env.VITE_API_URL || 'http://localhost:8000'
+  
+  // If running in Docker, use backend service name
+  if (apiUrl.includes('backend:8000')) {
+    // Keep Docker internal URL for proxy
+    apiUrl = 'http://backend:8000'
+  }
 
-  console.log('🔧 Vite Config - API URL:', apiUrl)
+  console.log('🔧 Vite Config - Mode:', mode)
+  console.log('🔧 Vite Config - Proxy Target:', apiUrl)
 
   return {
     plugins: [react()],
@@ -20,7 +28,15 @@ export default defineConfig(({ mode }) => {
           target: apiUrl,
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => path
+          rewrite: (path) => path,
+          configure: (proxy, options) => {
+            proxy.on('error', (err, req, res) => {
+              console.log('❌ Proxy error:', err.message)
+            })
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log('📤 Proxy request:', req.method, req.url, '→', apiUrl + req.url)
+            })
+          }
         },
       },
     },
