@@ -184,7 +184,7 @@ function App() {
         <Route
           path="pid/upload"
           element={
-            <ModuleProtectedRoute moduleCode="PID">
+            <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDUpload />
             </ModuleProtectedRoute>
           }
@@ -192,7 +192,7 @@ function App() {
         <Route
           path="pid/report/:id"
           element={
-            <ModuleProtectedRoute moduleCode="PID">
+            <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDReport />
             </ModuleProtectedRoute>
           }
@@ -202,7 +202,7 @@ function App() {
         <Route
           path="pfd/upload"
           element={
-            <ModuleProtectedRoute moduleCode="PFD">
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDUpload />
             </ModuleProtectedRoute>
           }
@@ -210,7 +210,7 @@ function App() {
         <Route
           path="pfd/convert/:documentId"
           element={
-            <ModuleProtectedRoute moduleCode="PFD">
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDConvert />
             </ModuleProtectedRoute>
           }
@@ -218,7 +218,7 @@ function App() {
         <Route
           path="pfd/s3-browser"
           element={
-            <ModuleProtectedRoute moduleCode="PFD">
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <S3PFDBrowser />
             </ModuleProtectedRoute>
           }
@@ -228,7 +228,7 @@ function App() {
         <Route
           path="crs/documents"
           element={
-            <ModuleProtectedRoute moduleCode="CRS">
+            <ModuleProtectedRoute moduleCode="crs_documents">
               <CRSDocuments />
             </ModuleProtectedRoute>
           }
@@ -236,7 +236,7 @@ function App() {
         <Route
           path="crs/documents/history"
           element={
-            <ModuleProtectedRoute moduleCode="CRS">
+            <ModuleProtectedRoute moduleCode="crs_documents">
               <CRSDocumentsHistory />
             </ModuleProtectedRoute>
           }
@@ -247,7 +247,7 @@ function App() {
         <Route
           path="projects"
           element={
-            <ModuleProtectedRoute moduleCode="PROJECT_CONTROL">
+            <ModuleProtectedRoute moduleCode="project_control">
               <ProjectControl />
             </ModuleProtectedRoute>
           }
