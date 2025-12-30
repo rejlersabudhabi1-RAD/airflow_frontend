@@ -40,10 +40,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   React.useEffect(() => {
     const fetchUserModules = async () => {
       try {
+        const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
         const apiUrl = `${API_BASE_URL}/rbac/users/me/`
         console.log('🔐 Fetching modules from:', apiUrl)
-        const response = await fetch(apiUrln') || localStorage.getItem('access')
-        const response = await fetch('/api/v1/rbac/users/me/', {
+        const response = await fetch(apiUrl, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
