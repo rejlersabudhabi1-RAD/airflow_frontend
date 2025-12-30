@@ -317,9 +317,18 @@ const PIDUpload = () => {
     <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-          P&ID Design Verification
-        </h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">
+            P&ID Design Verification
+          </h1>
+          <button
+            onClick={() => navigate('/pid/history')}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+          >
+            <span>📋</span>
+            View History
+          </button>
+        </div>
         <p className="text-sm sm:text-base text-gray-600">
           Upload your P&ID drawing for AI-powered engineering review and compliance verification
         </p>

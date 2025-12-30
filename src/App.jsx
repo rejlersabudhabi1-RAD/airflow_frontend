@@ -11,8 +11,10 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
+import PIDHistory from './pages/PIDHistory'
 import PFDUpload from './pages/PFDUpload'
 import PFDConvert from './pages/PFDConvert'
+import PFDHistory from './pages/PFDHistory'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
@@ -198,6 +200,14 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        <Route
+          path="pid/history"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <PIDHistory />
+            </ModuleProtectedRoute>
+          }
+        />
         
         {/* Feature Routes - PFD Converter */}
         <Route
@@ -221,6 +231,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <S3PFDBrowser />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/history"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDHistory />
             </ModuleProtectedRoute>
           }
         />

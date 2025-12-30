@@ -104,9 +104,19 @@ const PFDUpload = () => {
             Back to Dashboard
           </button>
           
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Upload Process Flow Diagram
-          </h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              Upload Process Flow Diagram
+            </h1>
+            <button
+              type="button"
+              onClick={() => navigate('/pfd/history')}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+            >
+              <span>📋</span>
+              View History
+            </button>
+          </div>
           <p className="text-gray-600">AI-powered conversion from PFD to detailed P&ID drawings</p>
         </div>
 
