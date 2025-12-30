@@ -43,7 +43,8 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Enable credentials for CORS with authentication
+  // withCredentials removed - we use JWT in localStorage, not cookies
+  // This fixes CORS issues with Access-Control-Allow-Origin
 })
 
 console.log('[API Service] Enhanced Axios client initialized with CORS support')
