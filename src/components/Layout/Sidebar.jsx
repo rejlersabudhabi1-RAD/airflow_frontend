@@ -120,7 +120,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentTextIcon,
           path: '/pid/upload',
           description: 'AI-powered engineering review',
-          moduleCode: 'PID'
+          moduleCode: 'pid_analysis'
         },
         {
           id: 'pfd',
@@ -128,7 +128,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentTextIcon,
           path: '/pfd/upload',
           description: 'Intelligent conversion',
-          moduleCode: 'PFD'
+          moduleCode: 'pfd_to_pid'
         }
       ]
     },
@@ -145,7 +145,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentTextIcon,
           path: '/crs/documents',
           description: 'Centralized CRS repository',
-          moduleCode: 'CRS'
+          moduleCode: 'crs_documents'
         }
       ]
     },
@@ -162,7 +162,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
-          moduleCode: 'PROJECT_CONTROL'
+          moduleCode: 'project_control'
         }
       ]
     }
