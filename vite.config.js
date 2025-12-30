@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // Load environment variables for this mode
   const env = loadEnv(mode, process.cwd(), '')
-  const apiUrl = env.VITE_API_URL || 'http://localhost:8000'
+  // Use host.docker.internal for Docker on Windows/Mac, localhost for Linux
+  const apiUrl = env.VITE_API_URL || 'http://host.docker.internal:8000'
 
   return {
     plugins: [react()],
