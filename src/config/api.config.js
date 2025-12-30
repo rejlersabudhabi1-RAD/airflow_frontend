@@ -8,9 +8,10 @@ const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/
 
 // Determine API base URL (soft-coded for all environments)
 const getApiBaseUrl = () => {
-  // 1. Check if running in browser (client-side)
-  if (typeof window !== 'undefined') {
+  // 1. PRIORITY: Check if running in browser (client-side) - most reliable
+  if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname
+    console.log('[API Config] 🌐 Detected hostname:', hostname)
     
     // 2. For localhost/127.0.0.1, use relative path for Vite proxy
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -19,25 +20,20 @@ const getApiBaseUrl = () => {
       return localUrl
     }
     
-    // 3. For Vercel production, use Railway backend
-    if (hostname.includes('vercel.app')) {
-      console.log('[API Config] ☁️ Vercel detected, using Railway backend:', PRODUCTION_API_URL)
+    // 3. For ANY Vercel deployment (production/preview), ALWAYS use Railway backend
+    if (hostname.includes('vercel.app') || hostname.includes('vercel')) {
+      console.log('[API Config] ☁️ Vercel deployment detected, using Railway backend:', PRODUCTION_API_URL)
       return PRODUCTION_API_URL
     }
+    
+    // 4. For any other hostname, use production Railway backend as default
+    console.log('[API Config] 🌍 Unknown hostname, defaulting to Railway backend:', PRODUCTION_API_URL)
+    return PRODUCTION_API_URL
   }
   
-  // 4. SSR or build-time: Check environment variable
-  if (import.meta.env.VITE_API_URL) {
-    console.log('[API Config] 📦 Build-time VITE_API_URL:', import.meta.env.VITE_API_URL)
-    // For Docker internal URLs, convert to relative path
-    if (import.meta.env.VITE_API_URL.includes('backend:8000')) {
-      return '/api/v1'
-    }
-    return import.meta.env.VITE_API_URL
-  }
-  
-  // 5. Default fallback to production
-  console.log('[API Config] 🌐 Using default production backend:', PRODUCTION_API_URL)
+  // 5. SSR or build-time fallback: ALWAYS use production for Vercel
+  // Vercel builds are for production, so we always want Railway backend
+  console.log('[API Config] 📦 Build-time detected, using Railway backend:', PRODUCTION_API_URL)
   return PRODUCTION_API_URL
 }
 
