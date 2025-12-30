@@ -5,8 +5,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // Load environment variables for this mode
   const env = loadEnv(mode, process.cwd(), '')
-  // Use host.docker.internal for Docker on Windows/Mac, localhost for Linux
-  const apiUrl = env.VITE_API_URL || 'http://host.docker.internal:8000'
+  // Default to production backend if not specified
+  const apiUrl = env.VITE_API_URL || 'https://aiflowbackend-production.up.railway.app'
+
+  console.log('🔧 Vite Config - API URL:', apiUrl)
 
   return {
     plugins: [react()],
@@ -17,6 +19,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiUrl,
           changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path
         },
       },
     },

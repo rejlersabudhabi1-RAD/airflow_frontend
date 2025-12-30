@@ -20,10 +20,10 @@ const getApiBaseUrl = () => {
     return PRODUCTION_API_URL
   }
   
-  // 3. For localhost, use nginx proxy path (relative URL)
+  // 3. For localhost, use Vite dev server proxy (just /api, Vite will proxy to backend)
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     const localUrl = '/api/v1'
-    console.log('[API Config] Detected localhost, using nginx proxy:', localUrl)
+    console.log('[API Config] Detected localhost, using Vite proxy:', localUrl)
     return localUrl
   }
   
