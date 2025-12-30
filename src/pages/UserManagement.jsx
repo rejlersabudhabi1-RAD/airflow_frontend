@@ -19,9 +19,12 @@ const UserManagement = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [authError, setAuthError] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [bulkUploadFile, setBulkUploadFile] = useState(null);
+  const [bulkUploadResults, setBulkUploadResults] = useState(null);
   
   // Soft-coded: Action button states and configuration
   const [actionLoading, setActionLoading] = useState({});
@@ -585,6 +588,127 @@ const UserManagement = () => {
     }
   };
 
+  // Soft-coded: Bulk upload handlers
+  const handleBulkUploadFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type
+      if (!file.name.endsWith('.csv')) {
+        setNotification({
+          show: true,
+          type: 'error',
+          message: 'Please upload a CSV file'
+        });
+        return;
+      }
+      setBulkUploadFile(file);
+      setBulkUploadResults(null);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      console.log('📥 Downloading bulk upload template...');
+      const response = await rbacService.downloadBulkUploadTemplate();
+      
+      // Create blob and download
+      const url = window.URL.createObjectURL(new Blob([response]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'user_bulk_upload_template.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: 'Template downloaded successfully!'
+      });
+    } catch (error) {
+      console.error('❌ Failed to download template:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Failed to download template. Please try again.'
+      });
+    }
+  };
+
+  const handleBulkUpload = async (e) => {
+    e.preventDefault();
+    
+    if (!bulkUploadFile) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Please select a CSV file to upload'
+      });
+      return;
+    }
+
+    if (!formData.organization_id) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Please select an organization for bulk upload'
+      });
+      return;
+    }
+
+    try {
+      setActionLoading(prev => ({ ...prev, bulkUpload: true }));
+      
+      const formDataToSend = new FormData();
+      formDataToSend.append('file', bulkUploadFile);
+      formDataToSend.append('organization_id', formData.organization_id);
+      
+      console.log('📤 Uploading bulk users file...');
+      const response = await rbacService.bulkUploadUsers(formDataToSend);
+      
+      console.log('✅ Bulk upload response:', response);
+      setBulkUploadResults(response);
+      
+      // Refresh users list
+      await dispatch(fetchUsers()).unwrap();
+      
+      const { summary } = response;
+      setNotification({
+        show: true,
+        type: summary.failed > 0 ? 'warning' : 'success',
+        message: `Bulk upload completed! Success: ${summary.successful}, Failed: ${summary.failed}, Skipped: ${summary.skipped}`
+      });
+      
+      // Clear file input
+      setBulkUploadFile(null);
+      
+    } catch (error) {
+      console.error('❌ Failed to upload users:', error);
+      
+      let errorMessage = 'Failed to upload users. ';
+      if (error.response?.data?.error) {
+        errorMessage += error.response.data.error;
+      } else if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please check your file format and try again.';
+      }
+      
+      setNotification({
+        show: true,
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      setActionLoading(prev => {
+        const newState = { ...prev };
+        delete newState.bulkUpload;
+        return newState;
+      });
+    }
+  };
+
   const handleEditClick = (user) => {
     console.log('📝 Opening edit modal for user:', user);
     setSelectedUser(user);
@@ -906,6 +1030,15 @@ const UserManagement = () => {
             <p className="text-gray-600 mt-1">Manage system users and their roles</p>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowBulkUploadModal(true)}
+              className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 transition-colors shadow-lg hover:shadow-xl"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Bulk Upload</span>
+            </button>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors shadow-lg hover:shadow-xl"
@@ -1581,6 +1714,225 @@ const UserManagement = () => {
                       </>
                     )}
                   </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Upload Modal */}
+        {showBulkUploadModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-900">Bulk Upload Users</h2>
+                  <button
+                    onClick={() => {
+                      setShowBulkUploadModal(false);
+                      setBulkUploadFile(null);
+                      setBulkUploadResults(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleBulkUpload} className="p-6">
+                <div className="space-y-6">
+                  {/* Instructions */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <svg className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <h3 className="text-sm font-semibold text-blue-900 mb-2">How to use Bulk Upload:</h3>
+                        <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                          <li>Download the CSV template using the button below</li>
+                          <li>Fill in the user details following the format in the template</li>
+                          <li>Select an organization for all users in the upload</li>
+                          <li>Upload the completed CSV file</li>
+                        </ol>
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={handleDownloadTemplate}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 text-sm transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>Download Template</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Organization Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Organization <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.organization_id}
+                      onChange={(e) => setFormData({ ...formData, organization_id: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Select Organization</option>
+                      {organizations.map(org => (
+                        <option key={org.id} value={org.id}>{org.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">All users in the upload will be assigned to this organization</p>
+                  </div>
+
+                  {/* File Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CSV File <span className="text-red-500">*</span>
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleBulkUploadFileChange}
+                        className="hidden"
+                        id="bulk-upload-file"
+                      />
+                      <label htmlFor="bulk-upload-file" className="cursor-pointer">
+                        <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-sm text-gray-600 mb-1">
+                          {bulkUploadFile ? bulkUploadFile.name : 'Click to upload or drag and drop'}
+                        </p>
+                        <p className="text-xs text-gray-500">CSV file only</p>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Upload Results */}
+                  {bulkUploadResults && (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h3 className="font-semibold text-gray-900 mb-3">Upload Summary</h3>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="bg-green-100 rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-green-700">{bulkUploadResults.summary?.successful || 0}</p>
+                            <p className="text-xs text-green-600">Successful</p>
+                          </div>
+                          <div className="bg-red-100 rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-red-700">{bulkUploadResults.summary?.failed || 0}</p>
+                            <p className="text-xs text-red-600">Failed</p>
+                          </div>
+                          <div className="bg-yellow-100 rounded-lg p-3 text-center">
+                            <p className="text-2xl font-bold text-yellow-700">{bulkUploadResults.summary?.skipped || 0}</p>
+                            <p className="text-xs text-yellow-600">Skipped</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detailed Results */}
+                      {bulkUploadResults.details && (
+                        <div className="space-y-3 max-h-60 overflow-y-auto">
+                          {/* Success List */}
+                          {bulkUploadResults.details.success?.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-green-700 mb-2">✓ Successfully Created</h4>
+                              <div className="space-y-1">
+                                {bulkUploadResults.details.success.map((item, idx) => (
+                                  <div key={idx} className="text-sm bg-green-50 p-2 rounded">
+                                    Row {item.row}: {item.name} ({item.email})
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Failed List */}
+                          {bulkUploadResults.details.failed?.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-red-700 mb-2">✗ Failed</h4>
+                              <div className="space-y-1">
+                                {bulkUploadResults.details.failed.map((item, idx) => (
+                                  <div key={idx} className="text-sm bg-red-50 p-2 rounded">
+                                    Row {item.row}: {item.email} - {item.error}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Skipped List */}
+                          {bulkUploadResults.details.skipped?.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-yellow-700 mb-2">⚠ Skipped</h4>
+                              <div className="space-y-1">
+                                {bulkUploadResults.details.skipped.map((item, idx) => (
+                                  <div key={idx} className="text-sm bg-yellow-50 p-2 rounded">
+                                    Row {item.row}: {item.email} - {item.reason}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBulkUploadModal(false);
+                      setBulkUploadFile(null);
+                      setBulkUploadResults(null);
+                    }}
+                    disabled={actionLoading.bulkUpload}
+                    className={`px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg transition-colors font-medium ${
+                      actionLoading.bulkUpload ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    {bulkUploadResults ? 'Close' : 'Cancel'}
+                  </button>
+                  {!bulkUploadResults && (
+                    <button
+                      type="submit"
+                      disabled={actionLoading.bulkUpload || !bulkUploadFile || !formData.organization_id}
+                      className={`px-6 py-2.5 bg-green-600 text-white rounded-lg transition-colors font-medium shadow-lg flex items-center space-x-2 ${
+                        actionLoading.bulkUpload || !bulkUploadFile || !formData.organization_id
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : 'hover:bg-green-700 hover:shadow-xl'
+                      }`}
+                    >
+                      {actionLoading.bulkUpload ? (
+                        <>
+                          <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <span>Upload Users</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
