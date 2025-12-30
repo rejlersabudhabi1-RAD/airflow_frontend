@@ -17,7 +17,7 @@ const testCorsConnection = async (baseURL = API_BASE_URL) => {
     const response = await fetch(`${baseURL}/cors/health/`, {
       method: 'GET',
       mode: 'cors',
-      credentials: 'include', // Include credentials for proper CORS test
+      // No credentials - JWT in localStorage, not cookies
       headers: {
         'Content-Type': 'application/json',
       }
@@ -50,7 +50,7 @@ const apiClient = axios.create({
 console.log('[API Service] Enhanced Axios client initialized with CORS support')
 console.log('[API Service] Base URL:', API_BASE_URL)
 console.log('[API Service] Timeout:', API_TIMEOUT)
-console.log('[API Service] With Credentials:', true) // Enabled for auth
+console.log('[API Service] With Credentials:', false) // JWT in localStorage
 
 // Request interceptor - Add auth token and handle content types
 apiClient.interceptors.request.use(
