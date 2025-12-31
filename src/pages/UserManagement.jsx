@@ -86,6 +86,12 @@ const UserManagement = () => {
     phone_number: '',
     module_ids: []
   });
+  const [emailValidation, setEmailValidation] = useState({
+    checking: false,
+    isValid: false,
+    isAvailable: false,
+    message: ''
+  });
 
   // Soft-coded: Check authentication before loading data
   useEffect(() => {
@@ -327,6 +333,12 @@ const UserManagement = () => {
       return;
     }
     
+    // Check email validation status
+    if (!emailValidation.isValid || !emailValidation.isAvailable) {
+      alert('Please provide a valid and available email address');
+      return;
+    }
+    
     if (formData.password.length < 8) {
       alert('Password must be at least 8 characters long');
       return;
@@ -368,9 +380,18 @@ const UserManagement = () => {
       const response = await rbacService.createUser(userData);
       
       console.log('✅ User created successfully:', response);
-      alert('User created successfully!');
+      
+      // Show success message with email notification info
+      alert(
+        `User created successfully!\n\n` +
+        `A welcome email has been sent to ${formData.email} with login credentials.\n\n` +
+        `The user will be required to change their password on first login.`
+      );
+      
       setShowCreateModal(false);
       dispatch(fetchUsers());
+      
+      // Reset form
       setFormData({
         email: '',
         first_name: '',
@@ -381,6 +402,12 @@ const UserManagement = () => {
         job_title: '',
         phone_number: '',
         module_ids: []
+      });
+      setEmailValidation({
+        checking: false,
+        isValid: false,
+        isAvailable: false,
+        message: ''
       });
     } catch (error) {
       console.error('❌ Failed to create user:', error);
@@ -413,6 +440,64 @@ const UserManagement = () => {
       alert(errorMessage);
     }
   };
+  
+  // Email validation handler with debouncing
+  const validateEmail = async (email) => {
+    if (!email) {
+      setEmailValidation({
+        checking: false,
+        isValid: false,
+        isAvailable: false,
+        message: ''
+      });
+      return;
+    }
+    
+    setEmailValidation(prev => ({ ...prev, checking: true }));
+    
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/validate-email/`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          },
+          body: JSON.stringify({ email })
+        }
+      );
+      
+      const data = await response.json();
+      
+      setEmailValidation({
+        checking: false,
+        isValid: data.is_valid,
+        isAvailable: data.is_available,
+        message: data.message
+      });
+    } catch (error) {
+      console.error('Error validating email:', error);
+      setEmailValidation({
+        checking: false,
+        isValid: false,
+        isAvailable: false,
+        message: 'Failed to validate email'
+      });
+    }
+  };
+  
+  // Debounced email validation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.email) {
+        validateEmail(formData.email);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [formData.email]);
 
   // Soft-coded: Enhanced status toggle with loading states and notifications
   const handleStatusToggle = async (userId, currentStatus) => {
@@ -1266,14 +1351,48 @@ const UserManagement = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Email <span className="text-red-500">*</span>
                         </label>
-                        <input
-                          type="email"
-                          required
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                          placeholder="user@example.com"
-                        />
+                        <div className="relative">
+                          <input
+                            type="email"
+                            required
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 ${
+                              emailValidation.checking ? 'border-gray-300' :
+                              emailValidation.isValid && emailValidation.isAvailable ? 'border-green-500' :
+                              formData.email && !emailValidation.isValid ? 'border-red-500' :
+                              'border-gray-300'
+                            }`}
+                            placeholder="user@example.com"
+                          />
+                          {emailValidation.checking && (
+                            <div className="absolute right-3 top-3">
+                              <svg className="animate-spin h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          )}
+                          {!emailValidation.checking && emailValidation.isValid && emailValidation.isAvailable && (
+                            <div className="absolute right-3 top-3">
+                              <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        {emailValidation.message && (
+                          <p className={`mt-1 text-sm ${
+                            emailValidation.isValid && emailValidation.isAvailable ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {emailValidation.message}
+                          </p>
+                        )}
+                        {emailValidation.isValid && emailValidation.isAvailable && (
+                          <p className="mt-1 text-xs text-blue-600">
+                            ℹ️ A welcome email with login credentials will be sent to this address
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1287,6 +1406,9 @@ const UserManagement = () => {
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
                           placeholder="Min. 8 characters"
                         />
+                        <p className="mt-1 text-xs text-gray-500">
+                          This is a temporary password. User will be required to change it on first login.
+                        </p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">

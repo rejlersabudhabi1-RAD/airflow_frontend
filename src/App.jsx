@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL } from './config/api.config'
 import Layout from './components/Layout/Layout'
+import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -138,16 +139,17 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        } />
-        <Route path="home" element={<Home />} />
-        
-        {/* Public Routes */}
+    <FirstLoginCheck>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          } />
+          <Route path="home" element={<Home />} />
+          
+          {/* Public Routes */}
         <Route
           path="login"
           element={
@@ -302,6 +304,7 @@ function App() {
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
+    </FirstLoginCheck>
   )
 }
 

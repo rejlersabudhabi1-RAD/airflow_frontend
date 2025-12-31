@@ -1,0 +1,262 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+/**
+ * First Login Password Reset Component
+ * Forces users to change their password on first login
+ * Soft-coded with proper validation and error handling
+ */
+const FirstLoginPasswordReset = ({ user, onSuccess }) => {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0,
+    label: '',
+    color: ''
+  });
+
+  // Password strength calculator
+  const calculatePasswordStrength = (password) => {
+    if (!password) {
+      return { score: 0, label: '', color: '' };
+    }
+
+    let score = 0;
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      numbers: /[0-9]/.test(password),
+      special: /[^A-Za-z0-9]/.test(password)
+    };
+
+    score = Object.values(checks).filter(Boolean).length;
+
+    const strengthMap = {
+      0: { label: 'Very Weak', color: 'text-red-600' },
+      1: { label: 'Very Weak', color: 'text-red-600' },
+      2: { label: 'Weak', color: 'text-orange-600' },
+      3: { label: 'Fair', color: 'text-yellow-600' },
+      4: { label: 'Good', color: 'text-green-600' },
+      5: { label: 'Strong', color: 'text-green-700' }
+    };
+
+    return { score, ...strengthMap[score] };
+  };
+
+  useEffect(() => {
+    setPasswordStrength(calculatePasswordStrength(formData.new_password));
+  }, [formData.new_password]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error for this field
+    setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.current_password) {
+      newErrors.current_password = 'Current password is required';
+    }
+
+    if (!formData.new_password) {
+      newErrors.new_password = 'New password is required';
+    } else if (formData.new_password.length < 8) {
+      newErrors.new_password = 'Password must be at least 8 characters';
+    } else if (formData.new_password === formData.current_password) {
+      newErrors.new_password = 'New password must be different from current password';
+    }
+
+    if (!formData.confirm_password) {
+      newErrors.confirm_password = 'Please confirm your new password';
+    } else if (formData.new_password !== formData.confirm_password) {
+      newErrors.confirm_password = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/reset-first-login-password/`,
+        {
+          current_password: formData.current_password,
+          new_password: formData.new_password,
+          confirm_password: formData.confirm_password
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.success) {
+        alert('Password successfully updated! Please login again with your new password.');
+        
+        // Clear tokens and redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          navigate('/login');
+        }
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to reset password';
+      setErrors({ submit: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Password Reset Required
+          </h2>
+          <p className="text-gray-600">
+            Welcome, {user?.first_name || 'User'}! For security reasons, please change your temporary password before continuing.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Current Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Current (Temporary) Password *
+            </label>
+            <input
+              type="password"
+              name="current_password"
+              value={formData.current_password}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                errors.current_password ? 'border-red-500' : 'border-gray-300'
+              }`}
+              disabled={loading}
+            />
+            {errors.current_password && (
+              <p className="mt-1 text-sm text-red-600">{errors.current_password}</p>
+            )}
+          </div>
+
+          {/* New Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              New Password *
+            </label>
+            <input
+              type="password"
+              name="new_password"
+              value={formData.new_password}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                errors.new_password ? 'border-red-500' : 'border-gray-300'
+              }`}
+              disabled={loading}
+            />
+            {formData.new_password && (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-sm">Strength:</span>
+                <span className={`text-sm font-medium ${passwordStrength.color}`}>
+                  {passwordStrength.label}
+                </span>
+                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      passwordStrength.score <= 2 ? 'bg-red-500' :
+                      passwordStrength.score === 3 ? 'bg-yellow-500' :
+                      'bg-green-500'
+                    }`}
+                    style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {errors.new_password && (
+              <p className="mt-1 text-sm text-red-600">{errors.new_password}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              Must be at least 8 characters with uppercase, lowercase, numbers, and special characters
+            </p>
+          </div>
+
+          {/* Confirm Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Confirm New Password *
+            </label>
+            <input
+              type="password"
+              name="confirm_password"
+              value={formData.confirm_password}
+              onChange={handleChange}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                errors.confirm_password ? 'border-red-500' : 'border-gray-300'
+              }`}
+              disabled={loading}
+            />
+            {errors.confirm_password && (
+              <p className="mt-1 text-sm text-red-600">{errors.confirm_password}</p>
+            )}
+          </div>
+
+          {/* Submit Error */}
+          {errors.submit && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{errors.submit}</p>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Updating...' : 'Update Password'}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800">
+            <strong>Note:</strong> You will be logged out after updating your password and will need to login again with your new credentials.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FirstLoginPasswordReset;
