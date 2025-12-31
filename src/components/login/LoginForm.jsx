@@ -1,5 +1,6 @@
 import React from 'react'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
+import { Link } from 'react-router-dom'
 import { BRANDING, PAGE_CONTENT, FORM_CONFIG, THEME, LOGIN_RESPONSIVE, ICON } from '../../config/login.config'
 
 /**
@@ -11,26 +12,26 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
   const { company } = BRANDING
   const { title, subtitle } = PAGE_CONTENT
   const { fields, buttons, options } = FORM_CONFIG
-  const { gradients } = THEME
+  const { colors, gradients } = THEME
 
   return (
     <div className={`${LOGIN_RESPONSIVE.form.wrapper}`}>
       <div className={`${LOGIN_RESPONSIVE.form.maxWidth} w-full ${LOGIN_RESPONSIVE.form.container}`}>
         {/* Mobile Logo */}
-        <div className="lg:hidden text-center mb-3 sm:mb-6">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 mb-1">{company.name}</h1>
+        <div className="lg:hidden text-center mb-2 sm:mb-4">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black mb-1" style={{ color: colors.primary }}>{company.name}</h1>
           <div className="flex items-center justify-center space-x-2">
-            <div className={`h-1 w-8 sm:w-10 md:w-12 bg-gradient-to-r ${gradients.accentLine} rounded-full`}></div>
-            <span className="text-amber-600 text-xs sm:text-sm md:text-base font-semibold">{company.product}</span>
+            <div className={`h-0.5 w-6 sm:w-8 md:w-10 rounded-full`} style={{ background: gradients.accentLine }}></div>
+            <span className="text-xs sm:text-sm font-semibold" style={{ color: colors.secondaryAccent }}>{company.product}</span>
           </div>
         </div>
 
         {/* Welcome Message */}
-        <div className="text-center mb-3 sm:mb-6">
-          <h2 className={`${LOGIN_RESPONSIVE.form.title} font-bold bg-gradient-to-r ${gradients.title} bg-clip-text text-transparent mb-1 sm:mb-2`}>
+        <div className="text-center mb-3 sm:mb-5">
+          <h2 className={`${LOGIN_RESPONSIVE.form.title} font-bold bg-clip-text text-transparent mb-1`} style={{ backgroundImage: gradients.title }}>
             {title}
           </h2>
-          <p className="text-gray-600 text-xs sm:text-sm md:text-base">
+          <p className="text-gray-600 text-xs sm:text-sm">
             {subtitle}
           </p>
         </div>
@@ -41,7 +42,7 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
           onSubmit={onSubmit}
         >
           {({ errors, touched }) => (
-            <Form className="space-y-3 sm:space-y-4">
+            <Form className="space-y-2.5 sm:space-y-3">
               {/* Email Field */}
               <div>
                 <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-1 sm:mb-2">
@@ -116,21 +117,22 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full bg-gradient-to-r ${gradients.button} hover:${gradients.buttonHover} text-white font-bold ${LOGIN_RESPONSIVE.form.button} px-3 sm:px-4 md:px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2 relative overflow-hidden group text-xs sm:text-sm md:text-base`}
+                className={`w-full text-white font-bold ${LOGIN_RESPONSIVE.form.button} px-3 sm:px-4 md:px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2 relative overflow-hidden group text-xs sm:text-sm md:text-base`}
+                style={{ background: gradients.button }}
               >
-                <div className={`absolute inset-0 w-full h-full bg-gradient-to-r ${gradients.accentLine} opacity-0 group-hover:opacity-20 transition-opacity duration-300`}></div>
+                <div className="absolute inset-0 w-full h-full opacity-0 group-hover:opacity-20 transition-opacity duration-300" style={{ background: gradients.accentLine }}></div>
                 {isLoading ? (
                   <>
                     <svg className={`animate-spin ${ICON.sm} text-white`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>{buttons.submit.loadingText}</span>
+                    <span className="relative z-10">{buttons.submit.loadingText}</span>
                   </>
                 ) : (
                   <>
-                    <span>{buttons.submit.text}</span>
-                    <svg className={`${ICON.sm}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <span className="relative z-10">{buttons.submit.text}</span>
+                    <svg className={`${ICON.sm} relative z-10`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                     </svg>
                   </>
@@ -139,6 +141,20 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
             </Form>
           )}
         </Formik>
+
+        {/* Footer */}
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <p className="text-center text-xs text-gray-500 mb-2">
+            © 2025 RADAI. All rights reserved. v1.0.0
+          </p>
+          <div className="flex items-center justify-center space-x-4 text-xs">
+            <Link to="/privacy-policy" className="text-gray-600 hover:text-blue-600 transition-colors">Privacy Policy</Link>
+            <span className="text-gray-300">•</span>
+            <Link to="/terms-of-service" className="text-gray-600 hover:text-blue-600 transition-colors">Terms of Service</Link>
+            <span className="text-gray-300">•</span>
+            <a href="https://www.rejlers.com/ae/contact-us/" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-blue-600 transition-colors">Contact</a>
+          </div>
+        </div>
       </div>
     </div>
   )

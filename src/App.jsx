@@ -8,6 +8,8 @@ import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import TermsOfService from './pages/TermsOfService'
+import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
@@ -142,12 +144,7 @@ function App() {
     <FirstLoginCheck>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          } />
-          <Route path="home" element={<Home />} />
+          <Route index element={<Home />} />
           
           {/* Public Routes */}
         <Route
@@ -166,6 +163,7 @@ function App() {
             </PublicRoute>
           }
         />
+        <Route path="terms-of-service" element={<TermsOfService />} />
         
         {/* Protected Routes */}
         <Route

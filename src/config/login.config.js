@@ -1,21 +1,23 @@
 /**
  * Login Page Configuration
- * Soft-coded configuration for login page
+ * Soft-coded configuration using Official Rejlers Brand Guidelines 2024
  * Allows easy customization without modifying core logic
  */
+
+import { REJLERS_COLORS, BRAND_TEXT } from './theme.config'
 
 // Branding Configuration
 export const BRANDING = {
   company: {
-    name: 'REJLERS',
-    product: 'RADAI',
-    tagline: 'AI-Powered P&ID Design Verification',
-    description: 'Intelligent engineering review for Process & Instrumentation Diagrams',
+    name: BRAND_TEXT.company,
+    product: BRAND_TEXT.product,
+    tagline: BRAND_TEXT.vision,
+    description: BRAND_TEXT.visionDescription,
   },
   location: {
     city: 'Abu Dhabi',
     country: 'UAE',
-    displayText: 'Launching in Abu Dhabi, UAE',
+    displayText: `${BRAND_TEXT.location}`,
   },
 }
 
@@ -139,23 +141,24 @@ export const LOGGING = {
   },
 }
 
-// Theme Configuration
+// Theme Configuration - Official Rejlers Brand Colors
 export const THEME = {
   colors: {
-    primary: 'blue',
-    secondary: 'indigo',
-    accent: 'amber',
-    success: 'green',
-    error: 'red',
+    primary: REJLERS_COLORS.primary.base,
+    primaryAccent: REJLERS_COLORS.primary.accent,
+    secondary: REJLERS_COLORS.secondary.green.base,
+    secondaryAccent: REJLERS_COLORS.secondary.green.accent,
+    success: REJLERS_COLORS.status.success,
+    error: REJLERS_COLORS.status.error,
   },
   
   gradients: {
-    background: 'from-slate-50 via-blue-50 to-indigo-100',
-    branding: 'from-blue-900 via-indigo-900 to-purple-900',
-    button: 'from-blue-600 via-indigo-600 to-purple-600',
-    buttonHover: 'from-blue-700 via-indigo-700 to-purple-700',
-    accentLine: 'from-amber-400 to-orange-500',
-    title: 'from-blue-600 to-indigo-600',
+    background: `linear-gradient(to bottom right, ${REJLERS_COLORS.neutral.white}, ${REJLERS_COLORS.primary.complement}, ${REJLERS_COLORS.secondary.turbine.complement})`,
+    branding: `linear-gradient(to bottom right, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.primary.accent}, ${REJLERS_COLORS.secondary.turbine.accent})`,
+    button: `linear-gradient(to right, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.green.accent})`,
+    buttonHover: `linear-gradient(to right, ${REJLERS_COLORS.secondary.green.accent}, ${REJLERS_COLORS.secondary.green.base})`,
+    accentLine: `linear-gradient(to right, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})`,
+    title: `linear-gradient(to right, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.primary.accent})`,
   },
   
   animations: {

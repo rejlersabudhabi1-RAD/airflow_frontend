@@ -107,7 +107,7 @@ const Login = () => {
   }
 
   return (
-    <div className={`${LOGIN_RESPONSIVE.container} bg-gradient-to-br ${THEME.gradients.background}`}>
+    <div className="min-h-screen flex flex-col lg:flex-row" style={{ background: THEME.gradients.background }}>
       <LoginBranding />
       <LoginForm 
         loginSchema={loginSchema}

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Link } from 'react-router-dom'
 import { APP_NAME, APP_VERSION } from '../../config/app.config'
 
 /**
@@ -17,20 +18,22 @@ const Footer = () => {
             &copy; {currentYear} {APP_NAME}. All rights reserved. v{APP_VERSION}
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
-            <a
-              href="#"
-              className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 text-sm transition-colors"
+            <Link 
+              to="/privacy-policy"
+              className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               Privacy Policy
-            </a>
-            <a
-              href="#"
+            </Link>
+            <Link
+              to="/terms-of-service"
               className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 text-sm transition-colors"
             >
               Terms of Service
-            </a>
+            </Link>
             <a
-              href="#"
+              href="https://www.rejlers.com/ae/contact-us/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 text-sm transition-colors"
             >
               Contact

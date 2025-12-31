@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
-import FirstLoginPasswordReset from '../components/Auth/FirstLoginPasswordReset';
+import FirstLoginPasswordReset from './FirstLoginPasswordReset';
 
 /**
  * First Login Check Component
