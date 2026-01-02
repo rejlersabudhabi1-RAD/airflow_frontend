@@ -20,13 +20,19 @@ const getApiBaseUrl = () => {
       return localUrl
     }
     
-    // 3. For ANY Vercel deployment (production/preview), ALWAYS use Railway backend
+    // 3. For radai.ae custom domain, use Railway backend
+    if (hostname === 'radai.ae' || hostname === 'www.radai.ae') {
+      console.log('[API Config] 🌐 RADAI custom domain detected, using Railway backend:', PRODUCTION_API_URL)
+      return PRODUCTION_API_URL
+    }
+    
+    // 4. For ANY Vercel deployment (production/preview), ALWAYS use Railway backend
     if (hostname.includes('vercel.app') || hostname.includes('vercel')) {
       console.log('[API Config] ☁️ Vercel deployment detected, using Railway backend:', PRODUCTION_API_URL)
       return PRODUCTION_API_URL
     }
     
-    // 4. For any other hostname, use production Railway backend as default
+    // 5. For any other hostname, use production Railway backend as default
     console.log('[API Config] 🌍 Unknown hostname, defaulting to Railway backend:', PRODUCTION_API_URL)
     return PRODUCTION_API_URL
   }
