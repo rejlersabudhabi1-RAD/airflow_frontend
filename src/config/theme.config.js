@@ -62,12 +62,13 @@ export const REJLERS_COLORS = {
 
 export const BRAND_TEXT = {
   company: 'REJLERS',
-  tagline: 'HOME of the LEARNING MINDS',
-  vision: 'Home of the Learning Minds',
-  visionDescription: 'Our vision guides us to continuous learning, development and growth. At the cutting edge of technology, we create a sustainable future through knowledge.',
+  tagline: 'RADAI - AI-Powered Engineering Intelligence',
+  vision: 'RADAI by Rejlers Engineering Solutions',
+  visionDescription: 'Revolutionizing Oil & Gas engineering workflows with AI-powered P&ID verification, automated compliance checking, and intelligent analysis. Built by Rejlers, a leader in engineering excellence since 1942.',
   founded: 'Since 1942',
   location: 'Abu Dhabi, UAE',
   product: 'RADAI',
+  productTagline: 'AI-Powered Engineering Intelligence',
   fullCompanyName: 'Rejlers International Engineering Solutions',
   values: [
     { name: 'Open Source Culture', description: 'We form a learning culture where we willingly share our knowledge and insights' },
