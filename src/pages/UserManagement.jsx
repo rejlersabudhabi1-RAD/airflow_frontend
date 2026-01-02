@@ -247,7 +247,8 @@ const UserManagement = () => {
       }
     };
     loadData();
-  }, [dispatch, isAuthenticated, navigate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   // Check if user has admin access via RBAC roles OR Django superuser/staff flags
   const hasRBACAdminRole = currentUser?.roles?.some(
@@ -495,7 +496,8 @@ const UserManagement = () => {
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [formData.email, validateEmail]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.email]);
 
   // Soft-coded: Enhanced status toggle with loading states and notifications
   const handleStatusToggle = async (userId, currentStatus) => {
