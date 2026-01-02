@@ -64,18 +64,18 @@ const UserManagement = () => {
     organization_id: '',
     department: '',
     job_title: '',
-    phone_number: '',
-    module_ids: []
+    phone: '',
+    module_ids: [],
+    role_ids: []
   });
   
-  const [editFormData, setEditFormData] = useState({
-    email: '',
+  const [editFormData, setEditFormData] = useState({  email: '',
     first_name: '',
     last_name: '',
     organization_id: '',
     department: '',
     job_title: '',
-    phone_number: '',
+    phone: '',
     module_ids: []
   });
   
@@ -107,7 +107,7 @@ const UserManagement = () => {
       STEP_1: [
         { name: 'first_name', label: 'First Name', type: 'text', required: true, icon: 'user', placeholder: 'John' },
         { name: 'last_name', label: 'Last Name', type: 'text', required: true, icon: 'user', placeholder: 'Doe' },
-        { name: 'phone_number', label: 'Phone Number', type: 'tel', required: false, icon: 'phone', placeholder: '+971 50 123 4567' }
+        { name: 'phone', label: 'Phone Number', type: 'tel', required: false, icon: 'phone', placeholder: '+971 50 123 4567' }
       ],
       STEP_2: [
         { name: 'email', label: 'Email Address', type: 'email', required: true, icon: 'mail', placeholder: 'john.doe@company.com' },
@@ -229,12 +229,21 @@ const UserManagement = () => {
   // ========== HELPER: WIZARD NAVIGATION ==========
   const canProceedToNextStep = useCallback(() => {
     const stepFields = CONFIG.FORM_FIELDS[`STEP_${createUserStep}`] || [];
-    return stepFields.every(field => {
+    const canProceed = stepFields.every(field => {
       if (!field.required) return true;
       const value = formData[field.name];
       if (Array.isArray(value)) return value.length > 0;
       return value && value.trim() !== '';
     });
+    
+    if (!canProceed) {
+      console.log(`[UserManagement] Step ${createUserStep} validation failed:`, {
+        stepFields,
+        formData: stepFields.reduce((acc, f) => ({ ...acc, [f.name]: formData[f.name] }), {})
+      });
+    }
+    
+    return canProceed;
   }, [createUserStep, formData, CONFIG.FORM_FIELDS]);
   
   const goToNextStep = () => {
@@ -259,7 +268,7 @@ const UserManagement = () => {
       organization_id: '',
       department: '',
       job_title: '',
-      phone_number: '',
+      phone: '',
       module_ids: [],
       role_ids: []
     });
@@ -469,9 +478,10 @@ const UserManagement = () => {
   const showingFrom = filteredUsers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const showingTo = Math.min(currentPage * itemsPerPage, filteredUsers.length);
   
-  // ========== EMAIL VALIDATION ==========
-  const validateEmail = useCallback(async (email) => {
-    if (!email) {
+  // ========== EMAIL VALIDATION - CLIENT SIDE ONLY ==========
+  // Backend endpoint /users/validate-email/ doesn't exist, so we do client-side validation only
+  useEffect(() => {
+    if (!formData.email) {
       setEmailValidation({
         checking: false,
         isValid: false,
@@ -481,55 +491,27 @@ const UserManagement = () => {
       return;
     }
     
-    setEmailValidation(prev => ({ ...prev, checking: true }));
-    
-    try {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/validate-email/`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` })
-          },
-          body: JSON.stringify({ email })
-        }
-      );
-      
-      const data = await response.json();
-      
-      setEmailValidation({
-        checking: false,
-        isValid: data.is_valid,
-        isAvailable: data.is_available,
-        message: data.message
-      });
-    } catch (error) {
-      console.error('[UserManagement] Email validation error:', error);
-      setEmailValidation({
-        checking: false,
-        isValid: false,
-        isAvailable: false,
-        message: 'Failed to validate email'
-      });
-    }
-  }, []);
-  
-  // Debounced email validation
-  useEffect(() => {
-    if (!formData.email) return;
-    
     const timer = setTimeout(() => {
-      validateEmail(formData.email);
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const isValid = emailRegex.test(formData.email);
+      
+      setEmailValidation({
+        checking: false,
+        isValid: isValid,
+        isAvailable: true, // Backend will validate on submit
+        message: isValid ? '' : 'Invalid email format'
+      });
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [formData.email, validateEmail]);
+  }, [formData.email]);
   
   // ========== HANDLERS: USER ACTIONS ==========
   const handleCreateUser = async (e) => {
     e.preventDefault();
+    
+    console.log('[UserManagement] Create user initiated');
+    console.log('[UserManagement] Form data:', formData);
     
     // Validate all required fields across all steps
     const allRequiredFieldsFilled = CONFIG.CREATE_USER_STEPS.every((step) => {
@@ -541,6 +523,8 @@ const UserManagement = () => {
         return value && value.trim() !== '';
       });
     });
+    
+    console.log('[UserManagement] Validation passed:', allRequiredFieldsFilled);
     
     if (!allRequiredFieldsFilled) {
       setNotification({
@@ -562,15 +546,20 @@ const UserManagement = () => {
         organization_id: formData.organization_id || null,
         department: formData.department || null,
         job_title: formData.job_title || null,
-        phone_number: formData.phone_number || null,
+        phone: formData.phone || null,
         role_ids: formData.role_ids || [],
         module_ids: formData.module_ids || []
       };
       
-      await rbacService.createUser(payload);
+      console.log('[UserManagement] Sending payload:', payload);
+      
+      const response = await rbacService.createUser(payload);
+      console.log('[UserManagement] Create response:', response);
       
       // Refresh users list
+      console.log('[UserManagement] Refreshing users list...');
       await dispatch(fetchUsers()).unwrap();
+      console.log('[UserManagement] Users list refreshed');
       
       setNotification({
         show: true,
@@ -583,10 +572,11 @@ const UserManagement = () => {
       
     } catch (error) {
       console.error('[UserManagement] Create user error:', error);
+      console.error('[UserManagement] Error response:', error.response?.data);
       setNotification({
         show: true,
         type: 'error',
-        message: error.response?.data?.message || 'Failed to create user'
+        message: error.response?.data?.message || error.response?.data?.detail || 'Failed to create user'
       });
     } finally {
       setActionLoading({ create: false });
@@ -610,7 +600,7 @@ const UserManagement = () => {
         organization_id: editFormData.organization_id,
         department: editFormData.department,
         job_title: editFormData.job_title,
-        phone_number: editFormData.phone_number,
+        phone: editFormData.phone,
         module_ids: editFormData.module_ids
       };
       
@@ -718,7 +708,7 @@ const UserManagement = () => {
       organization_id: user.organization || '',
       department: user.department || '',
       job_title: user.job_title || '',
-      phone_number: user.phone_number || '',
+      phone: user.phone || '',
       module_ids: user.accessible_modules || []
     });
     setShowEditModal(true);
@@ -1368,8 +1358,8 @@ const UserManagement = () => {
                         <input
                           type="tel"
                           placeholder="+971 50 123 4567"
-                          value={formData.phone_number}
-                          onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
+                          value={formData.phone}
+                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
                           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         />
                       </div>
@@ -1722,29 +1712,37 @@ const UserManagement = () => {
                     </svg>
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleCreateUser}
-                    disabled={actionLoading.create || !canProceedToNextStep()}
-                    className="px-8 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg"
-                  >
-                    {actionLoading.create ? (
-                      <>
-                        <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Create User
-                      </>
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCreateUser}
+                      disabled={actionLoading.create || !canProceedToNextStep()}
+                      title={!canProceedToNextStep() ? 'Please fill all required fields' : 'Create new user'}
+                      className="px-8 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg"
+                    >
+                      {actionLoading.create ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Create User
+                        </>
+                      )}
+                    </button>
+                    {!canProceedToNextStep() && (
+                      <p className="text-xs text-red-600">
+                        ⚠️ Please fill all required fields
+                      </p>
                     )}
-                  </button>
+                  </>
                 )}
               </div>
             </div>
