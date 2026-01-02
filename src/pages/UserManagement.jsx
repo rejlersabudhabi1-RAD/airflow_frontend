@@ -106,26 +106,27 @@ const UserManagement = () => {
       if (!token && !refreshToken) {
         console.warn('[UserManagement] No authentication tokens found - redirecting to login');
         setIsAuthenticated(false);
+        setAuthError(true);
         navigate('/login', { 
           replace: true,
           state: { from: '/admin/users', message: 'Please login to access User Management' }
         });
+        return false;
       } else {
-        console.log('[UserManagement] Authentication tokens found - proceeding');
+        console.log('[UserManagement] Authentication tokens found - setting authenticated state');
         setIsAuthenticated(true);
+        setAuthError(false);
+        return true;
       }
     };
     
-    checkAuth();
-  }, [navigate]);
-
-  useEffect(() => {
-    // Only fetch current user if authenticated
-    if (isAuthenticated) {
-      console.log('[UserManagement] Fetching current user...');
+    const isAuth = checkAuth();
+    // Immediately fetch current user if authenticated
+    if (isAuth) {
+      console.log('[UserManagement] Fetching current user immediately...');
       dispatch(fetchCurrentUser());
     }
-  }, [dispatch, isAuthenticated]);
+  }, [navigate, dispatch]);
   
   // Soft-coded: Auto-dismiss notification
   useEffect(() => {
@@ -140,15 +141,17 @@ const UserManagement = () => {
   useEffect(() => {
     // Only load data if authenticated
     if (!isAuthenticated) {
-      console.log('[UserManagement] Skipping data load - not authenticated');
+      console.log('[UserManagement] Skipping data load - authentication state not set yet');
       return;
     }
+    
+    console.log('[UserManagement] Starting data load - authenticated:', isAuthenticated);
     
     const loadData = async () => {
       try {
         setAuthError(false);
         
-        console.log('[UserManagement] Loading data...');
+        console.log('[UserManagement] Fetching users, roles, and modules...');
         
         // Fetch users, roles, and modules via Redux
         await Promise.all([
@@ -156,6 +159,8 @@ const UserManagement = () => {
           dispatch(fetchRoles()).unwrap(),
           dispatch(fetchModules()).unwrap()
         ]);
+        
+        console.log('[UserManagement] Successfully loaded Redux data');
         
         // Load organizations with better error handling
         try {
