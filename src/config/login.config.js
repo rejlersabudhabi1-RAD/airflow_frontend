@@ -69,7 +69,7 @@ export const FORM_CONFIG = {
     },
     forgotPassword: {
       text: 'Forgot password?',
-      link: '#',
+      link: '/forgot-password',
     },
   },
   

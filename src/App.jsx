@@ -8,6 +8,8 @@ import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import SetupPassword from './pages/SetupPassword'
+import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
@@ -163,7 +165,15 @@ function App() {
             </PublicRoute>
           }
         />
+        
+        {/* Password Reset Routes - Public */}
+        <Route path="setup-password" element={<SetupPassword />} />
+        <Route path="reset-password" element={<SetupPassword />} />
+        <Route path="request-password-reset" element={<RequestPasswordReset />} />
+        <Route path="forgot-password" element={<RequestPasswordReset />} />
+        
         <Route path="terms-of-service" element={<TermsOfService />} />
+        <Route path="privacy-policy" element={<PrivacyPolicy />} />
         
         {/* Protected Routes */}
         <Route
