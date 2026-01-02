@@ -93,7 +93,7 @@ const UserManagement = () => {
     message: ''
   });
 
-  // Soft-coded: Check authentication before loading data (runs once on mount)
+  // Soft-coded: Check authentication and load data (runs once on mount)
   useEffect(() => {
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
@@ -110,39 +110,18 @@ const UserManagement = () => {
         replace: true,
         state: { from: '/admin/users', message: 'Please login to access User Management' }
       });
-    } else {
-      console.log('[UserManagement] Authentication tokens found - setting authenticated state');
-      setIsAuthenticated(true);
-      setAuthError(false);
-      // Immediately fetch current user if authenticated
-      console.log('[UserManagement] Fetching current user immediately...');
-      dispatch(fetchCurrentUser());
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  
-  // Soft-coded: Auto-dismiss notification
-  useEffect(() => {
-    if (notification.show) {
-      const timer = setTimeout(() => {
-        setNotification({ show: false, type: '', message: '' });
-      }, NOTIFICATION_TIMEOUT);
-      return () => clearTimeout(timer);
-    }
-  }, [notification.show]);
-
-  useEffect(() => {
-    // Only load data if authenticated
-    if (!isAuthenticated) {
-      console.log('[UserManagement] Skipping data load - authentication state not set yet');
       return;
     }
     
-    console.log('[UserManagement] Starting data load - authenticated:', isAuthenticated);
+    // User is authenticated - load data immediately
+    console.log('[UserManagement] Authentication tokens found - loading data...');
+    setIsAuthenticated(true);
+    setAuthError(false);
     
     const loadData = async () => {
       try {
-        setAuthError(false);
+        console.log('[UserManagement] Fetching current user...');
+        dispatch(fetchCurrentUser());
         
         console.log('[UserManagement] Fetching users, roles, and modules...');
         
@@ -155,12 +134,10 @@ const UserManagement = () => {
         
         console.log('[UserManagement] Successfully loaded Redux data');
         
-        // Load organizations with better error handling
+        // Load organizations
         try {
           const orgsResponse = await rbacService.getOrganizations();
           console.log('Organizations Response:', orgsResponse);
-          console.log('Organizations Response Type:', typeof orgsResponse);
-          console.log('Organizations Response Keys:', orgsResponse ? Object.keys(orgsResponse) : 'null');
           
           let orgsData = [];
           if (orgsResponse) {
@@ -173,20 +150,13 @@ const UserManagement = () => {
             }
           }
           setOrganizations(orgsData);
-          console.log('✅ Organizations set to:', orgsData);
-          console.log('✅ Organizations count:', orgsData.length);
+          console.log('✅ Organizations set to:', orgsData.length, 'items');
         } catch (error) {
           console.error('❌ Failed to load organizations:', error);
-          console.error('❌ Error details:', {
-            status: error?.response?.status,
-            statusText: error?.response?.statusText,
-            data: error?.response?.data,
-            message: error?.message
-          });
           setOrganizations([]);
         }
         
-        // Extract departments and job titles with better error handling
+        // Extract departments and job titles
         try {
           const usersData = await rbacService.getUsers();
           console.log('Users Data for extraction:', usersData);
@@ -202,7 +172,7 @@ const UserManagement = () => {
             }
           }
           
-          console.log('All Users array:', allUsers, 'is array:', Array.isArray(allUsers));
+          console.log('All Users array:', allUsers.length, 'users');
           
           if (Array.isArray(allUsers) && allUsers.length > 0) {
             const depts = allUsers
@@ -217,10 +187,7 @@ const UserManagement = () => {
             
             setDepartmentSuggestions(uniqueDepartments);
             setJobTitleSuggestions(uniqueJobTitles);
-            console.log('Departments:', uniqueDepartments, 'Job Titles:', uniqueJobTitles);
-          } else {
-            setDepartmentSuggestions([]);
-            setJobTitleSuggestions([]);
+            console.log('Departments:', uniqueDepartments.length, 'Job Titles:', uniqueJobTitles.length);
           }
         } catch (error) {
           console.error('Failed to extract departments/titles:', error);
@@ -229,10 +196,8 @@ const UserManagement = () => {
         }
       } catch (err) {
         console.error('[UserManagement] Failed to load data:', err);
-        console.error('[UserManagement] Error status:', err?.status);
-        console.error('[UserManagement] Error message:', err?.message);
         
-        // Soft-coded: Handle authentication errors
+        // Handle authentication errors
         if (err?.status === 401 || err?.message?.includes('401')) {
           console.warn('[UserManagement] Authentication error detected - redirecting to login');
           setAuthError(true);
@@ -246,9 +211,21 @@ const UserManagement = () => {
         }
       }
     };
+    
     loadData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, []);
+  
+  // Soft-coded: Auto-dismiss notification
+  // Soft-coded: Auto-dismiss notification
+  useEffect(() => {
+    if (notification.show) {
+      const timer = setTimeout(() => {
+        setNotification({ show: false, type: '', message: '' });
+      }, NOTIFICATION_TIMEOUT);
+      return () => clearTimeout(timer);
+    }
+  }, [notification.show]);
 
   // Check if user has admin access via RBAC roles OR Django superuser/staff flags
   const hasRBACAdminRole = currentUser?.roles?.some(
