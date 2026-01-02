@@ -114,6 +114,55 @@ const UserManagement = () => {
     }
   }), []);
   
+  // ========== HELPER: SAFE DATA EXTRACTION ==========
+  // Handle both nested (user.user.email) and flat (user.email) data structures
+  const getUserEmail = (user) => {
+    return user.user?.email || user.email || null;
+  };
+  
+  const getUserFirstName = (user) => {
+    return user.user?.first_name || user.first_name || null;
+  };
+  
+  const getUserLastName = (user) => {
+    return user.user?.last_name || user.last_name || null;
+  };
+  
+  const getUserUsername = (user) => {
+    return user.user?.username || user.username || null;
+  };
+  
+  const getUserDisplayName = (user) => {
+    const firstName = getUserFirstName(user);
+    const lastName = getUserLastName(user);
+    const username = getUserUsername(user);
+    const email = getUserEmail(user);
+    
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    } else if (firstName) {
+      return firstName;
+    } else if (lastName) {
+      return lastName;
+    } else if (username) {
+      return username;
+    } else if (email) {
+      return email.split('@')[0]; // Use email prefix
+    }
+    return 'Unknown User';
+  };
+  
+  const getUserInitial = (user) => {
+    const firstName = getUserFirstName(user);
+    const lastName = getUserLastName(user);
+    const email = getUserEmail(user);
+    
+    if (firstName) return firstName[0].toUpperCase();
+    if (lastName) return lastName[0].toUpperCase();
+    if (email) return email[0].toUpperCase();
+    return 'U';
+  };
+
   // ========== LIFECYCLE: AUTHENTICATION & DATA LOADING ==========
   useEffect(() => {
     let isMounted = true;
@@ -157,6 +206,13 @@ const UserManagement = () => {
           roles: rolesResult.status,
           modules: modulesResult.status
         });
+        
+        // Debug: Check first user data structure
+        if (usersResult.status === 'fulfilled' && usersResult.value?.length > 0) {
+          console.log('[UserManagement] First user sample:', usersResult.value[0]);
+          console.log('[UserManagement] User has "user" nested object?', !!usersResult.value[0].user);
+          console.log('[UserManagement] User has direct "email"?', !!usersResult.value[0].email);
+        }
         
         // Load organizations
         try {
@@ -273,12 +329,18 @@ const UserManagement = () => {
     const safeUsers = Array.isArray(users) ? users : [];
     
     return safeUsers.filter(user => {
+      const email = getUserEmail(user) || '';
+      const firstName = getUserFirstName(user) || '';
+      const lastName = getUserLastName(user) || '';
+      const department = user.department || '';
+      const jobTitle = user.job_title || '';
+      
       const matchesSearch = !searchTerm || 
-        user.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.user?.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.user?.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.job_title?.toLowerCase().includes(searchTerm.toLowerCase());
+        email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        jobTitle.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
       
@@ -869,22 +931,19 @@ const UserManagement = () => {
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                           <span className="text-white font-bold text-sm">
-                            {user.user?.first_name?.[0]?.toUpperCase() || user.user?.last_name?.[0]?.toUpperCase() || user.user?.email?.[0]?.toUpperCase() || 'U'}
+                            {getUserInitial(user)}
                           </span>
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {(user.user?.first_name && user.user?.last_name) 
-                              ? `${user.user.first_name} ${user.user.last_name}`
-                              : (user.user?.first_name || user.user?.last_name || user.user?.username || 'Unknown User')
-                            }
+                            {getUserDisplayName(user)}
                           </div>
                           <div className="text-xs text-gray-500">{user.job_title || 'No job title'}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{user.user?.email || 'N/A'}</div>
+                      <div className="text-sm text-gray-900">{getUserEmail(user) || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{user.organization_name || 'N/A'}</div>
