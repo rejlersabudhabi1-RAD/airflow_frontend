@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { REJLERS_COLORS, BRAND_TEXT } from '../config/theme.config'
 import { LOGO_CONFIG, getLogoPath, getLogoSize } from '../config/logo.config'
+import { FOOTER_CONFIG } from '../config/footer.config'
 
 /**
  * Home Page - REJLERS RADAI Landing Page
@@ -25,11 +26,11 @@ const Home = () => {
                      style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})` }}></div>
                 
                 {/* Logo container with shadow */}
-                <div className="relative bg-white rounded-xl shadow-lg group-hover:shadow-2xl transition-all duration-300 p-1">
+                <div className="relative bg-white rounded-xl shadow-lg group-hover:shadow-2xl transition-all duration-300 p-2">
                   <img 
-                    src={getLogoPath('horizontal')}
+                    src={getLogoPath()}
                     alt={LOGO_CONFIG.primary.alt}
-                    className="h-12 lg:h-14 w-auto transition-all group-hover:scale-105"
+                    className="h-10 lg:h-12 w-auto transition-all group-hover:scale-105"
                     style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
                     onError={(e) => {
                       e.target.style.display = 'none';
@@ -37,25 +38,28 @@ const Home = () => {
                     }}
                   />
                   {/* Fallback with better styling */}
-                  <div style={{display: 'none'}} className="flex items-center h-12 lg:h-14 px-3">
-                    <div className="flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full mr-2" 
-                         style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.secondary.green.base})` }}>
-                      <span className="text-white font-black text-lg lg:text-xl">{LOGO_CONFIG.fallback.iconLetter}</span>
-                    </div>
-                    <span className="text-xl lg:text-2xl font-black" style={{ color: REJLERS_COLORS.primary.base }}>
-                      {LOGO_CONFIG.fallback.text}
-                    </span>
+                  <div style={{display: 'none'}} className="flex items-center h-10 lg:h-12 px-3">
+                    <img 
+                      src={LOGO_CONFIG.fallback.image}
+                      alt={LOGO_CONFIG.primary.alt}
+                      className="h-full w-auto"
+                    />
                   </div>
                 </div>
               </div>
               
-              {/* RADAI branding */}
+              {/* RADAI Product Branding */}
               <div className="flex flex-col">
-                <div className="text-lg lg:text-xl font-black bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                  RADAI
+                <div className="flex items-center space-x-2">
+                  <div className="text-2xl lg:text-3xl font-black bg-gradient-to-r from-[#00a896] to-[#73bdc8] bg-clip-text text-transparent">
+                    RADAI
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] lg:text-xs font-bold text-white rounded-full" style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})` }}>
+                    AI-POWERED
+                  </span>
                 </div>
-                <div className="text-xs lg:text-sm font-semibold" style={{ color: REJLERS_COLORS.secondary.green.base }}>
-                  {LOGO_CONFIG.fallback.subtext}
+                <div className="text-[10px] lg:text-xs font-medium text-gray-600">
+                  by Rejlers Engineering Solutions
                 </div>
               </div>
             </div>
@@ -126,19 +130,18 @@ const Home = () => {
               
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black leading-tight mb-4 lg:mb-5 animate-slide-up">
                 <span className="bg-clip-text text-transparent animate-gradient" style={{ 
-                  backgroundImage: `linear-gradient(90deg, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.primary.accent}, ${REJLERS_COLORS.secondary.turbine.base}, ${REJLERS_COLORS.primary.base})`,
-                  backgroundSize: '200% auto',
-                  animation: 'gradient 3s linear infinite'
-                }}>
-                  HOME of the
-                </span>
-                <br />
-                <span className="bg-clip-text text-transparent animate-gradient" style={{ 
                   backgroundImage: `linear-gradient(90deg, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.green.accent}, ${REJLERS_COLORS.secondary.turbine.base}, ${REJLERS_COLORS.secondary.green.base})`,
                   backgroundSize: '200% auto',
                   animation: 'gradient 3s linear infinite'
                 }}>
-                  LEARNING MINDS
+                  RADAI
+                </span>
+                <br />
+                <span className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl bg-clip-text text-transparent" style={{ 
+                  backgroundImage: `linear-gradient(90deg, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.primary.accent}, ${REJLERS_COLORS.secondary.turbine.base})`,
+                  backgroundSize: '200% auto'
+                }}>
+                  AI-Powered Engineering Intelligence
                 </span>
               </h1>
               
@@ -155,14 +158,14 @@ const Home = () => {
             {/* Value Proposition - AI-Enhanced Typography */}
             <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-3 lg:mb-4 leading-tight animate-slide-up" style={{ color: REJLERS_COLORS.primary.base, animationDelay: '0.3s' }}>
               <span className="relative">
-                AI-Powered Engineering Platform
+                Revolutionizing Engineering Workflows
                 <span className="absolute -top-3 -right-3 text-xl animate-bounce" style={{ animationDuration: '2s' }}>⚡</span>
               </span>
-              <span className="block mt-2 bg-clip-text text-transparent" style={{ 
-                backgroundImage: `linear-gradient(90deg, ${REJLERS_COLORS.secondary.green.accent}, ${REJLERS_COLORS.secondary.turbine.base})`,
-                backgroundSize: '200% auto',
-                animation: 'gradient 3s linear infinite'
-              }}>for Oil & Gas Excellence</span>
+              <span className="block mt-2 text-lg sm:text-xl md:text-2xl text-gray-600">
+                for Oil & Gas Industry by <span className="font-bold bg-clip-text text-transparent" style={{ 
+                  backgroundImage: `linear-gradient(90deg, ${REJLERS_COLORS.secondary.green.accent}, ${REJLERS_COLORS.secondary.turbine.base})`
+                }}>Rejlers Engineering Solutions</span>
+              </span>
             </h2>
             
             <p className="text-sm sm:text-base lg:text-lg text-gray-600 mb-6 lg:mb-8 leading-relaxed max-w-2xl mx-auto animate-fade-in" style={{ animationDelay: '0.5s' }}>
@@ -418,23 +421,38 @@ const Home = () => {
       </section>
 
       {/* Footer - Clean and Light */}
-      <footer className="bg-gray-900 text-white py-10 lg:py-12">
+      <footer className={`${FOOTER_CONFIG.styling.bgColor} ${FOOTER_CONFIG.styling.textColor} py-10 lg:py-12`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
             {/* Contact */}
             <div>
-              <h3 className="text-lg font-bold mb-3 text-[#00a896]">Contact Us</h3>
+              <h3 className="text-lg font-bold mb-3 text-[#00a896]">{FOOTER_CONFIG.contact.title}</h3>
               <div className="space-y-2 text-gray-300 text-sm leading-relaxed">
-                <p className="font-semibold text-white">Rejlers International Engineering Solutions</p>
-                <p>Rejlers Tower, 13th floor</p>
-                <p>AI Hamdan Street, P.O. Box 39317</p>
-                <p>Abu Dhabi, United Arab Emirates</p>
+                <p className="font-semibold text-white">{FOOTER_CONFIG.contact.company}</p>
+                <p>{FOOTER_CONFIG.contact.address.building}</p>
+                <p>{FOOTER_CONFIG.contact.address.street}</p>
+                <p>{FOOTER_CONFIG.contact.address.city}</p>
                 <p className="mt-4">
-                  <a href="tel:+97126397449" className="hover:text-[#00a896] transition-colors flex items-center space-x-2">
+                  <a 
+                    href={`tel:${FOOTER_CONFIG.contact.phone.link}`}
+                    className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors flex items-center space-x-2`}
+                  >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                     </svg>
-                    <span>+971 2 639 7449</span>
+                    <span>{FOOTER_CONFIG.contact.phone.display}</span>
+                  </a>
+                </p>
+                <p>
+                  <a 
+                    href={FOOTER_CONFIG.contact.email.link}
+                    className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors flex items-center space-x-2`}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                    </svg>
+                    <span>{FOOTER_CONFIG.contact.email.display}</span>
                   </a>
                 </p>
               </div>
@@ -442,38 +460,107 @@ const Home = () => {
 
             {/* Quick Links */}
             <div>
-              <h3 className="text-xl font-bold mb-4 text-[#00a896]">Quick Links</h3>
+              <h3 className="text-xl font-bold mb-4 text-[#00a896]">{FOOTER_CONFIG.quickLinks.title}</h3>
               <ul className="space-y-2 text-gray-300 text-sm">
-                <li><a href="https://www.rejlers.com/ae/careers/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Career Opportunities</a></li>
-                <li><a href="https://www.rejlers.com/ae/newsroom/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Insights & News</a></li>
-                <li><a href="https://www.rejlers.com/ae/contact-us/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Contact</a></li>
-                <li><Link to="/login" className="hover:text-[#00a896] transition-colors">Sign In</Link></li>
+                {FOOTER_CONFIG.quickLinks.links.map((link, index) => (
+                  <li key={index}>
+                    {link.external ? (
+                      <a 
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors`}
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link 
+                        to={link.url}
+                        className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors`}
+                      >
+                        {link.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
 
-            {/* Global Sites */}
+            {/* Our Services - Oil & Gas Industry */}
             <div>
-              <h3 className="text-xl font-bold mb-4 text-[#00a896]">Global Sites</h3>
+              <h3 className="text-xl font-bold mb-4 text-[#00a896]">{FOOTER_CONFIG.services.title}</h3>
               <ul className="space-y-2 text-gray-300 text-sm">
-                <li><a href="https://www.rejlers.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Rejlers Global</a></li>
-                <li><a href="https://www.rejlers.com/se/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Rejlers Sweden</a></li>
-                <li><a href="https://www.rejlers.com/fi/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Rejlers Finland</a></li>
-                <li><a href="https://www.rejlers.com/no/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Rejlers Norway</a></li>
+                {FOOTER_CONFIG.services.items.map((service, index) => (
+                  <li key={index}>
+                    <Link 
+                      to={service.url}
+                      className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors block`}
+                      title={service.description}
+                    >
+                      {service.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Data Security & Compliance */}
+            <div>
+              <h3 className="text-xl font-bold mb-4 text-[#00a896]">{FOOTER_CONFIG.compliance.title}</h3>
+              <ul className="space-y-2 text-gray-300 text-sm">
+                {FOOTER_CONFIG.compliance.links.map((link, index) => (
+                  <li key={index}>
+                    {link.external ? (
+                      <a 
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors flex items-center space-x-2`}
+                      >
+                        <span>{link.icon}</span>
+                        <span>{link.label}</span>
+                      </a>
+                    ) : (
+                      <Link 
+                        to={link.url}
+                        className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors flex items-center space-x-2`}
+                      >
+                        <span>{link.icon}</span>
+                        <span>{link.label}</span>
+                      </Link>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
 
           {/* Bottom Bar */}
-          <div className="border-t border-gray-700 pt-6 text-center text-gray-400 text-xs lg:text-sm">
-            <p className="mb-3">© 2025 REJLERS AB • Engineering Excellence Since 1942</p>
+          <div className={`border-t ${FOOTER_CONFIG.styling.borderColor} pt-6 text-center text-gray-400 text-xs lg:text-sm`}>
+            <p className="mb-3">{FOOTER_CONFIG.bottomBar.copyright}</p>
             <div className="flex flex-wrap justify-center items-center gap-4">
-              <Link to="/privacy-policy" className="hover:text-[#00a896] transition-colors">Privacy Policy</Link>
-              <span>•</span>
-              <Link to="/terms-of-service" className="hover:text-[#00a896] transition-colors">Terms of Service</Link>
-              <span>•</span>
-              <a href="https://www.rejlers.com/ae/personal-data/" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">Cookie Settings</a>
-              <span>•</span>
-              <a href="https://www.linkedin.com/company/rejlers" target="_blank" rel="noopener noreferrer" className="hover:text-[#00a896] transition-colors">LinkedIn</a>
+              {FOOTER_CONFIG.bottomBar.links.map((link, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 && <span>•</span>}
+                  {link.external ? (
+                    <a 
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors`}
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link 
+                      to={link.url}
+                      className={`${FOOTER_CONFIG.styling.hoverColor} transition-colors`}
+                    >
+                      {link.label}
+                    </Link>
+                  )}
+                </React.Fragment>
+              ))}
             </div>
           </div>
         </div>

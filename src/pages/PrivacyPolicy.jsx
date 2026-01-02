@@ -390,28 +390,32 @@ All users must be of legal age to enter into a binding contract and have the aut
               <div className="relative">
                 <div className="absolute -inset-1 rounded-xl opacity-0 group-hover:opacity-100 transition duration-300 blur-sm" 
                      style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})` }}></div>
-                <div className="relative bg-white rounded-xl shadow-md group-hover:shadow-xl transition-all duration-300 p-1">
+                <div className="relative bg-white rounded-xl shadow-md group-hover:shadow-xl transition-all duration-300 p-2">
                   <img 
-                    src={getLogoPath('horizontal')}
+                    src={getLogoPath()}
                     alt={LOGO_CONFIG.primary.alt}
-                    className="h-12 w-auto transition-all group-hover:scale-105"
+                    className="h-10 w-auto transition-all group-hover:scale-105"
                     style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
                     onError={(e) => {
                       e.target.style.display = 'none';
                       e.target.nextElementSibling.style.display = 'flex';
                     }}
                   />
-                  <div style={{display: 'none'}} className="flex items-center h-12 px-2">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center mr-2" style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.primary.base}, ${REJLERS_COLORS.secondary.green.base})` }}>
-                      <span className="text-white font-black text-base">{LOGO_CONFIG.fallback.iconLetter}</span>
-                    </div>
-                    <span className="text-lg font-black" style={{ color: REJLERS_COLORS.primary.base }}>{LOGO_CONFIG.fallback.text}</span>
+                  <div style={{display: 'none'}} className="flex items-center h-10 px-2">
+                    <img 
+                      src={LOGO_CONFIG.fallback.image}
+                      alt={LOGO_CONFIG.primary.alt}
+                      className="h-full w-auto"
+                    />
                   </div>
                 </div>
               </div>
               <div>
-                <div className="text-base font-bold text-gray-900">RADAI</div>
-                <div className="text-xs font-semibold" style={{ color: REJLERS_COLORS.secondary.green.base }}>{LOGO_CONFIG.fallback.subtext}</div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-base font-bold bg-gradient-to-r from-[#00a896] to-[#73bdc8] bg-clip-text text-transparent">RADAI</span>
+                  <span className="px-1.5 py-0.5 text-[8px] font-bold text-white rounded-full" style={{ background: `linear-gradient(135deg, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})` }}>AI</span>
+                </div>
+                <div className="text-[10px] font-medium text-gray-600">by Rejlers Engineering Solutions</div>
               </div>
             </Link>
             

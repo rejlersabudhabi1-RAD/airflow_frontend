@@ -44,26 +44,32 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
               <div className="relative">
                 <div className="absolute -inset-1 rounded-xl opacity-0 group-hover:opacity-100 transition duration-300 blur-sm" 
                      style={{ background: 'linear-gradient(135deg, rgba(127, 202, 181, 0.5), rgba(115, 189, 200, 0.5))' }}></div>
-                <div className="relative bg-white/95 backdrop-blur-sm rounded-xl shadow-md group-hover:shadow-xl transition-all duration-300 p-1.5">
+                <div className="relative bg-white/95 backdrop-blur-sm rounded-xl shadow-md group-hover:shadow-xl transition-all duration-300 p-2">
                   <img 
-                    src={getLogoPath('horizontal')}
+                    src={getLogoPath()}
                     alt={LOGO_CONFIG.primary.alt}
-                    className="h-11 w-auto transition-all group-hover:scale-105"
+                    className="h-9 w-auto transition-all group-hover:scale-105"
                     style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' }}
                     onError={(e) => {
                       e.target.style.display = 'none';
                       e.target.nextElementSibling.style.display = 'flex';
                     }}
                   />
-                  <div style={{display: 'none'}} className="flex items-center h-11 px-2 space-x-2">
-                    <span className="text-xl font-black text-slate-900">
-                      {LOGO_CONFIG.fallback.text}
-                    </span>
-                    <div className="h-6 w-px bg-gradient-to-b from-amber-300 to-orange-400"></div>
-                    <span className="text-lg font-bold bg-gradient-to-r from-amber-300 to-orange-400 bg-clip-text text-transparent">
-                      RADAI
-                    </span>
+                  <div style={{display: 'none'}} className="flex items-center h-9 px-2">
+                    <img 
+                      src={LOGO_CONFIG.fallback.image}
+                      alt={LOGO_CONFIG.primary.alt}
+                      className="h-full w-auto"
+                    />
                   </div>
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <div className="text-lg font-black bg-gradient-to-r from-[#00a896] to-[#73bdc8] bg-clip-text text-transparent">
+                  RADAI
+                </div>
+                <div className="text-[9px] font-medium text-blue-200">
+                  AI Platform
                 </div>
               </div>
             </Link>
