@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
@@ -93,40 +93,33 @@ const UserManagement = () => {
     message: ''
   });
 
-  // Soft-coded: Check authentication before loading data
+  // Soft-coded: Check authentication before loading data (runs once on mount)
   useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      
-      console.log('[UserManagement] Checking authentication...');
-      console.log('[UserManagement] Access token exists:', !!token);
-      console.log('[UserManagement] Refresh token exists:', !!refreshToken);
-      
-      if (!token && !refreshToken) {
-        console.warn('[UserManagement] No authentication tokens found - redirecting to login');
-        setIsAuthenticated(false);
-        setAuthError(true);
-        navigate('/login', { 
-          replace: true,
-          state: { from: '/admin/users', message: 'Please login to access User Management' }
-        });
-        return false;
-      } else {
-        console.log('[UserManagement] Authentication tokens found - setting authenticated state');
-        setIsAuthenticated(true);
-        setAuthError(false);
-        return true;
-      }
-    };
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
     
-    const isAuth = checkAuth();
-    // Immediately fetch current user if authenticated
-    if (isAuth) {
+    console.log('[UserManagement] Checking authentication...');
+    console.log('[UserManagement] Access token exists:', !!token);
+    console.log('[UserManagement] Refresh token exists:', !!refreshToken);
+    
+    if (!token && !refreshToken) {
+      console.warn('[UserManagement] No authentication tokens found - redirecting to login');
+      setIsAuthenticated(false);
+      setAuthError(true);
+      navigate('/login', { 
+        replace: true,
+        state: { from: '/admin/users', message: 'Please login to access User Management' }
+      });
+    } else {
+      console.log('[UserManagement] Authentication tokens found - setting authenticated state');
+      setIsAuthenticated(true);
+      setAuthError(false);
+      // Immediately fetch current user if authenticated
       console.log('[UserManagement] Fetching current user immediately...');
       dispatch(fetchCurrentUser());
     }
-  }, [navigate, dispatch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Soft-coded: Auto-dismiss notification
   useEffect(() => {
@@ -447,7 +440,7 @@ const UserManagement = () => {
   };
   
   // Email validation handler with debouncing
-  const validateEmail = async (email) => {
+  const validateEmail = useCallback(async (email) => {
     if (!email) {
       setEmailValidation({
         checking: false,
@@ -491,7 +484,7 @@ const UserManagement = () => {
         message: 'Failed to validate email'
       });
     }
-  };
+  }, []);
   
   // Debounced email validation
   useEffect(() => {
@@ -502,7 +495,7 @@ const UserManagement = () => {
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [formData.email]);
+  }, [formData.email, validateEmail]);
 
   // Soft-coded: Enhanced status toggle with loading states and notifications
   const handleStatusToggle = async (userId, currentStatus) => {
