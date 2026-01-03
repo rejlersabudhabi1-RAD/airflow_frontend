@@ -16,6 +16,8 @@ const CRSMultipleRevision = () => {
   const [statistics, setStatistics] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showChainDetail, setShowChainDetail] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyActivities, setHistoryActivities] = useState([]);
   const [aiInsights, setAiInsights] = useState([]);
 
   // Filters
@@ -135,6 +137,28 @@ const CRSMultipleRevision = () => {
       }
     } catch (error) {
       console.error('Error loading chain detail:', error);
+    }
+  };
+
+  const handleViewHistory = async (chain) => {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(`${API_BASE_URL}/crs/revision-activities/?chain_id=${chain.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const activities = Array.isArray(data) ? data : data.results || [];
+        setHistoryActivities(activities);
+        setSelectedChain(chain);
+        setShowHistoryModal(true);
+      } else {
+        alert('Failed to load history');
+      }
+    } catch (error) {
+      console.error('Error loading history:', error);
+      alert('Error loading history');
     }
   };
 
@@ -422,6 +446,15 @@ const CRSMultipleRevision = () => {
                           </svg>
                         </button>
                         <button
+                          onClick={() => handleViewHistory(chain)}
+                          className="text-green-600 hover:text-green-900 p-2 hover:bg-green-50 rounded-lg transition-colors"
+                          title="View History"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
                           onClick={() => handleAnalyzeChain(chain.id)}
                           className="text-purple-600 hover:text-purple-900 p-2 hover:bg-purple-50 rounded-lg transition-colors"
                           title="AI Analysis"
@@ -555,6 +588,135 @@ const CRSMultipleRevision = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && selectedChain && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Revision Chain History</h2>
+                  <p className="text-gray-600 mt-1">{selectedChain.chain_id} - {selectedChain.document_title}</p>
+                </div>
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Activity Timeline */}
+              {historyActivities.length === 0 ? (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-gray-500 text-lg">No activity history found</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Activity Timeline</h3>
+                  
+                  {/* Timeline */}
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                    
+                    {/* Activities */}
+                    <div className="space-y-6">
+                      {historyActivities.map((activity, index) => (
+                        <div key={activity.id || index} className="relative flex gap-4">
+                          {/* Timeline dot */}
+                          <div className="relative z-10">
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                              activity.activity_type === 'chain_created' ? 'bg-blue-100' :
+                              activity.activity_type === 'revision_added' ? 'bg-green-100' :
+                              activity.activity_type === 'status_changed' ? 'bg-yellow-100' :
+                              activity.activity_type === 'comment_linked' ? 'bg-purple-100' :
+                              activity.activity_type === 'ai_analysis' ? 'bg-indigo-100' :
+                              'bg-gray-100'
+                            }`}>
+                              <svg className={`w-8 h-8 ${
+                                activity.activity_type === 'chain_created' ? 'text-blue-600' :
+                                activity.activity_type === 'revision_added' ? 'text-green-600' :
+                                activity.activity_type === 'status_changed' ? 'text-yellow-600' :
+                                activity.activity_type === 'comment_linked' ? 'text-purple-600' :
+                                activity.activity_type === 'ai_analysis' ? 'text-indigo-600' :
+                                'text-gray-600'
+                              }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {activity.activity_type === 'chain_created' && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                )}
+                                {activity.activity_type === 'revision_added' && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                )}
+                                {activity.activity_type === 'status_changed' && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                )}
+                                {activity.activity_type === 'comment_linked' && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                )}
+                                {activity.activity_type === 'ai_analysis' && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                )}
+                                {!['chain_created', 'revision_added', 'status_changed', 'comment_linked', 'ai_analysis'].includes(activity.activity_type) && (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                )}
+                              </svg>
+                            </div>
+                          </div>
+                          
+                          {/* Activity content */}
+                          <div className="flex-1 bg-gray-50 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">
+                                  {activity.activity_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </h4>
+                                <p className="text-sm text-gray-600 mt-1">{activity.description || 'No description'}</p>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {new Date(activity.performed_at).toLocaleString()}
+                              </span>
+                            </div>
+                            
+                            {/* Performed by */}
+                            {activity.performed_by_username && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                                  <span className="text-white text-xs font-bold">
+                                    {activity.performed_by_username.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <span className="text-sm text-gray-600">
+                                  {activity.performed_by_username}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Additional details */}
+                            {activity.revision_label && (
+                              <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {activity.revision_label}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

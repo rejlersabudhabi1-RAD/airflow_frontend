@@ -107,7 +107,16 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row" style={{ background: THEME.gradients.background }}>
+    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%)' }}>
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Floating Technical Particles */}
+        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-blue-400 rounded-full animate-ping opacity-75"></div>
+        <div className="absolute top-1/3 right-1/3 w-2 h-2 bg-cyan-400 rounded-full animate-ping opacity-75" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute bottom-1/4 left-1/3 w-2 h-2 bg-amber-400 rounded-full animate-ping opacity-75" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute bottom-1/3 right-1/4 w-2 h-2 bg-orange-400 rounded-full animate-ping opacity-75" style={{ animationDelay: '1.5s' }}></div>
+      </div>
+
       <LoginBranding />
       <LoginForm 
         loginSchema={loginSchema}

@@ -7,13 +7,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
   // Smart API URL detection (soft-coded for Docker and production)
-  let apiUrl = env.VITE_API_URL || 'http://localhost:8000'
-  
-  // If running in Docker, use backend service name
-  if (apiUrl.includes('backend:8000')) {
-    // Keep Docker internal URL for proxy
-    apiUrl = 'http://backend:8000'
-  }
+  // For local development in Docker, proxy to backend service
+  let apiUrl = 'http://backend:8000'
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
@@ -22,7 +17,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       host: '0.0.0.0', // Listen on all interfaces for Docker
-      port: 3000,
+      port: 5173, // Use port 5173 for local development
       proxy: {
         '/api': {
           target: apiUrl,

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
+import PIDEngineeringResults from '../components/PIDEngineeringResults';
 
 /**
  * PFD Conversion Results & P&ID Generation Page
  * Shows extracted PFD data and auto-generates P&ID using AI
+ * Uses 3-Step Engineering Workflow Display Component
  */
 const PFDConvert = () => {
   const { documentId } = useParams();
@@ -301,7 +303,14 @@ const PFDConvert = () => {
             {/* PFD Data Tab */}
             {activeTab === 'pfd' && pfdDocument?.extracted_data && (
               <div className="space-y-6">
-                <PFDDataView data={pfdDocument.extracted_data} />
+                {/* Check if data has 3-step structure */}
+                {(pfdDocument.extracted_data.step1_core_extraction || 
+                  pfdDocument.extracted_data.step2_pid_structure || 
+                  pfdDocument.extracted_data.step3_detailed_engineering) ? (
+                  <PIDEngineeringResults data={pfdDocument.extracted_data} />
+                ) : (
+                  <PFDDataView data={pfdDocument.extracted_data} />
+                )}
               </div>
             )}
 
@@ -312,15 +321,57 @@ const PFDConvert = () => {
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-600 mx-auto mb-4"></div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Generating P&ID Specifications...</h3>
-                    <p className="text-gray-600">AI is analyzing PFD data and creating detailed P&ID specifications with instrumentation, piping, and safety systems</p>
+                    <p className="text-gray-600">AI is analyzing PFD data using 3-step engineering workflow and creating detailed P&ID specifications with instrumentation, piping, and safety systems</p>
                   </div>
                 ) : pidConversion ? (
-                  <PIDView 
-                    data={pidConversion} 
-                    onRegenerate={regeneratePID}
-                    onDownload={downloadPIDSpec}
-                    onDownloadDrawing={downloadPIDDrawing}
-                  />
+                  <>
+                    {/* Check if PID data has 3-step structure */}
+                    {(pidConversion.step1_core_extraction || 
+                      pidConversion.step2_pid_structure || 
+                      pidConversion.step3_detailed_engineering ||
+                      pidConversion.pid_data?.step1_core_extraction) ? (
+                      <>
+                        <PIDEngineeringResults data={pidConversion.pid_data || pidConversion} />
+                        {/* Action Buttons */}
+                        <div className="flex gap-4">
+                          <button
+                            onClick={regeneratePID}
+                            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors flex items-center"
+                          >
+                            <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Regenerate P&ID
+                          </button>
+                          <button
+                            onClick={downloadPIDSpec}
+                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center"
+                          >
+                            <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download JSON
+                          </button>
+                          <button
+                            onClick={downloadPIDDrawing}
+                            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center"
+                          >
+                            <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            Download P&ID Drawing
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <PIDView 
+                        data={pidConversion} 
+                        onRegenerate={regeneratePID}
+                        onDownload={downloadPIDSpec}
+                        onDownloadDrawing={downloadPIDDrawing}
+                      />
+                    )}
+                  </>
                 ) : (
                   <div className="text-center py-12">
                     <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
