@@ -346,8 +346,6 @@ export const validateUserForm = (formData) => {
     errors
   }
 }
-  }
-}
 
 /**
  * Parse backend error response
