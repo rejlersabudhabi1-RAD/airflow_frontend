@@ -5,6 +5,16 @@
  */
 
 export const USER_MANAGEMENT_CONFIG = {
+  // 🔧 VALIDATION CONTROL FLAGS - Easy Enable/Disable
+  validationFlags: {
+    enableEmailValidation: false,        // ⚠️ Temporarily disabled - set true to re-enable
+    enablePasswordStrengthCheck: false,  // ⚠️ Temporarily disabled for testing
+    enablePhoneValidation: false,        // Phone is optional
+    requireRoles: false,                 // Don't require roles selection
+    requireModules: false,               // Don't require modules selection
+    strictMode: false                    // Lenient validation
+  },
+
   // Email Validation Configuration
   email: {
     // Email format validation regex
@@ -141,8 +151,16 @@ export const USER_MANAGEMENT_CONFIG = {
  * Validate email format and domain
  */
 export const validateEmail = (email) => {
+  const flags = USER_MANAGEMENT_CONFIG.validationFlags;
+
+  // Basic check - email must exist
   if (!email || email.trim() === '') {
     return { valid: false, message: USER_MANAGEMENT_CONFIG.email.messages.required }
+  }
+
+  // If email validation is disabled, just check it's not empty
+  if (!flags.enableEmailValidation) {
+    return { valid: true, message: '' }
   }
 
   // Format validation
@@ -173,9 +191,18 @@ export const validateEmail = (email) => {
  */
 export const validatePassword = (password) => {
   const config = USER_MANAGEMENT_CONFIG.password
+  const flags = USER_MANAGEMENT_CONFIG.validationFlags
 
   if (!password || password.trim() === '') {
     return { valid: false, message: config.messages.required }
+  }
+
+  // If password strength check is disabled, only validate minimum length
+  if (!flags.enablePasswordStrengthCheck) {
+    if (password.length < 6) {
+      return { valid: false, message: 'Password must be at least 6 characters' }
+    }
+    return { valid: true, message: '' }
   }
 
   if (password.length < config.minLength) {
@@ -229,9 +256,15 @@ export const validateName = (name, fieldName = 'Name') => {
  */
 export const validatePhone = (phone) => {
   const config = USER_MANAGEMENT_CONFIG.phone
+  const flags = USER_MANAGEMENT_CONFIG.validationFlags
 
   if (!phone || phone.trim() === '') {
     // Phone is optional
+    return { valid: true, message: '' }
+  }
+
+  // If phone validation is disabled, accept any non-empty value
+  if (!flags.enablePhoneValidation) {
     return { valid: true, message: '' }
   }
 
@@ -247,8 +280,9 @@ export const validatePhone = (phone) => {
  */
 export const validateUserForm = (formData) => {
   const errors = {}
+  const flags = USER_MANAGEMENT_CONFIG.validationFlags
 
-  // Email validation
+  // Email validation (always required - but with flexible checking)
   const emailValidation = validateEmail(formData.email)
   if (!emailValidation.valid) {
     errors.email = emailValidation.message
@@ -261,8 +295,8 @@ export const validateUserForm = (formData) => {
       errors.password = passwordValidation.message
     }
 
-    // Confirm password
-    if (formData.password !== formData.confirmPassword) {
+    // Confirm password (always check if passwords are provided)
+    if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
       errors.confirmPassword = USER_MANAGEMENT_CONFIG.password.messages.mismatch
     }
   }
@@ -279,22 +313,39 @@ export const validateUserForm = (formData) => {
     errors.last_name = lastNameValidation.message
   }
 
-  // Phone validation
-  const phoneValidation = validatePhone(formData.phone)
-  if (!phoneValidation.valid) {
-    errors.phone = phoneValidation.message
-  }
-
-  // Role validation (if required)
-  if (USER_MANAGEMENT_CONFIG.requirements.roleRequired) {
-    if (!formData.role_ids || formData.role_ids.length === 0) {
-      errors.role_ids = 'At least one role must be selected'
+  // Phone validation (only if enabled)
+  if (flags.enablePhoneValidation && formData.phone) {
+    const phoneValidation = validatePhone(formData.phone)
+    if (!phoneValidation.valid) {
+      errors.phone = phoneValidation.message
     }
   }
+
+  // Role/Module validation (only if flags require them)
+  if (flags.requireRoles && flags.requireModules) {
+    // Strict mode: require BOTH roles and modules
+    if (!formData.role_ids || formData.role_ids.length === 0) {
+      errors.role_ids = 'Please select at least one role'
+    }
+    if (!formData.module_ids || formData.module_ids.length === 0) {
+      errors.module_ids = 'Please select at least one module'
+    }
+  } else if (flags.requireRoles || flags.requireModules) {
+    // Flexible mode: require at least one
+    const hasRoles = formData.role_ids && formData.role_ids.length > 0
+    const hasModules = formData.module_ids && formData.module_ids.length > 0
+    
+    if (!hasRoles && !hasModules) {
+      errors.access = 'Please select at least one role or module'
+    }
+  }
+  // If both flags are false, roles and modules are optional
 
   return {
     valid: Object.keys(errors).length === 0,
     errors
+  }
+}
   }
 }
 

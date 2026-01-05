@@ -566,9 +566,10 @@ const UserManagement = () => {
     const validation = validateUserForm(formData);
     
     console.log('[UserManagement] Validation result:', validation);
+    console.log('[UserManagement] Validation errors (if any):', JSON.stringify(validation.errors, null, 2));
     
     if (!validation.valid) {
-      console.error('[UserManagement] Validation failed:', validation.errors);
+      console.error('[UserManagement] Validation failed:', JSON.stringify(validation.errors, null, 2));
       
       // Show first error message
       const firstError = Object.values(validation.errors)[0];
