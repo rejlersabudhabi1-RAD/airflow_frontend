@@ -1880,20 +1880,20 @@ const UserManagement = () => {
                           <label
                             key={module.id}
                             className={`flex flex-col items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                              formData.module_ids?.includes(module.code)
+                              formData.module_ids?.includes(module.id)
                                 ? 'border-purple-500 bg-purple-50'
                                 : 'border-gray-200 hover:border-purple-300'
                             }`}
                           >
                             <input
                               type="checkbox"
-                              checked={formData.module_ids?.includes(module.code) || false}
+                              checked={formData.module_ids?.includes(module.id) || false}
                               onChange={(e) => {
                                 const currentModules = formData.module_ids || [];
                                 if (e.target.checked) {
-                                  setFormData({...formData, module_ids: [...currentModules, module.code]});
+                                  setFormData({...formData, module_ids: [...currentModules, module.id]});
                                 } else {
-                                  setFormData({...formData, module_ids: currentModules.filter(code => code !== module.code)});
+                                  setFormData({...formData, module_ids: currentModules.filter(id => id !== module.id)});
                                 }
                               }}
                               className="mb-2 w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
