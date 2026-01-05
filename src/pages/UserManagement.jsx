@@ -10,7 +10,7 @@ import {
   prepareUserPayload,
   USER_MANAGEMENT_CONFIG 
 } from '../config/userManagement.config';
-import CreateUserForm from '../components/UserCreation/CreateUserForm';
+import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 
 /**
  * User Management Page - Rebuilt
@@ -1446,10 +1446,10 @@ const UserManagement = () => {
         )}
       </div>
       
-      {/* Create User Modal - New Robust Form */}
+      {/* Create User Modal - Simple & User Friendly */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <CreateUserForm
+          <SimpleCreateUserForm
             onSuccess={async (data) => {
               console.log('[UserManagement] User created successfully:', data);
               
