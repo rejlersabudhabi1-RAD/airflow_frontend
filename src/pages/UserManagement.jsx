@@ -617,16 +617,41 @@ const UserManagement = () => {
     } catch (error) {
       console.error('[UserManagement] Create user error:', error);
       console.error('[UserManagement] Error response:', error.response?.data);
+      console.error('[UserManagement] Error response JSON:', JSON.stringify(error.response?.data, null, 2));
       console.error('[UserManagement] Error status:', error.response?.status);
       console.error('[UserManagement] Error headers:', error.response?.headers);
+      console.error('[UserManagement] Full error object:', {
+        message: error.message,
+        code: error.code,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data
+        }
+      });
       
       // Parse backend error using soft-coded function
       const errorMessage = parseBackendError(error);
       
+      // Show detailed error message including field-specific errors
+      let detailedMessage = errorMessage;
+      if (error.response?.data && typeof error.response.data === 'object') {
+        const fieldErrors = [];
+        for (const [field, messages] of Object.entries(error.response.data)) {
+          if (field !== 'detail' && field !== 'message') {
+            const errorText = Array.isArray(messages) ? messages.join(', ') : messages;
+            fieldErrors.push(`${field}: ${errorText}`);
+          }
+        }
+        if (fieldErrors.length > 0) {
+          detailedMessage = `${errorMessage}\n\nDetails:\n${fieldErrors.join('\n')}`;
+        }
+      }
+      
       setNotification({
         show: true,
         type: 'error',
-        message: errorMessage
+        message: detailedMessage
       });
     } finally {
       setActionLoading({ create: false });

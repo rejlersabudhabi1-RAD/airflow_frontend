@@ -101,8 +101,11 @@ apiClient.interceptors.response.use(
     console.error('Error Message:', error.message);
     console.error('Error Code:', error.code);
     console.error('Response Status:', error.response?.status);
+    console.error('Response Data:', error.response?.data);
+    console.error('Response Data (JSON):', JSON.stringify(error.response?.data, null, 2));
     console.error('Request URL:', error.config?.url);
     console.error('Request Method:', error.config?.method);
+    console.error('Request Data:', error.config?.data);
     console.error('Request Timeout:', error.config?.timeout);
     console.error('Full Error Object:', error);
     console.groupEnd();
