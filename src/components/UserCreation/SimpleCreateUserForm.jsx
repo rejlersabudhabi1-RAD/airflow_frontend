@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import rbacService from '../../services/rbac.service';
-import { fetchRoles, fetchModules } from '../../store/slices/rbacSlice';
+import { fetchRoles, fetchModules, fetchOrganizations } from '../../store/slices/rbacSlice';
 
 /**
  * Simple Create User Form - User Friendly Design
@@ -12,13 +12,17 @@ const FORM_CONFIG = {
   title: 'Create New User',
   subtitle: 'Fill in the required information below',
   requiredFields: ['email', 'first_name', 'last_name', 'password'],
+  basicFields: {
+    title: 'Basic Information',
+    fields: ['email', 'first_name', 'last_name', 'password', 'organization_id']
+  },
   optionalSections: {
     workInfo: {
       title: 'Work Information (Optional)',
       fields: ['department', 'job_title', 'phone']
     },
     access: {
-      title: 'Access Permissions',
+      title: 'Access Permissions (Optional)',
       fields: ['role_ids', 'module_ids']
     }
   },
@@ -37,13 +41,14 @@ const FORM_CONFIG = {
 
 const SimpleCreateUserForm = ({ onSuccess, onCancel }) => {
   const dispatch = useDispatch();
-  const { roles, modules } = useSelector((state) => state.rbac);
+  const { roles, modules, organizations } = useSelector((state) => state.rbac);
   
   const [formData, setFormData] = useState({
     email: '',
     first_name: '',
     last_name: '',
     password: '',
+    organization_id: '',
     department: '',
     job_title: '',
     phone: '',
@@ -61,6 +66,7 @@ const SimpleCreateUserForm = ({ onSuccess, onCancel }) => {
   useEffect(() => {
     dispatch(fetchRoles());
     dispatch(fetchModules());
+    dispatch(fetchOrganizations());
   }, [dispatch]);
 
   const handleChange = (field, value) => {
@@ -135,6 +141,7 @@ const SimpleCreateUserForm = ({ onSuccess, onCancel }) => {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
         password: formData.password,
+        ...(formData.organization_id && { organization_id: formData.organization_id }),
         ...(formData.department && { department: formData.department.trim() }),
         ...(formData.job_title && { job_title: formData.job_title.trim() }),
         ...(formData.phone && { phone: formData.phone.trim() }),
@@ -264,6 +271,30 @@ const SimpleCreateUserForm = ({ onSuccess, onCancel }) => {
                 disabled={isLoading}
               />
               {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+            </div>
+
+            {/* Organization */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Organization
+              </label>
+              <select
+                value={formData.organization_id}
+                onChange={(e) => handleChange('organization_id', e.target.value)}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${
+                  errors.organization_id ? 'border-red-500' : 'border-gray-300'
+                }`}
+                disabled={isLoading}
+              >
+                <option value="">Select organization (optional)</option>
+                {organizations?.map(org => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+              {errors.organization_id && <p className="text-red-500 text-sm mt-1">{errors.organization_id}</p>}
+              <p className="text-gray-500 text-xs mt-1">If not selected, default organization will be assigned</p>
             </div>
           </div>
 

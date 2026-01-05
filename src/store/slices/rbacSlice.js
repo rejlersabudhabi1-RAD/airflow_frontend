@@ -81,6 +81,22 @@ export const fetchModules = createAsyncThunk(
   }
 );
 
+export const fetchOrganizations = createAsyncThunk(
+  'rbac/fetchOrganizations',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await rbacService.getOrganizations();
+      // Soft-coded: Handle both direct data and nested data.data responses
+      const organizationsData = response?.data?.data || response?.data || response;
+      console.log('[fetchOrganizations] Extracted organizationsData:', organizationsData);
+      return organizationsData;
+    } catch (error) {
+      console.error('[fetchOrganizations] Error:', error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 export const fetchUserStats = createAsyncThunk(
   'rbac/fetchUserStats',
   async (_, { rejectWithValue }) => {
@@ -100,6 +116,7 @@ const initialState = {
   roles: [],
   permissions: [],
   modules: [],
+  organizations: [],
   stats: null,
   loading: false,
   error: null
@@ -244,6 +261,36 @@ const rbacSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
         state.modules = []; // Ensure modules is always an array
+      })
+      
+      // Organizations
+      .addCase(fetchOrganizations.pending, (state) => {
+        state.loading = true;
+        console.log('[Redux] fetchOrganizations.pending');
+      })
+      .addCase(fetchOrganizations.fulfilled, (state, action) => {
+        state.loading = false;
+        const payload = action.payload;
+        console.log('[Redux] fetchOrganizations.fulfilled - payload:', payload);
+        
+        // Soft-coded: Handle multiple response structures
+        let organizationsArray = [];
+        if (Array.isArray(payload)) {
+          organizationsArray = payload;
+        } else if (payload?.results && Array.isArray(payload.results)) {
+          organizationsArray = payload.results;
+        } else if (payload?.data && Array.isArray(payload.data)) {
+          organizationsArray = payload.data;
+        }
+        
+        state.organizations = organizationsArray;
+        console.log('[Redux] Organizations set:', organizationsArray.length, 'organizations');
+      })
+      .addCase(fetchOrganizations.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.organizations = []; // Ensure organizations is always an array
+        console.error('[Redux] fetchOrganizations.rejected:', action.payload);
       })
       
       // Stats
