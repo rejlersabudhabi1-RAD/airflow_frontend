@@ -4,6 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 import { STORAGE_KEYS } from '../config/app.config';
+import { 
+  validateUserForm, 
+  parseBackendError, 
+  prepareUserPayload,
+  USER_MANAGEMENT_CONFIG 
+} from '../config/userManagement.config';
 
 /**
  * User Management Page - Rebuilt
@@ -81,6 +87,7 @@ const UserManagement = () => {
     first_name: '',
     last_name: '',
     password: '',
+    confirmPassword: '',
     organization_id: '',
     department: '',
     job_title: '',
@@ -131,7 +138,8 @@ const UserManagement = () => {
       ],
       STEP_2: [
         { name: 'email', label: 'Email Address', type: 'email', required: true, icon: 'mail', placeholder: 'john.doe@company.com' },
-        { name: 'password', label: 'Password', type: 'password', required: true, icon: 'lock', placeholder: 'Min. 8 characters' }
+        { name: 'password', label: 'Password', type: 'password', required: true, icon: 'lock', placeholder: 'Min. 8 characters' },
+        { name: 'confirmPassword', label: 'Confirm Password', type: 'password', required: true, icon: 'lock', placeholder: 'Re-enter password' }
       ],
       STEP_3: [
         { name: 'organization_id', label: 'Organization', type: 'select', required: false, icon: 'building', placeholder: 'Select organization' },
@@ -285,6 +293,7 @@ const UserManagement = () => {
       first_name: '',
       last_name: '',
       password: '',
+      confirmPassword: '',
       organization_id: '',
       department: '',
       job_title: '',
@@ -538,24 +547,20 @@ const UserManagement = () => {
     console.log('[UserManagement] Create user initiated');
     console.log('[UserManagement] Form data:', formData);
     
-    // Validate all required fields across all steps
-    const allRequiredFieldsFilled = CONFIG.CREATE_USER_STEPS.every((step) => {
-      const stepFields = CONFIG.FORM_FIELDS[`STEP_${step.id}`] || [];
-      return stepFields.every(field => {
-        if (!field.required) return true;
-        const value = formData[field.name];
-        if (Array.isArray(value)) return value.length > 0;
-        return value && value.trim() !== '';
-      });
-    });
+    // Advanced validation using soft-coded config
+    const validation = validateUserForm(formData);
     
-    console.log('[UserManagement] Validation passed:', allRequiredFieldsFilled);
+    console.log('[UserManagement] Validation result:', validation);
     
-    if (!allRequiredFieldsFilled) {
+    if (!validation.valid) {
+      console.error('[UserManagement] Validation failed:', validation.errors);
+      
+      // Show first error message
+      const firstError = Object.values(validation.errors)[0];
       setNotification({
         show: true,
         type: 'error',
-        message: 'Please fill in all required fields'
+        message: firstError || 'Please check all fields and try again'
       });
       return;
     }
@@ -563,20 +568,19 @@ const UserManagement = () => {
     try {
       setActionLoading({ create: true });
       
-      const payload = {
-        email: formData.email,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        password: formData.password,
-        organization_id: formData.organization_id || null,
-        department: formData.department || null,
-        job_title: formData.job_title || null,
-        phone: formData.phone || null,
-        role_ids: formData.role_ids || [],
-        module_ids: formData.module_ids || []
-      };
+      // Prepare payload using soft-coded function
+      const payload = prepareUserPayload(formData);
       
       console.log('[UserManagement] Sending payload:', payload);
+      console.log('[UserManagement] Payload details:', {
+        email: payload.email,
+        hasPassword: !!payload.password,
+        passwordLength: payload.password?.length,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        role_ids: payload.role_ids,
+        module_ids: payload.module_ids
+      });
       
       const response = await rbacService.createUser(payload);
       console.log('[UserManagement] Create response:', response);
@@ -589,7 +593,7 @@ const UserManagement = () => {
       setNotification({
         show: true,
         type: 'success',
-        message: '✓ User created successfully!'
+        message: USER_MANAGEMENT_CONFIG.successMessages.userCreated
       });
       
       setShowCreateModal(false);
@@ -598,10 +602,16 @@ const UserManagement = () => {
     } catch (error) {
       console.error('[UserManagement] Create user error:', error);
       console.error('[UserManagement] Error response:', error.response?.data);
+      console.error('[UserManagement] Error status:', error.response?.status);
+      console.error('[UserManagement] Error headers:', error.response?.headers);
+      
+      // Parse backend error using soft-coded function
+      const errorMessage = parseBackendError(error);
+      
       setNotification({
         show: true,
         type: 'error',
-        message: error.response?.data?.message || error.response?.data?.detail || 'Failed to create user'
+        message: errorMessage
       });
     } finally {
       setActionLoading({ create: false });
