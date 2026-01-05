@@ -264,6 +264,21 @@ const UserManagement = () => {
       return value && value.trim() !== '';
     });
     
+    // Additional validation for Step 2 (Account credentials)
+    if (createUserStep === 2 && canProceed) {
+      // Check if password and confirmPassword match
+      if (formData.password !== formData.confirmPassword) {
+        console.log('[UserManagement] Step 2 validation failed: passwords do not match');
+        return false;
+      }
+      
+      // Check password strength
+      if (formData.password && formData.password.length < 8) {
+        console.log('[UserManagement] Step 2 validation failed: password too short');
+        return false;
+      }
+    }
+    
     if (!canProceed) {
       console.log(`[UserManagement] Step ${createUserStep} validation failed:`, {
         stepFields,
@@ -1651,6 +1666,48 @@ const UserManagement = () => {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Confirm Password Field */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Confirm Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+                        <input
+                          type="password"
+                          placeholder="Re-enter password"
+                          value={formData.confirmPassword}
+                          onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                            formData.confirmPassword && formData.password !== formData.confirmPassword
+                              ? 'border-red-300 bg-red-50'
+                              : 'border-gray-300'
+                          }`}
+                          required
+                        />
+                      </div>
+                      {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                        <div className="mt-2 flex items-center text-xs text-red-600">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Passwords do not match
+                        </div>
+                      )}
+                      {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                        <div className="mt-2 flex items-center text-xs text-green-600">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Passwords match
                         </div>
                       )}
                     </div>
