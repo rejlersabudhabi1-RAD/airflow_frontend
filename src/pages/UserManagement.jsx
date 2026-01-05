@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
@@ -10,6 +10,7 @@ import {
   prepareUserPayload,
   USER_MANAGEMENT_CONFIG 
 } from '../config/userManagement.config';
+import CreateUserForm from '../components/UserCreation/CreateUserForm';
 
 /**
  * User Management Page - Rebuilt
@@ -853,7 +854,7 @@ const UserManagement = () => {
       
       const response = await rbacService.bulkUploadUsers(uploadFormData);
       
-      console.log('[BulkUpload] ✓ Response received:', response);
+      console.log('[BulkUpload] âœ“ Response received:', response);
       setBulkUploadProgress(70);
       
       setBulkUploadResults(response.data || response);
@@ -1445,569 +1446,30 @@ const UserManagement = () => {
         )}
       </div>
       
-      {/* Create User Modal - Innovative Wizard */}
+      {/* Create User Modal - New Robust Form */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-3xl font-bold">Create New User</h2>
-                  <p className="text-blue-100 mt-1">Step {createUserStep} of {CONFIG.CREATE_USER_STEPS.length}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    resetCreateUserWizard();
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <CreateUserForm
+            onSuccess={async (data) => {
+              console.log('[UserManagement] User created successfully:', data);
               
-              {/* Step Progress Bar */}
-              <div className="mt-6 flex items-center justify-between">
-                {CONFIG.CREATE_USER_STEPS.map((step, index) => (
-                  <React.Fragment key={step.id}>
-                    <div className="flex flex-col items-center">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold transition-all ${
-                        createUserStep === step.id 
-                          ? 'bg-white text-blue-600 shadow-lg scale-110' 
-                          : createUserStep > step.id
-                          ? 'bg-green-400 text-white'
-                          : 'bg-blue-400 bg-opacity-50 text-white'
-                      }`}>
-                        {createUserStep > step.id ? (
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          step.id
-                        )}
-                      </div>
-                      <p className={`mt-2 text-sm font-medium ${createUserStep === step.id ? 'text-white' : 'text-blue-200'}`}>
-                        {step.name}
-                      </p>
-                      <p className="text-xs text-blue-100">{step.description}</p>
-                    </div>
-                    {index < CONFIG.CREATE_USER_STEPS.length - 1 && (
-                      <div className={`flex-1 h-1 mx-2 rounded transition-all ${
-                        createUserStep > step.id ? 'bg-green-400' : 'bg-blue-400 bg-opacity-30'
-                      }`} />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            </div>
-            
-            {/* Modal Body */}
-            <div className="p-8 overflow-y-auto max-h-[calc(95vh-280px)]">
-              <form onSubmit={handleCreateUser}>
-                {/* Step 1: Basic Info */}
-                {createUserStep === 1 && (
-                  <div className="space-y-6 animate-slide-in">
-                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900">Personal Details</h3>
-                      <p className="text-gray-600 mt-2">Let's start with the basic information</p>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          First Name <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="John"
-                            value={formData.first_name}
-                            onChange={(e) => setFormData({...formData, first_name: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            required
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Last Name <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Doe"
-                            value={formData.last_name}
-                            onChange={(e) => setFormData({...formData, last_name: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Phone Number <span className="text-gray-400 text-xs">(Optional)</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                        </div>
-                        <input
-                          type="tel"
-                          placeholder="+971 50 123 4567"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Step 2: Account */}
-                {createUserStep === 2 && (
-                  <div className="space-y-6 animate-slide-in">
-                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-teal-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900">Account Credentials</h3>
-                      <p className="text-gray-600 mt-2">Set up login credentials for the user</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Email Address <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                          </svg>
-                        </div>
-                        <input
-                          type="email"
-                          placeholder="john.doe@company.com"
-                          value={formData.email}
-                          onChange={(e) => setFormData({...formData, email: e.target.value})}
-                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          required
-                        />
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">User will use this email to log in</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        </div>
-                        <input
-                          type={showPasswordStrength ? "text" : "password"}
-                          placeholder="Min. 8 characters"
-                          value={formData.password}
-                          onChange={(e) => {
-                            setFormData({...formData, password: e.target.value});
-                            setShowPasswordStrength(e.target.value.length > 0);
-                          }}
-                          className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswordStrength(!showPasswordStrength)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                        >
-                          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showPasswordStrength ? "M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" : "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"} />
-                          </svg>
-                        </button>
-                      </div>
-                      
-                      {/* Password Strength Indicator */}
-                      {formData.password && (
-                        <div className="mt-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-gray-600">Password Strength</span>
-                            <span className={`text-xs font-bold ${
-                              getPasswordStrength(formData.password).score < 3 ? 'text-red-600' :
-                              getPasswordStrength(formData.password).score < 4 ? 'text-yellow-600' :
-                              'text-green-600'
-                            }`}>
-                              {getPasswordStrength(formData.password).label}
-                            </span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full transition-all duration-300 ${getPasswordStrength(formData.password).color}`}
-                              style={{ width: `${getPasswordStrength(formData.password).percentage}%` }}
-                            />
-                          </div>
-                          
-                          {/* Password Requirements */}
-                          <div className="mt-3 space-y-1">
-                            {CONFIG.PASSWORD_REQUIREMENTS.map((req, idx) => (
-                              <div key={idx} className="flex items-center text-xs">
-                                {req.regex.test(formData.password) ? (
-                                  <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                )}
-                                <span className={req.regex.test(formData.password) ? 'text-green-700' : 'text-gray-600'}>
-                                  {req.label}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Confirm Password Field */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Confirm Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        </div>
-                        <input
-                          type="password"
-                          placeholder="Re-enter password"
-                          value={formData.confirmPassword}
-                          onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
-                          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            formData.confirmPassword && formData.password !== formData.confirmPassword
-                              ? 'border-red-300 bg-red-50'
-                              : 'border-gray-300'
-                          }`}
-                          required
-                        />
-                      </div>
-                      {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                        <div className="mt-2 flex items-center text-xs text-red-600">
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Passwords do not match
-                        </div>
-                      )}
-                      {formData.confirmPassword && formData.password === formData.confirmPassword && (
-                        <div className="mt-2 flex items-center text-xs text-green-600">
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Passwords match
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Step 3: Organization */}
-                {createUserStep === 3 && (
-                  <div className="space-y-6 animate-slide-in">
-                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900">Organization Details</h3>
-                      <p className="text-gray-600 mt-2">Assign organizational information</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Organization <span className="text-gray-400 text-xs">(Optional)</span>
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        </div>
-                        <select
-                          value={formData.organization_id}
-                          onChange={(e) => setFormData({...formData, organization_id: e.target.value})}
-                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none bg-white"
-                        >
-                          <option value="">Select organization</option>
-                          {organizations.map(org => (
-                            <option key={org.id} value={org.id}>{org.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Department <span className="text-gray-400 text-xs">(Optional)</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Engineering"
-                            value={formData.department}
-                            onChange={(e) => setFormData({...formData, department: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Job Title <span className="text-gray-400 text-xs">(Optional)</span>
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Software Engineer"
-                            value={formData.job_title}
-                            onChange={(e) => setFormData({...formData, job_title: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Step 4: Access */}
-                {createUserStep === 4 && (
-                  <div className="space-y-6 animate-slide-in">
-                    <div className="text-center mb-8">
-                      <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                        </svg>
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900">Access Permissions</h3>
-                      <p className="text-gray-600 mt-2">Assign roles and module access</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Roles <span className="text-gray-400 text-xs">(Optional)</span>
-                      </label>
-                      <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto p-1">
-                        {Array.isArray(roles) && roles.map(role => (
-                          <label
-                            key={role.id}
-                            className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                              formData.role_ids?.includes(role.id)
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-200 hover:border-blue-300'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={formData.role_ids?.includes(role.id) || false}
-                              onChange={(e) => {
-                                const currentRoles = formData.role_ids || [];
-                                if (e.target.checked) {
-                                  setFormData({...formData, role_ids: [...currentRoles, role.id]});
-                                } else {
-                                  setFormData({...formData, role_ids: currentRoles.filter(id => id !== role.id)});
-                                }
-                              }}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <div className="ml-3">
-                              <span className="text-sm font-medium text-gray-900">{role.name}</span>
-                              {role.description && (
-                                <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>
-                              )}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Accessible Modules <span className="text-gray-400 text-xs">(Optional)</span>
-                      </label>
-                      <div className="grid grid-cols-3 gap-3 max-h-64 overflow-y-auto p-1">
-                        {Array.isArray(modules) && modules.map(module => (
-                          <label
-                            key={module.id}
-                            className={`flex flex-col items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
-                              formData.module_ids?.includes(module.id)
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 hover:border-purple-300'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={formData.module_ids?.includes(module.id) || false}
-                              onChange={(e) => {
-                                const currentModules = formData.module_ids || [];
-                                if (e.target.checked) {
-                                  setFormData({...formData, module_ids: [...currentModules, module.id]});
-                                } else {
-                                  setFormData({...formData, module_ids: currentModules.filter(id => id !== module.id)});
-                                }
-                              }}
-                              className="mb-2 w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                            />
-                            <span className="text-xs font-medium text-center text-gray-900">{module.name}</span>
-                            <span className="text-xs text-gray-500 mt-0.5">{module.code}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Summary */}
-                    <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 mt-6">
-                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Summary
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-600 font-medium">User</p>
-                          <p className="text-gray-900">{formData.first_name} {formData.last_name}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600 font-medium">Email</p>
-                          <p className="text-gray-900">{formData.email}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600 font-medium">Organization</p>
-                          <p className="text-gray-900">{organizations.find(o => o.id === formData.organization_id)?.name || 'Not assigned'}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600 font-medium">Department</p>
-                          <p className="text-gray-900">{formData.department || 'Not assigned'}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600 font-medium">Roles</p>
-                          <p className="text-gray-900">{formData.role_ids?.length || 0} assigned</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600 font-medium">Modules</p>
-                          <p className="text-gray-900">{formData.module_ids?.length || 0} assigned</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </form>
-            </div>
-            
-            {/* Modal Footer */}
-            <div className="bg-gray-50 px-8 py-5 flex items-center justify-between border-t border-gray-200">
-              <button
-                type="button"
-                onClick={goToPreviousStep}
-                disabled={createUserStep === 1}
-                className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Previous
-              </button>
+              // Show success notification
+              setNotification({
+                show: true,
+                type: 'success',
+                message: 'User created successfully!'
+              });
               
-              <div className="flex items-center gap-3">
-                {createUserStep < CONFIG.CREATE_USER_STEPS.length ? (
-                  <button
-                    type="button"
-                    onClick={goToNextStep}
-                    disabled={!canProceedToNextStep()}
-                    className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg"
-                  >
-                    Next Step
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCreateUser}
-                      disabled={actionLoading.create || !canProceedToNextStep()}
-                      title={!canProceedToNextStep() ? 'Please fill all required fields' : 'Create new user'}
-                      className="px-8 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg"
-                    >
-                      {actionLoading.create ? (
-                        <>
-                          <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Creating...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Create User
-                        </>
-                      )}
-                    </button>
-                    {!canProceedToNextStep() && (
-                      <p className="text-xs text-red-600">
-                        ⚠️ Please fill all required fields
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+              // Refresh users list
+              await dispatch(fetchUsers()).unwrap();
+              
+              // Close modal
+              setShowCreateModal(false);
+            }}
+            onCancel={() => {
+              setShowCreateModal(false);
+            }}
+          />
         </div>
       )}
       
@@ -2047,16 +1509,16 @@ const UserManagement = () => {
                     ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
                 }`}>
-                  {detailedUser.status === 'active' ? '● Active' : '● Inactive'}
+                  {detailedUser.status === 'active' ? 'â— Active' : 'â— Inactive'}
                 </span>
                 {detailedUser.user?.is_staff && (
                   <span className="px-4 py-2 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
-                    ★ Staff Member
+                    â˜… Staff Member
                   </span>
                 )}
                 {detailedUser.user?.is_superuser && (
                   <span className="px-4 py-2 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800">
-                    ⚡ Superuser
+                    âš¡ Superuser
                   </span>
                 )}
               </div>
