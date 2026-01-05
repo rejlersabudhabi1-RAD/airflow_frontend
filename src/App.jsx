@@ -27,6 +27,8 @@ import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
+import ContactSupportPage from './pages/ContactSupportPage'
+import DocumentationPage from './pages/DocumentationPage'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -304,6 +306,26 @@ function App() {
           element={
             <ProtectedRoute>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Contact Support */}
+        <Route
+          path="support"
+          element={
+            <ProtectedRoute>
+              <ContactSupportPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Documentation */}
+        <Route
+          path="documentation"
+          element={
+            <ProtectedRoute>
+              <DocumentationPage />
             </ProtectedRoute>
           }
         />

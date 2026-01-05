@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { fetchFeatures } from '../store/featureSlice'
 import FeatureCard from '../components/FeatureCard'
+import ContactSupport from '../components/support/ContactSupport'
+import Documentation from '../components/documentation/Documentation'
 
 /**
  * Dashboard Page
@@ -16,6 +18,8 @@ const Dashboard = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('all')
+  const [showContactSupport, setShowContactSupport] = useState(false)
+  const [showDocumentation, setShowDocumentation] = useState(false)
 
   useEffect(() => {
     dispatch(fetchFeatures())
@@ -271,16 +275,38 @@ const Dashboard = () => {
               <p className="text-blue-100">Explore our documentation or reach out to support</p>
             </div>
             <div className="flex gap-3">
-              <button className="px-6 py-3 bg-white text-blue-600 rounded-xl hover:shadow-lg transition-all font-medium">
+              <button 
+                onClick={() => setShowDocumentation(true)}
+                className="px-6 py-3 bg-white text-blue-600 rounded-xl hover:shadow-lg transition-all font-medium"
+              >
                 📚 Documentation
               </button>
-              <button className="px-6 py-3 bg-blue-500 hover:bg-blue-400 rounded-xl transition-all font-medium">
+              <button 
+                onClick={() => setShowContactSupport(true)}
+                className="px-6 py-3 bg-blue-500 hover:bg-blue-400 rounded-xl transition-all font-medium"
+              >
                 💬 Contact Support
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Contact Support Modal */}
+      {showContactSupport && (
+        <ContactSupport 
+          isModal={true} 
+          onClose={() => setShowContactSupport(false)} 
+        />
+      )}
+
+      {/* Documentation Modal */}
+      {showDocumentation && (
+        <Documentation 
+          isModal={true} 
+          onClose={() => setShowDocumentation(false)} 
+        />
+      )}
     </div>
   )
 }
