@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
 import PIDEngineeringResults from '../components/PIDEngineeringResults';
 import PID2DGenerator from '../components/pid/PID2DGenerator';
+import PIDDesignCheck from '../components/pid/PIDDesignCheck';
 
 /**
  * PFD Conversion Results & P&ID Generation Page
  * Shows extracted PFD data and auto-generates P&ID using AI
  * Uses 3-Step Engineering Workflow Display Component
+ * Includes P&ID Design Check for verification
  */
 const PFDConvert = () => {
   const { documentId } = useParams();
@@ -20,7 +22,7 @@ const PFDConvert = () => {
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('pfd');
-  const [view2D, setView2D] = useState(false);
+  const [viewMode, setViewMode] = useState('specifications'); // 'specifications', '2d-diagram', 'design-check'
 
   useEffect(() => {
     loadPFDDocument();
@@ -83,13 +85,40 @@ const PFDConvert = () => {
         pid_revision: pfdDocument.revision || 'A',
       };
 
-      const response = await apiClient.post('/pfd/conversions/generate/', requestData);
+      // Use extended timeout for P&ID generation (5 minutes for AI processing)
+      const response = await apiClient.post('/pfd/conversions/generate/', requestData, {
+        timeout: 300000 // 5 minutes for OpenAI API calls
+      });
+      
       setPidConversion(response.data);
       setActiveTab('pid');
       
     } catch (err) {
       console.error('P&ID generation failed:', err);
-      setError(err.response?.data?.error || 'P&ID generation failed. Please try again.');
+      
+      // Smart error handling based on error type
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        // Timeout error - check if generation actually completed
+        console.log('⏱️ Request timed out, checking if generation completed in background...');
+        
+        // Poll for completion
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+          await checkExistingPID(); // Check if PID was generated
+          
+          if (pidConversion) {
+            console.log('✅ P&ID generation completed successfully despite timeout');
+            setActiveTab('pid');
+            return;
+          }
+        } catch (pollErr) {
+          console.error('Polling failed:', pollErr);
+        }
+        
+        setError('P&ID generation is taking longer than expected. The process may still be running in the background. Please refresh the page in a few moments.');
+      } else {
+        setError(err.response?.data?.error || err.response?.data?.detail || 'P&ID generation failed. Please try again.');
+      }
     } finally {
       setGenerating(false);
       setAutoGenerating(false);
@@ -248,14 +277,25 @@ const PFDConvert = () => {
         {/* Error Banner */}
         {error && pfdDocument && (
           <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6">
-            <div className="flex">
-              <svg className="h-5 w-5 text-red-400 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <div>
-                <h4 className="text-red-800 font-medium">Generation Error</h4>
-                <p className="text-red-700 text-sm mt-1">{error}</p>
+            <div className="flex items-start justify-between">
+              <div className="flex">
+                <svg className="h-5 w-5 text-red-400 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <h4 className="text-red-800 font-medium">Generation Error</h4>
+                  <p className="text-red-700 text-sm mt-1">{error}</p>
+                </div>
               </div>
+              <button
+                onClick={() => {
+                  setError('');
+                  loadPFDDocument(); // Refresh to check if PID was generated
+                }}
+                className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex-shrink-0"
+              >
+                🔄 Check Status
+              </button>
             </div>
           </div>
         )}
@@ -323,16 +363,26 @@ const PFDConvert = () => {
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-600 mx-auto mb-4"></div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Generating P&ID Specifications...</h3>
-                    <p className="text-gray-600">AI is analyzing PFD data using 3-step engineering workflow and creating detailed P&ID specifications with instrumentation, piping, and safety systems</p>
+                    <p className="text-gray-600 mb-4">
+                      AI is analyzing PFD data using 3-step engineering workflow and creating detailed P&ID specifications with instrumentation, piping, and safety systems
+                    </p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto mt-6">
+                      <p className="text-sm text-blue-800">
+                        <strong>⏱️ This process may take 2-5 minutes</strong> as we're making multiple AI calls to generate comprehensive P&ID specifications.
+                      </p>
+                      <p className="text-xs text-blue-600 mt-2">
+                        If this takes longer, don't worry - the process is still running in the background. You can refresh the page in a few moments to check the results.
+                      </p>
+                    </div>
                   </div>
                 ) : pidConversion ? (
                   <>
-                    {/* View Mode Selector */}
-                    <div className="flex gap-3 mb-6">
+                    {/* View Mode Selector - 3 Options */}
+                    <div className="flex gap-3 mb-6 flex-wrap">
                       <button
-                        onClick={() => setView2D(false)}
+                        onClick={() => setViewMode('specifications')}
                         className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
-                          !view2D
+                          viewMode === 'specifications'
                             ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -343,9 +393,9 @@ const PFDConvert = () => {
                         📋 Specifications View
                       </button>
                       <button
-                        onClick={() => setView2D(true)}
+                        onClick={() => setViewMode('2d-diagram')}
                         className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
-                          view2D
+                          viewMode === '2d-diagram'
                             ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
@@ -355,13 +405,31 @@ const PFDConvert = () => {
                         </svg>
                         📐 2D P&ID Diagram (Expert Mode)
                       </button>
+                      <button
+                        onClick={() => setViewMode('design-check')}
+                        className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
+                          viewMode === 'design-check'
+                            ? 'bg-gradient-to-r from-green-600 to-teal-600 text-white shadow-lg'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        ✅ P&ID Design Check
+                      </button>
                     </div>
 
-                    {/* 2D Diagram View with Expert Recommendations */}
-                    {view2D ? (
+                    {/* Conditional View Rendering */}
+                    {viewMode === '2d-diagram' ? (
                       <PID2DGenerator 
                         pidData={pidConversion.pid_data || pidConversion} 
                         pfdData={pfdDocument?.extracted_data}
+                      />
+                    ) : viewMode === 'design-check' ? (
+                      <PIDDesignCheck 
+                        pidConversion={pidConversion}
+                        pfdDocument={pfdDocument}
                       />
                     ) : (
                       <>
@@ -413,7 +481,8 @@ const PFDConvert = () => {
                           />
                         )}
                       </>
-                    )}
+                    )
+                    }
                   </>
                 ) : (
                   <div className="text-center py-12">

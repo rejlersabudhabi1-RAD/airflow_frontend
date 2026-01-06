@@ -515,13 +515,30 @@ const UserManagement = () => {
   const paginatedUsers = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return filteredUsers.slice(startIndex, endIndex);
+    const paginated = filteredUsers.slice(startIndex, endIndex);
+    
+    console.log('🔄 [paginatedUsers] Recalculated:', {
+      totalUsers: filteredUsers.length,
+      currentPage,
+      itemsPerPage,
+      startIndex,
+      endIndex,
+      paginatedCount: paginated.length
+    });
+    
+    return paginated;
   }, [filteredUsers, currentPage, itemsPerPage]);
   
   // ========== COMPUTED: PAGINATION INFO ==========
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const showingFrom = filteredUsers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const showingTo = Math.min(currentPage * itemsPerPage, filteredUsers.length);
+  
+  // ========== MONITOR: ITEMS PER PAGE CHANGES ==========
+  useEffect(() => {
+    console.log('👀 [useEffect] ItemsPerPage changed to:', itemsPerPage);
+    console.log('👀 [useEffect] Pagination info:', { showingFrom, showingTo, totalPages, currentPage });
+  }, [itemsPerPage, showingFrom, showingTo, totalPages, currentPage]);
   
   // ========== EMAIL VALIDATION - CLIENT SIDE ONLY ==========
   // Backend endpoint /users/validate-email/ doesn't exist, so we do client-side validation only
@@ -797,14 +814,48 @@ const UserManagement = () => {
   };
   
   const handlePageChange = (newPage) => {
+    console.log('📄 [handlePageChange] Called with:', newPage);
+    console.log('📄 [handlePageChange] Current page:', currentPage);
+    console.log('📄 [handlePageChange] Total pages:', totalPages);
+    console.log('📄 [handlePageChange] Validation:', newPage >= 1, newPage <= totalPages);
+    
     if (newPage >= 1 && newPage <= totalPages) {
+      console.log('✅ [handlePageChange] Valid - Setting page to:', newPage);
       setCurrentPage(newPage);
+    } else {
+      console.warn('❌ [handlePageChange] Invalid page number:', newPage);
     }
   };
   
   const handleItemsPerPageChange = (newItemsPerPage) => {
-    setItemsPerPage(newItemsPerPage);
-    setCurrentPage(1); // Reset to first page
+    console.log('📄 [handleItemsPerPageChange] Called with:', newItemsPerPage);
+    console.log('📄 [handleItemsPerPageChange] Type:', typeof newItemsPerPage);
+    console.log('📄 [handleItemsPerPageChange] Current itemsPerPage:', itemsPerPage);
+    console.log('📄 [handleItemsPerPageChange] Current page:', currentPage);
+    console.log('📄 [handleItemsPerPageChange] Total users:', filteredUsers.length);
+    
+    // Validate input
+    const validValue = Number(newItemsPerPage);
+    if (isNaN(validValue) || validValue <= 0) {
+      console.error('❌ [handleItemsPerPageChange] Invalid value:', newItemsPerPage);
+      return;
+    }
+    
+    // Update states
+    console.log('🔄 [handleItemsPerPageChange] Updating itemsPerPage to:', validValue);
+    setItemsPerPage(validValue);
+    
+    console.log('🔄 [handleItemsPerPageChange] Resetting currentPage to 1');
+    setCurrentPage(1);
+    
+    console.log('✅ [handleItemsPerPageChange] State update triggered');
+    
+    // Force a small delay to ensure state is updated
+    setTimeout(() => {
+      console.log('⏱️ [handleItemsPerPageChange] Post-update check:');
+      console.log('   - itemsPerPage should be:', validValue);
+      console.log('   - currentPage should be: 1');
+    }, 100);
   };
   
   const handleBulkUpload = async (e) => {
@@ -1052,6 +1103,71 @@ const UserManagement = () => {
         </div>
       )}
       
+      {/* Debug Panel - Pagination State */}
+      <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-400 rounded-xl shadow-lg p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+            <h3 className="text-lg font-bold text-gray-900">🐛 Live Debug Panel - Pagination State</h3>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                console.log('🧪 [Test Button] Manual test - Setting to 25 per page');
+                handleItemsPerPageChange(25);
+              }}
+              className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 active:scale-95 transition-all font-bold"
+            >
+              🧪 Test: Set 25/page
+            </button>
+            <button
+              onClick={() => {
+                console.log('🧪 [Test Button] Manual test - Setting to 50 per page');
+                handleItemsPerPageChange(50);
+              }}
+              className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 active:scale-95 transition-all font-bold"
+            >
+              🧪 Test: Set 50/page
+            </button>
+            <button
+              onClick={() => {
+                console.log('🧪 [Test Button] Manual test - Go to page 2');
+                handlePageChange(2);
+              }}
+              className="px-3 py-1 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 active:scale-95 transition-all font-bold"
+            >
+              🧪 Test: Go Page 2
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="bg-white p-3 rounded-lg border border-yellow-300">
+            <p className="text-gray-600 font-semibold">Items Per Page:</p>
+            <p className="text-2xl font-bold text-blue-600">{itemsPerPage}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-yellow-300">
+            <p className="text-gray-600 font-semibold">Current Page:</p>
+            <p className="text-2xl font-bold text-green-600">{currentPage}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-yellow-300">
+            <p className="text-gray-600 font-semibold">Total Users:</p>
+            <p className="text-2xl font-bold text-purple-600">{filteredUsers.length}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-yellow-300">
+            <p className="text-gray-600 font-semibold">Showing Users:</p>
+            <p className="text-2xl font-bold text-orange-600">{paginatedUsers.length}</p>
+          </div>
+        </div>
+        <div className="mt-3 bg-white p-3 rounded-lg border border-yellow-300">
+          <p className="text-gray-600 font-semibold mb-1">Range:</p>
+          <p className="text-sm font-mono">
+            From: <span className="font-bold text-blue-600">{showingFrom}</span> | 
+            To: <span className="font-bold text-green-600">{showingTo}</span> | 
+            Total Pages: <span className="font-bold text-purple-600">{totalPages}</span>
+          </p>
+        </div>
+      </div>
+      
       {/* Header */}
       <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
@@ -1092,32 +1208,55 @@ const UserManagement = () => {
                 type="text"
                 placeholder="Search by name, email, department, or job title..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(e) => {
+                  console.log('🔍 Search term changed:', e.target.value);
+                  setSearchTerm(e.target.value);
+                }}
+                className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
-              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
+              {searchTerm && (
+                <button
+                  onClick={() => {
+                    console.log('🗑️ Clearing search');
+                    setSearchTerm('');
+                  }}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Clear search"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
           
           <div className="flex flex-wrap gap-3">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              onChange={(e) => {
+                console.log('📊 Status filter changed:', e.target.value);
+                setStatusFilter(e.target.value);
+              }}
+              className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="all">📋 All Status</option>
+              <option value="active">✅ Active</option>
+              <option value="inactive">❌ Inactive</option>
             </select>
             
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              onChange={(e) => {
+                console.log('👤 Role filter changed:', e.target.value);
+                setRoleFilter(e.target.value);
+              }}
+              className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">All Roles</option>
+              <option value="all">👥 All Roles</option>
               {Array.isArray(roles) && roles.map(role => (
                 <option key={role.id} value={role.id}>{role.name}</option>
               ))}
@@ -1125,10 +1264,13 @@ const UserManagement = () => {
             
             <select
               value={organizationFilter}
-              onChange={(e) => setOrganizationFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              onChange={(e) => {
+                console.log('🏢 Organization filter changed:', e.target.value);
+                setOrganizationFilter(e.target.value);
+              }}
+              className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">All Organizations</option>
+              <option value="all">🏢 All Organizations</option>
               {organizations.map(org => (
                 <option key={org.id} value={org.id}>{org.name}</option>
               ))}
@@ -1136,22 +1278,29 @@ const UserManagement = () => {
             
             <button
               onClick={() => {
+                console.log('🔄 Resetting all filters');
                 setSearchTerm('');
                 setStatusFilter('all');
                 setRoleFilter('all');
                 setOrganizationFilter('all');
                 setCurrentPage(1);
+                // Visual feedback
+                const btn = event.currentTarget;
+                btn.classList.add('scale-95');
+                setTimeout(() => btn.classList.remove('scale-95'), 100);
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+              className="px-4 py-2 border-2 border-blue-300 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all flex items-center gap-2 font-medium shadow-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              Reset Filters
+              🔄 Reset Filters
             </button>
             
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-sm text-gray-600">Showing {showingFrom}-{showingTo} of {filteredUsers.length}</span>
+            <div className="ml-auto flex items-center gap-2 bg-gradient-to-r from-blue-50 to-purple-50 px-4 py-2 rounded-lg border-2 border-blue-200">
+              <span className="text-sm font-semibold text-gray-700">
+                📊 Showing <span className="text-blue-600">{showingFrom}</span>-<span className="text-blue-600">{showingTo}</span> of <span className="text-purple-600 font-bold">{filteredUsers.length}</span> results
+              </span>
             </div>
           </div>
         </div>
@@ -1352,26 +1501,55 @@ const UserManagement = () => {
           <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-700">
-                  Showing <span className="font-medium">{showingFrom}</span> to <span className="font-medium">{showingTo}</span> of{' '}
-                  <span className="font-medium">{filteredUsers.length}</span> results
+                <span className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                  Showing <span className="font-bold text-blue-600">{showingFrom}</span> to <span className="font-bold text-blue-600">{showingTo}</span> of{' '}
+                  <span className="font-bold text-purple-600">{filteredUsers.length}</span> results
                 </span>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                  className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {CONFIG.ITEMS_PER_PAGE_OPTIONS.map(option => (
-                    <option key={option} value={option}>{option} per page</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    id="itemsPerPageSelect"
+                    name="itemsPerPage"
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      const newValue = Number(e.target.value);
+                      console.log('📄 [Select onChange] ==================');
+                      console.log('📄 [Select onChange] Event fired!');
+                      console.log('📄 [Select onChange] Raw value:', e.target.value);
+                      console.log('📄 [Select onChange] Parsed value:', newValue);
+                      console.log('📄 [Select onChange] Current state:', itemsPerPage);
+                      console.log('📄 [Select onChange] Available options:', CONFIG.ITEMS_PER_PAGE_OPTIONS);
+                      console.log('📄 [Select onChange] Calling handler...');
+                      handleItemsPerPageChange(newValue);
+                      console.log('📄 [Select onChange] Handler called!');
+                      console.log('📄 [Select onChange] ==================');
+                    }}
+                    className="px-4 py-2 pr-10 border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-white rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-600 hover:border-blue-500 cursor-pointer transition-all shadow-md appearance-none"
+                  >
+                    {CONFIG.ITEMS_PER_PAGE_OPTIONS.map(option => (
+                      <option key={option} value={option} className="font-medium">
+                        {option} per page
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
+                  Current: <span className="font-bold text-yellow-700">{itemsPerPage}</span> per page
+                </span>
               </div>
               
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handlePageChange(1)}
+                  onClick={() => {
+                    console.log('⏮️ First page button clicked');
+                    handlePageChange(1);
+                  }}
                   disabled={currentPage === 1}
-                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 border-2 border-gray-400 bg-white rounded-lg hover:bg-blue-50 hover:border-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                   title="First page"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1380,9 +1558,12 @@ const UserManagement = () => {
                 </button>
                 
                 <button
-                  onClick={() => handlePageChange(currentPage - 1)}
+                  onClick={() => {
+                    console.log('⏪ Previous page button clicked. Current:', currentPage);
+                    handlePageChange(currentPage - 1);
+                  }}
                   disabled={currentPage === 1}
-                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 border-2 border-gray-400 bg-white rounded-lg hover:bg-blue-50 hover:border-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                   title="Previous page"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1406,11 +1587,14 @@ const UserManagement = () => {
                     return (
                       <button
                         key={pageNum}
-                        onClick={() => handlePageChange(pageNum)}
-                        className={`px-4 py-2 border rounded-lg transition-colors ${
+                        onClick={() => {
+                          console.log('🔢 Page number button clicked:', pageNum);
+                          handlePageChange(pageNum);
+                        }}
+                        className={`px-4 py-2 border-2 rounded-lg font-bold transition-all active:scale-95 ${
                           currentPage === pageNum
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'border-gray-300 hover:bg-white'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-lg'
+                            : 'border-gray-400 bg-white hover:bg-blue-50 hover:border-blue-500'
                         }`}
                       >
                         {pageNum}
@@ -1420,9 +1604,12 @@ const UserManagement = () => {
                 </div>
                 
                 <button
-                  onClick={() => handlePageChange(currentPage + 1)}
+                  onClick={() => {
+                    console.log('⏩ Next page button clicked. Current:', currentPage, 'Total:', totalPages);
+                    handlePageChange(currentPage + 1);
+                  }}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 border-2 border-gray-400 bg-white rounded-lg hover:bg-blue-50 hover:border-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                   title="Next page"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1431,9 +1618,12 @@ const UserManagement = () => {
                 </button>
                 
                 <button
-                  onClick={() => handlePageChange(totalPages)}
+                  onClick={() => {
+                    console.log('⏭️ Last page button clicked. Total pages:', totalPages);
+                    handlePageChange(totalPages);
+                  }}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 border-2 border-gray-400 bg-white rounded-lg hover:bg-blue-50 hover:border-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                   title="Last page"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

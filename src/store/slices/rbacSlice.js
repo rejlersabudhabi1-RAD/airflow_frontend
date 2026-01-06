@@ -20,18 +20,38 @@ export const fetchCurrentUser = createAsyncThunk(
 
 export const fetchUsers = createAsyncThunk(
   'rbac/fetchUsers',
-  async (params, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await rbacService.getUsers(params);
+      // 🔧 Smart fetching: Request all users by setting large page_size
+      // This ensures frontend gets all users for proper pagination
+      const fetchParams = {
+        ...params,
+        page_size: params.page_size || 1000  // Default to fetching all users
+      };
+      
+      console.log('[fetchUsers] 📄 Fetching users with params:', fetchParams);
+      const response = await rbacService.getUsers(fetchParams);
+      
       // Soft-coded: Handle both direct data and nested data.data responses
       const userData = response?.data?.data || response?.data || response;
+      
+      // Handle paginated response
+      let users = userData;
+      if (userData?.results && Array.isArray(userData.results)) {
+        users = userData.results;
+        console.log('[fetchUsers] ✅ Paginated response detected');
+        console.log('[fetchUsers] 📊 Total count:', userData.count);
+        console.log('[fetchUsers] 📄 Users fetched:', users.length);
+      }
+      
       console.log('[fetchUsers] Raw response:', response);
       console.log('[fetchUsers] Extracted userData:', userData);
-      console.log('[fetchUsers] Is array:', Array.isArray(userData));
-      console.log('[fetchUsers] Has results:', userData?.results ? `Yes (${userData.results.length})` : 'No');
-      return userData;
+      console.log('[fetchUsers] Is array:', Array.isArray(users));
+      console.log('[fetchUsers] Total users:', users.length || 0);
+      
+      return users;
     } catch (error) {
-      console.error('[fetchUsers] Error:', error);
+      console.error('[fetchUsers] ❌ Error:', error);
       return rejectWithValue(error.response?.data || error.message);
     }
   }
