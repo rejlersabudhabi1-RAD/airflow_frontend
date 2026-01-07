@@ -562,9 +562,21 @@ export class PipingRouteEngine {
   autoGenerateConnections(equipmentList) {
     const connections = []
     
+    // Validate input
+    if (!equipmentList || !Array.isArray(equipmentList) || equipmentList.length < 2) {
+      console.warn('Invalid equipment list for auto-generating connections')
+      return connections
+    }
+    
     for (let i = 0; i < equipmentList.length - 1; i++) {
       const fromEquipment = equipmentList[i]
       const toEquipment = equipmentList[i + 1]
+      
+      // Validate equipment items have tag numbers
+      if (!fromEquipment?.tag_number || !toEquipment?.tag_number) {
+        console.warn(`Skipping connection at index ${i}: missing tag_number`)
+        continue
+      }
       
       connections.push({
         from_equipment: fromEquipment.tag_number,

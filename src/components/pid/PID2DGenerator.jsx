@@ -252,14 +252,33 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
   // Draw instrument symbol
   // Draw instrument symbol (ISA-5.1 compliant)
   const drawInstrument = (ctx, instrument, x, y) => {
+    if (!instrument) return
+    
     ctx.save()
     const radius = 20
-    const tag = instrument.tag_number || instrument.tag || ''
+    const tag = instrument.tag_number || instrument.tag || instrument.id || 'XI-001'
     
-    // Get symbol info from engine if available
-    const symbol = instrumentationEngineRef.current 
-      ? instrumentationEngineRef.current.getInstrumentSymbol(instrument)
-      : { circleType: 'field', letters: tag.split('-')[0] || 'XI', showBalloon: true }
+    // Get symbol info from engine if available, with safe fallback
+    let symbol
+    try {
+      symbol = instrumentationEngineRef.current 
+        ? instrumentationEngineRef.current.getInstrumentSymbol(instrument)
+        : { 
+            circleType: 'field', 
+            letters: tag.split('-')[0] || 'XI', 
+            showBalloon: true,
+            loopNumber: '001'
+          }
+    } catch (error) {
+      console.error('Error getting instrument symbol:', error, instrument)
+      // Fallback symbol
+      symbol = { 
+        circleType: 'field', 
+        letters: tag.split('-')[0] || 'XI', 
+        showBalloon: true,
+        loopNumber: '001'
+      }
+    }
 
     // Draw based on mounting location
     if (symbol.circleType === 'dcs') {
@@ -459,8 +478,18 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
     
     // Auto-generate connections if enabled and no manual connections
     if (autoGenerateConnections && connections.length === 0 && pidData?.equipment_list) {
-      connectionsToRoute = pipingEngineRef.current.autoGenerateConnections(pidData.equipment_list)
-      setConnections(connectionsToRoute)
+      if (pipingEngineRef.current && typeof pipingEngineRef.current.autoGenerateConnections === 'function') {
+        try {
+          connectionsToRoute = pipingEngineRef.current.autoGenerateConnections(pidData.equipment_list)
+          setConnections(connectionsToRoute)
+        } catch (error) {
+          console.error('Error auto-generating connections:', error)
+          // Fallback to empty connections array
+          connectionsToRoute = []
+        }
+      } else {
+        console.warn('Piping engine not initialized, cannot auto-generate connections')
+      }
     }
     
     // Extract connections from pidData if available
@@ -470,16 +499,21 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
     }
     
     // Route pipes
-    if (connectionsToRoute.length > 0) {
-      const routes = pipingEngineRef.current.routePipes(
-        equipmentPositions,
-        connectionsToRoute,
-        {
-          routingStrategy,
-          avoidCrossings
-        }
-      )
-      setPipeRoutes(routes)
+    if (connectionsToRoute.length > 0 && pipingEngineRef.current) {
+      try {
+        const routes = pipingEngineRef.current.routePipes(
+          equipmentPositions,
+          connectionsToRoute,
+          {
+            routingStrategy,
+            avoidCrossings
+          }
+        )
+        setPipeRoutes(routes)
+      } catch (error) {
+        console.error('Error routing pipes:', error)
+        setPipeRoutes([])
+      }
     }
   }, [equipmentPositions, routingStrategy, avoidCrossings, autoGenerateConnections, connections])
   
@@ -2264,7 +2298,7 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
       {/* Canvas Area */}
       <div className="flex-1 flex flex-col relative">
         {/* Enhanced Toolbar */}
-        <div className={`bg-white border-b border-gray-200 p-4 flex items-center justify-between ${isFullscreen ? 'bg-opacity-95 backdrop-blur' : ''}`}>
+        <div className={`bg-white border-b border-gray-200 p-4 flex items-center justify-between ${isFullscreen ? 'bg-opacity-95 backdrop-blur relative z-[100]' : ''}`}>
           <div className="flex items-center gap-4">
             {!isFullscreen && (
               <button
@@ -2357,7 +2391,7 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
               
               {/* Integration Panel */}
               {showIntegrationPanel && (
-                <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border-2 border-gray-200 z-50 max-h-96 overflow-y-auto">
+                <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-xl shadow-2xl border-2 border-gray-200 max-h-96 overflow-y-auto" style={{ zIndex: 9999 }}>
                   <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-cyan-50 to-blue-50">
                     <div className="flex items-center justify-between">
                       <h3 className="font-bold text-gray-900">Third-Party Integration</h3>

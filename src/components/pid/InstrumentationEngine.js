@@ -560,24 +560,30 @@ export class InstrumentationEngine {
    * Generate ISA-5.1 compliant instrument symbols
    */
   getInstrumentSymbol(instrument) {
-    const { mountingLocation, functions, measuredVariable } = instrument
+    // Safely extract properties with defaults
+    const mountingLocation = instrument?.mountingLocation || instrument?.mounting_location || 'field'
+    const functions = instrument?.functions || instrument?.function || []
+    const measuredVariable = instrument?.measuredVariable || instrument?.measured_variable || instrument?.variable || 'X'
+    
+    // Ensure functions is an array
+    const functionsArray = Array.isArray(functions) ? functions : [functions].filter(Boolean)
     
     // Determine circle type based on mounting
     let circleType = 'field' // Solid circle
-    if (mountingLocation === this.mountingLocations.panel) {
+    if (mountingLocation === this.mountingLocations.panel || mountingLocation === 'panel') {
       circleType = 'panel' // Circle mounted on line
-    } else if (mountingLocation === this.mountingLocations.dcs) {
+    } else if (mountingLocation === this.mountingLocations.dcs || mountingLocation === 'dcs' || mountingLocation === 'computer') {
       circleType = 'dcs' // Square or hexagon
     }
     
     // Determine if balloon should be shown
-    const showBalloon = functions.includes('C') || functions.includes('I') || functions.includes('R')
+    const showBalloon = functionsArray.includes('C') || functionsArray.includes('I') || functionsArray.includes('R')
     
     return {
       circleType,
       showBalloon,
-      letters: `${measuredVariable}${functions.join('')}`,
-      loopNumber: instrument.loopNumber
+      letters: `${measuredVariable}${functionsArray.join('')}`,
+      loopNumber: instrument?.loopNumber || instrument?.loop_number || '001'
     }
   }
 
