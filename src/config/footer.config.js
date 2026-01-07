@@ -22,8 +22,8 @@ export const FOOTER_CONFIG = {
       city: 'Abu Dhabi, United Arab Emirates'
     },
     phone: {
-      display: '+971 2 639 7449',
-      link: '+97126397449'
+      display: '+971 50 560 6987',
+      link: '+971505606987'
     },
     email: {
       display: 'info@rejlers.ae',
@@ -54,6 +54,12 @@ export const FOOTER_CONFIG = {
         label: 'Sign In',
         url: '/login',
         external: false
+      },
+      {
+        label: 'Enquiry',
+        url: '/enquiry',
+        external: false,
+        highlighted: true // Special styling for new link
       }
     ]
   },

@@ -66,12 +66,12 @@ const Home = () => {
             
             {/* Navigation Links - Modern Style */}
             <div className="hidden md:flex items-center space-x-4 lg:space-x-6">
-              <a href="#features" className="transition-colors font-semibold text-sm lg:text-base" style={{ color: REJLERS_COLORS.neutral.gray600 }} onMouseEnter={(e) => e.target.style.color = REJLERS_COLORS.secondary.green.base} onMouseLeave={(e) => e.target.style.color = REJLERS_COLORS.neutral.gray600}>
+              <Link to="/solutions" className="transition-colors font-semibold text-sm lg:text-base" style={{ color: REJLERS_COLORS.neutral.gray600 }} onMouseEnter={(e) => e.target.style.color = REJLERS_COLORS.secondary.green.base} onMouseLeave={(e) => e.target.style.color = REJLERS_COLORS.neutral.gray600}>
                 Solutions
-              </a>
-              <a href="#about" className="transition-colors font-semibold text-sm lg:text-base" style={{ color: REJLERS_COLORS.neutral.gray600 }} onMouseEnter={(e) => e.target.style.color = REJLERS_COLORS.secondary.green.base} onMouseLeave={(e) => e.target.style.color = REJLERS_COLORS.neutral.gray600}>
+              </Link>
+              <Link to="/about" className="transition-colors font-semibold text-sm lg:text-base" style={{ color: REJLERS_COLORS.neutral.gray600 }} onMouseEnter={(e) => e.target.style.color = REJLERS_COLORS.secondary.green.base} onMouseLeave={(e) => e.target.style.color = REJLERS_COLORS.neutral.gray600}>
                 About
-              </a>
+              </Link>
               <Link 
                 to="/login" 
                 className="group relative px-5 lg:px-7 py-2 lg:py-2.5 text-white text-sm lg:text-base font-bold rounded-full overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-105"

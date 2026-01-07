@@ -12,6 +12,7 @@ import SetupPassword from './pages/SetupPassword'
 import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
+import Enquiry from './pages/Enquiry'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
@@ -29,6 +30,14 @@ import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
+import Solutions from './pages/Solutions'
+import About from './pages/About'
+import PIDAnalysisService from './pages/PIDAnalysisService'
+import PFDConversionService from './pages/PFDConversionService'
+import AssetIntegrityService from './pages/AssetIntegrityService'
+import ConsultingService from './pages/ConsultingService'
+import DataGovernanceService from './pages/DataGovernanceService'
+import SecurityService from './pages/SecurityService'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -176,6 +185,15 @@ function App() {
         
         <Route path="terms-of-service" element={<TermsOfService />} />
         <Route path="privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="enquiry" element={<Enquiry />} />
+        <Route path="solutions" element={<Solutions />} />
+        <Route path="about" element={<About />} />
+        <Route path="services/pid-analysis" element={<PIDAnalysisService />} />
+        <Route path="services/pfd-conversion" element={<PFDConversionService />} />
+        <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
+        <Route path="services/consulting" element={<ConsultingService />} />
+        <Route path="data-governance" element={<DataGovernanceService />} />
+        <Route path="security" element={<SecurityService />} />
         
         {/* Protected Routes */}
         <Route

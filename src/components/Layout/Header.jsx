@@ -87,6 +87,24 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
             {isAuthenticated ? (
               <>
                 <Link
+                  to="/"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  Home
+                </Link>
+                <Link
+                  to="/solutions"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  Solutions
+                </Link>
+                <Link
+                  to="/about"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  About
+                </Link>
+                <Link
                   to="/dashboard"
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
                 >
@@ -110,6 +128,24 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
               </>
             ) : (
               <>
+                <Link
+                  to="/"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  Home
+                </Link>
+                <Link
+                  to="/solutions"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  Solutions
+                </Link>
+                <Link
+                  to="/about"
+                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  About
+                </Link>
                 <Link
                   to="/login"
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"

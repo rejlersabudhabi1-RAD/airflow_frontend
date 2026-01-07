@@ -318,8 +318,8 @@ export const BRANDING_CONFIG = {
     
     // Phone numbers
     phone: {
-      display: '+971 2 639 7449',
-      link: 'tel:+97126397449'
+      display: '+971 50 560 6987',
+      link: 'tel:+971505606987'
     },
     
     // Email addresses
