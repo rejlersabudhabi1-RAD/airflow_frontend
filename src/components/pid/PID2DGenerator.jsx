@@ -521,9 +521,20 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
   const autoRoutePipes = (strategy) => {
     if (!equipmentPositions.length || !pipingEngineRef.current) return
     
+    // Get connections to route (either manual or auto-generated)
+    let connectionsToUse = connections
+    if (connectionsToUse.length === 0 && pidData?.equipment_list) {
+      try {
+        connectionsToUse = pipingEngineRef.current.autoGenerateConnections(pidData?.equipment_list || [])
+      } catch (error) {
+        console.error('Error auto-generating connections in autoRoutePipes:', error)
+        connectionsToUse = []
+      }
+    }
+    
     const routes = pipingEngineRef.current.routePipes(
       equipmentPositions,
-      connections.length > 0 ? connections : pipingEngineRef.current.autoGenerateConnections(pidData?.equipment_list || []),
+      connectionsToUse,
       {
         routingStrategy: strategy,
         avoidCrossings
