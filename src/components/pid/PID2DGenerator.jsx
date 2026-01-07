@@ -615,63 +615,130 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
   
   // Stage 5: Generate and place annotations
   useEffect(() => {
-    if (!equipmentPositions.length || !annotationEngineRef.current) return
+    // Soft coding: Validate all required conditions before proceeding
+    if (!equipmentPositions?.length || !annotationEngineRef.current) return
+    
+    // Validate annotation engine has the required method
+    if (!annotationEngineRef.current || typeof annotationEngineRef.current.generateAnnotations !== 'function') {
+      console.warn('Annotation engine not properly initialized')
+      return
+    }
     
     if (autoGenerateAnnotations) {
-      const diagramData = {
-        equipment: equipmentPositions,
-        pipes: pipeRoutes,
-        instruments: instrumentPositions,
-        processConditions: {
-          flowRates: pipeRoutes.map(p => ({ pipeId: p.id, value: 100, unit: 'm³/h' })),
-          pressures: equipmentPositions.map(e => ({ equipmentId: e.id, value: 2.5, unit: 'bar' })),
-          temperatures: equipmentPositions.map(e => ({ equipmentId: e.id, value: 80, unit: '°C' }))
+      try {
+        // Soft coding: Build diagram data with safe array operations
+        const diagramData = {
+          equipment: equipmentPositions || [],
+          pipes: pipeRoutes || [],
+          instruments: instrumentPositions || [],
+          processConditions: {
+            flowRates: (pipeRoutes || []).map((p, idx) => ({ 
+              pipeId: p?.id || `pipe-${idx}`, 
+              value: 100, 
+              unit: 'm³/h' 
+            })),
+            pressures: (equipmentPositions || []).map((e, idx) => ({ 
+              equipmentId: e?.id || `equipment-${idx}`, 
+              value: 2.5, 
+              unit: 'bar' 
+            })),
+            temperatures: (equipmentPositions || []).map((e, idx) => ({ 
+              equipmentId: e?.id || `equipment-${idx}`, 
+              value: 80, 
+              unit: '°C' 
+            }))
+          }
         }
+        
+        // Soft coding: Configuration object with safe boolean checks
+        const annotationConfig = {
+          includeProcessData: showProcessData === true,
+          includeEquipmentNotes: showEquipmentNotes === true,
+          includeSafetyNotes: showSafetyNotes === true,
+          includeDesignBasis: showDesignBasis === true,
+          includeCallouts: showCallouts === true
+        }
+        
+        const generated = annotationEngineRef.current.generateAnnotations(diagramData, annotationConfig)
+        
+        // Soft coding: Validate generated annotations before setting state
+        if (Array.isArray(generated)) {
+          setAnnotations(generated)
+        } else {
+          console.warn('Generated annotations is not an array, ignoring')
+          setAnnotations([])
+        }
+      } catch (error) {
+        console.error('Error auto-generating annotations:', error)
+        setAnnotations([])
       }
-      
-      const generated = annotationEngineRef.current.generateAnnotations(diagramData, {
-        includeProcessData: showProcessData,
-        includeEquipmentNotes: showEquipmentNotes,
-        includeSafetyNotes: showSafetyNotes,
-        includeDesignBasis: showDesignBasis,
-        includeCallouts: showCallouts
-      })
-      
-      setAnnotations(generated)
     }
   }, [equipmentPositions, pipeRoutes, instrumentPositions, autoGenerateAnnotations, showProcessData, showEquipmentNotes, showSafetyNotes, showDesignBasis, showCallouts])
   
   // Auto-generate specific annotation types
   const autoGenerateAnnotationType = (type) => {
-    if (!annotationEngineRef.current) return
+    // Soft coding: Validate annotation engine exists and has required methods
+    if (!annotationEngineRef.current) {
+      console.warn('Annotation engine not initialized')
+      return
+    }
     
-    const diagramData = {
-      equipment: equipmentPositions,
-      pipes: pipeRoutes,
-      instruments: instrumentPositions,
-      processConditions: {
-        flowRates: pipeRoutes.map(p => ({ pipeId: p.id, value: 100, unit: 'm³/h' })),
-        pressures: equipmentPositions.map(e => ({ equipmentId: e.id, value: 2.5, unit: 'bar' })),
-        temperatures: equipmentPositions.map(e => ({ equipmentId: e.id, value: 80, unit: '°C' }))
+    try {
+      // Soft coding: Build diagram data with safe defaults
+      const diagramData = {
+        equipment: equipmentPositions || [],
+        pipes: pipeRoutes || [],
+        instruments: instrumentPositions || [],
+        processConditions: {
+          flowRates: (pipeRoutes || []).map((p, idx) => ({ 
+            pipeId: p?.id || `pipe-${idx}`, 
+            value: 100, 
+            unit: 'm³/h' 
+          })),
+          pressures: (equipmentPositions || []).map((e, idx) => ({ 
+            equipmentId: e?.id || `equipment-${idx}`, 
+            value: 2.5, 
+            unit: 'bar' 
+          })),
+          temperatures: (equipmentPositions || []).map((e, idx) => ({ 
+            equipmentId: e?.id || `equipment-${idx}`, 
+            value: 80, 
+            unit: '°C' 
+          }))
+        }
       }
+      
+      let newAnnotations = []
+      
+      // Soft coding: Validate method exists before calling
+      switch(type) {
+        case 'process_data':
+          if (typeof annotationEngineRef.current.generateProcessDataAnnotations === 'function') {
+            newAnnotations = annotationEngineRef.current.generateProcessDataAnnotations(diagramData)
+          }
+          break
+        case 'equipment':
+          if (typeof annotationEngineRef.current.generateEquipmentAnnotations === 'function') {
+            newAnnotations = annotationEngineRef.current.generateEquipmentAnnotations(diagramData)
+          }
+          break
+        case 'safety':
+          if (typeof annotationEngineRef.current.generateSafetyAnnotations === 'function') {
+            newAnnotations = annotationEngineRef.current.generateSafetyAnnotations(diagramData)
+          }
+          break
+        default:
+          console.warn(`Unknown annotation type: ${type}`)
+          break
+      }
+      
+      // Soft coding: Validate result is array before updating state
+      if (Array.isArray(newAnnotations) && newAnnotations.length > 0) {
+        setAnnotations(prev => [...(prev || []), ...newAnnotations])
+      }
+    } catch (error) {
+      console.error(`Error generating ${type} annotations:`, error)
     }
-    
-    let newAnnotations = []
-    switch(type) {
-      case 'process_data':
-        newAnnotations = annotationEngineRef.current.generateProcessDataAnnotations(diagramData)
-        break
-      case 'equipment':
-        newAnnotations = annotationEngineRef.current.generateEquipmentAnnotations(diagramData)
-        break
-      case 'safety':
-        newAnnotations = annotationEngineRef.current.generateSafetyAnnotations(diagramData)
-        break
-      default:
-        break
-    }
-    
-    setAnnotations(prev => [...prev, ...newAnnotations])
   }
   
   // Main render function
