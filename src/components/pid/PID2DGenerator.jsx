@@ -13,7 +13,7 @@ import { IntegrationEngine } from './IntegrationEngine'
  * Configuration: src/config/domainExpert.config.js
  */
 
-const PID2DGenerator = ({ pidData, pfdData }) => {
+const PID2DGenerator = ({ pidData, pfdData, conversionId, onLoadToCanvas }) => {
   const canvasRef = useRef(null)
   const placementEngineRef = useRef(null)
   const pipingEngineRef = useRef(null)
@@ -80,6 +80,10 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
   const [autoGenerateAnnotations, setAutoGenerateAnnotations] = useState(false)
   const [selectedAnnotation, setSelectedAnnotation] = useState(null)
   const [showCallouts, setShowCallouts] = useState(false)
+  
+  // P&ID data loading state
+  const [isPIDLoaded, setIsPIDLoaded] = useState(false)
+  const [isLoadingPID, setIsLoadingPID] = useState(false)
 
   // P&ID Canvas Settings (2D) - Dynamic based on fullscreen
   const canvasSettings = {
@@ -1555,8 +1559,11 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
           // Clear sessionStorage after loading
           sessionStorage.removeItem('canvasLoadData');
           
+          // Mark as loaded
+          setIsPIDLoaded(true);
+          
           // Show success notification
-          console.log('✅ Canvas data loaded successfully from AI-generated P&ID!');
+          console.log('✅ Canvas data loaded successfully from programmatic P&ID!');
           
         } catch (error) {
           console.error('Failed to load canvas data:', error);
@@ -1566,6 +1573,24 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
     
     loadCanvasData();
   }, []); // Run once on mount
+  
+  // Manual load function for button click
+  const handleLoadPID = async () => {
+    if (!conversionId || !onLoadToCanvas) {
+      console.warn('No conversion ID or load handler provided');
+      return;
+    }
+    
+    setIsLoadingPID(true);
+    try {
+      await onLoadToCanvas(conversionId);
+      setIsPIDLoaded(true);
+    } catch (error) {
+      console.error('Failed to load P&ID:', error);
+    } finally {
+      setIsLoadingPID(false);
+    }
+  };
 
   const currentStageData = DOMAIN_EXPERT_CONFIG.designStages.find(s => s.id === currentStage)
 
@@ -2474,6 +2499,43 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
         {/* Enhanced Toolbar */}
         <div className={`bg-white border-b border-gray-200 p-4 flex items-center justify-between ${isFullscreen ? 'bg-opacity-95 backdrop-blur relative z-[100]' : ''}`}>
           <div className="flex items-center gap-4">
+            {/* Load P&ID Button */}
+            {conversionId && onLoadToCanvas && !isPIDLoaded && (
+              <button
+                onClick={handleLoadPID}
+                disabled={isLoadingPID}
+                className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 transition-colors flex items-center gap-2 shadow-md disabled:opacity-50"
+                title="Load programmatic P&ID to canvas"
+              >
+                {isLoadingPID ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Loading...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>📐 Load P&ID to Canvas</span>
+                  </>
+                )}
+              </button>
+            )}
+            
+            {/* Status Indicator */}
+            {isPIDLoaded && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm font-medium text-green-700">P&ID Loaded ({equipmentPositions.length} equipment)</span>
+              </div>
+            )}
+            
             {!isFullscreen && (
               <button
                 onClick={() => setShowExpertPanel(!showExpertPanel)}
