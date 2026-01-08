@@ -25,6 +25,9 @@ import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
+import InvoiceUpload from './pages/Finance/InvoiceUpload'
+import InvoiceList from './pages/Finance/InvoiceList'
+import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
@@ -281,6 +284,32 @@ function App() {
           }
         />
 
+
+        {/* Feature Routes - Finance Invoice Automation */}
+        <Route
+          path="finance/upload"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceUpload />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/invoices"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceList />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/invoices/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceDetail />
+            </ModuleProtectedRoute>
+          }
+        />
 
         {/* Project Control */}
         <Route

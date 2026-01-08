@@ -7,6 +7,7 @@ import {
   ChevronRightIcon,
   HomeIcon,
   DocumentTextIcon,
+  DocumentPlusIcon,
   BeakerIcon,
   CogIcon,
   UsersIcon,
@@ -14,7 +15,8 @@ import {
   XMarkIcon,
   Bars3Icon,
   FolderIcon,
-  BriefcaseIcon
+  BriefcaseIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -30,6 +32,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
     crs: true,
+    finance: true,
     projectControl: true,
     admin: true
   })
@@ -121,6 +124,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'pid',
           title: '1.1 P&ID Design Verification',
           icon: DocumentTextIcon,
+  DocumentPlusIcon,
           path: '/pid/upload',
           description: 'AI-powered engineering review',
           moduleCode: 'pid_analysis'
@@ -129,6 +133,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'pfd',
           title: '1.2 PFD to P&ID Converter',
           icon: DocumentTextIcon,
+  DocumentPlusIcon,
           path: '/pfd/upload',
           description: 'Intelligent conversion',
           moduleCode: 'pfd_to_pid'
@@ -146,6 +151,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'crsDocuments',
           title: '2.1 CRS Document Management',
           icon: DocumentTextIcon,
+  DocumentPlusIcon,
           path: '/crs/documents',
           description: 'Centralized CRS repository',
           moduleCode: 'crs_documents'
@@ -154,22 +160,45 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'crsMultipleRevision',
           title: '2.2 CRS Multiple Revision',
           icon: DocumentTextIcon,
+  DocumentPlusIcon,
           path: '/crs/multiple-revision',
           description: 'AI-powered revision tracking',
           moduleCode: 'crs_documents'
         }
       ]
-    },
-    {
-      id: 'projectControl',
-      title: '3. Project Control',
+    },      {
+        id: 'finance',
+        title: '3. Finance Invoice Automation',
+        icon: CurrencyDollarIcon,
+        type: 'section',
+        expanded: expandedSections.finance,
+        children: [
+          {
+            id: 'financeUpload',
+            title: '3.1 Upload Invoice',
+            path: '/finance/upload',
+            icon: DocumentPlusIcon,
+            moduleCode: 'finance'
+          },
+          {
+            id: 'financeInvoices',
+            title: '3.2 Invoice Management',
+            path: '/finance/invoices',
+            icon: DocumentTextIcon,
+            moduleCode: 'finance'
+          }
+        ]
+      },
+      {
+        id: 'projectControl',
+        title: '4. Project Control',
       icon: BriefcaseIcon,
       type: 'section',
       expanded: expandedSections.projectControl,
       children: [
         {
           id: 'projectManagement',
-          title: '3.1 Project Management',
+          title: '4.1 Project Management',
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
@@ -411,3 +440,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 }
 
 export default Sidebar
+
+
+

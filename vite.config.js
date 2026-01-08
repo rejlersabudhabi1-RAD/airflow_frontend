@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
   
   // Smart API URL detection (soft-coded for Docker and production)
   // For local development in Docker, proxy to backend service
-  let apiUrl = 'http://backend:8000'
+  let apiUrl = 'http://localhost:8000'
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
