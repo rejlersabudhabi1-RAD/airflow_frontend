@@ -1471,6 +1471,102 @@ const PID2DGenerator = ({ pidData, pfdData }) => {
     renderPID()
   }, [pidData, zoom, pan, currentStage, flowDirection, layoutStyle, showGrid, showFlowArrows, equipmentPositions, selectedEquipment, pipeRoutes, showPipeLabels, selectedPipe, instrumentPositions, signalRoutes, showInstrumentTags, selectedInstrument, annotations, showProcessData, showEquipmentNotes, showSafetyNotes, selectedAnnotation])
 
+  // Load canvas data from sessionStorage if available (from "Load to Canvas" button)
+  useEffect(() => {
+    const loadCanvasData = () => {
+      const canvasDataStr = sessionStorage.getItem('canvasLoadData');
+      if (canvasDataStr) {
+        try {
+          const canvasData = JSON.parse(canvasDataStr);
+          console.log('🎨 Loading P&ID data into canvas:', canvasData);
+          
+          // Load equipment positions
+          if (canvasData.equipment && canvasData.equipment.length > 0) {
+            const positions = canvasData.equipment.map(eq => ({
+              tag: eq.tag || eq.id,
+              type: eq.type,
+              x: (eq.position.x / 100) * canvasSettings.width,  // Convert % to pixels
+              y: (eq.position.y / 100) * canvasSettings.height,
+              size: eq.size || 'medium',
+              orientation: eq.orientation || 'vertical',
+              draggable: eq.properties?.draggable !== false
+            }));
+            setEquipmentPositions(positions);
+            console.log('✅ Loaded equipment positions:', positions.length);
+          }
+          
+          // Load instrumentation
+          if (canvasData.instrumentation && canvasData.instrumentation.length > 0) {
+            const positions = canvasData.instrumentation.map(inst => ({
+              tag: inst.tag || inst.id,
+              type: inst.type,
+              function: inst.function || 'indicator',
+              x: (inst.position.x / 100) * canvasSettings.width,
+              y: (inst.position.y / 100) * canvasSettings.height,
+              connected_to: inst.connected_to,
+              draggable: inst.properties?.draggable !== false
+            }));
+            setInstrumentPositions(positions);
+            setInstruments(positions);
+            console.log('✅ Loaded instruments:', positions.length);
+          }
+          
+          // Load piping routes
+          if (canvasData.piping && canvasData.piping.length > 0) {
+            const routes = canvasData.piping.map(pipe => ({
+              line_number: pipe.line_number || pipe.id,
+              from: pipe.from,
+              to: pipe.to,
+              waypoints: pipe.waypoints.map(wp => ({
+                x: (wp.x / 100) * canvasSettings.width,
+                y: (wp.y / 100) * canvasSettings.height
+              })),
+              pipe_size: pipe.size,
+              specification: pipe.specification,
+              flow_direction: pipe.flow_direction || 'forward'
+            }));
+            setPipeRoutes(routes);
+            console.log('✅ Loaded pipe routes:', routes.length);
+          }
+          
+          // Load annotations
+          if (canvasData.annotations && canvasData.annotations.length > 0) {
+            const notes = canvasData.annotations.map(ann => ({
+              id: ann.id,
+              type: ann.type,
+              text: ann.text,
+              x: (ann.position.x / 100) * canvasSettings.width,
+              y: (ann.position.y / 100) * canvasSettings.height,
+              related_to: ann.related_to
+            }));
+            setAnnotations(notes);
+            console.log('✅ Loaded annotations:', notes.length);
+          }
+          
+          // Set layout from metadata
+          if (canvasData.layout) {
+            if (canvasData.layout.flow_direction === 'left-to-right') {
+              setFlowDirection('left-to-right');
+            } else if (canvasData.layout.flow_direction === 'top-to-bottom') {
+              setFlowDirection('top-to-bottom');
+            }
+          }
+          
+          // Clear sessionStorage after loading
+          sessionStorage.removeItem('canvasLoadData');
+          
+          // Show success notification
+          console.log('✅ Canvas data loaded successfully from AI-generated P&ID!');
+          
+        } catch (error) {
+          console.error('Failed to load canvas data:', error);
+        }
+      }
+    };
+    
+    loadCanvasData();
+  }, []); // Run once on mount
+
   const currentStageData = DOMAIN_EXPERT_CONFIG.designStages.find(s => s.id === currentStage)
 
   const toggleChecklistItem = (id) => {

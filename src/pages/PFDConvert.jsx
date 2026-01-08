@@ -165,6 +165,66 @@ const PFDConvert = () => {
     }
   };
 
+  const loadToCanvas = async (conversionId) => {
+    if (!conversionId) return;
+    
+    try {
+      // Show loading notification
+      const loadingToast = document.createElement('div');
+      loadingToast.className = 'fixed top-4 right-4 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-3';
+      loadingToast.innerHTML = `
+        <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>🎨 Converting P&ID to canvas format...</span>
+      `;
+      document.body.appendChild(loadingToast);
+      
+      // Call API to convert P&ID to canvas data
+      const response = await apiClient.get(
+        `/pfd/conversions/${conversionId}/load-to-canvas/`
+      );
+      
+      // Remove loading notification
+      document.body.removeChild(loadingToast);
+      
+      const canvasData = response.data;
+      
+      console.log('Canvas data loaded:', canvasData);
+      console.log('Equipment items:', canvasData.equipment?.length || 0);
+      console.log('Instruments:', canvasData.instrumentation?.length || 0);
+      
+      // Store canvas data in sessionStorage for the editor to pick up
+      sessionStorage.setItem('canvasLoadData', JSON.stringify(canvasData));
+      
+      // Switch to 2D diagram view mode to load the canvas
+      setViewMode('2d-diagram');
+      
+      // Show success notification
+      const successToast = document.createElement('div');
+      successToast.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-3';
+      successToast.innerHTML = `
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span>✅ P&ID loaded into Expert Mode canvas! ${canvasData.equipment?.length || 0} equipment, ${canvasData.instrumentation?.length || 0} instruments</span>
+      `;
+      document.body.appendChild(successToast);
+      
+      setTimeout(() => {
+        document.body.removeChild(successToast);
+      }, 5000);
+      
+    } catch (err) {
+      console.error('Failed to load P&ID to canvas:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to convert P&ID to canvas format';
+      const detail = err.response?.data?.detail || 'The P&ID may not be available or the conversion service may be unavailable.';
+      
+      alert(`Canvas Load Failed: ${errorMsg}\n\n${detail}\n\nThis feature uses GPT-4 Vision to extract elements from the P&ID drawing.`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50 flex items-center justify-center">
@@ -267,8 +327,8 @@ const PFDConvert = () => {
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mr-4"></div>
               <div>
-                <h3 className="text-lg font-semibold mb-1">🚀 AI is Generating P&ID...</h3>
-                <p className="text-purple-100">Using SFILES2-enhanced RAG system with learned patterns from 15+ engineering documents</p>
+                <h3 className="text-lg font-semibold mb-1">🚀 Generating Professional P&ID...</h3>
+                <p className="text-purple-100">Using programmatic CAD-style generator with ISA 5.1 standards and ROBOFLOW specifications</p>
               </div>
             </div>
           </div>
@@ -451,6 +511,15 @@ const PFDConvert = () => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                                 Regenerate P&ID
+                              </button>
+                              <button
+                                onClick={() => loadToCanvas(pidConversion.id)}
+                                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 font-medium transition-colors flex items-center shadow-lg"
+                              >
+                                <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                ✏️ Edit in Canvas (Expert Mode)
                               </button>
                               <button
                                 onClick={downloadPIDSpec}
