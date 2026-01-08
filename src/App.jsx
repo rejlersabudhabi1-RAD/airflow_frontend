@@ -12,7 +12,6 @@ import SetupPassword from './pages/SetupPassword'
 import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
-import Enquiry from './pages/Enquiry'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
@@ -26,18 +25,14 @@ import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
+import InvoiceUpload from './pages/Finance/InvoiceUpload'
+import InvoiceList from './pages/Finance/InvoiceList'
+import InvoiceDetail from './pages/Finance/InvoiceDetail'
+import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
-import Solutions from './pages/Solutions'
-import About from './pages/About'
-import PIDAnalysisService from './pages/PIDAnalysisService'
-import PFDConversionService from './pages/PFDConversionService'
-import AssetIntegrityService from './pages/AssetIntegrityService'
-import ConsultingService from './pages/ConsultingService'
-import DataGovernanceService from './pages/DataGovernanceService'
-import SecurityService from './pages/SecurityService'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -180,20 +175,14 @@ function App() {
         {/* Password Reset Routes - Public */}
         <Route path="setup-password" element={<SetupPassword />} />
         <Route path="reset-password" element={<SetupPassword />} />
+        
+        {/* Finance Approval - Public Route */}
+        <Route path="finance/approve/:token" element={<InvoiceApproval />} />
         <Route path="request-password-reset" element={<RequestPasswordReset />} />
         <Route path="forgot-password" element={<RequestPasswordReset />} />
         
         <Route path="terms-of-service" element={<TermsOfService />} />
         <Route path="privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="enquiry" element={<Enquiry />} />
-        <Route path="solutions" element={<Solutions />} />
-        <Route path="about" element={<About />} />
-        <Route path="services/pid-analysis" element={<PIDAnalysisService />} />
-        <Route path="services/pfd-conversion" element={<PFDConversionService />} />
-        <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
-        <Route path="services/consulting" element={<ConsultingService />} />
-        <Route path="data-governance" element={<DataGovernanceService />} />
-        <Route path="security" element={<SecurityService />} />
         
         {/* Protected Routes */}
         <Route
@@ -299,6 +288,32 @@ function App() {
           }
         />
 
+
+        {/* Feature Routes - Finance Invoice Automation */}
+        <Route
+          path="finance/upload"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceUpload />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/invoices"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceList />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/invoices/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceDetail />
+            </ModuleProtectedRoute>
+          }
+        />
 
         {/* Project Control */}
         <Route
