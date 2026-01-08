@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import crsService from '../services/crsService';
 import { API_BASE_URL } from '../config/api.config';
 import { STORAGE_KEYS } from '../config/app.config';
@@ -137,9 +138,25 @@ const CRSDocuments = () => {
       const data = await response.json();
       
       if (data.preview && data.comments) {
+        // Smart filtering: Remove comments with "Not Provided" or empty reviewers (client-side fallback)
+        const notProvidedPatterns = ['not provided', 'not_provided', 'unknown', 'n/a', 'na', ''];
+        const filteredComments = data.comments.filter(comment => {
+          const reviewer = (comment.reviewer_name || '').toLowerCase().trim();
+          return !notProvidedPatterns.includes(reviewer) && reviewer.length > 0;
+        });
+        
+        // Recalculate statistics based on filtered comments
+        const adjustedStatistics = {
+          ...data.statistics,
+          total: filteredComments.length,
+          filtered_count: data.comments.length - filteredComments.length
+        };
+        
         // Store preview data and show preview modal
         setPreviewData({
           ...data,
+          comments: filteredComments, // Use filtered comments
+          statistics: adjustedStatistics, // Use adjusted statistics
           file: uploadFile,
           fileMetadata: { ...fileMetadata }
         });
@@ -147,7 +164,7 @@ const CRSDocuments = () => {
         setShowPreviewModal(true);
         setUploadResult({
           success: true,
-          message: `Extracted ${data.comments.length} comments. Review below and choose download format.`
+          message: `Extracted ${filteredComments.length} comments${adjustedStatistics.filtered_count > 0 ? ` (filtered ${adjustedStatistics.filtered_count} without reviewer attribution)` : ''}. Review below and choose download format.`
         });
       } else {
         // Fallback for non-preview response
@@ -169,69 +186,111 @@ const CRSDocuments = () => {
     }
   };
 
-  // NEW: Handle download in specific format
-  const handleDownload = async (format) => {
-    if (!previewData || !previewData.file) {
-      alert('No file data available for download');
+  // NEW: Generate and download Excel directly from preview data
+  const handleDownload = (format) => {
+    if (!previewData || !previewData.comments || previewData.comments.length === 0) {
+      alert('No comment data available for download');
       return;
     }
-    
+
     setDownloadingFormat(format);
-    
+
     try {
-      const formData = new FormData();
-      formData.append('file', previewData.file);
-      formData.append('project_name', previewData.fileMetadata.project_name);
-      formData.append('document_number', previewData.fileMetadata.document_number);
-      formData.append('revision', previewData.fileMetadata.revision);
-      formData.append('contractor', previewData.fileMetadata.contractor);
-      formData.append('department', previewData.fileMetadata.department);
-      formData.append('preview', 'false');
-      formData.append('format', format);
-      
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      
-      const response = await fetch(
-        `${API_BASE_URL}/crs/documents/upload-and-process/`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          body: formData
-        }
-      );
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Download failed');
+      const docNumber = previewData.fileMetadata?.document_number || 'Document';
+      const timestamp = new Date().toISOString().split('T')[0];
+
+      if (format === 'xlsx') {
+        // Create Excel workbook using xlsx library
+        const wb = XLSX.utils.book_new();
+        
+        // Define headers matching CRS template
+        const headers = ['Page', 'Reviewer', 'Comment', 'Type', 'Discipline', 'Drawing Ref', 'Status'];
+        
+        // Map comment data to Excel rows
+        const wsData = [
+          headers,
+          ...previewData.comments.map(comment => [
+            comment.page_number || 'N/A',
+            comment.reviewer_name || 'N/A',
+            comment.comment_text || '',
+            (comment.type || 'General').toUpperCase() === 'HOLD' ? 'HOLD' : 'General',
+            comment.discipline || 'N/A',
+            comment.drawing_reference || 'N/A',
+            comment.status || 'Open'
+          ])
+        ];
+        
+        // Create worksheet with data
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // Set column widths for readability
+        ws['!cols'] = [
+          {wch: 8},  // Page
+          {wch: 20}, // Reviewer
+          {wch: 50}, // Comment
+          {wch: 12}, // Type
+          {wch: 15}, // Discipline
+          {wch: 20}, // Drawing Ref
+          {wch: 10}  // Status
+        ];
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'CRS Comments');
+        
+        // Generate Excel file and download
+        XLSX.writeFile(wb, `CRS_${docNumber}_${timestamp}.xlsx`);
+        
+      } else if (format === 'csv') {
+        // Create CSV data
+        const headers = ['Page', 'Reviewer', 'Comment', 'Type', 'Discipline', 'Drawing Ref', 'Status'];
+        const rows = previewData.comments.map(comment => [
+          comment.page_number || 'N/A',
+          comment.reviewer_name || 'N/A',
+          `"${(comment.comment_text || '').replace(/"/g, '""')}"`, // Escape quotes
+          (comment.type || 'General').toUpperCase() === 'HOLD' ? 'HOLD' : 'General',
+          comment.discipline || 'N/A',
+          comment.drawing_reference || 'N/A',
+          comment.status || 'Open'
+        ]);
+        
+        const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CRS_${docNumber}_${timestamp}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+      } else if (format === 'json') {
+        // Create JSON data
+        const jsonData = {
+          metadata: previewData.fileMetadata || {},
+          statistics: previewData.statistics || {},
+          comments: previewData.comments,
+          exported_at: new Date().toISOString()
+        };
+        
+        const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CRS_${docNumber}_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
       }
       
-      // Download the file
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      
-      const docNumber = previewData.fileMetadata.document_number || 'Document';
-      const extMap = { xlsx: 'xlsx', csv: 'csv', json: 'json', pdf: 'pdf' };
-      const ext = extMap[format] || format;
-      a.download = `CRS_${docNumber}.${ext}`;
-      
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
     } catch (error) {
-      console.error('Error downloading:', error);
-      alert('Failed to download: ' + error.message);
+      console.error('Error generating download:', error);
+      alert('Failed to generate download: ' + error.message);
     } finally {
       setDownloadingFormat(null);
     }
-  };
-
-  // NEW: Close preview and reset
+  };  // NEW: Close preview and reset
   const handleClosePreview = () => {
     setShowPreviewModal(false);
     setPreviewData(null);

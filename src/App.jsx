@@ -28,6 +28,7 @@ import ProjectControl from './pages/ProjectControl'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
+import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
@@ -174,6 +175,9 @@ function App() {
         {/* Password Reset Routes - Public */}
         <Route path="setup-password" element={<SetupPassword />} />
         <Route path="reset-password" element={<SetupPassword />} />
+        
+        {/* Finance Approval - Public Route */}
+        <Route path="finance/approve/:token" element={<InvoiceApproval />} />
         <Route path="request-password-reset" element={<RequestPasswordReset />} />
         <Route path="forgot-password" element={<RequestPasswordReset />} />
         
