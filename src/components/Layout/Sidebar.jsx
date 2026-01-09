@@ -124,7 +124,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'pid',
           title: '1.1 P&ID Design Verification',
           icon: DocumentTextIcon,
-  DocumentPlusIcon,
           path: '/pid/upload',
           description: 'AI-powered engineering review',
           moduleCode: 'pid_analysis'
@@ -133,7 +132,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'pfd',
           title: '1.2 PFD to P&ID Converter',
           icon: DocumentTextIcon,
-  DocumentPlusIcon,
           path: '/pfd/upload',
           description: 'Intelligent conversion',
           moduleCode: 'pfd_to_pid'
@@ -151,7 +149,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'crsDocuments',
           title: '2.1 CRS Document Management',
           icon: DocumentTextIcon,
-  DocumentPlusIcon,
           path: '/crs/documents',
           description: 'Centralized CRS repository',
           moduleCode: 'crs_documents'
@@ -160,7 +157,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           id: 'crsMultipleRevision',
           title: '2.2 CRS Multiple Revision',
           icon: DocumentTextIcon,
-  DocumentPlusIcon,
           path: '/crs/multiple-revision',
           description: 'AI-powered revision tracking',
           moduleCode: 'crs_documents'
@@ -251,7 +247,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '4. User Management',
+      title: '5. User Management',
       icon: UsersIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -259,14 +255,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '4.1 Admin Dashboard',
+          title: '5.1 Admin Dashboard',
           icon: ChartBarIcon,
           path: '/admin',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '4.2 Manage Users & Roles',
+          title: '5.2 Manage Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
