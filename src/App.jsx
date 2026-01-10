@@ -21,6 +21,7 @@ import PFDUpload from './pages/PFDUpload'
 import PFDAnalysisConsole from './pages/PFDAnalysisConsole'
 import PFDConvert from './pages/PFDConvert'
 import PFDHistory from './pages/PFDHistory'
+import PFDFiveStageAnalysis from './pages/PFDFiveStageAnalysis'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
@@ -290,6 +291,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDHistory />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/analysis/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDFiveStageAnalysis />
             </ModuleProtectedRoute>
           }
         />
