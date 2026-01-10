@@ -107,7 +107,7 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f9fafb 0%, #e3f2f4 30%, #d4ede7 70%, #fce4e5 100%)' }}>
+    <div className="h-screen flex flex-col lg:flex-row relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #f9fafb 0%, #e3f2f4 30%, #d4ede7 70%, #fce4e5 100%)' }}>
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Floating Technical Particles */}

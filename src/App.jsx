@@ -18,9 +18,11 @@ import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
 import PFDUpload from './pages/PFDUpload'
+import PFDAnalysisConsole from './pages/PFDAnalysisConsole'
 import PFDConvert from './pages/PFDConvert'
 import PFDHistory from './pages/PFDHistory'
 import S3PFDBrowser from './pages/S3PFDBrowser'
+import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSMultipleRevision from './pages/CRSMultipleRevision'
@@ -33,6 +35,14 @@ import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
+import Solutions from './pages/Solutions'
+import Enquiry from './pages/Enquiry'
+import ConsultingService from './pages/ConsultingService'
+import PFDConversionService from './pages/PFDConversionService'
+import AssetIntegrityService from './pages/AssetIntegrityService'
+import DataGovernanceService from './pages/DataGovernanceService'
+import SecurityService from './pages/SecurityService'
+import About from './pages/About'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -154,6 +164,20 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           
+          {/* Solutions Page */}
+          <Route path="solutions" element={<Solutions />} />
+          
+          {/* Enquiry Page */}
+          <Route path="enquiry" element={<Enquiry />} />
+          
+          {/* Services */}
+          <Route path="services/consulting" element={<ConsultingService />} />
+          <Route path="services/pfd-conversion" element={<PFDConversionService />} />
+          <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
+          <Route path="data-governance" element={<DataGovernanceService />} />
+          <Route path="security" element={<SecurityService />} />
+          <Route path="about" element={<About />} />
+          
           {/* Public Routes */}
         <Route
           path="login"
@@ -238,6 +262,14 @@ function App() {
           }
         />
         <Route
+          path="pfd/analyze/:documentId"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDAnalysisConsole />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="pfd/convert/:documentId"
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
@@ -258,6 +290,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDHistory />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/s3-management"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <S3Management />
             </ModuleProtectedRoute>
           }
         />

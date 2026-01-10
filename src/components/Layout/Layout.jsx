@@ -18,22 +18,23 @@ const Layout = () => {
   // Routes where sidebar should be hidden
   const publicRoutes = ['/', '/login', '/register', '/home', '/enquiry', '/solutions', '/about', '/services/pid-analysis', '/services/pfd-conversion', '/services/asset-integrity', '/services/consulting', '/data-governance', '/security', '/terms-of-service', '/privacy-policy']
   
-  // Check if current path is a PFD/PID conversion page (these need full width)
-  const isConversionPage = location.pathname.includes('/pfd/convert') || 
-                          location.pathname.includes('/pid/')
+  // Check if current path is a conversion/analysis page that needs full width
+  const isFullWidthPage = location.pathname.includes('/pfd/convert') || 
+                          location.pathname.includes('/pfd/analyze') ||
+                          location.pathname.includes('/pid/report')
   
-  const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname) && !isConversionPage
+  const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname) && !isFullWidthPage
   
   // Log sidebar state for debugging
   React.useEffect(() => {
     console.log('📐 Layout State:', {
       isAuthenticated,
       currentPath: location.pathname,
-      isConversionPage: location.pathname.includes('/pfd/convert') || location.pathname.includes('/pid/'),
+      isFullWidthPage,
       showSidebar,
       sidebarOpen
     })
-  }, [isAuthenticated, location.pathname, showSidebar, sidebarOpen])
+  }, [isAuthenticated, location.pathname, showSidebar, sidebarOpen, isFullWidthPage])
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
