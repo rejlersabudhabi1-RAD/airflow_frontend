@@ -35,6 +35,14 @@ import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
+import Solutions from './pages/Solutions'
+import Enquiry from './pages/Enquiry'
+import ConsultingService from './pages/ConsultingService'
+import PFDConversionService from './pages/PFDConversionService'
+import AssetIntegrityService from './pages/AssetIntegrityService'
+import DataGovernanceService from './pages/DataGovernanceService'
+import SecurityService from './pages/SecurityService'
+import About from './pages/About'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -155,6 +163,20 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
+          
+          {/* Solutions Page */}
+          <Route path="solutions" element={<Solutions />} />
+          
+          {/* Enquiry Page */}
+          <Route path="enquiry" element={<Enquiry />} />
+          
+          {/* Services */}
+          <Route path="services/consulting" element={<ConsultingService />} />
+          <Route path="services/pfd-conversion" element={<PFDConversionService />} />
+          <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
+          <Route path="data-governance" element={<DataGovernanceService />} />
+          <Route path="security" element={<SecurityService />} />
+          <Route path="about" element={<About />} />
           
           {/* Public Routes */}
         <Route
