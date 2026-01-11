@@ -124,7 +124,25 @@ const PFDUploadNew = () => {
 
     } catch (err) {
       console.error('Upload failed:', err);
-      setError(err.response?.data?.error || 'Upload failed. Please try again.');
+      
+      // Extract error information with fallbacks
+      const errorData = err.response?.data || {};
+      const errorMessage = errorData.message || errorData.error || 'Upload failed';
+      const suggestions = errorData.suggestions || [];
+      const technicalDetail = errorData.technical_detail || errorData.detail || '';
+      
+      // Build user-friendly error message
+      let displayMessage = errorMessage;
+      
+      if (suggestions.length > 0) {
+        displayMessage += '\n\nSuggestions:\n' + suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n');
+      }
+      
+      if (technicalDetail && technicalDetail.trim() !== '') {
+        displayMessage += '\n\nTechnical Details: ' + technicalDetail;
+      }
+      
+      setError(displayMessage);
       setUploading(false);
       setProgress(0);
     }
