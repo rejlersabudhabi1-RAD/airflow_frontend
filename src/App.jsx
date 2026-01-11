@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL } from './config/api.config'
+import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import Home from './pages/Home'
@@ -17,10 +18,14 @@ import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
-import PFDUpload from './pages/PFDUpload'
+// Soft-coded PFD Upload - Use different components based on environment
+import PFDUploadClassic from './pages/PFDUpload'
+import PFDUploadNew from './pages/PFDUploadNew'
+const PFDUpload = FEATURE_FLAGS.pfdUploadVersion === 'new' ? PFDUploadNew : PFDUploadClassic
 import PFDAnalysisConsole from './pages/PFDAnalysisConsole'
 import PFDConvert from './pages/PFDConvert'
 import PFDHistory from './pages/PFDHistory'
+import PFDFiveStageAnalysis from './pages/PFDFiveStageAnalysis'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
@@ -49,6 +54,10 @@ function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
   const [modulesLoaded, setModulesLoaded] = useState(false)
+
+  // Log environment and component selection
+  console.log('🎯 App Environment:', ENV)
+  console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
 
   // Fetch user modules on mount
   useEffect(() => {
@@ -290,6 +299,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDHistory />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/analysis/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDFiveStageAnalysis />
             </ModuleProtectedRoute>
           }
         />
