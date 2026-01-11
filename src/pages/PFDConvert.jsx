@@ -130,6 +130,47 @@ const PFDConvert = () => {
     await autoGeneratePID();
   };
 
+  const generateIntelligentPID = async () => {
+    if (!pfdDocument) {
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      
+      // Generate P&ID drawing number
+      const pfdNumber = pfdDocument.document_number || 'PFD-001';
+      const pidNumber = pfdNumber.replace('PFD', 'P&ID') + '-INT';
+      
+      const requestData = {
+        pfd_document_id: documentId,
+        pid_drawing_number: pidNumber,
+        pid_title: (pfdDocument.document_title || 'Generated P&ID') + ' (Intelligent)',
+        pid_revision: pfdDocument.revision || 'A',
+        // reference_pid_path can be provided by user or use default
+      };
+
+      // Extended timeout for intelligent generation (AI pattern learning)
+      const response = await apiClient.post('/pfd/conversions/intelligent-generate/', requestData, {
+        timeout: 360000 // 6 minutes for pattern learning + generation
+      });
+      
+      setPidConversion(response.data);
+      setActiveTab('pid');
+      
+    } catch (err) {
+      console.error('Intelligent P&ID generation failed:', err);
+      
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError('Intelligent P&ID generation is taking longer than expected. The process may still be running. Please refresh the page in a few moments.');
+      } else {
+        setError(err.response?.data?.error || err.response?.data?.detail || 'Intelligent P&ID generation failed. Please try again.');
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const downloadPIDSpec = () => {
     if (!pidConversion) return;
     
@@ -559,13 +600,45 @@ const PFDConvert = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">No P&ID Generated Yet</h3>
-                    <p className="text-gray-600 mb-6">Generate a P&ID from the extracted PFD data</p>
-                    <button
-                      onClick={autoGeneratePID}
-                      className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 font-medium transition-all shadow-lg"
-                    >
-                      🚀 Generate P&ID with AI
-                    </button>
+                    <p className="text-gray-600 mb-6">Generate a P&ID from the extracted PFD data using AI</p>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
+                      {/* Standard Generation */}
+                      <div className="flex-1 w-full">
+                        <button
+                          onClick={autoGeneratePID}
+                          className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 font-medium transition-all shadow-lg flex items-center justify-center"
+                        >
+                          <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          🚀 Standard Generation
+                        </button>
+                        <p className="text-xs text-gray-500 mt-2">Fast AI generation with industry standards</p>
+                      </div>
+                      
+                      {/* Intelligent Generation */}
+                      <div className="flex-1 w-full">
+                        <button
+                          onClick={generateIntelligentPID}
+                          className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 font-medium transition-all shadow-lg flex items-center justify-center border-2 border-blue-400"
+                        >
+                          <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          🧠 Intelligent Generation
+                        </button>
+                        <p className="text-xs text-gray-500 mt-2">AI learns from reference P&IDs for exact style matching</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg max-w-2xl mx-auto text-left">
+                      <h4 className="font-semibold text-blue-900 mb-2">💡 What's the difference?</h4>
+                      <ul className="text-sm text-blue-800 space-y-1">
+                        <li>• <strong>Standard:</strong> Fast generation using pre-configured rules (~2 min)</li>
+                        <li>• <strong>Intelligent:</strong> Learns style from your reference P&IDs (~6 min)</li>
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>
