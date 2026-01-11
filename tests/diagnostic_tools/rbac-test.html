@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBAC API Test - AIFlow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .test-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .loading {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        
+        .login-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .token-display {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 6px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-card {
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 RBAC API Test Dashboard</h1>
+        <p class="subtitle">Test AIFlow Super Admin Dashboard APIs</p>
+        
+        <!-- Login Section -->
+        <div class="test-section">
+            <h2>1. Authentication</h2>
+            <div class="login-form">
+                <input type="email" id="email" placeholder="Email" value="tanzeem.agra@rejlers.ae">
+                <input type="password" id="password" placeholder="Password" value="Tanzeem@123">
+                <button onclick="login()">Login</button>
+            </div>
+            <div id="auth-result"></div>
+        </div>
+        
+        <!-- User Stats Section -->
+        <div class="test-section">
+            <h2>2. User Statistics</h2>
+            <button onclick="getUserStats()">Get User Stats</button>
+            <div id="stats-result"></div>
+        </div>
+        
+        <!-- Users List Section -->
+        <div class="test-section">
+            <h2>3. Users List</h2>
+            <button onclick="getUsers()">Get All Users</button>
+            <button onclick="getCurrentUser()">Get Current User</button>
+            <div id="users-result"></div>
+        </div>
+        
+        <!-- Roles Section -->
+        <div class="test-section">
+            <h2>4. Roles</h2>
+            <button onclick="getRoles()">Get All Roles</button>
+            <div id="roles-result"></div>
+        </div>
+        
+        <!-- Permissions Section -->
+        <div class="test-section">
+            <h2>5. Permissions</h2>
+            <button onclick="getPermissions()">Get All Permissions</button>
+            <div id="permissions-result"></div>
+        </div>
+        
+        <!-- Modules Section -->
+        <div class="test-section">
+            <h2>6. Modules</h2>
+            <button onclick="getModules()">Get All Modules</button>
+            <div id="modules-result"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE_URL = 'https://aiflowbackend-production.up.railway.app/api/v1';
+        let authToken = localStorage.getItem('authToken') || '';
+        
+        // Update all buttons state based on auth
+        function updateButtonsState() {
+            const buttons = document.querySelectorAll('button:not([onclick="login()"])');
+            buttons.forEach(btn => {
+                btn.disabled = !authToken;
+            });
+        }
+        
+        // Initialize
+        updateButtonsState();
+        if (authToken) {
+            document.getElementById('auth-result').innerHTML = `
+                <div class="success">✓ Already logged in</div>
+                <div class="token-display">Token: ${authToken.substring(0, 50)}...</div>
+            `;
+        }
+        
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('auth-result');
+            
+            resultDiv.innerHTML = '<div class="loading">⏳ Logging in...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authToken = data.access;
+                    localStorage.setItem('authToken', authToken);
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Login successful!</div>
+                        <div class="token-display">Token: ${authToken.substring(0, 50)}...</div>
+                    `;
+                    updateButtonsState();
+                } else {
+                    resultDiv.innerHTML = `<div class="error">✗ Login failed: ${JSON.stringify(data)}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function apiCall(endpoint, resultDivId) {
+            const resultDiv = document.getElementById(resultDivId);
+            resultDiv.innerHTML = '<div class="loading">⏳ Loading...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Success!</div>
+                        <div class="result">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Error ${response.status}</div>
+                        <div class="result">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function getUserStats() {
+            const resultDiv = document.getElementById('stats-result');
+            resultDiv.innerHTML = '<div class="loading">⏳ Loading stats...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/rbac/users/stats/`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✓ Stats loaded successfully!</div>
+                        <div class="stats">
+                            <div class="stat-card">
+                                <h3>Total Users</h3>
+                                <div class="value">${data.total_users || 0}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Active</h3>
+                                <div class="value">${data.active_users || 0}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Pending</h3>
+                                <div class="value">${data.pending_users || 0}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Suspended</h3>
+                                <div class="value">${data.suspended_users || 0}</div>
+                            </div>
+                        </div>
+                        <div class="result" style="margin-top: 15px;">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">✗ Error ${response.status}</div>
+                        <div class="result">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ Error: ${error.message}</div>`;
+            }
+        }
+        
+        function getUsers() {
+            apiCall('/rbac/users/', 'users-result');
+        }
+        
+        function getCurrentUser() {
+            apiCall('/rbac/users/me/', 'users-result');
+        }
+        
+        function getRoles() {
+            apiCall('/rbac/roles/', 'roles-result');
+        }
+        
+        function getPermissions() {
+            apiCall('/rbac/permissions/', 'permissions-result');
+        }
+        
+        function getModules() {
+            apiCall('/rbac/modules/', 'modules-result');
+        }
+    </script>
+</body>
+</html>
