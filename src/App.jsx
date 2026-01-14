@@ -6,6 +6,7 @@ import { API_BASE_URL } from './config/api.config'
 import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
+import ChangePasswordModal from './components/Auth/ChangePasswordModal'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -54,6 +55,7 @@ function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
   const [modulesLoaded, setModulesLoaded] = useState(false)
+  const [mustChangePassword, setMustChangePassword] = useState(false)
 
   // Log environment and component selection
   console.log('🎯 App Environment:', ENV)
@@ -85,6 +87,11 @@ function App() {
         
         const data = await response.json()
         console.log('🔐 App: Full user data:', data)
+        
+        // Check must_change_password flag
+        if (data.must_change_password === true) {
+          setMustChangePassword(true)
+        }
         
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
@@ -166,20 +173,51 @@ function App() {
   const PublicRoute = ({ children }) => {
     return !isAuthenticated ? children : <Navigate to="/dashboard" replace />
   }
+  
+  // Handle password change success
+  const handlePasswordChangeSuccess = async () => {
+    setMustChangePassword(false)
+    // Refresh user data
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
+      const apiUrl = `${API_BASE_URL}/rbac/users/me/`
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setMustChangePassword(data.must_change_password === true)
+      }
+    } catch (error) {
+      console.error('Failed to refresh user data:', error)
+    }
+  }
 
   return (
-    <FirstLoginCheck>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          
-          {/* Solutions Page */}
-          <Route path="solutions" element={<Solutions />} />
-          
-          {/* Enquiry Page */}
-          <Route path="enquiry" element={<Enquiry />} />
-          
-          {/* Services */}
+    <>
+      {/* Password Change Modal - shown globally when required */}
+      {isAuthenticated && mustChangePassword && (
+        <ChangePasswordModal
+          isOpen={true}
+          isRequired={true}
+          onSuccess={handlePasswordChangeSuccess}
+        />
+      )}
+      
+      <FirstLoginCheck>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            
+            {/* Solutions Page */}
+            <Route path="solutions" element={<Solutions />} />
+            
+            {/* Enquiry Page */}
+            <Route path="enquiry" element={<Enquiry />} />
+            
+            {/* Services */}
           <Route path="services/consulting" element={<ConsultingService />} />
           <Route path="services/pfd-conversion" element={<PFDConversionService />} />
           <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
@@ -425,6 +463,7 @@ function App() {
       </Route>
     </Routes>
     </FirstLoginCheck>
+    </>
   )
 }
 
