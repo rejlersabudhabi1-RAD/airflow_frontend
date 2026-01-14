@@ -412,6 +412,26 @@ const Profile = () => {
                     <span className="text-gray-900">{profileData.employee_id}</span>
                   </div>
                 )}
+                
+                {formData.phone && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 flex items-center space-x-1">
+                      <Phone className="w-4 h-4" />
+                      <span>Phone</span>
+                    </span>
+                    <span className="text-gray-900">{formData.phone}</span>
+                  </div>
+                )}
+                
+                {formData.location && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 flex items-center space-x-1">
+                      <MapPin className="w-4 h-4" />
+                      <span>Location</span>
+                    </span>
+                    <span className="text-gray-900 text-right">{formData.location}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
