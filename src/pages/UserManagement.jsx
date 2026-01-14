@@ -801,6 +801,36 @@ const UserManagement = () => {
       setActionLoading({ [`delete_${userId}`]: false });
     }
   };
+
+  const handleResetPassword = async (userId, userEmail) => {
+    const { confirmAdminPasswordReset, ADMIN_PASSWORD_RESET_CONFIG } = await import('../config/passwordReset.config');
+    
+    if (!confirmAdminPasswordReset(userEmail)) {
+      return;
+    }
+    
+    try {
+      setActionLoading({ [`reset_${userId}`]: true });
+      
+      await rbacService.resetUserPassword(userId);
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: ADMIN_PASSWORD_RESET_CONFIG.UI.successMessage
+      });
+      
+    } catch (error) {
+      console.error('[UserManagement] Reset password error:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.message || ADMIN_PASSWORD_RESET_CONFIG.UI.errorMessage
+      });
+    } finally {
+      setActionLoading({ [`reset_${userId}`]: false });
+    }
+  };
   
   const openEditModal = (user) => {
     setSelectedUser(user);
@@ -1499,6 +1529,16 @@ const UserManagement = () => {
                                 ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                                 : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                             } />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleResetPassword(user.id, user.user?.email)}
+                          disabled={actionLoading[`reset_${user.id}`]}
+                          className="text-orange-600 hover:text-orange-900 disabled:opacity-50"
+                          title="Reset Password to Default"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                           </svg>
                         </button>
                         <button
