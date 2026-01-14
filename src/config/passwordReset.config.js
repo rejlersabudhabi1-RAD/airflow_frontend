@@ -145,3 +145,85 @@ export const getPublicRequestConfig = () => {
     withCredentials: false,
   }
 }
+
+/**
+ * ================================================================
+ * ADMIN PASSWORD RESET CONFIGURATION
+ * ================================================================
+ * Configuration for admin-initiated password resets
+ * Allows admins to reset user passwords to default
+ * ================================================================
+ */
+
+export const ADMIN_PASSWORD_RESET_CONFIG = {
+  // Default password for reset
+  DEFAULT_PASSWORD: 'Welcome@123',
+  
+  // Password requirements (for display)
+  REQUIREMENTS: {
+    minLength: 8,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumbers: true,
+    requireSpecialChars: true,
+    specialChars: '@$!%*?&',
+  },
+  
+  // UI Configuration
+  UI: {
+    confirmationMessage: 'Are you sure you want to reset this user\'s password?',
+    warningMessage: 'The password will be reset to the default password. The user should change it on first login.',
+    successMessage: 'Password reset successfully. Default password: Welcome@123',
+    errorMessage: 'Failed to reset password',
+    buttonLabel: 'Reset Password',
+    buttonIcon: '🔑',
+    tooltipText: 'Reset user password to default',
+  },
+  
+  // Security Settings
+  SECURITY: {
+    requireAdminConfirmation: true,
+    logPasswordReset: true,
+    forcePasswordChangeOnNextLogin: true,
+  },
+  
+  // API Endpoint
+  API: {
+    resetPasswordEndpoint: (userId) => `/api/v1/rbac/users/${userId}/reset-password/`,
+    method: 'POST',
+  },
+};
+
+/**
+ * Get password requirements as display text
+ */
+export const getPasswordRequirementsText = () => {
+  const req = ADMIN_PASSWORD_RESET_CONFIG.REQUIREMENTS;
+  return `
+• Minimum ${req.minLength} characters
+${req.requireUppercase ? '• At least one uppercase letter' : ''}
+${req.requireLowercase ? '• At least one lowercase letter' : ''}
+${req.requireNumbers ? '• At least one number' : ''}
+${req.requireSpecialChars ? `• At least one special character (${req.specialChars})` : ''}
+  `.trim();
+};
+
+/**
+ * Show confirmation dialog before resetting password
+ */
+export const confirmAdminPasswordReset = (userEmail) => {
+  if (!ADMIN_PASSWORD_RESET_CONFIG.SECURITY.requireAdminConfirmation) {
+    return true;
+  }
+  
+  const message = `${ADMIN_PASSWORD_RESET_CONFIG.UI.confirmationMessage}
+
+User: ${userEmail}
+${ADMIN_PASSWORD_RESET_CONFIG.UI.warningMessage}
+
+Default Password: ${ADMIN_PASSWORD_RESET_CONFIG.DEFAULT_PASSWORD}
+
+Click OK to proceed with password reset.`;
+  
+  return window.confirm(message);
+};
