@@ -28,6 +28,7 @@ const Profile = () => {
   // State management
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(true);
   const [profileData, setProfileData] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -53,6 +54,7 @@ const Profile = () => {
   
   const fetchProfile = async () => {
     try {
+      setIsFetchingProfile(true);
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
       const response = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
         headers: {
@@ -65,6 +67,7 @@ const Profile = () => {
       }
       
       const data = await response.json();
+      console.log('[Profile] Fetched data:', data); // Debug log
       setProfileData(data);
       
       // Set form data
@@ -80,12 +83,15 @@ const Profile = () => {
       
       // Set photo preview if exists
       if (data.profile_photo) {
+        console.log('[Profile] Setting photo preview:', data.profile_photo); // Debug log
         setPhotoPreview(data.profile_photo);
       }
       
     } catch (error) {
       console.error('Failed to fetch profile:', error);
       toast.error('Failed to load profile data');
+    } finally {
+      setIsFetchingProfile(false);
     }
   };
   
@@ -235,6 +241,18 @@ const Profile = () => {
     const lastName = formData.last_name || user?.last_name || '';
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'U';
   };
+  
+  // Show loading state while fetching profile
+  if (isFetchingProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
