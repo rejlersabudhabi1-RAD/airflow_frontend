@@ -23,8 +23,8 @@ const FirstLoginCheck = ({ children }) => {
       setChecking(true);
 
       try {
-        const token = localStorage.getItem('access_token') ||
-                     localStorage.getItem('radai_access_token');
+        const token = localStorage.getItem('radai_access_token') ||
+                     localStorage.getItem('access');
         
         if (!token) {
           setChecked(true);
@@ -32,9 +32,8 @@ const FirstLoginCheck = ({ children }) => {
           return;
         }
 
-        const response = await axios.post(
+        const response = await axios.get(
           `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/check-first-login/`,
-          {},
           {
             headers: {
               'Authorization': `Bearer ${token}`,
