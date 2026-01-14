@@ -194,8 +194,9 @@ const Profile = () => {
       // Update Redux store
       dispatch(updateUser(updatedProfile));
       
-      // Update local state
-      setProfileData(updatedProfile);
+      // Re-fetch profile to get the complete updated data with photo URL
+      await fetchProfile();
+      
       setSelectedFile(null);
       setIsEditing(false);
       
