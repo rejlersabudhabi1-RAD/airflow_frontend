@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import FirstLoginPasswordReset from './FirstLoginPasswordReset';
+import { API_BASE_URL } from '../../config/api.config';
 
 /**
  * First Login Check Component
@@ -33,7 +34,7 @@ const FirstLoginCheck = ({ children }) => {
         }
 
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/check-first-login/`,
+          `${API_BASE_URL}/users/check-first-login/`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
