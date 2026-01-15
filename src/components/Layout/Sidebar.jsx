@@ -16,7 +16,10 @@ import {
   Bars3Icon,
   FolderIcon,
   BriefcaseIcon,
-  CurrencyDollarIcon
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
+  TableCellsIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -34,6 +37,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     crs: true,
     finance: true,
     projectControl: true,
+    qhse: true,
     admin: true
   })
 
@@ -201,6 +205,79 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           moduleCode: 'project_control'
         }
       ]
+    },
+    {
+      id: 'qhse',
+      title: '5. QHSE',
+      icon: ShieldCheckIcon,
+      type: 'section',
+      expanded: expandedSections.qhse,
+      children: [
+        {
+          id: 'generalQHSE',
+          title: '5.1 General QHSE',
+          icon: ShieldCheckIcon,
+          path: '/qhse/general',
+          description: 'General QHSE management',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'detailedView',
+          title: '5.2 Detailed View',
+          icon: TableCellsIcon,
+          path: '/qhse/general/detailed',
+          description: 'Detailed project view',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'qualityManagement',
+          title: '5.3 Quality Management',
+          icon: ChartBarIcon,
+          path: '/qhse/general/quality',
+          description: 'Quality metrics and audits',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'healthSafety',
+          title: '5.4 Health and Safety',
+          icon: ShieldCheckIcon,
+          path: '/qhse/general/health-safety',
+          description: 'Health and safety management',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'environmental',
+          title: '5.5 Environmental',
+          icon: DocumentTextIcon,
+          path: '/qhse/general/environmental',
+          description: 'Environmental management',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'energy',
+          title: '5.6 Energy',
+          icon: ChartBarIcon,
+          path: '/qhse/general/energy',
+          description: 'Energy management',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'billability',
+          title: '5.7 Billability Overview',
+          icon: CurrencyDollarIcon,
+          path: '/qhse/general/billability',
+          description: 'Billability tracking',
+          moduleCode: 'qhse'
+        },
+        {
+          id: 'spotCheck',
+          title: '5.8 Spot Check Overview',
+          icon: MagnifyingGlassIcon,
+          path: '/qhse/general/spotcheck',
+          description: 'Spot check management',
+          moduleCode: 'qhse'
+        }
+      ]
     }
   ]
 
@@ -247,7 +324,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '5. User Management',
+      title: '6. User Management',
       icon: UsersIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -255,14 +332,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '5.1 Admin Dashboard',
+          title: '6.1 Admin Dashboard',
           icon: ChartBarIcon,
           path: '/admin',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '5.2 Manage Users & Roles',
+          title: '6.2 Manage Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'

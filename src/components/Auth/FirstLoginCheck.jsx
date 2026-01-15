@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import axios from 'axios';
 import FirstLoginPasswordReset from './FirstLoginPasswordReset';
 import { API_BASE_URL } from '../../config/api.config';
+import { STORAGE_KEYS } from '../../config/app.config';
 
 /**
  * First Login Check Component
@@ -24,8 +25,7 @@ const FirstLoginCheck = ({ children }) => {
       setChecking(true);
 
       try {
-        const token = localStorage.getItem('radai_access_token') ||
-                     localStorage.getItem('access');
+        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
         
         if (!token) {
           setChecked(true);

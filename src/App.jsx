@@ -33,6 +33,7 @@ import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
+import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
@@ -416,6 +417,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="project_control">
               <ProjectControl />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* QHSE Routes */}
+        <Route
+          path="qhse/general/*"
+          element={
+            <ModuleProtectedRoute moduleCode="qhse">
+              <GeneralQHSE />
             </ModuleProtectedRoute>
           }
         />
