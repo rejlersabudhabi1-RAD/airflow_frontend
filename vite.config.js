@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   // For local development in Docker, proxy to backend service using Docker service name
   // In Docker: use service name 'backend' (from docker-compose)
   // Outside Docker: use localhost
-  let apiUrl = env.VITE_API_PROXY_TARGET || 'http://backend:8000'
+  let apiUrl = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
