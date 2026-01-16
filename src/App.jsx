@@ -3,8 +3,10 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
 import { API_BASE_URL } from './config/api.config'
+import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
+import ChangePasswordModal from './components/Auth/ChangePasswordModal'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -17,14 +19,21 @@ import Profile from './pages/Profile'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
-import PFDUpload from './pages/PFDUpload'
+// Soft-coded PFD Upload - Use different components based on environment
+import PFDUploadClassic from './pages/PFDUpload'
+import PFDUploadNew from './pages/PFDUploadNew'
+const PFDUpload = FEATURE_FLAGS.pfdUploadVersion === 'new' ? PFDUploadNew : PFDUploadClassic
+import PFDAnalysisConsole from './pages/PFDAnalysisConsole'
 import PFDConvert from './pages/PFDConvert'
 import PFDHistory from './pages/PFDHistory'
+import PFDFiveStageAnalysis from './pages/PFDFiveStageAnalysis'
 import S3PFDBrowser from './pages/S3PFDBrowser'
+import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSMultipleRevision from './pages/CRSMultipleRevision'
 import ProjectControl from './pages/ProjectControl'
+import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
@@ -33,12 +42,25 @@ import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
+import Solutions from './pages/Solutions'
+import Enquiry from './pages/Enquiry'
+import ConsultingService from './pages/ConsultingService'
+import PFDConversionService from './pages/PFDConversionService'
+import AssetIntegrityService from './pages/AssetIntegrityService'
+import DataGovernanceService from './pages/DataGovernanceService'
+import SecurityService from './pages/SecurityService'
+import About from './pages/About'
 import NotFound from './pages/NotFound'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
   const [modulesLoaded, setModulesLoaded] = useState(false)
+  const [mustChangePassword, setMustChangePassword] = useState(false)
+
+  // Log environment and component selection
+  console.log('🎯 App Environment:', ENV)
+  console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
 
   // Fetch user modules on mount
   useEffect(() => {
@@ -66,6 +88,11 @@ function App() {
         
         const data = await response.json()
         console.log('🔐 App: Full user data:', data)
+        
+        // Check must_change_password flag
+        if (data.must_change_password === true) {
+          setMustChangePassword(true)
+        }
         
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
@@ -147,12 +174,57 @@ function App() {
   const PublicRoute = ({ children }) => {
     return !isAuthenticated ? children : <Navigate to="/dashboard" replace />
   }
+  
+  // Handle password change success
+  const handlePasswordChangeSuccess = async () => {
+    setMustChangePassword(false)
+    // Refresh user data
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
+      const apiUrl = `${API_BASE_URL}/rbac/users/me/`
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setMustChangePassword(data.must_change_password === true)
+      }
+    } catch (error) {
+      console.error('Failed to refresh user data:', error)
+    }
+  }
 
   return (
-    <FirstLoginCheck>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
+    <>
+      {/* Password Change Modal - shown globally when required */}
+      {isAuthenticated && mustChangePassword && (
+        <ChangePasswordModal
+          isOpen={true}
+          isRequired={true}
+          onSuccess={handlePasswordChangeSuccess}
+        />
+      )}
+      
+      <FirstLoginCheck>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            
+            {/* Solutions Page */}
+            <Route path="solutions" element={<Solutions />} />
+            
+            {/* Enquiry Page */}
+            <Route path="enquiry" element={<Enquiry />} />
+            
+            {/* Services */}
+          <Route path="services/consulting" element={<ConsultingService />} />
+          <Route path="services/pfd-conversion" element={<PFDConversionService />} />
+          <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
+          <Route path="data-governance" element={<DataGovernanceService />} />
+          <Route path="security" element={<SecurityService />} />
+          <Route path="about" element={<About />} />
           
           {/* Public Routes */}
         <Route
@@ -238,6 +310,14 @@ function App() {
           }
         />
         <Route
+          path="pfd/analyze/:documentId"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDAnalysisConsole />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="pfd/convert/:documentId"
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
@@ -258,6 +338,22 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <PFDHistory />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/analysis/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <PFDFiveStageAnalysis />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="pfd/s3-management"
+          element={
+            <ModuleProtectedRoute moduleCode="pfd_to_pid">
+              <S3Management />
             </ModuleProtectedRoute>
           }
         />
@@ -325,6 +421,16 @@ function App() {
           }
         />
 
+        {/* QHSE Routes */}
+        <Route
+          path="qhse/general/*"
+          element={
+            <ModuleProtectedRoute moduleCode="qhse">
+              <GeneralQHSE />
+            </ModuleProtectedRoute>
+          }
+        />
+
         {/* Admin Routes */}
         <Route
           path="admin"
@@ -368,6 +474,7 @@ function App() {
       </Route>
     </Routes>
     </FirstLoginCheck>
+    </>
   )
 }
 

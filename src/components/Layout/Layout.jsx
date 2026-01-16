@@ -18,18 +18,13 @@ const Layout = () => {
   // Routes where sidebar should be hidden
   const publicRoutes = ['/', '/login', '/register', '/home', '/enquiry', '/solutions', '/about', '/services/pid-analysis', '/services/pfd-conversion', '/services/asset-integrity', '/services/consulting', '/data-governance', '/security', '/terms-of-service', '/privacy-policy']
   
-  // Check if current path is a PFD/PID conversion page (these need full width)
-  const isConversionPage = location.pathname.includes('/pfd/convert') || 
-                          location.pathname.includes('/pid/')
-  
-  const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname) && !isConversionPage
+  const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname)
   
   // Log sidebar state for debugging
   React.useEffect(() => {
     console.log('📐 Layout State:', {
       isAuthenticated,
       currentPath: location.pathname,
-      isConversionPage: location.pathname.includes('/pfd/convert') || location.pathname.includes('/pid/'),
       showSidebar,
       sidebarOpen
     })
@@ -42,7 +37,7 @@ const Layout = () => {
         {showSidebar && (
           <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
         )}
-        <main className={`flex-grow transition-all duration-300 ${showSidebar && sidebarOpen ? 'lg:ml-72' : ''} overflow-x-hidden`}>
+        <main className={`flex-grow transition-all duration-300 ${showSidebar && sidebarOpen ? 'lg:ml-64' : ''} overflow-x-hidden`}>
           <Outlet />
         </main>
       </div>

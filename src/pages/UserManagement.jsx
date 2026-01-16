@@ -11,6 +11,7 @@ import {
   USER_MANAGEMENT_CONFIG 
 } from '../config/userManagement.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
+import EditUserModal from '../components/UserManagement/EditUserModal';
 
 /**
  * User Management Page - Rebuilt
@@ -677,9 +678,7 @@ const UserManagement = () => {
     }
   };
   
-  const handleEditUser = async (e) => {
-    e.preventDefault();
-    
+  const handleEditUser = async (formData) => {
     if (!selectedUser) return;
     
     try {
@@ -687,16 +686,25 @@ const UserManagement = () => {
       
       const payload = {
         user: {
-          email: editFormData.email,
-          first_name: editFormData.first_name,
-          last_name: editFormData.last_name
+          email: formData.email,
+          first_name: formData.first_name,
+          last_name: formData.last_name
         },
-        organization_id: editFormData.organization_id,
-        department: editFormData.department,
-        job_title: editFormData.job_title,
-        phone: editFormData.phone,
-        module_ids: editFormData.module_ids
+        organization_id: formData.organization_id,
+        department: formData.department,
+        job_title: formData.job_title,
+        phone: formData.phone,
+        module_ids: formData.module_ids,
+        role_ids: formData.role_ids || []
       };
+      
+      // If superuser or staff flags are present, include them
+      if (formData.is_superuser !== undefined) {
+        payload.user.is_superuser = formData.is_superuser;
+      }
+      if (formData.is_staff !== undefined) {
+        payload.user.is_staff = formData.is_staff;
+      }
       
       await rbacService.updateUser(selectedUser.id, payload);
       
@@ -706,7 +714,7 @@ const UserManagement = () => {
       setNotification({
         show: true,
         type: 'success',
-        message: 'User updated successfully'
+        message: 'User updated successfully! All changes have been saved.'
       });
       
       setShowEditModal(false);
@@ -717,8 +725,9 @@ const UserManagement = () => {
       setNotification({
         show: true,
         type: 'error',
-        message: error.response?.data?.message || 'Failed to update user'
+        message: error.response?.data?.message || 'Failed to update user. Please try again.'
       });
+      throw error; // Re-throw so the modal can handle it
     } finally {
       setActionLoading({ [`edit_${selectedUser.id}`]: false });
     }
@@ -790,6 +799,36 @@ const UserManagement = () => {
       });
     } finally {
       setActionLoading({ [`delete_${userId}`]: false });
+    }
+  };
+
+  const handleResetPassword = async (userId, userEmail) => {
+    const { confirmAdminPasswordReset, ADMIN_PASSWORD_RESET_CONFIG } = await import('../config/passwordReset.config');
+    
+    if (!confirmAdminPasswordReset(userEmail)) {
+      return;
+    }
+    
+    try {
+      setActionLoading({ [`reset_${userId}`]: true });
+      
+      await rbacService.resetUserPassword(userId);
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: ADMIN_PASSWORD_RESET_CONFIG.UI.successMessage
+      });
+      
+    } catch (error) {
+      console.error('[UserManagement] Reset password error:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.message || ADMIN_PASSWORD_RESET_CONFIG.UI.errorMessage
+      });
+    } finally {
+      setActionLoading({ [`reset_${userId}`]: false });
     }
   };
   
@@ -918,10 +957,25 @@ const UserManagement = () => {
       const summary = response.data?.summary || response.summary || {};
       console.log('[BulkUpload] Upload summary:', summary);
       
+      // Build notification message
+      let notificationMessage = `Bulk upload completed! ✅ Created: ${summary.successful || 0}`;
+      
+      if (summary.emails_sent > 0) {
+        notificationMessage += `, 📧 Emails Sent: ${summary.emails_sent}`;
+      }
+      
+      if (summary.failed > 0) {
+        notificationMessage += `, ❌ Failed: ${summary.failed}`;
+      }
+      
+      if (summary.skipped > 0) {
+        notificationMessage += `, ⏭️ Skipped: ${summary.skipped}`;
+      }
+      
       setNotification({
         show: true,
         type: summary.failed > 0 ? 'warning' : 'success',
-        message: `${BULK_UPLOAD_CONFIG.successMessage} Success: ${summary.successful || 0}, Failed: ${summary.failed || 0}, Skipped: ${summary.skipped || 0}`
+        message: notificationMessage
       });
       
       // Clear file
@@ -1014,8 +1068,8 @@ const UserManagement = () => {
       
       console.log('[BulkUpload] Template response:', response);
       
-      // Create blob and download
-      const url = window.URL.createObjectURL(new Blob([response]));
+      // Create blob and download - use response.data for blob responses
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', BULK_UPLOAD_CONFIG.templateFileName);
@@ -1475,6 +1529,16 @@ const UserManagement = () => {
                                 ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                                 : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                             } />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleResetPassword(user.id, user.user?.email)}
+                          disabled={actionLoading[`reset_${user.id}`]}
+                          className="text-orange-600 hover:text-orange-900 disabled:opacity-50"
+                          title="Reset Password to Default"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                           </svg>
                         </button>
                         <button
@@ -2026,10 +2090,14 @@ const UserManagement = () => {
                   <div className="space-y-4">
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Upload Summary</h3>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-green-100 rounded-lg p-3 text-center">
                           <p className="text-2xl font-bold text-green-700">{bulkUploadResults.summary?.successful || 0}</p>
-                          <p className="text-xs text-green-600">Successful</p>
+                          <p className="text-xs text-green-600">Created</p>
+                        </div>
+                        <div className="bg-blue-100 rounded-lg p-3 text-center">
+                          <p className="text-2xl font-bold text-blue-700">{bulkUploadResults.summary?.emails_sent || 0}</p>
+                          <p className="text-xs text-blue-600">Emails Sent</p>
                         </div>
                         <div className="bg-red-100 rounded-lg p-3 text-center">
                           <p className="text-2xl font-bold text-red-700">{bulkUploadResults.summary?.failed || 0}</p>
@@ -2040,6 +2108,38 @@ const UserManagement = () => {
                           <p className="text-xs text-yellow-600">Skipped</p>
                         </div>
                       </div>
+                      
+                      {/* Email Status */}
+                      {bulkUploadResults.summary?.emails_failed > 0 && (
+                        <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-start">
+                            <svg className="w-5 h-5 text-orange-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-orange-800">Email Notification Issues</p>
+                              <p className="text-xs text-orange-700 mt-1">
+                                {bulkUploadResults.summary.emails_failed} user(s) were created successfully but email notifications could not be sent. 
+                                Please share credentials manually or contact support.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Success Message */}
+                      {bulkUploadResults.summary?.emails_sent === bulkUploadResults.summary?.successful && bulkUploadResults.summary?.successful > 0 && (
+                        <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center">
+                            <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm font-medium text-green-800">
+                              All users created and welcome emails sent successfully! ✅
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {bulkUploadResults.details && (
@@ -2050,8 +2150,35 @@ const UserManagement = () => {
                             <h4 className="text-sm font-semibold text-green-700 mb-2">Successfully Created ({bulkUploadResults.details.success.length})</h4>
                             <div className="space-y-1">
                               {bulkUploadResults.details.success.map((item, idx) => (
-                                <div key={idx} className="text-sm bg-green-50 p-2 rounded">
-                                  Row {item.row}: {item.email} - {item.name}
+                                <div key={idx} className="text-sm bg-green-50 p-3 rounded border border-green-200">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <span className="font-medium">Row {item.row}:</span> {item.email} - {item.name}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {item.email_sent ? (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                                          </svg>
+                                          Email Sent
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                          </svg>
+                                          Email Failed
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {item.email_error && (
+                                    <p className="text-xs text-orange-600 mt-1 ml-1">
+                                      Email Error: {item.email_error}
+                                    </p>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -2141,59 +2268,20 @@ const UserManagement = () => {
         </div>
       )}
 
-      {/* Edit Modal - Simplified placeholder */}
-      {showEditModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Edit User</h2>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <form onSubmit={handleEditUser} className="space-y-4">
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={editFormData.email}
-                  onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="First Name"
-                  value={editFormData.first_name}
-                  onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Last Name"
-                  value={editFormData.last_name}
-                  onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={actionLoading[`edit_${selectedUser.id}`]}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {actionLoading[`edit_${selectedUser.id}`] ? 'Updating...' : 'Update User'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Comprehensive Edit User Modal */}
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedUser(null);
+        }}
+        user={selectedUser}
+        onSave={handleEditUser}
+        organizations={organizations}
+        modules={modules}
+        roles={roles}
+        loading={actionLoading[`edit_${selectedUser?.id}`]}
+      />
     </div>
   );
 };

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import FirstLoginPasswordReset from './FirstLoginPasswordReset';
+import { API_BASE_URL } from '../../config/api.config';
+import { STORAGE_KEYS } from '../../config/app.config';
 
 /**
  * First Login Check Component
@@ -23,8 +25,7 @@ const FirstLoginCheck = ({ children }) => {
       setChecking(true);
 
       try {
-        const token = localStorage.getItem('access_token') ||
-                     localStorage.getItem('radai_access_token');
+        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
         
         if (!token) {
           setChecked(true);
@@ -32,9 +33,8 @@ const FirstLoginCheck = ({ children }) => {
           return;
         }
 
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/check-first-login/`,
-          {},
+        const response = await axios.get(
+          `${API_BASE_URL}/users/check-first-login/`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
