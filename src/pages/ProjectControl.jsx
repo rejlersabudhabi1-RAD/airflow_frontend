@@ -47,7 +47,7 @@ const ProjectControl = () => {
       if (searchTerm) params.append('search', searchTerm);
 
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/projects/?${params.toString()}`,
+        `${API_BASE_URL}/projects/?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -64,7 +64,7 @@ const ProjectControl = () => {
     try {
       const token = getAuthToken();
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/projects/statistics/`,
+        `${API_BASE_URL}/projects/statistics/`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -86,7 +86,7 @@ const ProjectControl = () => {
     try {
       const token = getAuthToken();
       await axios.post(
-        `${API_BASE_URL}/api/v1/projects/`,
+        `${API_BASE_URL}/projects/`,
         formData,
         {
           headers: { Authorization: `Bearer ${token}` }

@@ -31,7 +31,7 @@ export const useQHSERunningProjects = () => {
 
       // Fetch all projects (handling pagination)
       let allProjects = [];
-      let nextUrl = `${API_BASE_URL}/api/v1/qhse/projects/?page_size=1000`; // Get all at once
+      let nextUrl = `${API_BASE_URL}/qhse/projects/?page_size=1000`; // Get all at once
       
       console.log('🌐 Fetching from:', nextUrl);
       

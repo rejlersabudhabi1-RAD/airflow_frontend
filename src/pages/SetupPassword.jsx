@@ -57,7 +57,7 @@ const SetupPassword = () => {
   const verifyToken = async (email, token) => {
     try {
       setVerifying(true);
-      const response = await axios.post(`${API_BASE_URL}/api/v1/users/verify-reset-token/`, {
+      const response = await axios.post(`${API_BASE_URL}/users/verify-reset-token/`, {
         email,
         token
       });
@@ -144,7 +144,7 @@ const SetupPassword = () => {
     try {
       setSubmitting(true);
       
-      const response = await axios.post(`${API_BASE_URL}/api/v1/users/reset-password/`, {
+      const response = await axios.post(`${API_BASE_URL}/users/reset-password/`, {
         email: formData.email,
         token: formData.token,
         new_password: formData.new_password,

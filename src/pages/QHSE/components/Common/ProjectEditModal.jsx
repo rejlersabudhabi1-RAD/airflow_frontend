@@ -120,8 +120,8 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
 
       // Determine API endpoint and method based on mode
       const url = isCreateMode 
-        ? `${API_BASE_URL}/api/v1/qhse/projects/`
-        : `${API_BASE_URL}/api/v1/qhse/projects/${project.srNo}/`;
+        ? `${API_BASE_URL}/qhse/projects/`
+        : `${API_BASE_URL}/qhse/projects/${project.srNo}/`;
       
       const method = isCreateMode ? 'POST' : 'PATCH';
 

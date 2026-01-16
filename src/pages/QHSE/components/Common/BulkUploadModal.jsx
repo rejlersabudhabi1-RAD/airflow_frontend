@@ -70,7 +70,7 @@ export const BulkUploadModal = ({ open, onClose, onSuccess }) => {
       setProgress(30);
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/qhse/projects/bulk_upload/`,
+        `${API_BASE_URL}/qhse/projects/bulk_upload/`,
         {
           method: 'POST',
           headers: {

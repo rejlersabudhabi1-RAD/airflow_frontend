@@ -28,7 +28,7 @@ export const useQHSESpotCheckRegister = () => {
       }
       // Fetch all spot checks (handling pagination)
       let allSpotChecks = [];
-      let nextUrl = `${API_BASE_URL}/api/v1/qhse/spot-checks/?page_size=1000`; // Get all at once
+      let nextUrl = `${API_BASE_URL}/qhse/spot-checks/?page_size=1000`; // Get all at once
       
       while (nextUrl) {
         const response = await fetch(nextUrl, {
