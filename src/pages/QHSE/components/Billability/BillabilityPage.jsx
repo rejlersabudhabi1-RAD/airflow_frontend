@@ -4,9 +4,9 @@ import { BarChart3, Eye } from 'lucide-react'
 
 // Import reusable components
 import { MainHeader } from "../Common/MainHeader"
-import { LoadingState } from "../common/LoadingState"
-import { ErrorState } from "../common/ErrorState"
-import { EmptyDataState } from "../common/EmptyDataState"
+import { LoadingState } from "../Common/LoadingState"
+import { ErrorState } from "../Common/ErrorState"
+import { EmptyDataState } from "../Common/EmptyDataState"
 import { PageLayout } from '@/layouts/PageLayout'
 import { Card, CardContent } from '../ui/Card'
 import { ManhoursChart } from '../charts/ChartComponents/ManhoursChart'

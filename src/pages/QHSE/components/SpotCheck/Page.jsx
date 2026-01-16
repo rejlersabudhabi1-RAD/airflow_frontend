@@ -2,9 +2,9 @@ import React from 'react';
 import { PageLayout } from '@/layouts/PageLayout';
 import { MainHeader } from "../Common/MainHeader";
 // Footer can be added if needed
-import { LoadingState } from "../common/LoadingState";
-import { ErrorState } from "../common/ErrorState";
-import { EmptyDataState } from "../common/EmptyDataState";
+import { LoadingState } from "../Common/LoadingState";
+import { ErrorState } from "../Common/ErrorState";
+import { EmptyDataState } from "../Common/EmptyDataState";
 import { useQHSESpotCheckRegister } from '../../hooks/useQHSESpotCheck';
 import SpotCheckSummaryCards from './SpotCheckSummaryCards'; // Create this similar to DashSummaryCard/SummaryCards
 
