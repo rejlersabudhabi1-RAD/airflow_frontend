@@ -17,8 +17,7 @@ import {
 } from '@mui/material';
 import { Upload, X, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react';
 import { STORAGE_KEYS } from '../../../../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../../../../config/api.config';
 
 /**
  * Bulk Upload Modal - Soft-coded Excel upload for QHSE projects
@@ -71,7 +70,7 @@ export const BulkUploadModal = ({ open, onClose, onSuccess }) => {
       setProgress(30);
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/qhse/projects/bulk_upload/`,
+        `${API_BASE_URL}/qhse/projects/bulk_upload/`,
         {
           method: 'POST',
           headers: {

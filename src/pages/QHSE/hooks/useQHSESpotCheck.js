@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { STORAGE_KEYS } from '../../../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../../../config/api.config';
 
 /**
  * Custom hook to fetch QHSE Spot Check Register from Django API
@@ -29,7 +28,7 @@ export const useQHSESpotCheckRegister = () => {
       }
       // Fetch all spot checks (handling pagination)
       let allSpotChecks = [];
-      let nextUrl = `${API_BASE_URL}/api/v1/qhse/spot-checks/?page_size=1000`; // Get all at once
+      let nextUrl = `${API_BASE_URL}/qhse/spot-checks/?page_size=1000`; // Get all at once
       
       while (nextUrl) {
         const response = await fetch(nextUrl, {

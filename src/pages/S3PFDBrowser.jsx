@@ -39,7 +39,7 @@ const S3PFDBrowser = () => {
   const fetchBucketInfo = async () => {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/pfd/s3/bucket-info/`,
+        `${API_BASE_URL}/pfd/s3/bucket-info/`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       
@@ -57,7 +57,7 @@ const S3PFDBrowser = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/pfd/s3/pfd-files/`,
+        `${API_BASE_URL}/pfd/s3/pfd-files/`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       
@@ -78,7 +78,7 @@ const S3PFDBrowser = () => {
     
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/pfd/s3/pid-files/`,
+        `${API_BASE_URL}/pfd/s3/pid-files/`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       
@@ -96,7 +96,7 @@ const S3PFDBrowser = () => {
   const downloadFile = async (s3Key, filename) => {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/v1/pfd/s3/download/?key=${encodeURIComponent(s3Key)}`,
+        `${API_BASE_URL}/pfd/s3/download/?key=${encodeURIComponent(s3Key)}`,
         {
           headers: { 'Authorization': `Bearer ${token}` },
           responseType: 'blob',
@@ -123,7 +123,7 @@ const S3PFDBrowser = () => {
     
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/v1/pfd/s3/convert/`,
+        `${API_BASE_URL}/pfd/s3/convert/`,
         {
           pfd_key: pfdKey,
           output_format: 'pdf'
@@ -160,7 +160,7 @@ const S3PFDBrowser = () => {
       }));
       
       const response = await axios.post(
-        `${API_BASE_URL}/api/v1/pfd/s3/upload-pfd/`,
+        `${API_BASE_URL}/pfd/s3/upload-pfd/`,
         formData,
         {
           headers: {

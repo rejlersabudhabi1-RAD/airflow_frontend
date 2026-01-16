@@ -15,8 +15,7 @@ import {
 } from '@mui/material';
 import { X, Save, Upload } from 'lucide-react';
 import { STORAGE_KEYS } from '../../../../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../../../../config/api.config';
 
 /**
  * Project Edit Modal - Soft-coded admin interface for creating/updating QHSE projects
@@ -121,8 +120,8 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
 
       // Determine API endpoint and method based on mode
       const url = isCreateMode 
-        ? `${API_BASE_URL}/api/v1/qhse/projects/`
-        : `${API_BASE_URL}/api/v1/qhse/projects/${project.srNo}/`;
+        ? `${API_BASE_URL}/qhse/projects/`
+        : `${API_BASE_URL}/qhse/projects/${project.srNo}/`;
       
       const method = isCreateMode ? 'POST' : 'PATCH';
 

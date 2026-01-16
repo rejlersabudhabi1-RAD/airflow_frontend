@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { STORAGE_KEYS } from '../../../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../../../config/api.config';
 
 /**
  * Custom hook to fetch QHSE Running Projects from Django API
@@ -32,7 +31,7 @@ export const useQHSERunningProjects = () => {
 
       // Fetch all projects (handling pagination)
       let allProjects = [];
-      let nextUrl = `${API_BASE_URL}/api/v1/qhse/projects/?page_size=1000`; // Get all at once
+      let nextUrl = `${API_BASE_URL}/qhse/projects/?page_size=1000`; // Get all at once
       
       console.log('🌐 Fetching from:', nextUrl);
       
