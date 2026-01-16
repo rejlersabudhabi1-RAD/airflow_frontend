@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_BASE_URL } from '../../config/api.config';
 
 /**
  * First Login Password Reset Component
@@ -99,7 +100,7 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/reset-first-login-password/`,
+        `${API_BASE_URL}/users/reset-first-login-password/`,
         {
           current_password: formData.current_password,
           new_password: formData.new_password,

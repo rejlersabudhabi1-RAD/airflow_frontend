@@ -4,6 +4,7 @@
  */
 
 import apiClient from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 
 const API_BASE = '/finance';
 
@@ -56,10 +57,9 @@ const financeService = {
    * Preview invoice PDF
    */
   getInvoicePreviewUrl(id) {
-    // Get the backend URL - need full URL for iframe, not relative path
-    const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:8000'  // Local backend
-      : 'https://aiflowbackend-production.up.railway.app';  // Production
+    // Use centralized API config for consistent backend URL
+    // Remove /api/v1 from API_BASE_URL for full domain
+    const backendUrl = API_BASE_URL.replace('/api/v1', '');
     
     // Get auth token for authenticated PDF access
     const token = localStorage.getItem('radai_access_token');

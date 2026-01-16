@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { STORAGE_KEYS } from '../../../config/app.config';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../../../config/api.config';
 
 /**
  * Custom hook to fetch QHSE Running Projects from Django API
