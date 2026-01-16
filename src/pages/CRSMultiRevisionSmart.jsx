@@ -181,7 +181,7 @@ const CRSMultiRevisionSmart = () => {
     }
   };
 
-  // Smart HTML-to-Excel export (like CRS management)
+  // Smart HTML-to-Excel export - ALL revisions combined
   const handleDownloadExcel = async () => {
     try {
       setLoading(true);
@@ -207,13 +207,13 @@ const CRSMultiRevisionSmart = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CRS_${chainData.chain_id}_${new Date().toISOString().split('T')[0]}.xls`;
+      link.download = `CRS_${chainData.chain_id}_ALL_REVISIONS_${new Date().toISOString().split('T')[0]}.xls`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setSuccess('Excel file downloaded successfully!');
+      setSuccess('Combined Excel file downloaded successfully!');
     } catch (err) {
       setError(`Download failed: ${err.message}`);
       console.error('[CRS] Excel download error:', err);
@@ -222,7 +222,53 @@ const CRSMultiRevisionSmart = () => {
     }
   };
 
-  // Generate smart HTML for Excel export
+  // Smart individual revision download - soft-coded for any revision
+  const handleDownloadSingleRevision = async (revisionIndex) => {
+    try {
+      setLoading(true);
+      const revision = uploadedRevisions[revisionIndex];
+      
+      if (!revision) {
+        throw new Error('Revision not found');
+      }
+
+      // Fetch chain data for context
+      const response = await fetch(
+        `${CONFIG.API_BASE_URL}/crs/revision-chains/${createdChain.id}/`,
+        { headers: getAuthHeaders() }
+      );
+
+      if (!response.ok) throw new Error('Failed to fetch chain data');
+      
+      const chainData = await response.json();
+
+      // Build HTML for single revision
+      const html = generateSingleRevisionHTML(chainData, revision);
+
+      // Convert to Excel
+      const blob = new Blob([html], { 
+        type: 'application/vnd.ms-excel;charset=utf-8' 
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CRS_${chainData.chain_id}_${revision.label}_${new Date().toISOString().split('T')[0]}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setSuccess(`${revision.label} Excel downloaded successfully!`);
+    } catch (err) {
+      setError(`Download failed: ${err.message}`);
+      console.error('[CRS] Single revision download error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Generate smart HTML for Excel export - ALL revisions
   const generateSmartHTML = (chainData, revisions) => {
     return `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -236,7 +282,7 @@ const CRSMultiRevisionSmart = () => {
         </style>
       </head>
       <body>
-        <h2>CRS Multi-Revision Report</h2>
+        <h2>CRS Multi-Revision Report - ALL REVISIONS</h2>
         
         <!-- Chain Information -->
         <table>
@@ -306,6 +352,75 @@ const CRSMultiRevisionSmart = () => {
     `;
   };
 
+  // Generate HTML for SINGLE revision - soft-coded
+  const generateSingleRevisionHTML = (chainData, revision) => {
+    const comments = revision.comments || revision.data?.comments || revision.data?.document_details?.recent_activities || [];
+    
+    return `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid black; padding: 8px; text-align: left; }
+          th { background-color: #4CAF50; color: white; font-weight: bold; }
+          .section-header { background-color: #2196F3; color: white; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <h2>CRS Report - ${revision.label}</h2>
+        
+        <!-- Chain Context -->
+        <table>
+          <tr class="section-header"><th colspan="2">Document Information</th></tr>
+          <tr><td><b>Chain ID</b></td><td>${chainData.chain_id || 'N/A'}</td></tr>
+          <tr><td><b>Document Title</b></td><td>${chainData.document_title || 'N/A'}</td></tr>
+          <tr><td><b>Document Number</b></td><td>${chainData.document_number || 'N/A'}</td></tr>
+          <tr><td><b>Project Name</b></td><td>${chainData.project_name || 'N/A'}</td></tr>
+          <tr><td><b>Contractor</b></td><td>${chainData.contractor_name || 'N/A'}</td></tr>
+          <tr><td><b>Department</b></td><td>${chainData.department || 'N/A'}</td></tr>
+        </table>
+        <br/>
+        
+        <!-- Revision Details -->
+        <table>
+          <tr class="section-header"><th colspan="2">Revision Details - ${revision.label}</th></tr>
+          <tr><td><b>File Name</b></td><td>${revision.fileName}</td></tr>
+          <tr><td><b>Uploaded At</b></td><td>${new Date(revision.uploadedAt).toLocaleString()}</td></tr>
+          <tr><td><b>Total Comments</b></td><td>${comments.length}</td></tr>
+          <tr><td><b>Status</b></td><td>${revision.data?.revision?.status || 'N/A'}</td></tr>
+        </table>
+        <br/>
+        
+        <!-- Comments for this revision -->
+        <table>
+          <tr class="section-header"><th colspan="7">Comments - ${revision.label}</th></tr>
+          <tr>
+            <th>Page</th>
+            <th>Reviewer</th>
+            <th>Comment</th>
+            <th>Type</th>
+            <th>Discipline</th>
+            <th>Drawing Ref</th>
+            <th>Status</th>
+          </tr>
+          ${comments.length > 0 ? comments.map(comment => `
+            <tr>
+              <td>${comment.page_number || 'N/A'}</td>
+              <td>${comment.reviewer_name || 'Not Provided'}</td>
+              <td>${comment.comment_text || comment.text || 'N/A'}</td>
+              <td>${comment.comment_type || comment.type || 'General'}</td>
+              <td>${comment.discipline || 'Not Provided'}</td>
+              <td>${comment.drawing_ref || 'N/A'}</td>
+              <td>${comment.status || 'Open'}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="7">No comments found for this revision</td></tr>'}
+        </table>
+      </body>
+      </html>
+    `;
+  };
+
   // Smart preview table component
   const PreviewTable = () => {
     if (!showPreview || uploadedRevisions.length === 0) return null;
@@ -323,8 +438,9 @@ const CRSMultiRevisionSmart = () => {
               startIcon={<DownloadIcon />}
               onClick={handleDownloadExcel}
               disabled={loading}
+              sx={{ mr: 1 }}
             >
-              Download Excel
+              Download All (Combined)
             </Button>
           </Box>
 
@@ -357,7 +473,7 @@ const CRSMultiRevisionSmart = () => {
             </Table>
           </TableContainer>
 
-          {/* Revisions Summary */}
+          {/* Revisions Summary with Individual Downloads */}
           <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
             Revisions Summary
           </Typography>
@@ -369,6 +485,7 @@ const CRSMultiRevisionSmart = () => {
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#2196F3', color: 'white' }}>File Name</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#2196F3', color: 'white' }}>Comments</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#2196F3', color: 'white' }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', bgcolor: '#2196F3', color: 'white' }} align="center">Download</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -389,6 +506,18 @@ const CRSMultiRevisionSmart = () => {
                         color="success"
                         size="small"
                       />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title={`Download ${rev.label} Excel`}>
+                        <IconButton
+                          color="primary"
+                          size="small"
+                          onClick={() => handleDownloadSingleRevision(idx)}
+                          disabled={loading}
+                        >
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}

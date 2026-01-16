@@ -33,6 +33,11 @@ export const FEATURE_FLAGS = {
   // 'classic' = Traditional PFD Upload (PFDUpload.jsx)
   pfdUploadVersion: import.meta.env.VITE_PFD_UPLOAD_VERSION || (isDevelopment ? 'new' : 'classic'),
   
+  // CRS Multi-Revision Component Version
+  // 'smart' = Smart component with finish early option (CRSMultiRevisionSmart.jsx)
+  // 'classic' = Traditional multi-revision (CRSMultipleRevision.jsx)
+  crsMultiRevisionVersion: import.meta.env.VITE_CRS_MULTI_REVISION_VERSION || (isDevelopment ? 'smart' : 'smart'),
+  
   // Enable/Disable experimental features
   enableUltraCompleteMode: import.meta.env.VITE_ENABLE_ULTRA_COMPLETE === 'true' || (import.meta.env.VITE_ENABLE_ULTRA_COMPLETE === undefined && isDevelopment),
   enableRAGKnowledgeBase: import.meta.env.VITE_ENABLE_RAG_KB === 'true' || (import.meta.env.VITE_ENABLE_RAG_KB === undefined && isDevelopment),

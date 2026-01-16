@@ -31,7 +31,10 @@ import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
-import CRSMultipleRevision from './pages/CRSMultipleRevision'
+// Soft-coded CRS Multi-Revision - Use Smart component with finish early logic
+import CRSMultipleRevisionClassic from './pages/CRSMultipleRevision'
+import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
+const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
@@ -61,6 +64,7 @@ function App() {
   // Log environment and component selection
   console.log('🎯 App Environment:', ENV)
   console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
+  console.log('📋 CRS Multi-Revision Component:', FEATURE_FLAGS.crsMultiRevisionVersion === 'smart' ? 'CRSMultiRevisionSmart (with Finish Early)' : 'CRSMultipleRevision (Classic)')
 
   // Fetch user modules on mount
   useEffect(() => {
