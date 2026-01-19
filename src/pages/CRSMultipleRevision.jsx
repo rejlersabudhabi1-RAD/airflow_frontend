@@ -4,12 +4,14 @@
  * Feature 2.2: CRS Multiple Revision
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../config/api.config';
 import { STORAGE_KEYS } from '../config/app.config';
+import { withDashboardControls } from '../hoc/withPageControls';
+import { PageControlButtons } from '../components/PageControlButtons';
 
-const CRSMultipleRevision = () => {
+const CRSMultipleRevision = ({ pageControls }) => {
   const [chains, setChains] = useState([]);
   const [selectedChain, setSelectedChain] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -216,15 +218,18 @@ const CRSMultipleRevision = () => {
             <h1 className="text-3xl font-bold text-gray-900">CRS Multiple Revision</h1>
             <p className="text-gray-600 mt-1">AI-powered revision chain management and tracking</p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Create Revision Chain
-          </button>
+          <div className="flex items-center gap-3">
+            <PageControlButtons controls={pageControls} />
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Revision Chain
+            </button>
+          </div>
         </div>
 
         {/* Statistics Cards */}
@@ -726,4 +731,18 @@ const CRSMultipleRevision = () => {
   );
 };
 
-export default CRSMultipleRevision;
+// Wrapper component to provide refetch functionality
+const CRSMultipleRevisionWithRefresh = (props) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const refetch = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
+  
+  return <CRSMultipleRevision {...props} refetch={refetch} key={refreshTrigger} />;
+};
+
+export default withDashboardControls(CRSMultipleRevisionWithRefresh, {
+  autoRefreshInterval: 30000, // 30 seconds
+  storageKey: 'crsMultipleRevisionPageControls',
+});

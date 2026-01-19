@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Shield, 
   AlertCircle, 
@@ -19,6 +19,8 @@ import { MainHeader } from './components/Common/MainHeader';
 import { LoadingState } from './components/Common/LoadingState';
 import { ErrorState } from './components/Common/ErrorState';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
+import { withDashboardControls } from '../../hoc/withPageControls';
+import { PageControlButtons } from '../../components/PageControlButtons';
 import {
   calculateHealthSafetyMetrics,
   getSafetyPerformance,
@@ -41,7 +43,7 @@ import {
   SafetyEmptyState
 } from './components/HealthSafety/SafetyComponents';
 
-const HealthSafety = () => {
+const HealthSafety = ({ pageControls }) => {
   const { data: projectsData, loading, error, refetch, isRefreshing } = useQHSERunningProjects();
   const [selectedView, setSelectedView] = useState('overview'); // overview, incidents, risk, performance
 
@@ -128,6 +130,7 @@ const HealthSafety = () => {
         subtitle={`${projectsData.length} projects • ${safetyMetrics.totalIncidents} incidents • ${safetyMetrics.daysWithoutIncident} days incident-free`}
       >
         <div className="flex items-center gap-3">
+          <PageControlButtons controls={pageControls} />
           <button
             onClick={refetch}
             disabled={isRefreshing}
@@ -461,4 +464,18 @@ const PerformanceView = ({ managerSafety, safetyKPIDistribution, monthlySafetyTr
   );
 };
 
-export default HealthSafety;
+// Wrapper component to provide refetch functionality
+const HealthSafetyWithRefresh = (props) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const refetch = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
+  
+  return <HealthSafety {...props} refetch={refetch} key={refreshTrigger} />;
+};
+
+export default withDashboardControls(HealthSafetyWithRefresh, {
+  autoRefreshInterval: 30000, // 30 seconds
+  storageKey: 'qhseHealthSafetyPageControls',
+});

@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { PageLayout } from '@/layouts/PageLayout';
 import { MainHeader } from './components/Common/MainHeader';
+import { withDashboardControls } from '@/hoc/withPageControls';
+import { PageControlButtons } from '@/components/PageControlButtons';
 import { Card, CardContent } from './components/ui/Card';
 import { Leaf, Droplets, Zap, Trash2, Wind, TreePine, Globe, TrendingDown, Award, AlertTriangle, Target, Activity } from 'lucide-react';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
@@ -42,7 +44,7 @@ import {
   AreaChart
 } from 'recharts';
 
-const Environmental = () => {
+const Environmental = ({ pageControls }) => {
   const [activeView, setActiveView] = useState('overview');
   const { data: projectsData, loading, error } = useQHSERunningProjects();
 
@@ -113,7 +115,9 @@ const Environmental = () => {
       <MainHeader 
         title="Environmental Management"
         subtitle="Carbon emissions monitoring, waste management, and sustainability initiatives"
-      />
+      >
+        <PageControlButtons {...pageControls} />
+      </MainHeader>
 
       {/* View Tabs */}
       <div className="bg-white rounded-lg shadow-sm p-2 mb-6 border border-gray-200">
@@ -578,4 +582,7 @@ const ViewTab = ({ icon: Icon, label, active, onClick, description }) => (
   </button>
 );
 
-export default Environmental;
+export default withDashboardControls(Environmental, {
+  autoRefreshInterval: 30000,
+  storageKey: 'qhseEnvironmentalPageControls'
+});

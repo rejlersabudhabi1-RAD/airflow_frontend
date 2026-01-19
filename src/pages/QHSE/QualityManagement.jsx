@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   FileCheck, 
   AlertTriangle, 
@@ -17,6 +17,8 @@ import { MainHeader } from './components/Common/MainHeader';
 import { LoadingState } from './components/Common/LoadingState';
 import { ErrorState } from './components/Common/ErrorState';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
+import { withDashboardControls } from '../../hoc/withPageControls';
+import { PageControlButtons } from '../../components/PageControlButtons';
 import {
   calculateQualityMetrics,
   getQualityPerformance,
@@ -36,7 +38,7 @@ import {
   QualityEmptyState
 } from './components/Quality/QualityComponents';
 
-const QualityManagement = () => {
+const QualityManagement = ({ pageControls }) => {
   const { data: projectsData, loading, error, refetch, isRefreshing } = useQHSERunningProjects();
   const [selectedView, setSelectedView] = useState('overview'); // overview, audits, compliance, trends
 
@@ -115,6 +117,7 @@ const QualityManagement = () => {
         subtitle={`Monitoring ${projectsData.length} projects • ${qualityMetrics.totalAudits} audits • ${qualityMetrics.openCARs + qualityMetrics.openObs} open issues`}
       >
         <div className="flex items-center gap-3">
+          <PageControlButtons controls={pageControls} />
           <button
             onClick={refetch}
             disabled={isRefreshing}
@@ -395,4 +398,18 @@ const TrendsView = ({ ncTrend, projectsData }) => {
   );
 };
 
-export default QualityManagement;
+// Wrapper component to provide refetch functionality
+const QualityManagementWithRefresh = (props) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const refetch = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
+  
+  return <QualityManagement {...props} refetch={refetch} key={refreshTrigger} />;
+};
+
+export default withDashboardControls(QualityManagementWithRefresh, {
+  autoRefreshInterval: 30000, // 30 seconds
+  storageKey: 'qhseQualityManagementPageControls',
+});

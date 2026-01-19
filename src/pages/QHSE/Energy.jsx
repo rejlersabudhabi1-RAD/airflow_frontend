@@ -3,9 +3,11 @@
  * Comprehensive energy monitoring, optimization, and sustainability
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { PageLayout } from '@/layouts/PageLayout';
 import { MainHeader } from './components/Common/MainHeader';
+import { withDashboardControls } from '@/hoc/withPageControls';
+import { PageControlButtons } from '@/components/PageControlButtons';
 import { Card, CardContent } from './components/ui/Card';
 import { 
   Zap, 
@@ -73,7 +75,7 @@ const SectionCard = ({ title, children, className = "" }) => (
   </Card>
 );
 
-const Energy = () => {
+const Energy = ({ pageControls }) => {
   const [activeView, setActiveView] = useState('overview');
   const { data: projectsData, loading, error } = useQHSERunningProjects();
 
@@ -170,7 +172,9 @@ const Energy = () => {
       <MainHeader 
         title="Energy Management" 
         subtitle={`Monitoring energy across ${energyData.totalProjects} projects`}
-      />
+      >
+        <PageControlButtons {...pageControls} />
+      </MainHeader>
 
       {/* View Navigation */}
       <div className="mb-6 border-b border-gray-200">
@@ -712,4 +716,7 @@ const Energy = () => {
   );
 };
 
-export default Energy;
+export default withDashboardControls(Energy, {
+  autoRefreshInterval: 30000,
+  storageKey: 'qhseEnergyPageControls'
+});

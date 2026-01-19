@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useQHSERunningProjects } from '../../hooks/useQHSEProjects'; // Add this import
 import {
   Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw } from "lucide-react";
+import { withDashboardControls } from '../../../../hoc/withPageControls';
+import { PageControlButtons } from '../../../../components/PageControlButtons';
 
 // Import common components for consistent loading/error states
 import { LoadingState } from "../Common/LoadingState"
@@ -55,7 +57,7 @@ const allHeaders = Object.keys(fieldLabels).map((key) => ({
   label: fieldLabels[key] || key
 }));
 
-const DetailedView = () => {
+const DetailedView = ({ pageControls }) => {
   const { data: projectsData, loading, error, lastUpdated, refetch } = useQHSERunningProjects();
   const [searchTerm, setSearchTerm] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -311,8 +313,11 @@ const DetailedView = () => {
         subtitle="Comprehensive table view of all project data with advanced filtering and search capabilities."
         lastUpdated={lastUpdated}
       >
-        <div className="text-xs text-green-600 dark:text-green-400">
-          • Live data ({projectsData.length} projects)
+        <div className="flex items-center gap-3">
+          <PageControlButtons controls={pageControls} />
+          <div className="text-xs text-green-600 dark:text-green-400">
+            • Live data ({projectsData.length} projects)
+          </div>
         </div>
       </MainHeader>
 
@@ -661,4 +666,18 @@ const DetailedViewContent = ({
   );
 };
 
-export default DetailedView;
+// Wrapper component to provide refetch functionality
+const DetailedViewWithRefresh = (props) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const refetch = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
+  
+  return <DetailedView {...props} refetch={refetch} key={refreshTrigger} />;
+};
+
+export default withDashboardControls(DetailedViewWithRefresh, {
+  autoRefreshInterval: 30000, // 30 seconds
+  storageKey: 'qhseDetailedViewPageControls',
+});

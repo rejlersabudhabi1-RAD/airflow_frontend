@@ -3,14 +3,16 @@
  * Professional PDF comment extraction and Google Sheets integration
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import crsService from '../services/crsService';
 import { API_BASE_URL } from '../config/api.config';
 import { STORAGE_KEYS } from '../config/app.config';
+import { withDashboardControls } from '../hoc/withPageControls';
+import { PageControlButtons } from '../components/PageControlButtons';
 
-const CRSDocuments = () => {
+const CRSDocuments = ({ pageControls, refetch }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -478,12 +480,15 @@ const CRSDocuments = () => {
             Professional PDF comment extraction and Google Sheets integration
           </p>
         </div>
-        <Link
-          to="/crs/documents/history"
-          className="inline-flex items-center px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm md:text-base bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors whitespace-nowrap"
-        >
-          📚 View History
-        </Link>
+        <div className="flex items-center gap-3">
+          <PageControlButtons controls={pageControls} />
+          <Link
+            to="/crs/documents/history"
+            className="inline-flex items-center px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm md:text-base bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors whitespace-nowrap"
+          >
+            📚 View History
+          </Link>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -1317,4 +1322,18 @@ const CRSDocuments = () => {
   );
 };
 
-export default CRSDocuments;
+// Wrapper component to provide refetch functionality
+const CRSDocumentsWithRefresh = (props) => {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  const refetch = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
+  
+  return <CRSDocuments {...props} refetch={refetch} key={refreshTrigger} />;
+};
+
+export default withDashboardControls(CRSDocumentsWithRefresh, {
+  autoRefreshInterval: 30000, // 30 seconds
+  storageKey: 'crsDocumentsPageControls',
+});

@@ -22,11 +22,12 @@ export const fetchUsers = createAsyncThunk(
   'rbac/fetchUsers',
   async (params = {}, { rejectWithValue }) => {
     try {
-      // 🔧 Smart fetching: Request all users by setting large page_size
-      // This ensures frontend gets all users for proper pagination
+      // � PERFORMANCE OPTIMIZATION: Use pagination instead of fetching all at once
+      // Backend is optimized but Railway DB latency causes timeouts with page_size=1000
+      // Solution: Use smaller batches (50-100) for faster response
       const fetchParams = {
         ...params,
-        page_size: params.page_size || 1000  // Default to fetching all users
+        page_size: params.page_size || 100  // Reduced from 1000 to 100 for better performance
       };
       
       console.log('[fetchUsers] 📄 Fetching users with params:', fetchParams);
@@ -42,6 +43,14 @@ export const fetchUsers = createAsyncThunk(
         console.log('[fetchUsers] ✅ Paginated response detected');
         console.log('[fetchUsers] 📊 Total count:', userData.count);
         console.log('[fetchUsers] 📄 Users fetched:', users.length);
+        
+        // Return full pagination data so frontend can show "Load More" or pagination controls
+        return {
+          users: users,
+          count: userData.count,
+          next: userData.next,
+          previous: userData.previous
+        };
       }
       
       console.log('[fetchUsers] Raw response:', response);
@@ -49,7 +58,8 @@ export const fetchUsers = createAsyncThunk(
       console.log('[fetchUsers] Is array:', Array.isArray(users));
       console.log('[fetchUsers] Total users:', users.length || 0);
       
-      return users;
+      // If not paginated, return users directly (backward compatibility)
+      return Array.isArray(users) ? { users: users, count: users.length } : { users: [], count: 0 };
     } catch (error) {
       console.error('[fetchUsers] ❌ Error:', error);
       return rejectWithValue(error.response?.data || error.message);
@@ -175,20 +185,25 @@ const rbacSlice = createSlice({
         const payload = action.payload;
         console.log('[Redux] fetchUsers.fulfilled - payload:', payload);
         
-        // Soft-coded: Handle multiple response structures
+        // 🚀 PERFORMANCE: Handle new pagination-aware response structure
         let usersArray = [];
         let totalCount = 0;
         
-        if (Array.isArray(payload)) {
-          // Direct array of users
+        if (payload?.users && Array.isArray(payload.users)) {
+          // New format: { users: [...], count: N, next: url, previous: url }
+          usersArray = payload.users;
+          totalCount = payload.count || payload.users.length;
+          console.log('[Redux] ✅ Using new pagination format');
+        } else if (Array.isArray(payload)) {
+          // Direct array of users (backward compatibility)
           usersArray = payload;
           totalCount = payload.length;
         } else if (payload?.results && Array.isArray(payload.results)) {
-          // Paginated response with results array
+          // Paginated response with results array (backward compatibility)
           usersArray = payload.results;
           totalCount = payload.count || payload.results.length;
         } else if (payload?.data) {
-          // Nested data structure
+          // Nested data structure (backward compatibility)
           if (Array.isArray(payload.data)) {
             usersArray = payload.data;
             totalCount = payload.data.length;
