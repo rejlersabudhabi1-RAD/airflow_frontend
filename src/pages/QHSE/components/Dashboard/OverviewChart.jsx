@@ -53,6 +53,16 @@ const QHSEOverviewChart = ({ monthlyData, yearlyData, className }) => {
   const [selectedMetrics, setSelectedMetrics] = useState(metricOptions.map(m => m.key));
 
   const chartData = filter === "monthly" ? monthlyData : yearlyData;
+  
+  // ✅ SMART: Detect data grouping type for dynamic labels
+  const hasDateBasedData = chartData && chartData.length > 0 && chartData[0].name?.includes('-');
+  const hasCompletionData = chartData && chartData.length > 0 && chartData[0].name?.includes('Complete');
+  const hasKPIData = chartData && chartData.length > 0 && chartData[0].name?.includes('KPI');
+  
+  // Dynamic axis labels based on data type
+  const xAxisLabel = hasDateBasedData ? 'Time Period' : hasCompletionData ? 'Project Completion Range' : 'Performance Category';
+  const viewLabel = hasDateBasedData ? (filter === "monthly" ? "Monthly View" : "Yearly View") :
+                    hasCompletionData ? "By Completion %" : "By KPI Performance";
 
   const toggleMetric = (metricKey) => {
     setSelectedMetrics(prev => 
@@ -70,6 +80,11 @@ const QHSEOverviewChart = ({ monthlyData, yearlyData, className }) => {
           <h3 className="card-title text-lg font-semibold">
             QHSE Performance Overview
           </h3>
+          {chartData && chartData.length > 0 && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {viewLabel} • {chartData.length} categories • {chartData.reduce((sum, d) => sum + (d.count || 0), 0)} projects
+            </p>
+          )}
         </div>
         {/* Filter Dropdown aligned right */}
         <div>
@@ -80,8 +95,8 @@ const QHSEOverviewChart = ({ monthlyData, yearlyData, className }) => {
             onChange={e => setFilter(e.target.value)}
             aria-label="Select time period"
           >
-            <option value="monthly">Monthly View</option>
-            <option value="yearly">Yearly View</option>
+            <option value="monthly">{hasDateBasedData ? 'Monthly View' : 'By Completion %'}</option>
+            <option value="yearly">{hasDateBasedData ? 'Yearly View' : 'By KPI Performance'}</option>
           </select>
         </div>
       </div>
@@ -136,10 +151,13 @@ const QHSEOverviewChart = ({ monthlyData, yearlyData, className }) => {
                 tickMargin={10}
                 axisLine={false}
                 tickLine={false}
+                angle={hasKPIData || hasCompletionData ? -15 : 0}
+                textAnchor={hasKPIData || hasCompletionData ? "end" : "middle"}
+                height={hasKPIData || hasCompletionData ? 80 : 50}
                 label={{ 
-                  value: 'Time Period', 
+                  value: xAxisLabel, 
                   position: 'insideBottom', 
-                  offset: -16,
+                  offset: hasKPIData || hasCompletionData ? -10 : -16,
                   style: { 
                     textAnchor: 'middle',
                     fill: theme === "light" ? "#64748b" : "#9ca3af",

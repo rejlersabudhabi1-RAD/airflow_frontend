@@ -37,6 +37,10 @@ export default defineConfig(({ mode }) => {
               console.log('❌ Proxy error:', err.message)
             })
             proxy.on('proxyReq', (proxyReq, req, res) => {
+              // Forward the original host header for proper URL generation
+              proxyReq.setHeader('X-Forwarded-Host', 'localhost:5173')
+              proxyReq.setHeader('X-Forwarded-Proto', 'http')
+              proxyReq.setHeader('X-Forwarded-For', req.socket.remoteAddress)
               console.log('📤 Proxy request:', req.method, req.url, '→', apiUrl + req.url)
             })
           }

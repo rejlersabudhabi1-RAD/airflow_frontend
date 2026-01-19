@@ -25,6 +25,7 @@ import QualityManagement from './QualityManagement';
 import HealthSafety from './HealthSafety';
 import Environmental from './Environmental';
 import Energy from './Energy';
+import Projects from './Projects';
 
 // Common Components
 import { LoadingState } from './components/Common/LoadingState';
@@ -44,6 +45,7 @@ const GeneralQHSE = () => {
         <Route path="/" element={<QHSEDashboard />} />
         <Route path="/summary" element={<SummaryViewWrapper />} />
         <Route path="/detailed" element={<DetailedViewWrapper />} />
+        <Route path="/projects" element={<ProjectsWrapper />} />
         <Route path="/quality" element={<QualityManagement />} />
         <Route path="/health-safety" element={<HealthSafety />} />
         <Route path="/environmental" element={<Environmental />} />
@@ -141,11 +143,20 @@ const QHSEDashboard = () => {
   }
 
   // Empty state
+  console.log('🔍 QHSE Dashboard Debug:', {
+    projectsData,
+    projectsDataType: typeof projectsData,
+    isArray: Array.isArray(projectsData),
+    length: projectsData?.length,
+    hasData: !!(projectsData && projectsData.length > 0)
+  });
+  
   if (!projectsData || projectsData.length === 0) {
+    console.warn('⚠️ Showing EmptyDataState - projectsData:', projectsData);
     return (
       <div className="p-6">
         <MainHeader />
-        <EmptyDataState />
+        <EmptyDataState onRetry={refetch} />
       </div>
     );
   }
@@ -167,6 +178,14 @@ const QHSEDashboard = () => {
       path: '/qhse/general/detailed',
       color: 'from-indigo-500 to-indigo-600',
       iconColor: 'text-indigo-500'
+    },
+    {
+      title: 'Project Management',
+      description: 'Create and manage QHSE projects',
+      icon: DocumentTextIcon,
+      path: '/qhse/general/projects',
+      color: 'from-purple-500 to-purple-600',
+      iconColor: 'text-purple-500'
     },
     {
       title: 'Billability Overview',
@@ -346,6 +365,14 @@ const SpotCheckWrapper = () => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1920px] mx-auto">
       <SpotCheckOverview />
+    </div>
+  );
+};
+
+const ProjectsWrapper = () => {
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1920px] mx-auto">
+      <Projects />
     </div>
   );
 };

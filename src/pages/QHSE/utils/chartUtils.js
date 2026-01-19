@@ -219,18 +219,21 @@ export const generateQualityPlanStatusData = (filteredProjects) => {
   ];
 };
 
-// Generate monthly overview data
+// ✅ SMART: Generate monthly overview data (with fallback for missing dates)
 export const getMonthlyOverviewData = (projects) => {
   if (!projects || projects.length === 0) {
     return [];
   }
 
+  // Try date-based grouping first
   const monthly = {};
+  let hasValidDates = false;
   
   projects.forEach(p => {
     const date = parseDate(p.projectStartingDate);
     if (!date) return;
     
+    hasValidDates = true;
     const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
     const monthLabel = date.toLocaleString('default', { month: 'short', year: 'numeric' });
     
@@ -253,27 +256,63 @@ export const getMonthlyOverviewData = (projects) => {
     monthly[monthKey].count += 1;
   });
   
-  return Object.values(monthly)
-    .map(m => ({
-      ...m,
-      kpiAchieved: m.count ? Math.round((m.kpiAchieved / m.count) * 100) / 100 : 0,
-      billability: m.count ? Math.round((m.billability / m.count) * 100) / 100 : 0,
-    }))
-    .sort((a, b) => a.date - b.date);
+  // If we have valid date data, use it
+  if (hasValidDates && Object.keys(monthly).length > 0) {
+    return Object.values(monthly)
+      .map(m => ({
+        ...m,
+        kpiAchieved: m.count ? Math.round((m.kpiAchieved / m.count) * 100) / 100 : 0,
+        billability: m.count ? Math.round((m.billability / m.count) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => a.date - b.date);
+  }
+  
+  // ✅ FALLBACK: Group by completion ranges when dates are missing
+  const completionRanges = [
+    { min: 0, max: 25, name: '0-25% Complete' },
+    { min: 25, max: 50, name: '25-50% Complete' },
+    { min: 50, max: 75, name: '50-75% Complete' },
+    { min: 75, max: 90, name: '75-90% Complete' },
+    { min: 90, max: 100, name: '90-100% Complete' },
+  ];
+  
+  return completionRanges.map(range => {
+    const rangeProjects = projects.filter(p => {
+      const completion = parsePercentage(p.projectCompletionPercent);
+      return completion >= range.min && completion < range.max;
+    });
+    
+    if (rangeProjects.length === 0) return null;
+    
+    const carsOpen = rangeProjects.reduce((sum, p) => sum + (Number(p.carsOpen) || 0), 0);
+    const obsOpen = rangeProjects.reduce((sum, p) => sum + (Number(p.obsOpen) || 0), 0);
+    const avgKpi = rangeProjects.reduce((sum, p) => sum + parsePercentage(p.projectKPIsAchievedPercent), 0) / rangeProjects.length;
+    
+    return {
+      name: range.name,
+      carsOpen,
+      obsOpen,
+      kpiAchieved: Math.round(avgKpi * 100) / 100,
+      count: rangeProjects.length
+    };
+  }).filter(Boolean); // Remove null entries
 };
 
-// Generate yearly overview data
+// ✅ SMART: Generate yearly overview data (with fallback for missing dates)
 export const getYearlyOverviewData = (projects) => {
   if (!projects || projects.length === 0) {
     return [];
   }
 
+  // Try date-based grouping first
   const yearly = {};
+  let hasValidDates = false;
   
   projects.forEach(p => {
     const date = parseDate(p.projectStartingDate);
     if (!date) return;
     
+    hasValidDates = true;
     const yearKey = `${date.getFullYear()}`;
     
     if (!yearly[yearKey]) {
@@ -295,13 +334,46 @@ export const getYearlyOverviewData = (projects) => {
     yearly[yearKey].count += 1;
   });
   
-  return Object.values(yearly)
-    .map(y => ({
-      ...y,
-      kpiAchieved: y.count ? Math.round((y.kpiAchieved / y.count) * 100) / 100 : 0,
-      billability: y.count ? Math.round((y.billability / y.count) * 100) / 100 : 0,
-    }))
-    .sort((a, b) => a.date - b.date);
+  // If we have valid date data, use it
+  if (hasValidDates && Object.keys(yearly).length > 0) {
+    return Object.values(yearly)
+      .map(y => ({
+        ...y,
+        kpiAchieved: y.count ? Math.round((y.kpiAchieved / y.count) * 100) / 100 : 0,
+        billability: y.count ? Math.round((y.billability / y.count) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => a.date - b.date);
+  }
+  
+  // ✅ FALLBACK: Group by KPI performance ranges when dates are missing
+  const kpiRanges = [
+    { min: 90, max: 101, name: '90-100% KPI (Excellent)' },
+    { min: 75, max: 90, name: '75-89% KPI (Good)' },
+    { min: 50, max: 75, name: '50-74% KPI (Fair)' },
+    { min: 1, max: 50, name: '1-49% KPI (Poor)' },
+    { min: 0, max: 1, name: '0% KPI (No Data)' },
+  ];
+  
+  return kpiRanges.map(range => {
+    const rangeProjects = projects.filter(p => {
+      const kpi = parsePercentage(p.projectKPIsAchievedPercent);
+      return kpi >= range.min && kpi < range.max;
+    });
+    
+    if (rangeProjects.length === 0) return null;
+    
+    const carsOpen = rangeProjects.reduce((sum, p) => sum + (Number(p.carsOpen) || 0), 0);
+    const obsOpen = rangeProjects.reduce((sum, p) => sum + (Number(p.obsOpen) || 0), 0);
+    const avgKpi = rangeProjects.reduce((sum, p) => sum + parsePercentage(p.projectKPIsAchievedPercent), 0) / rangeProjects.length;
+    
+    return {
+      name: range.name,
+      carsOpen,
+      obsOpen,
+      kpiAchieved: Math.round(avgKpi * 100) / 100,
+      count: rangeProjects.length
+    };
+  }).filter(Boolean); // Remove null entries
 };
 
 // ✅ SIMPLE: Management timeline data

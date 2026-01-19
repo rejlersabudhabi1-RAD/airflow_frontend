@@ -36,6 +36,15 @@ export const useQHSERunningProjects = () => {
       console.log('🌐 Fetching from:', nextUrl);
       
       while (nextUrl) {
+        // Fix Docker internal hostname in pagination URLs
+        // Replace 'backend:8000' with 'localhost:8000' for browser access
+        if (nextUrl.includes('backend:8000')) {
+          console.warn('⚠️ Fixing Docker hostname in URL:', nextUrl);
+          nextUrl = nextUrl.replace('backend:8000', 'localhost:8000');
+          nextUrl = nextUrl.replace('http://backend', 'http://localhost');
+          console.log('✅ Fixed URL:', nextUrl);
+        }
+        
         const response = await fetch(nextUrl, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -46,8 +55,22 @@ export const useQHSERunningProjects = () => {
         console.log('📡 API Response status:', response.status);
 
         if (!response.ok) {
-          if (response.status === 401) {
+          if (response.status === 401 || response.status === 403) {
+            // Clear invalid tokens
+            localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
             throw new Error('Session expired. Please log in again.');
+          }
+          if (response.status === 500) {
+            // Backend error - try to get error details
+            let errorDetail = 'Internal server error';
+            try {
+              const errorData = await response.json();
+              errorDetail = errorData.detail || errorData.message || errorDetail;
+            } catch (e) {
+              // Can't parse error response
+            }
+            throw new Error(`Server error: ${errorDetail}`);
           }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -64,6 +87,12 @@ export const useQHSERunningProjects = () => {
         if (jsonData.results && Array.isArray(jsonData.results)) {
           allProjects = [...allProjects, ...jsonData.results];
           nextUrl = jsonData.next; // Continue to next page if exists
+          
+          // Fix next URL if it contains Docker internal hostname
+          if (nextUrl && nextUrl.includes('backend:8000')) {
+            nextUrl = nextUrl.replace('backend:8000', 'localhost:8000');
+            nextUrl = nextUrl.replace('http://backend', 'http://localhost');
+          }
         } else if (Array.isArray(jsonData)) {
           allProjects = jsonData;
           nextUrl = null; // No pagination, exit loop
@@ -115,6 +144,16 @@ export const useQHSERunningProjects = () => {
       console.log('📊 Transformed data sample (first project):', transformedData[0]);
       console.log('📊 Field check - carsOpen:', transformedData[0]?.carsOpen, 'obsOpen:', transformedData[0]?.obsOpen, 'projectKPIsAchievedPercent:', transformedData[0]?.projectKPIsAchievedPercent);
       console.log('✅ Total projects loaded:', transformedData.length);
+
+      // Smart fallback: If no data received, retry once after 2 seconds
+      // This handles cases where backend was still loading data
+      if (transformedData.length === 0 && !isRefresh) {
+        console.warn('⚠️ No projects received, retrying in 2 seconds...');
+        setTimeout(() => {
+          console.log('🔄 Retrying data fetch...');
+          fetchData(true);
+        }, 2000);
+      }
 
       setData(transformedData);
       const now = new Date().toISOString();
