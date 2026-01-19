@@ -13,7 +13,7 @@ import {
 import {
   CloudUpload as UploadIcon, CheckCircle as CheckIcon,
   Download as DownloadIcon, Visibility as PreviewIcon,
-  TableChart as TableIcon
+  TableChart as TableIcon, CloudDownload as CloudDownloadIcon
 } from '@mui/icons-material';
 
 // Smart configuration
@@ -219,6 +219,45 @@ const CRSMultiRevisionSmart = () => {
       console.error('[CRS] Excel download error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // S3 Excel Download Handler - Try S3 first, fallback to on-the-fly generation
+  const handleDownloadFromS3 = async (revisionIndex) => {
+    try {
+      const revision = uploadedRevisions[revisionIndex];
+      
+      if (!revision || !revision.data || !revision.data.revision) {
+        throw new Error('Revision data not found');
+      }
+
+      const revisionData = revision.data.revision;
+      
+      // Check if S3 presigned URL exists
+      if (revisionData.excel_download_url) {
+        console.log(`✅ Downloading from S3: ${revision.label}`);
+        
+        // Download from S3 using presigned URL
+        const link = document.createElement('a');
+        link.href = revisionData.excel_download_url;
+        link.download = `CRS_${createdChain.chain_id}_${revision.label}_${new Date().toISOString().split('T')[0]}.xls`;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setSuccess(`✅ Downloaded ${revision.label} from S3`);
+        return;
+      } else {
+        // Fallback: Generate on-the-fly (existing logic)
+        console.warn('⚠️ No S3 URL available, generating excel on-the-fly');
+        handleDownloadSingleRevision(revisionIndex);
+      }
+    } catch (error) {
+      console.error('❌ Error downloading from S3:', error);
+      // Fallback to existing on-the-fly generation
+      setError('S3 download failed, generating excel...');
+      setTimeout(() => handleDownloadSingleRevision(revisionIndex), 1000);
     }
   };
 
@@ -508,14 +547,17 @@ const CRSMultiRevisionSmart = () => {
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <Tooltip title={`Download ${rev.label} Excel`}>
+                      <Tooltip title={rev.data?.revision?.excel_download_url ? "Download from S3 (instant)" : "Generate Excel"}>
                         <IconButton
-                          color="primary"
+                          color={rev.data?.revision?.excel_download_url ? "success" : "primary"}
                           size="small"
-                          onClick={() => handleDownloadSingleRevision(idx)}
+                          onClick={() => handleDownloadFromS3(idx)}
                           disabled={loading}
                         >
-                          <DownloadIcon fontSize="small" />
+                          {rev.data?.revision?.excel_download_url ? 
+                            <CloudDownloadIcon fontSize="small" /> : 
+                            <DownloadIcon fontSize="small" />
+                          }
                         </IconButton>
                       </Tooltip>
                     </TableCell>
