@@ -32,7 +32,14 @@ const CRSDocuments = ({ pageControls, refetch }) => {
     revision: '',
     contractor: '',
     department: '',
+    project_type: '', // NEW: ADNOC Onshore/Offshore
+    template_key: '', // NEW: Selected S3 template
   });
+  
+  // NEW: Template management states
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [availableTemplates, setAvailableTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   
   // Department options - loaded from API config
   const [departmentOptions, setDepartmentOptions] = useState([
@@ -48,7 +55,64 @@ const CRSDocuments = ({ pageControls, refetch }) => {
   useEffect(() => {
     loadData();
     loadConfig(); // Load configuration including departments
+    loadProjectTypes(); // Load project types from backend
   }, []);
+
+  // NEW: Load project types from backend
+  const loadProjectTypes = async () => {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(
+        `${API_BASE_URL}/crs/templates/`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.project_types) {
+          setProjectTypes(data.project_types);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading project types:', error);
+    }
+  };
+
+  // NEW: Load templates when project type changes
+  const handleProjectTypeChange = async (projectType) => {
+    setFileMetadata({ ...fileMetadata, project_type: projectType, template_key: '' });
+    setAvailableTemplates([]);
+    
+    if (!projectType) return;
+    
+    try {
+      setLoadingTemplates(true);
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(
+        `${API_BASE_URL}/crs/templates/?project_type=${projectType}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.templates) {
+          setAvailableTemplates(data.templates);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
 
   // Load soft-coded configuration from backend
   const loadConfig = async () => {
@@ -933,6 +997,58 @@ const CRSDocuments = ({ pageControls, refetch }) => {
                     ))}
                   </select>
                 </div>
+
+                {/* NEW: Project Type Selection */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Project Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={fileMetadata.project_type}
+                    onChange={(e) => handleProjectTypeChange(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                    required
+                  >
+                    <option value="">Select Project Type...</option>
+                    {projectTypes.map((type) => (
+                      <option key={type.code} value={type.code}>
+                        {type.icon} {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* NEW: Template Selection */}
+                {fileMetadata.project_type && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      CRS Template
+                    </label>
+                    {loadingTemplates ? (
+                      <div className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent"></div>
+                        Loading templates...
+                      </div>
+                    ) : availableTemplates.length > 0 ? (
+                      <select
+                        value={fileMetadata.template_key}
+                        onChange={(e) => setFileMetadata({...fileMetadata, template_key: e.target.value})}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white"
+                      >
+                        <option value="">Use Default Template</option>
+                        {availableTemplates.map((template) => (
+                          <option key={template.key} value={template.key}>
+                            📄 {template.filename} ({(template.size / 1024).toFixed(1)} KB)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="w-full px-4 py-2.5 border border-yellow-300 rounded-lg bg-yellow-50 text-yellow-700 text-sm">
+                        ⚠️ No custom templates found. Default template will be used.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Result Message */}
