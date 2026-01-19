@@ -187,7 +187,7 @@ const CRSDocuments = () => {
   };
 
   // NEW: Generate and download Excel directly from preview data
-  const handleDownload = (format) => {
+  const handleDownload = async (format) => {
     if (!previewData || !previewData.comments || previewData.comments.length === 0) {
       alert('No comment data available for download');
       return;
@@ -278,6 +278,46 @@ const CRSDocuments = () => {
         const a = document.createElement('a');
         a.href = url;
         a.download = `CRS_${docNumber}_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+      } else if (format === 'pdf' || format === 'docx') {
+        // Call backend API to generate PDF or DOCX from the preview data
+        const formData = new FormData();
+        formData.append('file', previewData.file);
+        formData.append('project_name', previewData.fileMetadata.project_name);
+        formData.append('document_number', previewData.fileMetadata.document_number);
+        formData.append('revision', previewData.fileMetadata.revision);
+        formData.append('contractor', previewData.fileMetadata.contractor);
+        formData.append('department', previewData.fileMetadata.department);
+        formData.append('format', format); // Specify PDF or DOCX format
+        
+        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        
+        const response = await fetch(
+          `${API_BASE_URL}/crs/documents/upload-and-process/`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          }
+        );
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `${format.toUpperCase()} generation failed`);
+        }
+        
+        // Backend returns the file as binary
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CRS_${docNumber}_${timestamp}.${format}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
