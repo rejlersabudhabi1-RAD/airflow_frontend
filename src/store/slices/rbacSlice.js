@@ -22,12 +22,11 @@ export const fetchUsers = createAsyncThunk(
   'rbac/fetchUsers',
   async (params = {}, { rejectWithValue }) => {
     try {
-      // � PERFORMANCE OPTIMIZATION: Use pagination instead of fetching all at once
-      // Backend is optimized but Railway DB latency causes timeouts with page_size=1000
-      // Solution: Use smaller batches (50-100) for faster response
+      // 🔧 SOFT-CODED: Fetch all users by setting high page_size or using pagination
+      // User can override page_size if needed for specific use cases
       const fetchParams = {
         ...params,
-        page_size: params.page_size || 100  // Reduced from 1000 to 100 for better performance
+        page_size: params.page_size || 1000  // Increased to 1000 to fetch all users
       };
       
       console.log('[fetchUsers] 📄 Fetching users with params:', fetchParams);

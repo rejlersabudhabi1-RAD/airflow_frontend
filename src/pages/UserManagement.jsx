@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 import { STORAGE_KEYS } from '../config/app.config';
+import { withDashboardControls } from '@/hoc/withPageControls';
+import { PageControlButtons } from '@/components/PageControlButtons';
 import { 
   validateUserForm, 
   parseBackendError, 
@@ -18,7 +20,7 @@ import EditUserModal from '../components/UserManagement/EditUserModal';
  * CRUD operations for users with role assignment
  * Soft-coded with proper state management
  */
-const UserManagement = () => {
+const UserManagement = ({ pageControls }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   
@@ -1230,6 +1232,7 @@ const UserManagement = () => {
             <p className="text-gray-600 mt-1">Manage users, roles, and permissions</p>
           </div>
           <div className="flex gap-3">
+            <PageControlButtons {...pageControls} />
             <button
               onClick={() => {
                 console.log('Bulk Upload button clicked');
@@ -2286,4 +2289,7 @@ const UserManagement = () => {
   );
 };
 
-export default UserManagement;
+export default withDashboardControls(UserManagement, {
+  autoRefreshInterval: 30000,
+  storageKey: 'adminUserManagementPageControls'
+});
