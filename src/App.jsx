@@ -31,6 +31,7 @@ import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
+import CRSChainDetail from './pages/CRSChainDetail'
 // Soft-coded CRS Multi-Revision - Use Smart component with finish early logic
 import CRSMultipleRevisionClassic from './pages/CRSMultipleRevision'
 import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
@@ -368,6 +369,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="crs_documents">
               <CRSDocuments />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="crs/documents/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="crs_documents">
+              <CRSChainDetail />
             </ModuleProtectedRoute>
           }
         />
