@@ -65,7 +65,27 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
     setLoading(true);
     setError(null);
 
+    // Client-side validation for required fields
+    const requiredFields = {
+      'Chain ID': chainForm.chain_id,
+      'Document Title': chainForm.document_title,
+      'Document Number': chainForm.document_number,
+      'Project Name': chainForm.project_name
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value || value.trim() === '')
+      .map(([name, _]) => name);
+
+    if (missingFields.length > 0) {
+      setError(`Required fields missing: ${missingFields.join(', ')}`);
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log('[CRS] Submitting chain data:', chainForm);
+      
       const response = await fetch(`${CONFIG.API_BASE_URL}/crs/revision-chains/`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -74,6 +94,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[CRS] Server error response:', errorData);
         
         // Smart error message extraction
         let errorMsg = `Failed: ${response.status}`;
@@ -82,11 +103,20 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         } else if (errorData.errors) {
           // Handle field-specific errors
           const fieldErrors = Object.entries(errorData.errors)
-            .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+            .map(([field, errors]) => {
+              const errorText = Array.isArray(errors) ? errors.join(', ') : errors;
+              return `${field}: ${errorText}`;
+            })
             .join('; ');
           errorMsg = fieldErrors || errorMsg;
         } else if (errorData.chain_id) {
-          errorMsg = `Chain ID: ${errorData.chain_id}`;
+          errorMsg = `Chain ID: ${Array.isArray(errorData.chain_id) ? errorData.chain_id.join(', ') : errorData.chain_id}`;
+        } else {
+          // Fallback: show all error fields
+          const allErrors = Object.entries(errorData)
+            .map(([key, val]) => `${key}: ${JSON.stringify(val)}`)
+            .join('; ');
+          if (allErrors) errorMsg = allErrors;
         }
         
         throw new Error(errorMsg);
