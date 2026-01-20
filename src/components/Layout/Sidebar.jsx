@@ -133,8 +133,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           moduleCode: 'pid_analysis'
         },
         {
+          id: 'designiq',
+          title: '1.2 DesignIQ - Design Intelligence',
+          icon: BeakerIcon,
+          path: '/designiq',
+          description: 'AI-powered design optimization',
+          moduleCode: 'designiq'
+        },
+        {
           id: 'pfd',
-          title: '1.2 PFD to P&ID Converter',
+          title: '1.3 PFD to P&ID Converter',
           icon: DocumentTextIcon,
           path: '/pfd/upload',
           description: 'Intelligent conversion',

@@ -55,6 +55,9 @@ import DataGovernanceService from './pages/DataGovernanceService'
 import SecurityService from './pages/SecurityService'
 import About from './pages/About'
 import NotFound from './pages/NotFound'
+// DesignIQ Components
+import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
+import DesignIQLists from './pages/DesignIQ/DesignIQLists'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -420,6 +423,24 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="finance">
               <InvoiceDetail />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* DesignIQ Routes */}
+        <Route
+          path="designiq"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <DesignIQDashboard />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="designiq/lists"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <DesignIQLists />
             </ModuleProtectedRoute>
           }
         />
