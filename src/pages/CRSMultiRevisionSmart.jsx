@@ -15,6 +15,8 @@ import {
   Download as DownloadIcon, Visibility as PreviewIcon,
   TableChart as TableIcon, CloudDownload as CloudDownloadIcon
 } from '@mui/icons-material';
+import { withDashboardControls } from '../hoc/withPageControls';
+import { PageControlButtons } from '../components/PageControlButtons';
 
 // Smart configuration
 const CONFIG = {
@@ -24,7 +26,7 @@ const CONFIG = {
   ACCEPTED_FILE_TYPE: '.pdf'
 };
 
-const CRSMultiRevisionSmart = () => {
+const CRSMultiRevisionSmart = ({ pageControls }) => {
   // Step tracking
   const [currentStep, setCurrentStep] = useState(0);
   
@@ -637,10 +639,13 @@ const CRSMultiRevisionSmart = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        CRS Multi-Revision Workflow (Smart Version)
-      </Typography>
+    <Box sx={{ pt: 6, px: 4, pb: 4, minHeight: "100vh" }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4">
+          CRS Multi-Revision Workflow (Smart Version)
+        </Typography>
+        <PageControlButtons controls={pageControls} />
+      </Box>
 
       {/* Stepper */}
       <Stepper activeStep={currentStep} sx={{ mb: 4 }}>
@@ -897,4 +902,5 @@ const CRSMultiRevisionSmart = () => {
   );
 };
 
-export default CRSMultiRevisionSmart;
+export default withDashboardControls(CRSMultiRevisionSmart);
+
