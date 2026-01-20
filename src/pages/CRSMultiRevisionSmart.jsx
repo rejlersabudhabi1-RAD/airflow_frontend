@@ -65,11 +65,6 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
     setSuccess(`Auto-generated Chain ID: ${newChainId}`);
     setTimeout(() => setSuccess(null), 3000);
   };
-  // UI states
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [showPreview, setShowPreview] = useState(false);
 
   // Smart auth helper
   const getAuthHeaders = () => {
