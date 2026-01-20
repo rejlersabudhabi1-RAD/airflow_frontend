@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { EDIT_USER_CONFIG, initializeFormData, validateField, hasChanges } from '../../config/editUser.config';
-import { canManageModules } from '../../config/adminPermissions.config';
 
 /**
  * Comprehensive Edit User Modal
@@ -468,10 +467,6 @@ const EditUserModal = ({
 
   // Render section
   const renderSection = (section) => {
-    // Hide modules section if user doesn't have permission
-    if (section.id === 'modules' && !canManageModules(currentUser)) {
-      return null;
-    }
     
     const isExpanded = expandedSections[section.id];
     const isCollapsible = section.collapsible;
