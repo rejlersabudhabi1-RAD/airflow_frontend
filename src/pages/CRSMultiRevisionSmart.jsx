@@ -94,31 +94,58 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[CRS] Server error response:', errorData);
+        console.error('[CRS] Server error response:', JSON.stringify(errorData, null, 2));
+        console.error('[CRS] Error data keys:', Object.keys(errorData));
+        console.error('[CRS] Full error object:', errorData);
         
-        // Smart error message extraction
+        // Smart error message extraction - handle all possible formats
         let errorMsg = `Failed: ${response.status}`;
-        if (errorData.detail) {
+        
+        // Check for 'detail' field
+        if (errorData.detail && typeof errorData.detail === 'string') {
           errorMsg = errorData.detail;
-        } else if (errorData.errors) {
-          // Handle field-specific errors
-          const fieldErrors = Object.entries(errorData.errors)
-            .map(([field, errors]) => {
-              const errorText = Array.isArray(errors) ? errors.join(', ') : errors;
-              return `${field}: ${errorText}`;
-            })
-            .join('; ');
-          errorMsg = fieldErrors || errorMsg;
-        } else if (errorData.chain_id) {
-          errorMsg = `Chain ID: ${Array.isArray(errorData.chain_id) ? errorData.chain_id.join(', ') : errorData.chain_id}`;
-        } else {
-          // Fallback: show all error fields
-          const allErrors = Object.entries(errorData)
-            .map(([key, val]) => `${key}: ${JSON.stringify(val)}`)
-            .join('; ');
-          if (allErrors) errorMsg = allErrors;
         }
         
+        // Check for 'errors' object (DRF serializer errors)
+        if (errorData.errors && typeof errorData.errors === 'object') {
+          const fieldErrors = Object.entries(errorData.errors)
+            .map(([field, errors]) => {
+              const errorText = Array.isArray(errors) ? errors.join(', ') : String(errors);
+              return `${field}: ${errorText}`;
+            })
+            .join(' | ');
+          if (fieldErrors) errorMsg = fieldErrors;
+        }
+        
+        // Check for direct field errors (DRF default format)
+        else if (errorData && typeof errorData === 'object' && !errorData.detail && !errorData.errors) {
+          // DRF returns errors like: {chain_id: ['error msg'], project_name: ['error msg']}
+          const directErrors = Object.entries(errorData)
+            .filter(([key]) => key !== 'non_field_errors')
+            .map(([field, errors]) => {
+              const errorText = Array.isArray(errors) ? errors.join(', ') : String(errors);
+              return `${field}: ${errorText}`;
+            });
+          
+          if (directErrors.length > 0) {
+            errorMsg = directErrors.join(' | ');
+          }
+          
+          // Check for non_field_errors
+          if (errorData.non_field_errors) {
+            const nfeText = Array.isArray(errorData.non_field_errors) 
+              ? errorData.non_field_errors.join(', ') 
+              : String(errorData.non_field_errors);
+            errorMsg = nfeText;
+          }
+        }
+        
+        // Final fallback: stringify the entire error object
+        if (errorMsg === `Failed: ${response.status}` && Object.keys(errorData).length > 0) {
+          errorMsg = JSON.stringify(errorData);
+        }
+        
+        console.error('[CRS] Final error message:', errorMsg);
         throw new Error(errorMsg);
       }
 
