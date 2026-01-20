@@ -14,6 +14,7 @@ import {
 } from '../config/userManagement.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
+import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
 
 /**
  * User Management Page - Rebuilt
@@ -55,6 +56,7 @@ const UserManagement = ({ pageControls }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [showAccessToAllModal, setShowAccessToAllModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Local state - Data
@@ -1061,7 +1063,44 @@ const UserManagement = ({ pageControls }) => {
       });
     }
   };
-  
+
+  // ========== HANDLER: ACCESS TO ALL USERS ==========
+  const handleAccessToAll = async (selectedModuleCodes) => {
+    try {
+      setActionLoading(prev => ({ ...prev, access_to_all: true }));
+      
+      console.log('[AccessToAll] Assigning modules to all users:', selectedModuleCodes);
+      
+      // Call the bulk assign API endpoint
+      const response = await rbacService.bulkAssignModules({
+        module_codes: selectedModuleCodes,
+        all_users: true
+      });
+      
+      console.log('[AccessToAll] Assignment response:', response);
+      
+      // Refresh users to get updated data
+      await dispatch(fetchUsers()).unwrap();
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: `Successfully granted access to ${selectedModuleCodes.length} module(s) for all users`
+      });
+      
+    } catch (error) {
+      console.error('[AccessToAll] Assignment failed:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.error || 'Failed to assign modules to all users'
+      });
+      throw error;
+    } finally {
+      setActionLoading(prev => ({ ...prev, access_to_all: false }));
+    }
+  };
+
   const handleDownloadTemplate = async () => {
     try {
       console.log('[BulkUpload] Downloading template...');
@@ -1244,6 +1283,16 @@ const UserManagement = ({ pageControls }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
               Bulk Upload
+            </button>
+
+            <button
+              onClick={() => setShowAccessToAllModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-lg"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Access to All Users
             </button>
 
             <button
@@ -2286,6 +2335,16 @@ const UserManagement = ({ pageControls }) => {
         roles={roles}
         currentUser={currentUser}
         loading={actionLoading[`edit_${selectedUser?.id}`]}
+      />
+
+      {/* Access to All Users Modal */}
+      <AccessToAllModal
+        isOpen={showAccessToAllModal}
+        onClose={() => setShowAccessToAllModal(false)}
+        onAssign={handleAccessToAll}
+        modules={modules}
+        totalUsers={users?.length || 0}
+        loading={actionLoading.access_to_all}
       />
     </div>
   );

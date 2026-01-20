@@ -207,6 +207,11 @@ class RBACService {
   async deleteFile(storageId) {
     return apiService.delete(`${RBAC_BASE_URL}/storage/${storageId}/`);
   }
+
+  // Bulk assign modules to all users
+  async bulkAssignModules(data) {
+    return apiService.post(`${RBAC_BASE_URL}/users/bulk-assign-modules/`, data);
+  }
 }
 
 export default new RBACService();
