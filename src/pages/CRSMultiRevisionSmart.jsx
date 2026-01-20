@@ -49,6 +49,28 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   const [success, setSuccess] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Smart auto-generation of unique chain_id
+  const generateUniqueChainId = () => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const prefix = chainForm.project_name ? 
+      chainForm.project_name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '') || 'CRS' : 
+      'CRS';
+    return `${prefix}-${timestamp}-${random}`;
+  };
+
+  const handleAutoGenerateChainId = () => {
+    const newChainId = generateUniqueChainId();
+    setChainForm({...chainForm, chain_id: newChainId});
+    setSuccess(`Auto-generated Chain ID: ${newChainId}`);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+  // UI states
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+
   // Smart auth helper
   const getAuthHeaders = () => {
     for (const key of CONFIG.TOKEN_KEYS) {
@@ -155,7 +177,14 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       setCurrentStep(1);
       setError(null);
     } catch (err) {
-      setError(err.message || 'Failed to create chain');
+      let errorMessage = err.message || 'Failed to create chain';
+      
+      // Smart handling for duplicate chain_id
+      if (errorMessage.includes('already exists') || errorMessage.includes('chain_id')) {
+        errorMessage += ' - Click "Auto-Generate ID" button to create a unique Chain ID.';
+      }
+      
+      setError(errorMessage);
       console.error('[CRS] Create chain error:', err);
     } finally {
       setLoading(false);
@@ -738,13 +767,24 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
             <form onSubmit={handleCreateChain}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Chain ID *"
-                    value={chainForm.chain_id}
-                    onChange={(e) => setChainForm({...chainForm, chain_id: e.target.value})}
-                    required
-                  />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <TextField
+                      fullWidth
+                      label="Chain ID *"
+                      value={chainForm.chain_id}
+                      onChange={(e) => setChainForm({...chainForm, chain_id: e.target.value})}
+                      required
+                      helperText="Unique identifier for this revision chain"
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={handleAutoGenerateChainId}
+                      sx={{ mt: 0.5, minWidth: '120px', whiteSpace: 'nowrap' }}
+                      disabled={loading}
+                    >
+                      Auto-Generate
+                    </Button>
+                  </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <TextField

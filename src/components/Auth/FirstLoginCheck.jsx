@@ -39,24 +39,25 @@ const FirstLoginCheck = ({ children }) => {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
-            }
+            },
+            validateStatus: (status) => status < 500 // Don't throw on 404
           }
         );
 
-        console.log('[FirstLoginCheck] Response:', response.data);
+        // Handle successful response
+        if (response.status === 200) {
+          console.log('[FirstLoginCheck] Response:', response.data);
 
-        if (response.data.must_reset_password) {
-          setMustResetPassword(true);
+          if (response.data.must_reset_password) {
+            setMustResetPassword(true);
+          }
+        } else if (response.status === 404) {
+          console.warn('[FirstLoginCheck] Endpoint not available (404) - skipping check');
         }
         
         setChecked(true);
       } catch (error) {
-        console.error('[FirstLoginCheck] Error:', error);
-        
-        // If 404, the endpoint might not exist - don't block the app
-        if (error.response?.status === 404) {
-          console.warn('[FirstLoginCheck] Endpoint not found - skipping check');
-        }
+        console.warn('[FirstLoginCheck] Check failed - not blocking app:', error.message);
         
         // Don't block app if check fails
         setChecked(true);
