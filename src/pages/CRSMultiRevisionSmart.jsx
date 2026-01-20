@@ -59,7 +59,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
     return {};
   };
 
-  // Create Chain
+  // Create Chain with smart error handling
   const handleCreateChain = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -74,7 +74,22 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed: ${response.status}`);
+        
+        // Smart error message extraction
+        let errorMsg = `Failed: ${response.status}`;
+        if (errorData.detail) {
+          errorMsg = errorData.detail;
+        } else if (errorData.errors) {
+          // Handle field-specific errors
+          const fieldErrors = Object.entries(errorData.errors)
+            .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+            .join('; ');
+          errorMsg = fieldErrors || errorMsg;
+        } else if (errorData.chain_id) {
+          errorMsg = `Chain ID: ${errorData.chain_id}`;
+        }
+        
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();

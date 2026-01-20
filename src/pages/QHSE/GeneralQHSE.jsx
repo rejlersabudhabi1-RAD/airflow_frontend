@@ -42,6 +42,7 @@ const GeneralQHSE = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50">
       <Routes>
+        <Route index element={<QHSEDashboard />} />
         <Route path="/" element={<QHSEDashboard />} />
         <Route path="/summary" element={<SummaryViewWrapper />} />
         <Route path="/detailed" element={<DetailedViewWrapper />} />

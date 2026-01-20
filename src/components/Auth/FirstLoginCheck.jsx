@@ -52,6 +52,12 @@ const FirstLoginCheck = ({ children }) => {
         setChecked(true);
       } catch (error) {
         console.error('[FirstLoginCheck] Error:', error);
+        
+        // If 404, the endpoint might not exist - don't block the app
+        if (error.response?.status === 404) {
+          console.warn('[FirstLoginCheck] Endpoint not found - skipping check');
+        }
+        
         // Don't block app if check fails
         setChecked(true);
       } finally {
