@@ -12,21 +12,34 @@ import {
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../config/api.config';
 import { STORAGE_KEYS } from '../../config/app.config';
+import { usePageControls } from '../../hooks/usePageControls';
+import { PageControlButtons } from '../../components/Common/PageControlButtons';
 
 const DesignIQDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Page controls (Fullscreen, Sidebar, Auto-refresh)
+  const pageControls = usePageControls({
+    refreshCallback: () => loadDashboardData(true),
+    autoRefreshInterval: 30000, // 30 seconds
+    storageKey: 'designiq_dashboard',
+  });
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isAutoRefresh = false) => {
+    if (isAutoRefresh) setIsRefreshing(true);
+    else setLoading(true);
+    
     try {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const response = await fetch(`${API_BASE_URL}/designiq/projects/dashboard/`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/designiq/projects/dashboard/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -41,6 +54,7 @@ const DesignIQDashboard = () => {
       setError(err.message);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -65,13 +79,30 @@ const DesignIQDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <BeakerIcon className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">DesignIQ</h1>
+      {/* Apply control styles for fullscreen and sidebar */}
+      <style>{pageControls.styles}</style>
+
+      {/* Header with Controls */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <BeakerIcon className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-900">DesignIQ</h1>
+          </div>
+          <p className="text-gray-600">AI-Powered Engineering Design Intelligence & Optimization</p>
         </div>
-        <p className="text-gray-600">AI-Powered Engineering Design Intelligence & Optimization</p>
+
+        {/* Page Control Buttons */}
+        <PageControlButtons
+          sidebarVisible={pageControls.sidebarVisible}
+          setSidebarVisible={pageControls.toggleSidebar}
+          autoRefreshEnabled={pageControls.autoRefreshEnabled}
+          setAutoRefreshEnabled={pageControls.toggleAutoRefresh}
+          isFullscreen={pageControls.isFullscreen}
+          toggleFullscreen={pageControls.toggleFullscreen}
+          isRefreshing={isRefreshing}
+          autoRefreshInterval={30}
+        />
       </div>
 
       {error && (

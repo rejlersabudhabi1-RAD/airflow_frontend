@@ -14,6 +14,8 @@ import {
   ClockIcon,
   FunnelIcon
 } from '@heroicons/react/24/outline';
+import { usePageControls } from '../../hooks/usePageControls';
+import { PageControlButtons } from '../../components/Common/PageControlButtons';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -64,6 +66,7 @@ const DesignIQLists = () => {
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -71,12 +74,20 @@ const DesignIQLists = () => {
 
   const currentListConfig = LIST_TYPES[selectedListType];
 
+  // Page controls (Fullscreen, Sidebar, Auto-refresh)
+  const pageControls = usePageControls({
+    refreshCallback: () => fetchData(true),
+    autoRefreshInterval: 30000, // 30 seconds
+    storageKey: `designiq_lists_${selectedListType}`,
+  });
+
   useEffect(() => {
     fetchData();
   }, [selectedListType, statusFilter]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (isAutoRefresh = false) => {
+    if (isAutoRefresh) setIsRefreshing(true);
+    else setLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
       
@@ -120,6 +131,7 @@ const DesignIQLists = () => {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -175,10 +187,27 @@ const DesignIQLists = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
-        <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
+      {/* Apply control styles for fullscreen and sidebar */}
+      <style>{pageControls.styles}</style>
+
+      {/* Header with Controls */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
+          <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
+        </div>
+
+        {/* Page Control Buttons */}
+        <PageControlButtons
+          sidebarVisible={pageControls.sidebarVisible}
+          setSidebarVisible={pageControls.toggleSidebar}
+          autoRefreshEnabled={pageControls.autoRefreshEnabled}
+          setAutoRefreshEnabled={pageControls.toggleAutoRefresh}
+          isFullscreen={pageControls.isFullscreen}
+          toggleFullscreen={pageControls.toggleFullscreen}
+          isRefreshing={isRefreshing}
+          autoRefreshInterval={30}
+        />
       </div>
 
       {/* List Type Tabs */}
