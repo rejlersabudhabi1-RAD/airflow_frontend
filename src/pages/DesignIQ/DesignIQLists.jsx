@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ViewColumnsIcon,
@@ -60,6 +60,7 @@ const STATUS_COLORS = {
 const DesignIQLists = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const fileInputRef = useRef(null);
   const [selectedListType, setSelectedListType] = useState(searchParams.get('type') || 'line_list');
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -68,6 +69,8 @@ const DesignIQLists = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showPIDUploadModal, setShowPIDUploadModal] = useState(false);
+  const [uploadingPID, setUploadingPID] = useState(false);
 
   const currentListConfig = LIST_TYPES[selectedListType];
 
@@ -156,33 +159,49 @@ const DesignIQLists = () => {
     }
   };
 
-  const getStatusBadge = (status) => {
-    const color = STATUS_COLORS[status] || 'gray';
-    const colorClasses = {
-      green: 'bg-green-100 text-green-800',
-      yellow: 'bg-yellow-100 text-yellow-800',
-      blue: 'bg-blue-100 text-blue-800',
-      red: 'bg-red-100 text-red-800',
-      gray: 'bg-gray-100 text-gray-800'
-    };
+  const handlePIDUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    return (
-      <span className={`px-2 py-1 text-xs font-medium rounded-full ${colorClasses[color]}`}>
-        {status}
-      </span>
-    );
+    if (file.type !== 'application/pdf') {
+      alert('Please upload a PDF file');
+      return;
+    }
+
+    setUploadingPID(true);
+    try {
+      const formData = new FormData();
+      formData.append('pid_file', file);
+      formData.append('list_type', 'line_list');
+
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/designiq/lists/upload_pid/`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Successfully uploaded P&ID! Extracted ${data.items_created || 0} line items.`);
+        fetchData(); // Refresh the list
+      } else {
+        const error = await response.json();
+        alert(`Upload failed: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error uploading P&ID:', error);
+      alert('Failed to upload P&ID. Please try again.');
+    } finally {
+      setUploadingPID(false);
+      event.target.value = ''; // Reset file input
+    }
   };
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
-        <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
-      </div>
-
-      {/* List Type Tabs */}
-      <div className="bg-white rounded-lg shadow-sm mb-6">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-4 px-6" aria-label="Tabs">
             {Object.entries(LIST_TYPES).map(([key, config]) => {
@@ -274,12 +293,32 @@ const DesignIQLists = () => {
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
               Export
             </button>
-            <button
-              className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-              Import
-            </button>
+            
+            {/* P&ID Upload Button - Only for Line List */}
+            {selectedListType === 'line_list' && (
+              <>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf"
+                  onChange={handlePIDUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingPID}
+                  className={`flex items-center px-4 py-2 border rounded-lg ${
+                    uploadingPID 
+                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'border-blue-500 text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                  {uploadingPID ? 'Uploading...' : 'Upload P&ID PDF'}
+                </button>
+              </>
+            )}
+
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
