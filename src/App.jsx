@@ -58,6 +58,8 @@ import NotFound from './pages/NotFound'
 // DesignIQ Components
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+// Procurement Components
+import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -441,6 +443,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="designiq">
               <DesignIQLists />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* Procurement Routes */}
+        <Route
+          path="procurement"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <ProcurementDashboard />
             </ModuleProtectedRoute>
           }
         />

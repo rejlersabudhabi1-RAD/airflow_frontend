@@ -32,11 +32,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const location = useLocation()
   const { user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
     crs: true,
     finance: true,
     projectControl: true,
+    procurement: true,
     qhse: true,
     admin: true
   })
@@ -119,7 +121,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
     {
       id: 'processEngineering',
-      title: '1. Process Engineering',
+      title: '1. Process Eng.',
       icon: BeakerIcon,
       type: 'section',
       expanded: expandedSections.processEngineering,
@@ -134,7 +136,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'designiq',
-          title: '1.2 DesignIQ - Design Intelligence',
+          title: '1.2 DesignIQ',
           icon: BeakerIcon,
           path: '/designiq',
           description: 'AI-powered design optimization',
@@ -142,7 +144,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'pfd',
-          title: '1.3 PFD to P&ID Converter',
+          title: '1.3 PFD Converter',
           icon: DocumentTextIcon,
           path: '/pfd/upload',
           description: 'Intelligent conversion',
@@ -152,14 +154,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
     {
       id: 'crs',
-      title: '2. CRS - Comment Resolution Sheet',
+      title: '2. CRS',
       icon: ChartBarIcon,
       type: 'section',
       expanded: expandedSections.crs,
       children: [
         {
           id: 'crsDocuments',
-          title: '2.1 CRS Document Management',
+          title: '2.1 CRS Documents',
           icon: DocumentTextIcon,
           path: '/crs/documents',
           description: 'Centralized CRS repository',
@@ -167,7 +169,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'crsMultipleRevision',
-          title: '2.2 CRS Multiple Revision',
+          title: '2.2 Multi-Revision',
           icon: DocumentTextIcon,
           path: '/crs/multiple-revision',
           description: 'AI-powered revision tracking',
@@ -176,7 +178,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       ]
     },      {
         id: 'finance',
-        title: '3. Finance Invoice Automation',
+        title: '3. Finance',
         icon: CurrencyDollarIcon,
         type: 'section',
         expanded: expandedSections.finance,
@@ -190,7 +192,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           },
           {
             id: 'financeInvoices',
-            title: '3.2 Invoice Management',
+            title: '3.2 Invoices',
             path: '/finance/invoices',
             icon: DocumentTextIcon,
             moduleCode: 'finance'
@@ -206,7 +208,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'projectManagement',
-          title: '4.1 Project Management',
+          title: '4.1 Projects',
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
@@ -215,15 +217,64 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       ]
     },
     {
+      id: 'procurement',
+      title: '5. Procurement',
+      icon: BriefcaseIcon,
+      type: 'section',
+      expanded: expandedSections.procurement,
+      children: [
+        {
+          id: 'procurementDashboard',
+          title: '5.1 Dashboard',
+          icon: HomeIcon,
+          path: '/procurement',
+          description: 'Procurement overview',
+          moduleCode: 'procurement'
+        },
+        {
+          id: 'vendors',
+          title: '5.2 Vendors',
+          icon: UsersIcon,
+          path: '/procurement/vendors',
+          description: 'Vendor management',
+          moduleCode: 'procurement'
+        },
+        {
+          id: 'requisitions',
+          title: '5.3 Requisitions',
+          icon: DocumentTextIcon,
+          path: '/procurement/requisitions',
+          description: 'Purchase requisitions',
+          moduleCode: 'procurement'
+        },
+        {
+          id: 'purchaseOrders',
+          title: '5.4 Purchase Orders',
+          icon: DocumentPlusIcon,
+          path: '/procurement/orders',
+          description: 'PO management',
+          moduleCode: 'procurement'
+        },
+        {
+          id: 'receipts',
+          title: '5.5 Receipts',
+          icon: FolderIcon,
+          path: '/procurement/receipts',
+          description: 'Goods receipt',
+          moduleCode: 'procurement'
+        }
+      ]
+    },
+    {
       id: 'qhse',
-      title: '5. QHSE',
+      title: '6. QHSE',
       icon: ShieldCheckIcon,
       type: 'section',
       expanded: expandedSections.qhse,
       children: [
         {
           id: 'generalQHSE',
-          title: '5.1 General QHSE',
+          title: '6.1 General QHSE',
           icon: ShieldCheckIcon,
           path: '/qhse/general',
           description: 'General QHSE management',
@@ -231,7 +282,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'detailedView',
-          title: '5.2 Detailed View',
+          title: '6.2 Detailed View',
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
           description: 'Detailed project view',
@@ -239,7 +290,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'qualityManagement',
-          title: '5.3 Quality Management',
+          title: '6.3 Quality Management',
           icon: ChartBarIcon,
           path: '/qhse/general/quality',
           description: 'Quality metrics and audits',
@@ -247,7 +298,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'healthSafety',
-          title: '5.4 Health and Safety',
+          title: '6.4 Health & Safety',
           icon: ShieldCheckIcon,
           path: '/qhse/general/health-safety',
           description: 'Health and safety management',
@@ -255,7 +306,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'environmental',
-          title: '5.5 Environmental',
+          title: '6.5 Environmental',
           icon: DocumentTextIcon,
           path: '/qhse/general/environmental',
           description: 'Environmental management',
@@ -263,7 +314,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'energy',
-          title: '5.6 Energy',
+          title: '6.6 Energy',
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
@@ -271,7 +322,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'billability',
-          title: '5.7 Billability Overview',
+          title: '6.7 Billability',
           icon: CurrencyDollarIcon,
           path: '/qhse/general/billability',
           description: 'Billability tracking',
@@ -279,7 +330,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'spotCheck',
-          title: '5.8 Spot Check Overview',
+          title: '6.8 Spot Check',
           icon: MagnifyingGlassIcon,
           path: '/qhse/general/spotcheck',
           description: 'Spot check management',
@@ -332,22 +383,22 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '6. User Management',
-      icon: UsersIcon,
+      title: '7. Admin',
+      icon: CogIcon,
       type: 'section',
       expanded: expandedSections.admin,
       badge: 'ADMIN',
       children: [
         {
           id: 'adminDashboard',
-          title: '6.1 Admin Dashboard',
+          title: '7.1 Dashboard',
           icon: ChartBarIcon,
-          path: '/admin',
+          path: '/admin/dashboard',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '6.2 Manage Users & Roles',
+          title: '7.2 Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
@@ -378,28 +429,49 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 top-16
-          w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-          transform transition-transform duration-300 ease-in-out
+          ${isCollapsed ? 'w-20' : 'w-72'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
+          transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           flex flex-col h-[calc(100vh-4rem)]
         `}
       >
         {/* Sidebar Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">AI</span>
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              RADAI
-            </span>
-          </div>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <XMarkIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          </button>
+          {!isCollapsed ? (
+            <>
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">AI</span>
+                </div>
+                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  RADAI
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setIsCollapsed(true)}
+                  className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Collapse sidebar"
+                >
+                  <ChevronRightIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={() => setIsCollapsed(false)}
+              className="w-full flex justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="Expand sidebar"
+            >
+              <Bars3Icon className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Menu */}
@@ -411,44 +483,52 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 <button
                   onClick={() => handleNavigation(item.path)}
                   className={`
-                    w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg
+                    w-full flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2.5 rounded-lg
                     transition-all duration-200
                     ${isActiveRoute(item.path)
                       ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 font-semibold shadow-sm'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }
                   `}
+                  title={isCollapsed ? item.title : ''}
                 >
                   <item.icon className={`w-5 h-5 ${isActiveRoute(item.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                  <span>{item.title}</span>
+                  {!isCollapsed && <span>{item.title}</span>}
                 </button>
               ) : (
                 // Section with children
                 <div className="space-y-1">
                   <button
-                    onClick={() => toggleSection(item.id)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-semibold"
+                    onClick={() => isCollapsed ? null : toggleSection(item.id)}
+                    className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-3 py-2.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-semibold`}
+                    title={isCollapsed ? item.title : ''}
                   >
-                    <div className="flex items-center space-x-3">
+                    {isCollapsed ? (
                       <item.icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      <span>{item.title}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {item.badge && (
-                        <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full">
-                          {item.badge}
-                        </span>
-                      )}
-                      {item.expanded ? (
-                        <ChevronDownIcon className="w-4 h-4 text-gray-500" />
-                      ) : (
-                        <ChevronRightIcon className="w-4 h-4 text-gray-500" />
-                      )}
-                    </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center space-x-3">
+                          <item.icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                          <span>{item.title}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {item.badge && (
+                            <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full">
+                              {item.badge}
+                            </span>
+                          )}
+                          {item.expanded ? (
+                            <ChevronDownIcon className="w-4 h-4 text-gray-500" />
+                          ) : (
+                            <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+                          )}
+                        </div>
+                      </>
+                    )}
                   </button>
 
                   {/* Child items */}
-                  {item.expanded && (
+                  {!isCollapsed && item.expanded && (
                     <div className="ml-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-1">
                       {item.children.map((child) => (
                         <button
@@ -486,25 +566,30 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
         {/* Sidebar Footer - User Info */}
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center relative">
               <span className="text-white font-semibold text-sm">
                 {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
               </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                {user?.first_name || user?.email?.split('@')[0] || 'User'}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {user?.email || 'user@example.com'}
-              </p>
-              {isAdmin && (
-                <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full mt-1">
-                  ADMIN
-                </span>
+              {isAdmin && isCollapsed && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full border-2 border-white"></span>
               )}
             </div>
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  {user?.first_name || user?.email?.split('@')[0] || 'User'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {user?.email || 'user@example.com'}
+                </p>
+                {isAdmin && (
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full mt-1">
+                    ADMIN
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </aside>
