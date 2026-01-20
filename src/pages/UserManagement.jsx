@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
@@ -14,6 +14,8 @@ import {
 } from '../config/userManagement.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
+import BulkModuleAssignmentModal from '../components/UserManagement/BulkModuleAssignmentModal';
+import { canManageModules } from '../config/adminPermissions.config';
 
 /**
  * User Management Page - Rebuilt
@@ -520,7 +522,7 @@ const UserManagement = ({ pageControls }) => {
     const endIndex = startIndex + itemsPerPage;
     const paginated = filteredUsers.slice(startIndex, endIndex);
     
-    console.log('🔄 [paginatedUsers] Recalculated:', {
+    console.log('?? [paginatedUsers] Recalculated:', {
       totalUsers: filteredUsers.length,
       currentPage,
       itemsPerPage,
@@ -539,8 +541,8 @@ const UserManagement = ({ pageControls }) => {
   
   // ========== MONITOR: ITEMS PER PAGE CHANGES ==========
   useEffect(() => {
-    console.log('👀 [useEffect] ItemsPerPage changed to:', itemsPerPage);
-    console.log('👀 [useEffect] Pagination info:', { showingFrom, showingTo, totalPages, currentPage });
+    console.log('?? [useEffect] ItemsPerPage changed to:', itemsPerPage);
+    console.log('?? [useEffect] Pagination info:', { showingFrom, showingTo, totalPages, currentPage });
   }, [itemsPerPage, showingFrom, showingTo, totalPages, currentPage]);
   
   // ========== EMAIL VALIDATION - CLIENT SIDE ONLY ==========
@@ -855,45 +857,45 @@ const UserManagement = ({ pageControls }) => {
   };
   
   const handlePageChange = (newPage) => {
-    console.log('📄 [handlePageChange] Called with:', newPage);
-    console.log('📄 [handlePageChange] Current page:', currentPage);
-    console.log('📄 [handlePageChange] Total pages:', totalPages);
-    console.log('📄 [handlePageChange] Validation:', newPage >= 1, newPage <= totalPages);
+    console.log('?? [handlePageChange] Called with:', newPage);
+    console.log('?? [handlePageChange] Current page:', currentPage);
+    console.log('?? [handlePageChange] Total pages:', totalPages);
+    console.log('?? [handlePageChange] Validation:', newPage >= 1, newPage <= totalPages);
     
     if (newPage >= 1 && newPage <= totalPages) {
-      console.log('✅ [handlePageChange] Valid - Setting page to:', newPage);
+      console.log('? [handlePageChange] Valid - Setting page to:', newPage);
       setCurrentPage(newPage);
     } else {
-      console.warn('❌ [handlePageChange] Invalid page number:', newPage);
+      console.warn('? [handlePageChange] Invalid page number:', newPage);
     }
   };
   
   const handleItemsPerPageChange = (newItemsPerPage) => {
-    console.log('📄 [handleItemsPerPageChange] Called with:', newItemsPerPage);
-    console.log('📄 [handleItemsPerPageChange] Type:', typeof newItemsPerPage);
-    console.log('📄 [handleItemsPerPageChange] Current itemsPerPage:', itemsPerPage);
-    console.log('📄 [handleItemsPerPageChange] Current page:', currentPage);
-    console.log('📄 [handleItemsPerPageChange] Total users:', filteredUsers.length);
+    console.log('?? [handleItemsPerPageChange] Called with:', newItemsPerPage);
+    console.log('?? [handleItemsPerPageChange] Type:', typeof newItemsPerPage);
+    console.log('?? [handleItemsPerPageChange] Current itemsPerPage:', itemsPerPage);
+    console.log('?? [handleItemsPerPageChange] Current page:', currentPage);
+    console.log('?? [handleItemsPerPageChange] Total users:', filteredUsers.length);
     
     // Validate input
     const validValue = Number(newItemsPerPage);
     if (isNaN(validValue) || validValue <= 0) {
-      console.error('❌ [handleItemsPerPageChange] Invalid value:', newItemsPerPage);
+      console.error('? [handleItemsPerPageChange] Invalid value:', newItemsPerPage);
       return;
     }
     
     // Update states
-    console.log('🔄 [handleItemsPerPageChange] Updating itemsPerPage to:', validValue);
+    console.log('?? [handleItemsPerPageChange] Updating itemsPerPage to:', validValue);
     setItemsPerPage(validValue);
     
-    console.log('🔄 [handleItemsPerPageChange] Resetting currentPage to 1');
+    console.log('?? [handleItemsPerPageChange] Resetting currentPage to 1');
     setCurrentPage(1);
     
-    console.log('✅ [handleItemsPerPageChange] State update triggered');
+    console.log('? [handleItemsPerPageChange] State update triggered');
     
     // Force a small delay to ensure state is updated
     setTimeout(() => {
-      console.log('⏱️ [handleItemsPerPageChange] Post-update check:');
+      console.log('?? [handleItemsPerPageChange] Post-update check:');
       console.log('   - itemsPerPage should be:', validValue);
       console.log('   - currentPage should be: 1');
     }, 100);
@@ -946,7 +948,7 @@ const UserManagement = ({ pageControls }) => {
       
       const response = await rbacService.bulkUploadUsers(uploadFormData);
       
-      console.log('[BulkUpload] âœ“ Response received:', response);
+      console.log('[BulkUpload] ✓ Response received:', response);
       setBulkUploadProgress(70);
       
       setBulkUploadResults(response.data || response);
@@ -960,18 +962,18 @@ const UserManagement = ({ pageControls }) => {
       console.log('[BulkUpload] Upload summary:', summary);
       
       // Build notification message
-      let notificationMessage = `Bulk upload completed! ✅ Created: ${summary.successful || 0}`;
+      let notificationMessage = `Bulk upload completed! ? Created: ${summary.successful || 0}`;
       
       if (summary.emails_sent > 0) {
-        notificationMessage += `, 📧 Emails Sent: ${summary.emails_sent}`;
+        notificationMessage += `, ?? Emails Sent: ${summary.emails_sent}`;
       }
       
       if (summary.failed > 0) {
-        notificationMessage += `, ❌ Failed: ${summary.failed}`;
+        notificationMessage += `, ? Failed: ${summary.failed}`;
       }
       
       if (summary.skipped > 0) {
-        notificationMessage += `, ⏭️ Skipped: ${summary.skipped}`;
+        notificationMessage += `, ?? Skipped: ${summary.skipped}`;
       }
       
       setNotification({
@@ -1164,35 +1166,35 @@ const UserManagement = ({ pageControls }) => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-            <h3 className="text-lg font-bold text-gray-900">🐛 Live Debug Panel - Pagination State</h3>
+            <h3 className="text-lg font-bold text-gray-900">?? Live Debug Panel - Pagination State</h3>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => {
-                console.log('🧪 [Test Button] Manual test - Setting to 25 per page');
+                console.log('?? [Test Button] Manual test - Setting to 25 per page');
                 handleItemsPerPageChange(25);
               }}
               className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 active:scale-95 transition-all font-bold"
             >
-              🧪 Test: Set 25/page
+              ?? Test: Set 25/page
             </button>
             <button
               onClick={() => {
-                console.log('🧪 [Test Button] Manual test - Setting to 50 per page');
+                console.log('?? [Test Button] Manual test - Setting to 50 per page');
                 handleItemsPerPageChange(50);
               }}
               className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 active:scale-95 transition-all font-bold"
             >
-              🧪 Test: Set 50/page
+              ?? Test: Set 50/page
             </button>
             <button
               onClick={() => {
-                console.log('🧪 [Test Button] Manual test - Go to page 2');
+                console.log('?? [Test Button] Manual test - Go to page 2');
                 handlePageChange(2);
               }}
               className="px-3 py-1 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 active:scale-95 transition-all font-bold"
             >
-              🧪 Test: Go Page 2
+              ?? Test: Go Page 2
             </button>
           </div>
         </div>
@@ -1266,7 +1268,7 @@ const UserManagement = ({ pageControls }) => {
                 placeholder="Search by name, email, department, or job title..."
                 value={searchTerm}
                 onChange={(e) => {
-                  console.log('🔍 Search term changed:', e.target.value);
+                  console.log('?? Search term changed:', e.target.value);
                   setSearchTerm(e.target.value);
                 }}
                 className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
@@ -1277,7 +1279,7 @@ const UserManagement = ({ pageControls }) => {
               {searchTerm && (
                 <button
                   onClick={() => {
-                    console.log('🗑️ Clearing search');
+                    console.log('??? Clearing search');
                     setSearchTerm('');
                   }}
                   className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 transition-colors"
@@ -1295,25 +1297,25 @@ const UserManagement = ({ pageControls }) => {
             <select
               value={statusFilter}
               onChange={(e) => {
-                console.log('📊 Status filter changed:', e.target.value);
+                console.log('?? Status filter changed:', e.target.value);
                 setStatusFilter(e.target.value);
               }}
               className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">📋 All Status</option>
-              <option value="active">✅ Active</option>
-              <option value="inactive">❌ Inactive</option>
+              <option value="all">?? All Status</option>
+              <option value="active">? Active</option>
+              <option value="inactive">? Inactive</option>
             </select>
             
             <select
               value={roleFilter}
               onChange={(e) => {
-                console.log('👤 Role filter changed:', e.target.value);
+                console.log('?? Role filter changed:', e.target.value);
                 setRoleFilter(e.target.value);
               }}
               className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">👥 All Roles</option>
+              <option value="all">?? All Roles</option>
               {Array.isArray(roles) && roles.map(role => (
                 <option key={role.id} value={role.id}>{role.name}</option>
               ))}
@@ -1322,12 +1324,12 @@ const UserManagement = ({ pageControls }) => {
             <select
               value={organizationFilter}
               onChange={(e) => {
-                console.log('🏢 Organization filter changed:', e.target.value);
+                console.log('?? Organization filter changed:', e.target.value);
                 setOrganizationFilter(e.target.value);
               }}
               className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
             >
-              <option value="all">🏢 All Organizations</option>
+              <option value="all">?? All Organizations</option>
               {organizations.map(org => (
                 <option key={org.id} value={org.id}>{org.name}</option>
               ))}
@@ -1335,7 +1337,7 @@ const UserManagement = ({ pageControls }) => {
             
             <button
               onClick={() => {
-                console.log('🔄 Resetting all filters');
+                console.log('?? Resetting all filters');
                 setSearchTerm('');
                 setStatusFilter('all');
                 setRoleFilter('all');
@@ -1351,12 +1353,12 @@ const UserManagement = ({ pageControls }) => {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              🔄 Reset Filters
+              ?? Reset Filters
             </button>
             
             <div className="ml-auto flex items-center gap-2 bg-gradient-to-r from-blue-50 to-purple-50 px-4 py-2 rounded-lg border-2 border-blue-200">
               <span className="text-sm font-semibold text-gray-700">
-                📊 Showing <span className="text-blue-600">{showingFrom}</span>-<span className="text-blue-600">{showingTo}</span> of <span className="text-purple-600 font-bold">{filteredUsers.length}</span> results
+                ?? Showing <span className="text-blue-600">{showingFrom}</span>-<span className="text-blue-600">{showingTo}</span> of <span className="text-purple-600 font-bold">{filteredUsers.length}</span> results
               </span>
             </div>
           </div>
@@ -1579,16 +1581,16 @@ const UserManagement = ({ pageControls }) => {
                     value={itemsPerPage}
                     onChange={(e) => {
                       const newValue = Number(e.target.value);
-                      console.log('📄 [Select onChange] ==================');
-                      console.log('📄 [Select onChange] Event fired!');
-                      console.log('📄 [Select onChange] Raw value:', e.target.value);
-                      console.log('📄 [Select onChange] Parsed value:', newValue);
-                      console.log('📄 [Select onChange] Current state:', itemsPerPage);
-                      console.log('📄 [Select onChange] Available options:', CONFIG.ITEMS_PER_PAGE_OPTIONS);
-                      console.log('📄 [Select onChange] Calling handler...');
+                      console.log('?? [Select onChange] ==================');
+                      console.log('?? [Select onChange] Event fired!');
+                      console.log('?? [Select onChange] Raw value:', e.target.value);
+                      console.log('?? [Select onChange] Parsed value:', newValue);
+                      console.log('?? [Select onChange] Current state:', itemsPerPage);
+                      console.log('?? [Select onChange] Available options:', CONFIG.ITEMS_PER_PAGE_OPTIONS);
+                      console.log('?? [Select onChange] Calling handler...');
                       handleItemsPerPageChange(newValue);
-                      console.log('📄 [Select onChange] Handler called!');
-                      console.log('📄 [Select onChange] ==================');
+                      console.log('?? [Select onChange] Handler called!');
+                      console.log('?? [Select onChange] ==================');
                     }}
                     className="px-4 py-2 pr-10 border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-white rounded-lg text-sm font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-600 hover:border-blue-500 cursor-pointer transition-all shadow-md appearance-none"
                   >
@@ -1612,7 +1614,7 @@ const UserManagement = ({ pageControls }) => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    console.log('⏮️ First page button clicked');
+                    console.log('?? First page button clicked');
                     handlePageChange(1);
                   }}
                   disabled={currentPage === 1}
@@ -1626,7 +1628,7 @@ const UserManagement = ({ pageControls }) => {
                 
                 <button
                   onClick={() => {
-                    console.log('⏪ Previous page button clicked. Current:', currentPage);
+                    console.log('? Previous page button clicked. Current:', currentPage);
                     handlePageChange(currentPage - 1);
                   }}
                   disabled={currentPage === 1}
@@ -1655,7 +1657,7 @@ const UserManagement = ({ pageControls }) => {
                       <button
                         key={pageNum}
                         onClick={() => {
-                          console.log('🔢 Page number button clicked:', pageNum);
+                          console.log('?? Page number button clicked:', pageNum);
                           handlePageChange(pageNum);
                         }}
                         className={`px-4 py-2 border-2 rounded-lg font-bold transition-all active:scale-95 ${
@@ -1672,7 +1674,7 @@ const UserManagement = ({ pageControls }) => {
                 
                 <button
                   onClick={() => {
-                    console.log('⏩ Next page button clicked. Current:', currentPage, 'Total:', totalPages);
+                    console.log('? Next page button clicked. Current:', currentPage, 'Total:', totalPages);
                     handlePageChange(currentPage + 1);
                   }}
                   disabled={currentPage === totalPages}
@@ -1686,7 +1688,7 @@ const UserManagement = ({ pageControls }) => {
                 
                 <button
                   onClick={() => {
-                    console.log('⏭️ Last page button clicked. Total pages:', totalPages);
+                    console.log('?? Last page button clicked. Total pages:', totalPages);
                     handlePageChange(totalPages);
                   }}
                   disabled={currentPage === totalPages}
@@ -1766,16 +1768,16 @@ const UserManagement = ({ pageControls }) => {
                     ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
                 }`}>
-                  {detailedUser.status === 'active' ? 'â— Active' : 'â— Inactive'}
+                  {detailedUser.status === 'active' ? '● Active' : '● Inactive'}
                 </span>
                 {detailedUser.user?.is_staff && (
                   <span className="px-4 py-2 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
-                    â˜… Staff Member
+                    ★ Staff Member
                   </span>
                 )}
                 {detailedUser.user?.is_superuser && (
                   <span className="px-4 py-2 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800">
-                    âš¡ Superuser
+                    ⚡ Superuser
                   </span>
                 )}
               </div>
@@ -2138,7 +2140,7 @@ const UserManagement = ({ pageControls }) => {
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
                             <p className="text-sm font-medium text-green-800">
-                              All users created and welcome emails sent successfully! ✅
+                              All users created and welcome emails sent successfully! ?
                             </p>
                           </div>
                         </div>
@@ -2283,6 +2285,7 @@ const UserManagement = ({ pageControls }) => {
         organizations={organizations}
         modules={modules}
         roles={roles}
+        currentUser={currentUser}
         loading={actionLoading[`edit_${selectedUser?.id}`]}
       />
     </div>
@@ -2293,3 +2296,4 @@ export default withDashboardControls(UserManagement, {
   autoRefreshInterval: 30000,
   storageKey: 'adminUserManagementPageControls'
 });
+
