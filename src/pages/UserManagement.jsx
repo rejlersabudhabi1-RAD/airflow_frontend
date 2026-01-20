@@ -57,6 +57,7 @@ const UserManagement = ({ pageControls }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [showBulkModuleModal, setShowBulkModuleModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Local state - Data
@@ -2296,4 +2297,6 @@ export default withDashboardControls(UserManagement, {
   autoRefreshInterval: 30000,
   storageKey: 'adminUserManagementPageControls'
 });
+
+
 
