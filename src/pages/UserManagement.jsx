@@ -14,8 +14,6 @@ import {
 } from '../config/userManagement.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
-import BulkModuleAssignmentModal from '../components/UserManagement/BulkModuleAssignmentModal';
-import { canManageModules } from '../config/adminPermissions.config';
 
 /**
  * User Management Page - Rebuilt
@@ -57,7 +55,6 @@ const UserManagement = ({ pageControls }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
-  const [showBulkModuleModal, setShowBulkModuleModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Local state - Data
@@ -1248,18 +1245,6 @@ const UserManagement = ({ pageControls }) => {
               </svg>
               Bulk Upload
             </button>
-            {canManageModules(currentUser) && (
-              <button
-                onClick={() => setShowBulkModuleModal(true)}
-                className="px-4 py-2 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:from-green-700 hover:to-blue-700 transition-all flex items-center gap-2 shadow-lg"
-                title="Bulk assign modules to all users (Admin only)"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Assign Modules
-              </button>
-            )}
 
             <button
               onClick={() => setShowCreateModal(true)}
