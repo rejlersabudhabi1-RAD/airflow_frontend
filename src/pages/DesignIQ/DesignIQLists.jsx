@@ -14,8 +14,9 @@ import {
   ClockIcon,
   FunnelIcon
 } from '@heroicons/react/24/outline';
+import { STORAGE_KEYS } from '../../config/app.config';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = '/api/v1';
 
 // List types configuration (matches backend)
 const LIST_TYPES = {
@@ -69,8 +70,11 @@ const DesignIQLists = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showPIDUploadModal, setShowPIDUploadModal] = useState(false);
   const [uploadingPID, setUploadingPID] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [extractedData, setExtractedData] = useState(null);
 
   const currentListConfig = LIST_TYPES[selectedListType];
 
@@ -81,10 +85,10 @@ const DesignIQLists = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       // Fetch items
-      let itemsUrl = `${API_BASE_URL}/api/v1/designiq/lists/?list_type=${selectedListType}`;
+      let itemsUrl = `${API_BASE_URL}/designiq/lists/?list_type=${selectedListType}`;
       if (statusFilter !== 'all') {
         itemsUrl += `&status=${statusFilter}`;
       }
@@ -101,12 +105,15 @@ const DesignIQLists = () => {
       
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json();
-        setItems(itemsData);
+        // API returns either array directly or object with items property
+        setItems(Array.isArray(itemsData) ? itemsData : (itemsData.items || []));
+      } else {
+        setItems([]);
       }
 
       // Fetch stats
       const statsResponse = await fetch(
-        `${API_BASE_URL}/api/v1/designiq/lists/stats/?list_type=${selectedListType}`,
+        `${API_BASE_URL}/designiq/lists/stats/?list_type=${selectedListType}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -121,6 +128,8 @@ const DesignIQLists = () => {
       }
     } catch (error) {
       console.error('Error fetching data:', error);
+      setItems([]);
+      setStats(null);
     } finally {
       setLoading(false);
     }
@@ -132,9 +141,9 @@ const DesignIQLists = () => {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('accessToken');
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/designiq/lists/export/?list_type=${selectedListType}`,
+        `${API_BASE_URL}/designiq/lists/export/?list_type=${selectedListType}`,
         {
           method: 'POST',
           headers: {
@@ -164,19 +173,34 @@ const DesignIQLists = () => {
     if (!file) return;
 
     if (file.type !== 'application/pdf') {
-      alert('Please upload a PDF file');
+      setUploadResult({
+        success: false,
+        message: 'Please upload a PDF file'
+      });
       return;
     }
 
     setUploadingPID(true);
+    setProcessing(true);
+    setUploadResult(null);
+    
     try {
       const formData = new FormData();
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
 
-      const token = localStorage.getItem('accessToken');
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      if (!token) {
+        setUploadResult({
+          success: false,
+          message: 'Authentication token not found. Please log in again.'
+        });
+        return;
+      }
+
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/designiq/lists/upload_pid/`,
+        `${API_BASE_URL}/designiq/lists/upload_pid/`,
         {
           method: 'POST',
           headers: {
@@ -188,20 +212,64 @@ const DesignIQLists = () => {
 
       if (response.ok) {
         const data = await response.json();
-        alert(`Successfully uploaded P&ID! Extracted ${data.items_created || 0} line items.`);
-        fetchData(); // Refresh the list
+        setExtractedData({
+          lines: data.extracted_lines || [],
+          fileName: file.name,
+          itemsCreated: data.items_created || 0
+        });
+        setShowPreviewModal(true);
+        setUploadResult({
+          success: true,
+          message: `Successfully extracted ${data.extracted_lines?.length || 0} line numbers from ${file.name}`,
+          data: data
+        });
+        setUploadingPID(false);
       } else {
-        const error = await response.json();
-        alert(`Upload failed: ${error.detail || 'Unknown error'}`);
+        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        setUploadResult({
+          success: false,
+          message: `Upload failed: ${error.detail || response.statusText || 'Unknown error'}`
+        });
       }
     } catch (error) {
       console.error('Error uploading P&ID:', error);
-      alert('Failed to upload P&ID. Please try again.');
+      setUploadResult({
+        success: false,
+        message: `Failed to upload P&ID: ${error.message || 'Network error. Please try again.'}`
+      });
     } finally {
-      setUploadingPID(false);
-      event.target.value = ''; // Reset file input
+      setProcessing(false);
+      event.target.value = '';
     }
   };
+
+  const getStatusBadge = (status) => {
+    const color = STATUS_COLORS[status] || 'gray';
+    const colorClasses = {
+      green: 'bg-green-100 text-green-800',
+      yellow: 'bg-yellow-100 text-yellow-800',
+      blue: 'bg-blue-100 text-blue-800',
+      red: 'bg-red-100 text-red-800',
+      gray: 'bg-gray-100 text-gray-800'
+    };
+
+    return (
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${colorClasses[color]}`}>
+        {status}
+      </span>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
+        <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
+      </div>
+
+      {/* List Type Tabs */}
+      <div className="bg-white rounded-lg shadow-sm mb-6">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-4 px-6" aria-label="Tabs">
             {Object.entries(LIST_TYPES).map(([key, config]) => {
@@ -306,15 +374,24 @@ const DesignIQLists = () => {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingPID}
+                  disabled={uploadingPID || processing}
                   className={`flex items-center px-4 py-2 border rounded-lg ${
-                    uploadingPID 
+                    uploadingPID || processing
                       ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'border-blue-500 text-blue-600 hover:bg-blue-50'
                   }`}
                 >
-                  <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                  {uploadingPID ? 'Uploading...' : 'Upload P&ID PDF'}
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent mr-2"></div>
+                      Processing OCR...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                      {uploadingPID ? 'Uploading...' : '📤 Upload P&ID PDF'}
+                    </>
+                  )}
                 </button>
               </>
             )}
@@ -444,6 +521,246 @@ const DesignIQLists = () => {
           </div>
         )}
       </div>
+
+      {/* Upload Result Notification */}
+      {uploadResult && (
+        <div className="fixed bottom-8 right-8 z-50 animate-slide-up">
+          <div className={`rounded-xl shadow-2xl p-6 max-w-md ${
+            uploadResult.success 
+              ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200'
+              : 'bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200'
+          }`}>
+            <div className="flex items-start">
+              <div className={`flex-shrink-0 ${
+                uploadResult.success ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {uploadResult.success ? (
+                  <CheckCircleIcon className="h-8 w-8" />
+                ) : (
+                  <XCircleIcon className="h-8 w-8" />
+                )}
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className={`text-lg font-semibold ${
+                  uploadResult.success ? 'text-green-900' : 'text-red-900'
+                }`}>
+                  {uploadResult.success ? 'Upload Successful!' : 'Upload Failed'}
+                </h3>
+                <p className={`mt-2 text-sm ${
+                  uploadResult.success ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {uploadResult.message}
+                </p>
+                {uploadResult.success && uploadResult.data?.extracted_lines && (
+                  <div className="mt-3 text-xs text-green-600 font-medium">
+                    <p>✓ OCR processing completed</p>
+                    <p>✓ {uploadResult.data.extracted_lines.length} line numbers detected</p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setUploadResult(null)}
+                className="ml-4 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Overlay */}
+      {processing && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md shadow-2xl">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mb-4"></div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Processing P&ID Document</h3>
+              <p className="text-gray-600 text-center mb-4">
+                Extracting line numbers using OCR technology...
+              </p>
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-full animate-pulse" style={{ width: '70%' }}></div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">
+                This may take a few moments for large documents
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && extractedData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">P&ID Line Numbers Extracted</h2>
+                <p className="text-blue-100 text-sm mt-1">{extractedData.fileName}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  fetchData();
+                  setUploadResult(null);
+                }}
+                className="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Summary Stats */}
+            <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircleIcon className="w-6 h-6 text-green-600" />
+                    <div>
+                      <p className="text-sm text-gray-600">Lines Detected</p>
+                      <p className="text-2xl font-bold text-gray-900">{extractedData.lines.length}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-gray-600">Items Created</p>
+                      <p className="text-2xl font-bold text-gray-900">{extractedData.itemsCreated}</p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const data = extractedData.lines;
+                    const headers = ['Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
+                    
+                    // Create HTML table
+                    let html = '<table border="1" style="border-collapse: collapse; width: 100%;">';
+                    html += '<thead><tr>';
+                    headers.forEach(h => html += `<th style="padding: 8px; background: #4F46E5; color: white;">${h}</th>`);
+                    html += '</tr></thead><tbody>';
+                    
+                    data.forEach(row => {
+                      html += '<tr>';
+                      html += `<td style="padding: 8px;">${row.fluid_code || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.size || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.sequence_no || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.pipr_class || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.insulation || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.from || ''}</td>`;
+                      html += `<td style="padding: 8px;">${row.to || ''}</td>`;
+                      html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                    
+                    // Convert to Excel
+                    const blob = new Blob([`
+                      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+                        <head><meta charset="UTF-8"><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+                        <x:Name>P&ID Lines</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml></head><body>${html}</body>
+                      </html>
+                    `], { type: 'application/vnd.ms-excel' });
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `PID_Lines_${extractedData.fileName.replace('.pdf', '')}_${new Date().toISOString().split('T')[0]}.xls`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download Excel
+                </button>
+              </div>
+            </div>
+
+            {/* Table Preview */}
+            <div className="flex-1 overflow-auto px-6 py-4">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Fluid Code
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Size
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Sequence No
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      PIPR Class
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Insulation
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      From
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      To
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {extractedData.lines.map((line, index) => (
+                    <tr key={index} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {line.fluid_code || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.size || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.sequence_no || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.pipr_class || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.insulation || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.from || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.to || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  fetchData();
+                  setUploadResult(null);
+                }}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+              >
+                Close & Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
