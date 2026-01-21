@@ -7,6 +7,8 @@ import RealTimeActivityTab from '../components/admin/RealTimeActivityTab';
 import SecurityAlertsTab from '../components/admin/SecurityAlertsTab';
 import PredictionsTab from '../components/admin/PredictionsTab';
 import SystemHealthTab from '../components/admin/SystemHealthTab';
+import AuditLogsTab from '../components/admin/AuditLogsTab';
+import AnalyticsCharts from '../components/admin/AnalyticsCharts';
 
 // Soft-coded configuration for dashboard stats cards
 const DASHBOARD_STATS_CONFIG = [
@@ -724,27 +726,15 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                {/* Trend Chart Placeholder */}
-                <div className="mt-6 bg-white rounded-xl p-6 border-2 border-gray-200 shadow-lg">
-                  <h4 className="font-bold text-gray-900 mb-4">Usage Trends (Last 7 Days)</h4>
-                  <div className="h-64 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
-                    <div className="text-center">
-                      <svg className="w-16 h-16 mx-auto text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                      </svg>
-                      <p className="text-gray-600 font-medium">Interactive charts coming soon</p>
-                      <p className="text-sm text-gray-500 mt-2">Real-time visualization of system metrics</p>
-                    </div>
-                  </div>
+                {/* Analytics Charts - Usage Trends & System Metrics */}
+                <div className="mt-6">
+                  <AnalyticsCharts analyticsData={analyticsData} />
                 </div>
               </div>
             )}
 
             {activeTab === 'audit' && (
-              <div className="p-6 text-center py-8">
-                <p className="text-gray-600">Comprehensive Audit Log Viewer - Coming Soon</p>
-                <p className="text-sm text-gray-500 mt-2">Track all system changes and user actions</p>
-              </div>
+              <AuditLogsTab onRefresh={loadAIAnalytics} />
             )}
           </div>
         </div>
