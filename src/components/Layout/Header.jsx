@@ -5,6 +5,7 @@ import { logout } from '../../store/slices/authSlice'
 import { toggleTheme } from '../../store/slices/themeSlice'
 import { Bars3Icon } from '@heroicons/react/24/outline'
 import { LOGO_CONFIG, getLogoPath } from '../../config/logo.config'
+import NotificationBell from '../notifications/NotificationBell'
 
 /**
  * Header Component - REJLERS RADAI
@@ -76,6 +77,8 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
           </div>
 
           <div className="flex items-center space-x-6">
+            {isAuthenticated && <NotificationBell />}
+            
             <button
               onClick={handleThemeToggle}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all transform hover:scale-110"

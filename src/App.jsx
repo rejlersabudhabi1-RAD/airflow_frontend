@@ -16,6 +16,7 @@ import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import NotificationPanel from './pages/NotificationPanel'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
@@ -280,6 +281,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <ProtectedRoute>
+              <NotificationPanel />
             </ProtectedRoute>
           }
         />

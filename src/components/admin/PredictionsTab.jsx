@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import analyticsService from '../../services/analyticsService';
+import qhseService from '../../services/qhse.service';
 import { 
   AI_MODELS_REGISTRY, 
   AI_PROVIDERS, 
@@ -12,6 +13,7 @@ import {
 /**
  * AI Predictions and Insights Component
  * Machine learning powered recommendations + Comprehensive AI Models Information
+ * Real-time model tracking with dynamic updates
  */
 const PredictionsTab = ({ predictions: initialPredictions, onRefresh }) => {
   const [predictions, setPredictions] = useState(initialPredictions || []);
@@ -19,6 +21,37 @@ const PredictionsTab = ({ predictions: initialPredictions, onRefresh }) => {
   const [activeView, setActiveView] = useState('models'); // 'predictions' or 'models'
   const [selectedModel, setSelectedModel] = useState(null);
   const [filterCategory, setFilterCategory] = useState('all');
+  
+  // Dynamic AI Models State
+  const [dynamicModels, setDynamicModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsStats, setModelsStats] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  // Fetch dynamic AI models from backend
+  useEffect(() => {
+    if (activeView === 'models') {
+      fetchAIModels();
+    }
+  }, [activeView]);
+
+  const fetchAIModels = async () => {
+    setModelsLoading(true);
+    try {
+      const response = await qhseService.ai.getModelsRegistry();
+      if (response.success) {
+        setDynamicModels(response.models);
+        setModelsStats(response.statistics);
+        setLastUpdated(response.timestamp);
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI models:', error);
+      // Fallback to static config if API fails
+      setDynamicModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
 
   const getImpactBadge = (impact) => {
     const styles = {
@@ -79,33 +112,124 @@ const PredictionsTab = ({ predictions: initialPredictions, onRefresh }) => {
     }
   };
 
+  // Merge static and dynamic models (dynamic takes priority)
+  const allModels = React.useMemo(() => {
+    const models = [...AI_MODELS_REGISTRY];
+    
+    // Add or update with dynamic QHSE models
+    dynamicModels.forEach(dynModel => {
+      const existingIndex = models.findIndex(m => m.id === dynModel.id);
+      if (existingIndex >= 0) {
+        // Update existing model with live data
+        models[existingIndex] = {
+          ...models[existingIndex],
+          ...dynModel,
+          specifications: dynModel.configuration,
+          usedIn: dynModel.usedIn || models[existingIndex].usedIn
+        };
+      } else {
+        // Add new model
+        models.push({
+          id: dynModel.id,
+          name: dynModel.name,
+          provider: { 
+            id: dynModel.provider, 
+            name: dynModel.provider === 'custom' ? 'QHSE Custom Models' : 'OpenAI',
+            logo: dynModel.provider === 'custom' ? '⚡' : '🤖',
+            color: 'from-blue-500 to-cyan-600'
+          },
+          category: dynModel.category,
+          version: dynModel.configuration?.version || '1.0',
+          description: dynModel.description,
+          capabilities: dynModel.capabilities,
+          usedIn: dynModel.usedIn,
+          specifications: dynModel.configuration,
+          status: dynModel.status,
+          lastUpdated: dynModel.last_updated
+        });
+      }
+    });
+    
+    return models;
+  }, [dynamicModels]);
+
+  // Calculate comprehensive stats
+  const comprehensiveStats = React.useMemo(() => {
+    if (modelsStats) {
+      return {
+        totalModels: allModels.length,
+        activeModels: modelsStats.active_models + AI_MODELS_STATS.activeModels,
+        providers: modelsStats.providers + AI_MODELS_STATS.providers,
+        categories: new Set([...allModels.map(m => m.category)]).size,
+        totalModules: new Set([...allModels.flatMap(m => m.usedIn?.map(u => u.module) || [])]).size,
+        totalPredictions: modelsStats.total_predictions || 0
+      };
+    }
+    return {
+      totalModels: allModels.length,
+      activeModels: allModels.filter(m => m.status === 'active').length,
+      providers: new Set(allModels.map(m => m.provider?.id || m.provider)).size,
+      categories: new Set(allModels.map(m => m.category)).size,
+      totalModules: new Set(allModels.flatMap(m => m.usedIn?.map(u => u.module) || [])).size,
+      totalPredictions: 0
+    };
+  }, [allModels, modelsStats]);
+
   // Filter models based on category
   const filteredModels = filterCategory === 'all' 
-    ? AI_MODELS_REGISTRY 
-    : getModelsByCategory(filterCategory);
+    ? allModels 
+    : allModels.filter(m => m.category === filterCategory);
 
   // AI Models View Component
   const renderAIModelsView = () => (
     <div className="space-y-6">
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Stats Overview with Real-time Data */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border-2 border-blue-200">
-          <div className="text-2xl font-bold text-blue-600">{AI_MODELS_STATS.totalModels}</div>
-          <div className="text-sm text-blue-900 font-medium">AI Models</div>
+          <div className="text-2xl font-bold text-blue-600">{comprehensiveStats.totalModels}</div>
+          <div className="text-sm text-blue-900 font-medium">Total AI Models</div>
+          {modelsLoading && <div className="text-xs text-blue-700 mt-1">Updating...</div>}
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border-2 border-green-200">
-          <div className="text-2xl font-bold text-green-600">{AI_MODELS_STATS.activeModels}</div>
+          <div className="text-2xl font-bold text-green-600">{comprehensiveStats.activeModels}</div>
           <div className="text-sm text-green-900 font-medium">Active Models</div>
+          {lastUpdated && <div className="text-xs text-green-700 mt-1">Live</div>}
         </div>
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border-2 border-purple-200">
-          <div className="text-2xl font-bold text-purple-600">{AI_MODELS_STATS.totalModules}</div>
-          <div className="text-sm text-purple-900 font-medium">Modules Using AI</div>
+          <div className="text-2xl font-bold text-purple-600">{comprehensiveStats.providers}</div>
+          <div className="text-sm text-purple-900 font-medium">AI Providers</div>
         </div>
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border-2 border-orange-200">
-          <div className="text-2xl font-bold text-orange-600">{AI_MODELS_STATS.providers}</div>
-          <div className="text-sm text-orange-900 font-medium">AI Providers</div>
+          <div className="text-2xl font-bold text-orange-600">{comprehensiveStats.categories}</div>
+          <div className="text-sm text-orange-900 font-medium">Categories</div>
+        </div>
+        <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 p-4 rounded-xl border-2 border-cyan-200">
+          <div className="text-2xl font-bold text-cyan-600">{comprehensiveStats.totalModules}</div>
+          <div className="text-sm text-cyan-900 font-medium">Modules</div>
         </div>
       </div>
+
+      {/* Last Updated Timestamp */}
+      {lastUpdated && (
+        <div className="flex items-center justify-between bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+          <div className="flex items-center space-x-2">
+            <svg className="w-5 h-5 text-blue-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="text-sm font-medium text-blue-900">Real-time Data</span>
+          </div>
+          <div className="text-xs text-blue-700">
+            Last updated: {new Date(lastUpdated).toLocaleString()}
+          </div>
+          <button
+            onClick={fetchAIModels}
+            disabled={modelsLoading}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {modelsLoading ? 'Refreshing...' : 'Refresh Now'}
+          </button>
+        </div>
+      )}
 
       {/* Category Filter */}
       <div className="flex items-center space-x-2 overflow-x-auto pb-2">

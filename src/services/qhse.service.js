@@ -418,6 +418,29 @@ export const qhseAIAPI = {
       body: JSON.stringify({ project_nos: projectNos, comparison_metrics: comparisonMetrics })
     });
     return handleResponse(response);
+  },
+
+  /**
+   * Get comprehensive AI models registry (real-time)
+   * @returns {Promise<Object>} All AI models with configurations and statistics
+   */
+  async getModelsRegistry() {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/models/registry/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Get detailed information about a specific model
+   * @param {string} modelId - Model identifier
+   * @returns {Promise<Object>} Model details
+   */
+  async getModelDetail(modelId) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/models/registry/${modelId}/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
   }
 };
 
