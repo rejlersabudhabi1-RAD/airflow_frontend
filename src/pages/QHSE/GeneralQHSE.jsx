@@ -8,7 +8,8 @@ import {
   TableCellsIcon,
   CurrencyDollarIcon,
   MagnifyingGlassIcon,
-  Bars3Icon
+  Bars3Icon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import { IconButton, Tooltip } from '@mui/material';
@@ -26,6 +27,7 @@ import HealthSafety from './HealthSafety';
 import Environmental from './Environmental';
 import Energy from './Energy';
 import Projects from './Projects';
+import QHSEAIDashboard from '../../components/qhse/QHSEAIDashboard';
 
 // Common Components
 import { LoadingState } from './components/Common/LoadingState';
@@ -53,6 +55,7 @@ const GeneralQHSE = () => {
         <Route path="/energy" element={<Energy />} />
         <Route path="/billability" element={<BillabilityPageWrapper />} />
         <Route path="/spotcheck" element={<SpotCheckWrapper />} />
+        <Route path="/ai-dashboard" element={<QHSEAIDashboard />} />
       </Routes>
     </div>
   );
@@ -203,6 +206,15 @@ const QHSEDashboard = () => {
       path: '/qhse/general/spotcheck',
       color: 'from-orange-500 to-orange-600',
       iconColor: 'text-orange-500'
+    },
+    {
+      title: 'AI Insights Dashboard',
+      description: 'AI-powered predictions and analytics',
+      icon: SparklesIcon,
+      path: '/qhse/general/ai-dashboard',
+      color: 'from-purple-500 to-pink-600',
+      iconColor: 'text-purple-500',
+      badge: 'NEW'
     }
   ];
 
@@ -284,6 +296,11 @@ const QHSEDashboard = () => {
             onClick={() => navigate(card.path)}
             className="group relative overflow-hidden rounded-xl bg-white p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-200 hover:border-gray-300"
           >
+            {card.badge && (
+              <div className="absolute top-3 right-3 px-2 py-1 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-pulse">
+                {card.badge}
+              </div>
+            )}
             <div className="flex items-start space-x-4">
               <div className={`flex-shrink-0 p-3 rounded-lg bg-gradient-to-br ${card.color} text-white group-hover:scale-110 transition-transform duration-300`}>
                 <card.icon className="h-6 w-6" />

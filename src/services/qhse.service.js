@@ -298,8 +298,132 @@ export const qhseAuditsAPI = {
   }
 };
 
+/**
+ * QHSE AI/ML API
+ */
+export const qhseAIAPI = {
+  /**
+   * Get AI insights dashboard
+   * @returns {Promise<Object>} AI insights and analytics
+   */
+  async getAIInsights() {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/insights/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Predict risk for specific project
+   * @param {string} projectNo - Project number
+   * @returns {Promise<Object>} Risk prediction
+   */
+  async predictProjectRisk(projectNo) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/risk-prediction/${projectNo}/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Predict risks for all projects
+   * @param {number} limit - Optional limit
+   * @returns {Promise<Object>} All risk predictions
+   */
+  async predictAllRisks(limit = null) {
+    const url = limit 
+      ? `${API_BASE_URL}/qhse/ai/risk-prediction/all/?limit=${limit}`
+      : `${API_BASE_URL}/qhse/ai/risk-prediction/all/`;
+    const response = await fetch(url, { headers: getAuthHeaders() });
+    return handleResponse(response);
+  },
+
+  /**
+   * Classify CAR/NCR using AI
+   * @param {string} carText - CAR text to classify
+   * @param {Object} context - Optional context
+   * @returns {Promise<Object>} Classification result
+   */
+  async classifyCAR(carText, context = {}) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/car-classification/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ car_text: carText, context })
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Predict required manhours
+   * @param {Object} projectDetails - Project details
+   * @returns {Promise<Object>} Manhour prediction
+   */
+  async predictManhours(projectDetails) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/manhour-prediction/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(projectDetails)
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Detect anomalies in project
+   * @param {string} projectNo - Project number
+   * @returns {Promise<Object>} Anomaly detection result
+   */
+  async detectAnomalies(projectNo) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/anomaly-detection/${projectNo}/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Get AI models status
+   * @returns {Promise<Object>} Models status and performance
+   */
+  async getModelsStatus() {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/models/status/`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Analyze remarks using NLP
+   * @param {string} remarksText - Text to analyze
+   * @param {Array} analysisTypes - Types of analysis ['sentiment', 'entities', 'topics', 'summary']
+   * @returns {Promise<Object>} Analysis results
+   */
+  async analyzeRemarks(remarksText, analysisTypes = ['sentiment', 'entities']) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/nlp/analyze-remarks/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ remarks_text: remarksText, analysis_types: analysisTypes })
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Compare multiple projects using AI
+   * @param {Array} projectNos - Array of project numbers
+   * @param {Array} comparisonMetrics - Metrics to compare
+   * @returns {Promise<Object>} Comparison results
+   */
+  async compareProjects(projectNos, comparisonMetrics = ['risk_score', 'kpis', 'cars', 'quality_costs']) {
+    const response = await fetch(`${API_BASE_URL}/qhse/ai/compare-projects/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ project_nos: projectNos, comparison_metrics: comparisonMetrics })
+    });
+    return handleResponse(response);
+  }
+};
+
 export default {
   projects: qhseProjectsAPI,
   spotChecks: qhseSpotChecksAPI,
-  audits: qhseAuditsAPI
+  audits: qhseAuditsAPI,
+  ai: qhseAIAPI
 };
