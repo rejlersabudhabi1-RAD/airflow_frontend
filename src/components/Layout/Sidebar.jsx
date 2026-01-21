@@ -18,8 +18,7 @@ import {
   BriefcaseIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
-  TableCellsIcon,
-  MagnifyingGlassIcon
+  TableCellsIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -318,22 +317,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
-          moduleCode: 'qhse'
-        },
-        {
-          id: 'billability',
-          title: '6.7 Billability',
-          icon: CurrencyDollarIcon,
-          path: '/qhse/general/billability',
-          description: 'Billability tracking',
-          moduleCode: 'qhse'
-        },
-        {
-          id: 'spotCheck',
-          title: '6.8 Spot Check',
-          icon: MagnifyingGlassIcon,
-          path: '/qhse/general/spotcheck',
-          description: 'Spot check management',
           moduleCode: 'qhse'
         }
       ]

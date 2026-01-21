@@ -6,8 +6,6 @@ import {
   DocumentTextIcon, 
   PresentationChartLineIcon,
   TableCellsIcon,
-  CurrencyDollarIcon,
-  MagnifyingGlassIcon,
   Bars3Icon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
@@ -20,8 +18,6 @@ import QHSEOverviewChart from './components/Dashboard/OverviewChart';
 import ProjectStatus from './components/Dashboard/ProjectStatus';
 import SummaryView from './components/SummayView/Page';
 import DetailedView from './components/DetailedView/DetailedView';
-import BillabilityPage from './components/Billability/BillabilityPage';
-import SpotCheckOverview from './components/SpotCheck/Page';
 import QualityManagement from './QualityManagement';
 import HealthSafety from './HealthSafety';
 import Environmental from './Environmental';
@@ -53,8 +49,6 @@ const GeneralQHSE = () => {
         <Route path="/health-safety" element={<HealthSafety />} />
         <Route path="/environmental" element={<Environmental />} />
         <Route path="/energy" element={<Energy />} />
-        <Route path="/billability" element={<BillabilityPageWrapper />} />
-        <Route path="/spotcheck" element={<SpotCheckWrapper />} />
         <Route path="/ai-dashboard" element={<QHSEAIDashboard />} />
       </Routes>
     </div>
@@ -190,22 +184,6 @@ const QHSEDashboard = () => {
       path: '/qhse/general/projects',
       color: 'from-purple-500 to-purple-600',
       iconColor: 'text-purple-500'
-    },
-    {
-      title: 'Billability Overview',
-      description: 'Manhours and billability analysis',
-      icon: CurrencyDollarIcon,
-      path: '/qhse/general/billability',
-      color: 'from-green-500 to-green-600',
-      iconColor: 'text-green-500'
-    },
-    {
-      title: 'Spot Check Overview',
-      description: 'Quality spot check register',
-      icon: MagnifyingGlassIcon,
-      path: '/qhse/general/spotcheck',
-      color: 'from-orange-500 to-orange-600',
-      iconColor: 'text-orange-500'
     },
     {
       title: 'AI Insights Dashboard',
@@ -367,22 +345,6 @@ const DetailedViewWrapper = () => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1920px] mx-auto">
       <DetailedView />
-    </div>
-  );
-};
-
-const BillabilityPageWrapper = () => {
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1920px] mx-auto">
-      <BillabilityPage />
-    </div>
-  );
-};
-
-const SpotCheckWrapper = () => {
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1920px] mx-auto">
-      <SpotCheckOverview />
     </div>
   );
 };

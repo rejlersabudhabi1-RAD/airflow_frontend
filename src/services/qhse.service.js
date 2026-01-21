@@ -140,90 +140,91 @@ export const qhseProjectsAPI = {
   }
 };
 
-/**
- * QHSE Spot Check Register API
- */
-export const qhseSpotChecksAPI = {
-  /**
-   * Get all spot checks
-   * @param {Object} filters - Query parameters for filtering
-   * @returns {Promise<Array>} List of spot checks
-   */
-  async getAll(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    const url = `${API_BASE_URL}/qhse/spot-checks/${queryParams ? `?${queryParams}` : ''}`;
-    const response = await fetch(url, { headers: getAuthHeaders() });
-    return handleResponse(response);
-  },
-
-  /**
-   * Get single spot check by ID
-   * @param {number} id - Spot check ID
-   * @returns {Promise<Object>} Spot check details
-   */
-  async getById(id) {
-    const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
-      headers: getAuthHeaders()
-    });
-    return handleResponse(response);
-  },
-
-  /**
-   * Create new spot check
-   * @param {Object} spotCheckData - Spot check data
-   * @returns {Promise<Object>} Created spot check
-   */
-  async create(spotCheckData) {
-    const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(spotCheckData)
-    });
-    return handleResponse(response);
-  },
-
-  /**
-   * Update existing spot check
-   * @param {number} id - Spot check ID
-   * @param {Object} spotCheckData - Updated data
-   * @returns {Promise<Object>} Updated spot check
-   */
-  async update(id, spotCheckData) {
-    const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(spotCheckData)
-    });
-    return handleResponse(response);
-  },
-
-  /**
-   * Delete spot check
-   * @param {number} id - Spot check ID
-   * @returns {Promise<void>}
-   */
-  async delete(id) {
-    const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    if (!response.ok) {
-      throw new Error('Failed to delete spot check');
-    }
-  },
-
-  /**
-   * Get spot checks grouped by project
-   * @param {Object} filters - Query parameters
-   * @returns {Promise<Array>} Spot checks grouped by project
-   */
-  async getByProject(filters = {}) {
-    const queryParams = new URLSearchParams(filters).toString();
-    const url = `${API_BASE_URL}/qhse/spot-checks/by_project/${queryParams ? `?${queryParams}` : ''}`;
-    const response = await fetch(url, { headers: getAuthHeaders() });
-    return handleResponse(response);
-  }
-};
+// ============================================================================
+// QHSE Spot Check Register API - DISABLED per QHSE Manager decision
+// ============================================================================
+// export const qhseSpotChecksAPI = {
+//   /**
+//    * Get all spot checks
+//    * @param {Object} filters - Query parameters for filtering
+//    * @returns {Promise<Array>} List of spot checks
+//    */
+//   async getAll(filters = {}) {
+//     const queryParams = new URLSearchParams(filters).toString();
+//     const url = `${API_BASE_URL}/qhse/spot-checks/${queryParams ? `?${queryParams}` : ''}`;
+//     const response = await fetch(url, { headers: getAuthHeaders() });
+//     return handleResponse(response);
+//   },
+//
+//   /**
+//    * Get single spot check by ID
+//    * @param {number} id - Spot check ID
+//    * @returns {Promise<Object>} Spot check details
+//    */
+//   async getById(id) {
+//     const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
+//       headers: getAuthHeaders()
+//     });
+//     return handleResponse(response);
+//   },
+//
+//   /**
+//    * Create new spot check
+//    * @param {Object} spotCheckData - Spot check data
+//    * @returns {Promise<Object>} Created spot check
+//    */
+//   async create(spotCheckData) {
+//     const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/`, {
+//       method: 'POST',
+//       headers: getAuthHeaders(),
+//       body: JSON.stringify(spotCheckData)
+//     });
+//     return handleResponse(response);
+//   },
+//
+//   /**
+//    * Update existing spot check
+//    * @param {number} id - Spot check ID
+//    * @param {Object} spotCheckData - Updated data
+//    * @returns {Promise<Object>} Updated spot check
+//    */
+//   async update(id, spotCheckData) {
+//     const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
+//       method: 'PUT',
+//       headers: getAuthHeaders(),
+//       body: JSON.stringify(spotCheckData)
+//     });
+//     return handleResponse(response);
+//   },
+//
+//   /**
+//    * Delete spot check
+//    * @param {number} id - Spot check ID
+//    * @returns {Promise<void>}
+//    */
+//   async delete(id) {
+//     const response = await fetch(`${API_BASE_URL}/qhse/spot-checks/${id}/`, {
+//       method: 'DELETE',
+//       headers: getAuthHeaders()
+//     });
+//     if (!response.ok) {
+//       throw new Error('Failed to delete spot check');
+//     }
+//   },
+//
+//   /**
+//    * Get spot checks grouped by project
+//    * @param {Object} filters - Query parameters
+//    * @returns {Promise<Array>} Spot checks grouped by project
+//    */
+//   async getByProject(filters = {}) {
+//     const queryParams = new URLSearchParams(filters).toString();
+//     const url = `${API_BASE_URL}/qhse/spot-checks/by_project/${queryParams ? `?${queryParams}` : ''}`;
+//     const response = await fetch(url, { headers: getAuthHeaders() });
+//     return handleResponse(response);
+//   }
+// };
+// ============================================================================
 
 /**
  * QHSE Audits API
@@ -446,7 +447,7 @@ export const qhseAIAPI = {
 
 export default {
   projects: qhseProjectsAPI,
-  spotChecks: qhseSpotChecksAPI,
+  // spotChecks: qhseSpotChecksAPI,  // Disabled per QHSE Manager decision
   audits: qhseAuditsAPI,
   ai: qhseAIAPI
 };

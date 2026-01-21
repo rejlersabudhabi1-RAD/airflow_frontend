@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { EDIT_USER_CONFIG, initializeFormData, validateField, hasChanges } from '../../config/editUser.config';
+import { groupModulesByCategory, MODULE_CATEGORIES_CONFIG } from '../../config/moduleCategories.config';
 
 /**
  * Comprehensive Edit User Modal
@@ -305,89 +306,195 @@ const EditUserModal = ({
         );
 
       case 'checkbox-group':
+        // Use centralized category configuration
+        const groupedModules = groupModulesByCategory(modules);
+        
+        // Filter modules by search term if provided
+        const filteredGroupedModules = {};
+        Object.entries(groupedModules).forEach(([categoryId, categoryData]) => {
+          const filteredModules = categoryData.modules.filter(module =>
+            !moduleSearch || 
+            module.name.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+            module.description?.toLowerCase().includes(moduleSearch.toLowerCase()) ||
+            module.code?.toLowerCase().includes(moduleSearch.toLowerCase())
+          );
+          
+          if (filteredModules.length > 0) {
+            filteredGroupedModules[categoryId] = {
+              ...categoryData,
+              modules: filteredModules
+            };
+          }
+        });
+        
         return (
           <div key={field.name} className={`${field.gridCols || 'col-span-2'}`}>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4">
               <label className="block text-sm font-medium text-gray-700">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
-              <div className="flex gap-2">
-                {EDIT_USER_CONFIG.moduleDisplay.selectAllButton && (
+              {field.showSelectAll && MODULE_CATEGORIES_CONFIG.features.enableQuickActions && (
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={handleSelectAllModules}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-md font-medium transition-colors"
                   >
-                    Select All
+                    ✓ Select All
                   </button>
-                )}
-                {EDIT_USER_CONFIG.moduleDisplay.clearAllButton && (
                   <button
                     type="button"
                     onClick={handleClearAllModules}
-                    className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+                    className="text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-md font-medium transition-colors"
                   >
-                    Clear All
+                    ✕ Clear All
                   </button>
-                )}
-              </div>
-            </div>
-
-            {EDIT_USER_CONFIG.moduleDisplay.searchable && modules.length > 5 && (
-              <div className="mb-3">
-                <input
-                  type="text"
-                  value={moduleSearch}
-                  onChange={(e) => setModuleSearch(e.target.value)}
-                  placeholder="Search modules..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            )}
-
-            <div className="space-y-2 max-h-80 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
-              {filteredModules.length > 0 ? (
-                filteredModules.map((module) => (
-                  <label
-                    key={module.id}
-                    className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${
-                      formData.module_ids?.includes(module.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-25'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.module_ids?.includes(module.id) || false}
-                      onChange={() => handleModuleToggle(module.id)}
-                      className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                    />
-                    <div className="ml-3 flex-1">
-                      <div className="font-medium text-gray-900">{module.name}</div>
-                      {EDIT_USER_CONFIG.moduleDisplay.showDescription && module.description && (
-                        <div className="text-sm text-gray-600 mt-1">{module.description}</div>
-                      )}
-                    </div>
-                  </label>
-                ))
-              ) : (
-                <div className="text-center py-6 text-gray-500">
-                  {moduleSearch ? 'No modules found matching your search' : 'No modules available'}
                 </div>
               )}
             </div>
 
+            {/* Selected Count Badge */}
             {formData.module_ids?.length > 0 && (
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Selected:</strong> {formData.module_ids.length} module(s)
-                </p>
+              <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-blue-900">
+                    <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-600 text-white rounded-full text-xs mr-2">
+                      {formData.module_ids.length}
+                    </span>
+                    Module{formData.module_ids.length !== 1 ? 's' : ''} Selected
+                  </p>
+                  <span className="text-xs text-blue-700">
+                    of {modules.length} total
+                  </span>
+                </div>
               </div>
             )}
 
+            {/* Search Bar */}
+            {field.showSearch && MODULE_CATEGORIES_CONFIG.features.enableSearch && modules.length > 3 && (
+              <div className="mb-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={moduleSearch}
+                    onChange={(e) => setModuleSearch(e.target.value)}
+                    placeholder="🔍 Search modules by name, code, or category..."
+                    className="w-full pl-4 pr-10 py-2.5 border-2 border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                  {moduleSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setModuleSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Categorized Modules */}
+            <div className="space-y-4 max-h-[500px] overflow-y-auto border-2 border-gray-200 rounded-xl p-4 bg-white">
+              {field.showCategoryGroups && Object.keys(filteredGroupedModules).length > 0 ? (
+                Object.entries(filteredGroupedModules).map(([categoryId, categoryData]) => {
+                  const { config, modules: categoryModules } = categoryData;
+                  
+                  const selectedInCategory = categoryModules.filter(m => 
+                    formData.module_ids?.includes(m.id)
+                  ).length;
+
+                  return (
+                    <div key={categoryId} className="border-b border-gray-200 last:border-0 pb-4 last:pb-0">
+                      {/* Category Header */}
+                      <div className={`flex items-center justify-between mb-3 ${config.bgColor} px-3 py-2.5 rounded-lg border ${config.borderColor}`}>
+                        <div className="flex items-center gap-2">
+                          {MODULE_CATEGORIES_CONFIG.display.showIcons && (
+                            <span className="text-lg">{config.icon}</span>
+                          )}
+                          <h4 className={`text-sm font-bold ${config.textColor} uppercase tracking-wider`}>
+                            {config.name}
+                          </h4>
+                          {MODULE_CATEGORIES_CONFIG.display.showDescriptions && (
+                            <span className="hidden lg:inline text-xs text-gray-600 ml-2 font-normal normal-case">
+                              {config.description}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-xs ${config.badgeColor} ${config.textColor} px-2 py-1 rounded-full font-medium`}>
+                          {selectedInCategory}/{categoryModules.length}
+                        </span>
+                      </div>
+
+                      {/* Modules in Category */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                        {categoryModules.map((module) => {
+                          const isSelected = formData.module_ids?.includes(module.id);
+                          return (
+                            <label
+                              key={module.id}
+                              className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                                isSelected
+                                  ? `${config.borderColor} ${config.bgColor} shadow-sm`
+                                  : 'border-gray-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleModuleToggle(module.id)}
+                                className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <div className="ml-3 flex-1">
+                                <div className="font-semibold text-gray-900 text-sm">
+                                  {module.name}
+                                </div>
+                                {EDIT_USER_CONFIG.moduleDisplay.showDescription && module.description && (
+                                  <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                    {module.description}
+                                  </div>
+                                )}
+                                {MODULE_CATEGORIES_CONFIG.features.showModuleCodes && module.code && (
+                                  <div className="text-xs text-gray-400 mt-1 font-mono">
+                                    {module.code}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                /* No modules found */
+                <div className="text-center py-8 text-gray-500">
+                  <div className="text-4xl mb-2">🔍</div>
+                  <div className="font-medium">
+                    {moduleSearch ? 'No modules found matching your search' : 'No modules available'}
+                  </div>
+                  {moduleSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setModuleSearch('')}
+                      className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             {field.helpText && (
-              <p className="text-xs text-gray-500 mt-2">{field.helpText}</p>
+              <p className="text-xs text-gray-600 mt-3 flex items-start">
+                <svg className="w-4 h-4 mr-1 mt-0.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                {field.helpText}
+              </p>
             )}
           </div>
         );
@@ -395,25 +502,49 @@ const EditUserModal = ({
       case 'role-selector':
         return (
           <div key={field.name} className={`${field.gridCols || 'col-span-2'}`}>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
-            </label>
+            <div className="flex items-center justify-between mb-4">
+              <label className="block text-sm font-medium text-gray-700">
+                {field.label}
+                {field.required && <span className="text-red-500 ml-1">*</span>}
+              </label>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Selected Roles Summary */}
+            {formData.role_ids?.length > 0 && (
+              <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 border-l-4 border-purple-500 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-purple-900">
+                    <span className="inline-flex items-center justify-center w-6 h-6 bg-purple-600 text-white rounded-full text-xs mr-2">
+                      {formData.role_ids.length}
+                    </span>
+                    Role{formData.role_ids.length !== 1 ? 's' : ''} Assigned
+                  </p>
+                  <span className="text-xs text-purple-700">
+                    {roles.filter(r => formData.role_ids.includes(r.id)).map(r => r.name).join(', ')}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Roles Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto border-2 border-gray-200 rounded-xl p-4 bg-white">
               {roles.length > 0 ? (
                 roles.map((role) => {
                   const isSelected = formData.role_ids?.includes(role.id);
                   const isAdmin = role.name?.toLowerCase().includes('admin');
+                  const isSuperAdmin = role.name?.toLowerCase().includes('super');
+                  
+                  // Choose icon based on role type
+                  const roleIcon = isSuperAdmin ? '👑' : isAdmin ? '🛡️' : '👤';
 
                   return (
                     <label
                       key={role.id}
-                      className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-lg ${
                         isSelected
                           ? isAdmin && EDIT_USER_CONFIG.roleDisplay.highlightAdmin
-                            ? EDIT_USER_CONFIG.roleDisplay.highlightColor
-                            : 'border-blue-500 bg-blue-50'
+                            ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-md'
+                            : 'border-blue-500 bg-blue-50 shadow-md'
                           : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-25'
                       }`}
                     >
@@ -421,41 +552,49 @@ const EditUserModal = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleRoleToggle(role.id)}
-                        className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                        className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
                       />
                       <div className="ml-3 flex-1">
                         <div className="flex items-center justify-between">
-                          <div className="font-semibold text-gray-900">{role.name}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{roleIcon}</span>
+                            <div className="font-bold text-gray-900">{role.name}</div>
+                          </div>
                           {EDIT_USER_CONFIG.roleDisplay.showPermissionCount && role.permissions?.length > 0 && (
-                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
-                              {role.permissions.length} permissions
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
+                              {role.permissions.length} perms
                             </span>
                           )}
                         </div>
                         {EDIT_USER_CONFIG.roleDisplay.showDescription && role.description && (
-                          <div className="text-sm text-gray-600 mt-1">{role.description}</div>
+                          <div className="text-xs text-gray-600 mt-2 line-clamp-2">
+                            {role.description}
+                          </div>
+                        )}
+                        {isAdmin && (
+                          <div className="mt-2 inline-flex items-center text-xs font-semibold text-purple-700 bg-purple-100 px-2 py-1 rounded-md">
+                            ⚡ Elevated Access
+                          </div>
                         )}
                       </div>
                     </label>
                   );
                 })
               ) : (
-                <div className="col-span-2 text-center py-6 text-gray-500 bg-gray-50 rounded-lg">
-                  No roles available
+                <div className="col-span-2 text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                  <div className="text-4xl mb-2">🔒</div>
+                  <div className="font-medium">No roles available</div>
                 </div>
               )}
             </div>
 
-            {formData.role_ids?.length > 0 && (
-              <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-purple-800">
-                  <strong>Assigned Roles:</strong> {formData.role_ids.length}
-                </p>
-              </div>
-            )}
-
             {field.helpText && (
-              <p className="text-xs text-gray-500 mt-2">{field.helpText}</p>
+              <p className="text-xs text-gray-600 mt-3 flex items-start">
+                <svg className="w-4 h-4 mr-1 mt-0.5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                {field.helpText}
+              </p>
             )}
           </div>
         );
