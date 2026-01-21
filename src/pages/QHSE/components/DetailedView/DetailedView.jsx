@@ -4,7 +4,7 @@ import {
   Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw } from "lucide-react";
+import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw, Plus } from "lucide-react";
 import { withDashboardControls } from '../../../../hoc/withPageControls';
 import { PageControlButtons } from '../../../../components/PageControlButtons';
 
@@ -15,6 +15,7 @@ import { EmptyDataState } from "../Common/EmptyDataState"
 import { MainHeader } from "../Common/MainHeader";
 import { PageLayout } from '@/layouts/PageLayout';
 import ProjectEditModal from '../Common/ProjectEditModal';
+import CreateProjectModal from './CreateProjectModal';
 
 // Field labels using the correct Google Sheets field names
 const fieldLabels = {
@@ -62,6 +63,7 @@ const DetailedView = ({ pageControls }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Debug: Log first project to verify field structure (only when data exists)
   if (projectsData && projectsData.length > 0) {
@@ -177,6 +179,12 @@ const DetailedView = ({ pageControls }) => {
   // Handle project update
   const handleProjectUpdate = (updatedProject) => {
     // Refresh data after update
+    refetch();
+  };
+
+  // Handle project creation success
+  const handleProjectCreateSuccess = (newProject) => {
+    // Refresh data after creation
     refetch();
   };
 
@@ -329,6 +337,7 @@ const DetailedView = ({ pageControls }) => {
         setSearchTerm={setSearchTerm}
         clearSearch={clearSearch}
         filteredHeaders={filteredHeaders}
+        onCreateProject={() => setCreateModalOpen(true)}
       />
 
       {/* Edit Modal */}
@@ -337,6 +346,13 @@ const DetailedView = ({ pageControls }) => {
         onClose={() => setEditModalOpen(false)}
         project={selectedProject}
         onUpdate={handleProjectUpdate}
+      />
+
+      {/* Create Modal */}
+      <CreateProjectModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleProjectCreateSuccess}
       />
     </PageLayout>
   );
@@ -350,7 +366,8 @@ const DetailedViewContent = ({
   searchTerm,
   setSearchTerm,
   clearSearch,
-  filteredHeaders
+  filteredHeaders,
+  onCreateProject
 }) => {
   return (
     <div className="space-y-3">
@@ -503,6 +520,31 @@ const DetailedViewContent = ({
                 </Box>
               )}
             </div>
+            
+            {/* Create New Project Button */}
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Plus size={16} />}
+              onClick={onCreateProject}
+              sx={{
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                px: 2,
+                py: 0.75,
+                borderRadius: '6px',
+                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                '&:hover': {
+                  backgroundColor: '#2563eb',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }
+              }}
+            >
+              New Project
+            </Button>
           </div>
           <Typography className="!text-gray-500 dark:!text-slate-400 mt-1"
             variant="caption" sx={{ fontSize: '0.7rem', display: 'block' }}>
