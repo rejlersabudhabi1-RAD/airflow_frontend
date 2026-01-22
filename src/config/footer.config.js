@@ -60,6 +60,12 @@ export const FOOTER_CONFIG = {
         url: '/enquiry',
         external: false,
         highlighted: true // Special styling for new link
+      },
+      {
+        label: 'Subscription',
+        url: '/pricing',
+        external: false,
+        highlighted: true // Special styling for subscription
       }
     ]
   },
