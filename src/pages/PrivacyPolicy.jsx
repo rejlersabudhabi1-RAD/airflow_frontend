@@ -35,7 +35,7 @@ AI Hamdan Street, P.O. Box 39317
 Abu Dhabi, United Arab Emirates
 
 Phone: +971 2 639 7449
-Email: info@rejlers.ae
+Email: tanzeem.agra@rejlers.ae
 
 For data protection inquiries in your region:
 • Sweden: dataskyddsgruppen@rejlers.se | +46 771 78 00 00
@@ -273,7 +273,7 @@ The applicability and extent of the above-mentioned rights are determined on a c
       content: `For any questions or concerns about your data and this privacy notice, please contact us:
 
 **Rejlers Abu Dhabi:**
-Email: info@rejlers.ae
+Email: tanzeem.agra@rejlers.ae
 Phone: +971 2 639 7449
 Address: Rejlers Tower, 13th Floor, AI Hamdan Street, P.O. Box 39317, Abu Dhabi, UAE
 
@@ -339,7 +339,7 @@ You can manage cookie preferences through your browser settings. Note that disab
 
 The law states that we can store cookies on your device if they are strictly necessary for the operation of the platform. For all other types of cookies, we need your permission.
 
-For detailed information about cookies and how to manage them, please refer to your browser's help documentation or contact us at info@rejlers.ae`
+For detailed information about cookies and how to manage them, please refer to your browser's help documentation or contact us at tanzeem.agra@rejlers.ae`
     },
     {
       title: "13. Third-Party Links",
@@ -373,7 +373,7 @@ RADAI is a professional engineering platform intended for business use by qualif
 We do not knowingly collect personal information from individuals under 18 years of age. If we discover that we have inadvertently collected data from a minor, we will delete it immediately.
 
 **Parental Notice:**
-If you are a parent or guardian and you believe your child has provided us with personal data, please contact us immediately at info@rejlers.ae, and we will take steps to remove such information from our systems.
+If you are a parent or guardian and you believe your child has provided us with personal data, please contact us immediately at tanzeem.agra@rejlers.ae, and we will take steps to remove such information from our systems.
 
 **Business and Professional Use:**
 All users must be of legal age to enter into a binding contract and have the authority to use the platform on behalf of their organization.`
@@ -560,7 +560,7 @@ All users must be of legal age to enter into a binding contract and have the aut
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <a 
-                  href="mailto:info@rejlers.ae"
+                  href="mailto:tanzeem.agra@rejlers.ae"
                   className="inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-semibold text-sm transition-all hover:scale-105 text-white"
                   style={{ background: `linear-gradient(to right, ${REJLERS_COLORS.secondary.turbine.base}, ${REJLERS_COLORS.secondary.turbine.accent})` }}
                 >

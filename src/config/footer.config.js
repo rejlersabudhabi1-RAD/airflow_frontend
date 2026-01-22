@@ -26,8 +26,8 @@ export const FOOTER_CONFIG = {
       link: '+971505606987'
     },
     email: {
-      display: 'info@rejlers.ae',
-      link: 'mailto:info@rejlers.ae'
+      display: 'tanzeem.agra@rejlers.ae',
+      link: 'mailto:tanzeem.agra@rejlers.ae'
     }
   },
 
