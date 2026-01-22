@@ -63,6 +63,9 @@ import DesignIQLists from './pages/DesignIQ/DesignIQLists'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
+import RequisitionManagement from './pages/Procurement/RequisitionManagement'
+import OrderManagement from './pages/Procurement/OrderManagement'
+import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -472,6 +475,30 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="procurement">
               <VendorManagement />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/requisitions"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <RequisitionManagement />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/orders"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <OrderManagement />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/receipts"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <ReceiptManagement />
             </ModuleProtectedRoute>
           }
         />

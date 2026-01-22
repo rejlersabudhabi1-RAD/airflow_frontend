@@ -14,7 +14,9 @@ import {
   ShieldCheckIcon,
   BeakerIcon,
   WrenchScrewdriverIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../config/api.config';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -29,6 +31,7 @@ const ProcurementDashboard = () => {
     vendors: { total: 0, active: 0, topRated: [] }
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   const pageControls = usePageControls({
     autoRefreshInterval: 30,
@@ -38,29 +41,67 @@ const ProcurementDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const token = localStorage.getItem('access_token');
-      const headers = { 'Authorization': `Bearer ${token}` };
+      
+      if (!token) {
+        setError({ 
+          type: 'auth', 
+          message: 'Authentication required. Please log in.',
+          action: () => window.location.href = '/login'
+        });
+        return;
+      }
 
-      // Fetch all dashboard data in parallel
-      const [prData, poData, receiptData, vendorData] = await Promise.all([
-        fetch(`${API_BASE_URL}/procurement/requisitions/dashboard/`, { headers }).then(r => r.json()),
-        fetch(`${API_BASE_URL}/procurement/orders/dashboard/`, { headers }).then(r => r.json()),
-        fetch(`${API_BASE_URL}/procurement/receipts/dashboard/`, { headers }).then(r => r.json()),
-        fetch(`${API_BASE_URL}/procurement/vendors/`, { headers }).then(r => r.json())
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Fetch all dashboard data in parallel with error handling
+      const [prData, poData, receiptData, vendorData] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/procurement/requisitions/dashboard/`, { headers })
+          .then(r => r.ok ? r.json() : Promise.reject(`PR: ${r.status}`)),
+        fetch(`${API_BASE_URL}/procurement/orders/dashboard/`, { headers })
+          .then(r => r.ok ? r.json() : Promise.reject(`PO: ${r.status}`)),
+        fetch(`${API_BASE_URL}/procurement/receipts/dashboard/`, { headers })
+          .then(r => r.ok ? r.json() : Promise.reject(`Receipt: ${r.status}`)),
+        fetch(`${API_BASE_URL}/procurement/vendors/`, { headers })
+          .then(r => r.ok ? r.json() : Promise.reject(`Vendor: ${r.status}`))
       ]);
 
+      // Soft-coded data extraction with fallbacks
+      const extractData = (result, fallback) => {
+        if (result.status === 'fulfilled') return result.value;
+        console.warn('Failed to fetch:', result.reason);
+        return fallback;
+      };
+
+      const prStats = extractData(prData, { totals: {} });
+      const poStats = extractData(poData, { totals: {} });
+      const receiptStats = extractData(receiptData, { totals: {} });
+      const vendorStats = extractData(vendorData, { results: [], count: 0 });
+
+      // Safe data normalization
+      const vendorList = Array.isArray(vendorStats.results) ? vendorStats.results : [];
+
       setStats({
-        requisitions: prData.totals || {},
-        orders: poData.totals || {},
-        receipts: receiptData.totals || {},
+        requisitions: prStats.totals || { total: 0, pending: 0, approved: 0, rejected: 0 },
+        orders: poStats.totals || { total: 0, draft: 0, sent: 0, acknowledged: 0, completed: 0, total_value: 0 },
+        receipts: receiptStats.totals || { total: 0, pending: 0, accepted: 0, rejected: 0, quality_passed: 0, quality_failed: 0 },
         vendors: {
-          total: vendorData.count || 0,
-          active: vendorData.results?.filter(v => v.status === 'active').length || 0,
-          topRated: vendorData.results?.filter(v => v.rating >= 4).slice(0, 5) || []
+          total: vendorStats.count || 0,
+          active: vendorList.filter(v => v?.status === 'active').length || 0,
+          topRated: vendorList.filter(v => v?.rating >= 4).slice(0, 5) || []
         }
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      setError({
+        type: 'network',
+        message: `Failed to load dashboard: ${error.message}`,
+        action: () => fetchDashboardData()
+      });
     } finally {
       setLoading(false);
     }
@@ -70,48 +111,49 @@ const ProcurementDashboard = () => {
     fetchDashboardData();
   }, [pageControls.isRefreshing]);
 
+  // Soft-coded stat cards with safe fallback values
   const statCards = [
     {
       title: 'Total Requisitions',
-      value: stats.requisitions.total,
+      value: stats?.requisitions?.total || 0,
       icon: DocumentTextIcon,
       color: 'blue',
       details: [
-        { label: 'Pending', value: stats.requisitions.pending, color: 'yellow' },
-        { label: 'Approved', value: stats.requisitions.approved, color: 'green' },
-        { label: 'Rejected', value: stats.requisitions.rejected, color: 'red' }
+        { label: 'Pending', value: stats?.requisitions?.pending || 0, color: 'yellow' },
+        { label: 'Approved', value: stats?.requisitions?.approved || 0, color: 'green' },
+        { label: 'Rejected', value: stats?.requisitions?.rejected || 0, color: 'red' }
       ]
     },
     {
       title: 'Purchase Orders',
-      value: stats.orders.total,
+      value: stats?.orders?.total || 0,
       icon: ShoppingCartIcon,
       color: 'green',
       details: [
-        { label: 'Draft', value: stats.orders.draft, color: 'gray' },
-        { label: 'Sent', value: stats.orders.sent, color: 'blue' },
-        { label: 'Completed', value: stats.orders.completed, color: 'green' }
+        { label: 'Draft', value: stats?.orders?.draft || 0, color: 'gray' },
+        { label: 'Sent', value: stats?.orders?.sent || 0, color: 'blue' },
+        { label: 'Completed', value: stats?.orders?.completed || 0, color: 'green' }
       ]
     },
     {
       title: 'Goods Receipts',
-      value: stats.receipts.total,
+      value: stats?.receipts?.total || 0,
       icon: ArchiveBoxIcon,
       color: 'purple',
       details: [
-        { label: 'Pending', value: stats.receipts.pending, color: 'yellow' },
-        { label: 'Accepted', value: stats.receipts.accepted, color: 'green' },
-        { label: 'Rejected', value: stats.receipts.rejected, color: 'red' }
+        { label: 'Pending', value: stats?.receipts?.pending || 0, color: 'yellow' },
+        { label: 'Accepted', value: stats?.receipts?.accepted || 0, color: 'green' },
+        { label: 'Rejected', value: stats?.receipts?.rejected || 0, color: 'red' }
       ]
     },
     {
       title: 'Active Vendors',
-      value: stats.vendors.active,
+      value: stats?.vendors?.active || 0,
       icon: UserGroupIcon,
       color: 'indigo',
       details: [
-        { label: 'Total Vendors', value: stats.vendors.total, color: 'gray' },
-        { label: 'Top Rated (4+)', value: stats.vendors.topRated.length, color: 'green' }
+        { label: 'Total Vendors', value: stats?.vendors?.total || 0, color: 'gray' },
+        { label: 'Top Rated (4+)', value: stats?.vendors?.topRated?.length || 0, color: 'green' }
       ]
     }
   ];
@@ -199,6 +241,48 @@ const ProcurementDashboard = () => {
             />
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+            <div className={`rounded-md p-4 ${error.type === 'auth' ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  {error.type === 'auth' ? (
+                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
+                  ) : (
+                    <XCircleIcon className="h-5 w-5 text-red-400" />
+                  )}
+                </div>
+                <div className="ml-3 flex-1">
+                  <p className={`text-sm font-medium ${error.type === 'auth' ? 'text-yellow-800' : 'text-red-800'}`}>
+                    {error.message}
+                  </p>
+                </div>
+                <div className="ml-auto pl-3">
+                  <div className="-mx-1.5 -my-1.5 flex">
+                    {error.action && (
+                      <button
+                        type="button"
+                        onClick={error.action}
+                        className={`inline-flex rounded-md p-1.5 ${error.type === 'auth' ? 'text-yellow-800 hover:bg-yellow-100' : 'text-red-800 hover:bg-red-100'} focus:outline-none`}
+                      >
+                        <ArrowPathIcon className="h-5 w-5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      className={`inline-flex rounded-md p-1.5 ml-2 ${error.type === 'auth' ? 'text-yellow-800 hover:bg-yellow-100' : 'text-red-800 hover:bg-red-100'} focus:outline-none`}
+                    >
+                      <XCircleIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Statistics Cards */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">

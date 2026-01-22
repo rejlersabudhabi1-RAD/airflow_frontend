@@ -349,3 +349,10 @@ export const getCertificationsList = () => {
     ...config
   }))
 }
+
+export const getQualityStandardsList = () => {
+  return Object.entries(PROCUREMENT_CONFIG.qualityStandards).map(([code, config]) => ({
+    code,
+    ...config
+  }))
+}
