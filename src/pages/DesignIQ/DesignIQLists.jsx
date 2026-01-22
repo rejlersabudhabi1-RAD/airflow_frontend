@@ -640,7 +640,7 @@ const DesignIQLists = () => {
                 <button
                   onClick={() => {
                     const data = extractedData.lines;
-                    const headers = ['Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
+                    const headers = ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
                     
                     // Create HTML table
                     let html = '<table border="1" style="border-collapse: collapse; width: 100%;">';
@@ -650,6 +650,7 @@ const DesignIQLists = () => {
                     
                     data.forEach(row => {
                       html += '<tr>';
+                      html += `<td style="padding: 8px; font-weight: bold;">${row.original_detection || row.line_number || ''}</td>`;
                       html += `<td style="padding: 8px;">${row.fluid_code || ''}</td>`;
                       html += `<td style="padding: 8px;">${row.size || ''}</td>`;
                       html += `<td style="padding: 8px;">${row.sequence_no || ''}</td>`;
@@ -693,6 +694,9 @@ const DesignIQLists = () => {
                 <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 sticky top-0">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Original Detection
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Fluid Code
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
@@ -718,6 +722,9 @@ const DesignIQLists = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {extractedData.lines.map((line, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-indigo-600">
+                        {line.original_detection || line.line_number || '-'}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                         {line.fluid_code || '-'}
                       </td>
