@@ -15,6 +15,7 @@ import {
   FunnelIcon
 } from '@heroicons/react/24/outline';
 import { STORAGE_KEYS } from '../../config/app.config';
+import * as XLSX from 'xlsx';
 
 const API_BASE_URL = '/api/v1';
 
@@ -640,43 +641,67 @@ const DesignIQLists = () => {
                 <button
                   onClick={() => {
                     const data = extractedData.lines;
-                    const headers = ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
                     
-                    // Create HTML table
-                    let html = '<table border="1" style="border-collapse: collapse; width: 100%;">';
-                    html += '<thead><tr>';
-                    headers.forEach(h => html += `<th style="padding: 8px; background: #4F46E5; color: white;">${h}</th>`);
-                    html += '</tr></thead><tbody>';
+                    // Create workbook
+                    const wb = XLSX.utils.book_new();
                     
+                    // Prepare data with headers
+                    const wsData = [
+                      ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To']
+                    ];
+                    
+                    // Add data rows
                     data.forEach(row => {
-                      html += '<tr>';
-                      html += `<td style="padding: 8px; font-weight: bold;">${row.original_detection || row.line_number || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.fluid_code || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.size || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.sequence_no || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.pipr_class || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.insulation || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.from || ''}</td>`;
-                      html += `<td style="padding: 8px;">${row.to || ''}</td>`;
-                      html += '</tr>';
+                      wsData.push([
+                        row.original_detection || row.line_number || '',
+                        row.fluid_code || '',
+                        row.size || '',
+                        row.sequence_no || '',
+                        row.pipr_class || '',
+                        row.insulation || '',
+                        row.from || '',
+                        row.to || ''
+                      ]);
                     });
-                    html += '</tbody></table>';
                     
-                    // Convert to Excel
-                    const blob = new Blob([`
-                      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-                        <head><meta charset="UTF-8"><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-                        <x:Name>P&ID Lines</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-                        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml></head><body>${html}</body>
-                      </html>
-                    `], { type: 'application/vnd.ms-excel' });
+                    // Create worksheet
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
                     
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `PID_Lines_${extractedData.fileName.replace('.pdf', '')}_${new Date().toISOString().split('T')[0]}.xls`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    // Format specific columns as text to preserve leading zeros
+                    const range = XLSX.utils.decode_range(ws['!ref']);
+                    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+                      // Column D (index 3) - Sequence No
+                      const seqCell = XLSX.utils.encode_cell({ r: R, c: 3 });
+                      if (ws[seqCell]) {
+                        ws[seqCell].t = 's'; // Set cell type to string
+                        ws[seqCell].v = String(ws[seqCell].v); // Ensure value is string
+                      }
+                      
+                      // Column E (index 4) - PIPR Class
+                      const piprCell = XLSX.utils.encode_cell({ r: R, c: 4 });
+                      if (ws[piprCell]) {
+                        ws[piprCell].t = 's'; // Set cell type to string
+                        ws[piprCell].v = String(ws[piprCell].v); // Ensure value is string
+                      }
+                    }
+                    
+                    // Set column widths
+                    ws['!cols'] = [
+                      { wch: 20 }, // Original Detection
+                      { wch: 12 }, // Fluid Code
+                      { wch: 8 },  // Size
+                      { wch: 15 }, // Sequence No
+                      { wch: 15 }, // PIPR Class
+                      { wch: 12 }, // Insulation
+                      { wch: 20 }, // From
+                      { wch: 20 }  // To
+                    ];
+                    
+                    // Add worksheet to workbook
+                    XLSX.utils.book_append_sheet(wb, ws, 'P&ID Lines');
+                    
+                    // Generate and download
+                    XLSX.writeFile(wb, `PID_Lines_${extractedData.fileName.replace('.pdf', '')}_${new Date().toISOString().split('T')[0]}.xlsx`);
                   }}
                   className="flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold"
                 >
