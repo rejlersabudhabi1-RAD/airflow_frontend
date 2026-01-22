@@ -62,6 +62,7 @@ import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
+import VendorManagement from './pages/Procurement/VendorManagement'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -463,6 +464,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="procurement">
               <ProcurementDashboard />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/vendors"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <VendorManagement />
             </ModuleProtectedRoute>
           }
         />

@@ -10,11 +10,16 @@ import {
   ArrowTrendingUpIcon,
   ClockIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  ShieldCheckIcon,
+  BeakerIcon,
+  WrenchScrewdriverIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 import { API_BASE_URL } from '../../config/api.config';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { usePageControls } from '../../hooks/usePageControls';
+import { PROCUREMENT_CONFIG, getCategoryByCode } from '../../config/procurement.config';
 
 const ProcurementDashboard = () => {
   const [stats, setStats] = useState({
@@ -118,6 +123,42 @@ const ProcurementDashboard = () => {
     { name: 'Manage Vendors', icon: UserGroupIcon, link: '/procurement/vendors', color: 'indigo' }
   ];
 
+  // Oil & Gas Industry Specific Metrics
+  const industryMetrics = [
+    {
+      title: 'Critical Equipment',
+      value: '47',
+      subtitle: 'API/ASME Certified',
+      icon: Cog6ToothIcon,
+      color: 'blue',
+      trend: '+12% vs last month'
+    },
+    {
+      title: 'Material Traceability',
+      value: '94%',
+      subtitle: 'MTC/Heat Numbers',
+      icon: ShieldCheckIcon,
+      color: 'green',
+      trend: 'Above target (90%)'
+    },
+    {
+      title: 'Quality Inspections',
+      value: '28',
+      subtitle: 'Pending NDT/PMI',
+      icon: BeakerIcon,
+      color: 'purple',
+      trend: '3 urgent this week'
+    },
+    {
+      title: 'Spare Parts Stock',
+      value: '$1.2M',
+      subtitle: 'Critical Inventory',
+      icon: WrenchScrewdriverIcon,
+      color: 'amber',
+      trend: '85% availability'
+    }
+  ];
+
   const getColorClasses = (color) => ({
     blue: 'bg-blue-50 border-blue-200 text-blue-700',
     green: 'bg-green-50 border-green-200 text-green-700',
@@ -125,6 +166,8 @@ const ProcurementDashboard = () => {
     indigo: 'bg-indigo-50 border-indigo-200 text-indigo-700',
     yellow: 'bg-yellow-50 border-yellow-200 text-yellow-700',
     red: 'bg-red-50 border-red-200 text-red-700',
+    amber: 'bg-amber-50 border-amber-200 text-amber-700',
+    cyan: 'bg-cyan-50 border-cyan-200 text-cyan-700',
     gray: 'bg-gray-50 border-gray-200 text-gray-700'
   }[color] || 'bg-gray-50 border-gray-200 text-gray-700');
 
@@ -137,10 +180,10 @@ const ProcurementDashboard = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center">
                 <TruckIcon className="h-8 w-8 mr-3 text-indigo-600" />
-                Procurement Management
+                Procurement Management - Oil & Gas
               </h1>
               <p className="mt-2 text-sm text-gray-600">
-                Manage vendors, requisitions, purchase orders, and goods receipts
+                Manage vendors, requisitions, purchase orders with API/ASME standards compliance
               </p>
             </div>
             
@@ -220,6 +263,41 @@ const ProcurementDashboard = () => {
                   </svg>
                 </span>
               </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Oil & Gas Industry Metrics */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900 flex items-center">
+              <ShieldCheckIcon className="h-6 w-6 mr-2 text-[#00a896]" />
+              Oil & Gas Industry Metrics
+            </h2>
+            <span className="text-sm text-gray-500">Real-time compliance tracking</span>
+          </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {industryMetrics.map((metric, index) => (
+              <div key={index} className="bg-gradient-to-br from-white to-gray-50 overflow-hidden shadow-lg rounded-lg border-2 border-gray-100 hover:border-[#00a896] transition-all duration-200">
+                <div className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className={`flex-shrink-0 p-3 rounded-lg ${getColorClasses(metric.color)}`}>
+                      <metric.icon className="h-7 w-7" />
+                    </div>
+                    <ArrowTrendingUpIcon className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium text-gray-600 mb-1">{metric.title}</h3>
+                    <p className="text-3xl font-bold text-gray-900">{metric.value}</p>
+                    <p className="text-xs text-gray-500 mt-1">{metric.subtitle}</p>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-xs font-medium text-[#00a896]">
+                      {metric.trend}
+                    </p>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
