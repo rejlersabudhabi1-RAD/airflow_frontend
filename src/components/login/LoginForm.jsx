@@ -208,6 +208,42 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
                 </svg>
                 <span className="text-xs text-gray-600 font-semibold">256-bit SSL Encrypted Connection</span>
               </div>
+
+              {/* Subscription Button - Soft-coded */}
+              {buttons.subscription?.enabled && (
+                <div className="pt-2">
+                  <Link 
+                    to={buttons.subscription.link}
+                    className="relative w-full flex items-center justify-center space-x-2 px-6 py-3 rounded-xl overflow-hidden transition-all duration-300 group shadow-md hover:shadow-lg border-2"
+                    style={{
+                      background: buttons.subscription.style === 'primary' 
+                        ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)'
+                        : buttons.subscription.style === 'outline'
+                        ? 'transparent'
+                        : 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
+                      borderColor: buttons.subscription.style === 'outline' ? '#7c3aed' : 'transparent',
+                      color: buttons.subscription.style === 'outline' ? '#7c3aed' : '#ffffff'
+                    }}
+                  >
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-violet-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    
+                    {/* Content */}
+                    <div className="relative z-10 flex items-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-bold text-sm">{buttons.subscription.text}</span>
+                      <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </div>
+                  </Link>
+                  {buttons.subscription.description && (
+                    <p className="text-center text-xs text-gray-500 mt-2">{buttons.subscription.description}</p>
+                  )}
+                </div>
+              )}
             </Form>
           )}
         </Formik>

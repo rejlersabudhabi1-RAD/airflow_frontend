@@ -385,6 +385,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
+        },
+        {
+          id: 'subscriptionManagement',
+          title: '7.3 Subscription',
+          icon: CurrencyDollarIcon,
+          path: '/admin/subscriptions',
+          description: 'Plans & billing management'
         }
       ]
     })

@@ -9,7 +9,6 @@ import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import ChangePasswordModal from './components/Auth/ChangePasswordModal'
 import Home from './pages/Home'
 import Login from './pages/Login'
-import Register from './pages/Register'
 import SetupPassword from './pages/SetupPassword'
 import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
@@ -45,6 +44,8 @@ import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
+import SubscriptionManagement from './pages/SubscriptionManagement'
+import SubscriptionPlans from './pages/SubscriptionPlans'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
 import Solutions from './pages/Solutions'
@@ -247,10 +248,10 @@ function App() {
           }
         />
         <Route
-          path="register"
+          path="pricing"
           element={
             <PublicRoute>
-              <Register />
+              <SubscriptionPlans />
             </PublicRoute>
           }
         />
@@ -508,6 +509,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/subscriptions"
+          element={
+            <ProtectedRoute>
+              <SubscriptionManagement />
             </ProtectedRoute>
           }
         />

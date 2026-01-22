@@ -71,6 +71,14 @@ export const FORM_CONFIG = {
       text: 'Forgot password?',
       link: '/forgot-password',
     },
+    subscription: {
+      enabled: true, // Soft-coded toggle
+      text: 'View Subscription Plans',
+      icon: 'currency-dollar', // Icon identifier
+      link: '/pricing',
+      description: 'Explore our pricing and features',
+      style: 'primary', // 'primary', 'secondary', 'outline'
+    },
   },
   
   options: {

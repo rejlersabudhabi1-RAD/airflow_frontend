@@ -16,7 +16,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Routes where sidebar should be hidden
-  const publicRoutes = ['/', '/login', '/register', '/home', '/enquiry', '/solutions', '/about', '/services/pid-analysis', '/services/pfd-conversion', '/services/asset-integrity', '/services/consulting', '/data-governance', '/security', '/terms-of-service', '/privacy-policy']
+  const publicRoutes = ['/', '/login', '/pricing', '/home', '/enquiry', '/solutions', '/about', '/services/pid-analysis', '/services/pfd-conversion', '/services/asset-integrity', '/services/consulting', '/data-governance', '/security', '/terms-of-service', '/privacy-policy']
   
   const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname)
   
