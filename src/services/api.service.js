@@ -238,4 +238,26 @@ apiClient.interceptors.response.use(
 // Add CORS test function to the client
 apiClient.testCors = testCorsConnection;
 
+/**
+ * Create a custom axios instance for long-running file uploads/processing
+ * Uses extended timeout for OCR, AI processing, and large file operations
+ */
+export const apiClientLongTimeout = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT_LONG, // 10 minutes for file processing
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Apply same interceptors to long timeout client
+apiClientLongTimeout.interceptors.request.use(apiClient.interceptors.request.handlers[0].fulfilled)
+apiClientLongTimeout.interceptors.response.use(
+  apiClient.interceptors.response.handlers[0].fulfilled,
+  apiClient.interceptors.response.handlers[0].rejected
+)
+
+console.log('[API Service] Long timeout client initialized for file processing')
+console.log('[API Service] Long Timeout:', API_TIMEOUT_LONG, 'ms')
+
 export default apiClient

@@ -18,6 +18,7 @@ import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { STORAGE_KEYS } from '../../config/app.config';
 import { API_BASE_URL } from '../../config/api.config';
+import { apiClientLongTimeout } from '../../services/api.service';
 import * as XLSX from 'xlsx';
 
 // List types configuration (matches backend)
@@ -211,46 +212,65 @@ const DesignIQLists = () => {
         return;
       }
 
-      const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/upload_pid/`,
+      console.log('[P&ID Upload] 🚀 Starting upload with extended timeout (10 minutes)...');
+      console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+
+      // Use long timeout client for OCR processing (10 minutes)
+      const response = await apiClientLongTimeout.post(
+        '/designiq/lists/upload_pid/',
+        formData,
         {
-          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
+            // Content-Type will be set automatically by axios for FormData
           },
-          body: formData
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            console.log('[P&ID Upload] 📊 Upload progress:', percentCompleted + '%');
+          }
         }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setExtractedData({
-          lines: data.extracted_lines || [],
-          fileName: file.name,
-          itemsCreated: data.items_created || 0
-        });
-        setShowPreviewModal(true);
-        setUploadResult({
-          success: true,
-          message: `Successfully extracted ${data.extracted_lines?.length || 0} line numbers from ${file.name}`,
-          data: data
-        });
-        setUploadingPID(false);
-      } else {
-        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        setUploadResult({
-          success: false,
-          message: `Upload failed: ${error.detail || response.statusText || 'Unknown error'}`
-        });
-      }
+      console.log('[P&ID Upload] ✅ Processing complete');
+      
+      const data = response.data;
+      setExtractedData({
+        lines: data.extracted_lines || [],
+        fileName: file.name,
+        itemsCreated: data.items_created || 0
+      });
+      setShowPreviewModal(true);
+      setUploadResult({
+        success: true,
+        message: `Successfully extracted ${data.extracted_lines?.length || 0} line numbers from ${file.name}`,
+        data: data
+      });
+      setUploadingPID(false);
     } catch (error) {
-      console.error('Error uploading P&ID:', error);
+      console.error('[P&ID Upload] ❌ Error:', error);
+      
+      let errorMessage = 'Failed to upload P&ID';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timed out. The PDF might be too large or complex. Please try a smaller file or contact support.';
+      } else if (error.response) {
+        // Server responded with error
+        const errorData = error.response.data;
+        errorMessage = errorData.detail || errorData.error || error.response.statusText || errorMessage;
+      } else if (error.request) {
+        // Request made but no response
+        errorMessage = 'No response from server. Please check your connection and try again.';
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      
       setUploadResult({
         success: false,
-        message: `Failed to upload P&ID: ${error.message || 'Network error. Please try again.'}`
+        message: errorMessage
       });
     } finally {
       setProcessing(false);
+      setUploadingPID(false);
       event.target.value = '';
     }
   };
@@ -608,13 +628,33 @@ const DesignIQLists = () => {
               <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mb-4"></div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Processing P&ID Document</h3>
               <p className="text-gray-600 text-center mb-4">
-                Extracting line numbers using OCR technology...
+                Using Multi-Engine OCR + AI to extract line numbers...
               </p>
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
                 <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-full animate-pulse" style={{ width: '70%' }}></div>
               </div>
-              <p className="text-sm text-gray-500 mt-3">
-                This may take a few moments for large documents
+              <div className="space-y-2 text-sm text-gray-600 w-full">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+                  <span>Tesseract OCR (Horizontal text)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full mr-2 animate-pulse"></div>
+                  <span>EasyOCR (Vertical text detection)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2 animate-pulse"></div>
+                  <span>PaddleOCR (Multi-orientation)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                  <span>OpenAI GPT-4 (Smart parsing)</span>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-4 text-center">
+                ⏱️ <strong>Processing time:</strong> 2-10 minutes for complex PDFs
+                <br />
+                <span className="text-xs">Please keep this window open</span>
               </p>
             </div>
           </div>
