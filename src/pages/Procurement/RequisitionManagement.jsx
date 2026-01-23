@@ -27,6 +27,7 @@ const RequisitionManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [filterType, setFilterType] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [aiAssisting, setAiAssisting] = useState(false);
 
@@ -110,12 +111,14 @@ const RequisitionManagement = () => {
     const prNumber = req?.pr_number || '';
     const status = req?.status || '';
     const priority = req?.priority || '';
+    const requisitionType = req?.requisition_type || 'general';
     
     const matchesSearch = title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          prNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || status === filterStatus;
     const matchesPriority = filterPriority === 'all' || priority === filterPriority;
-    return matchesSearch && matchesStatus && matchesPriority;
+    const matchesType = filterType === 'all' || requisitionType === filterType;
+    return matchesSearch && matchesStatus && matchesPriority && matchesType;
   }) : [];
 
   const getStatusBadge = (status) => {
@@ -284,7 +287,7 @@ const RequisitionManagement = () => {
         {/* Filters and Search */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
           <div className="bg-white shadow rounded-lg p-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
               {/* Search */}
               <div className="md:col-span-2">
                 <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
@@ -303,6 +306,23 @@ const RequisitionManagement = () => {
                     placeholder="Search by PR number or title..."
                   />
                 </div>
+              </div>
+
+              {/* Type Filter */}
+              <div>
+                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
+                  Type
+                </label>
+                <select
+                  id="type"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                >
+                  <option value="all">All Types</option>
+                  <option value="general">📋 General</option>
+                  <option value="project">🏗️ Project</option>
+                </select>
               </div>
 
               {/* Status Filter */}
@@ -453,6 +473,14 @@ const RequisitionManagement = () => {
                               <p className="text-sm font-medium text-indigo-600 truncate">
                                 PR-{requisition.pr_number}
                               </p>
+                              {/* Requisition Type Badge */}
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                requisition.requisition_type === 'project' 
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-300' 
+                                  : 'bg-blue-100 text-blue-800 border border-blue-300'
+                              }`}>
+                                {requisition.requisition_type === 'project' ? '🏗️ Project' : '📋 General'}
+                              </span>
                               {getStatusBadge(requisition.status)}
                               {getPriorityBadge(requisition.priority)}
                             </div>

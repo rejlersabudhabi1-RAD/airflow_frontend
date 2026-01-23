@@ -11,6 +11,7 @@ import { API_BASE_URL } from '../../config/api.config';
 
 const AIRequisitionCreator = ({ isOpen, onClose, onRequisitionCreated }) => {
   const [formData, setFormData] = useState({
+    requisition_type: 'general',
     title: '',
     description: '',
     category: '',
@@ -249,6 +250,60 @@ ${categoryInfo.standards.map(std => `- ${std}`).join('\n')}
               </h4>
               
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Requisition Type - New Field */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Requisition Type *
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, requisition_type: 'general'})}
+                      className={`relative flex items-center justify-center px-6 py-4 border-2 rounded-lg transition-all ${
+                        formData.requisition_type === 'general'
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-md'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      {formData.requisition_type === 'general' && (
+                        <div className="absolute top-2 right-2">
+                          <svg className="h-5 w-5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">📋</div>
+                        <div className="font-semibold">General</div>
+                        <div className="text-xs mt-1 opacity-75">For operational needs</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, requisition_type: 'project'})}
+                      className={`relative flex items-center justify-center px-6 py-4 border-2 rounded-lg transition-all ${
+                        formData.requisition_type === 'project'
+                          ? 'border-purple-600 bg-purple-50 text-purple-700 shadow-md'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-purple-400'
+                      }`}
+                    >
+                      {formData.requisition_type === 'project' && (
+                        <div className="absolute top-2 right-2">
+                          <svg className="h-5 w-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <div className="text-2xl mb-2">🏗️</div>
+                        <div className="font-semibold">Project</div>
+                        <div className="text-xs mt-1 opacity-75">For specific projects</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Title *

@@ -240,10 +240,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'requisitions',
-          title: '5.3 Requisitions',
+          title: '5.3 Recommendations',
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
-          description: 'Purchase requisitions',
+          description: 'Purchase recommendations',
           moduleCode: 'procurement'
         },
         {
