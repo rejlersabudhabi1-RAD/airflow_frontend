@@ -39,7 +39,7 @@ const DesignIQDashboard = () => {
     
     try {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const response = await fetch(`${API_BASE_URL}/api/v1/designiq/projects/dashboard/`, {
+      const response = await fetch(`${API_BASE_URL}/designiq/projects/dashboard/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 

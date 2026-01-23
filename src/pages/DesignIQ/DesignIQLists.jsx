@@ -17,9 +17,8 @@ import {
 import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { STORAGE_KEYS } from '../../config/app.config';
+import { API_BASE_URL } from '../../config/api.config';
 import * as XLSX from 'xlsx';
-
-const API_BASE_URL = '/api/v1';
 
 // List types configuration (matches backend)
 const LIST_TYPES = {
