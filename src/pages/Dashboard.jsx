@@ -5,10 +5,20 @@ import { fetchFeatures } from '../store/featureSlice'
 import FeatureCard from '../components/FeatureCard'
 import ContactSupport from '../components/support/ContactSupport'
 import Documentation from '../components/documentation/Documentation'
+import { DASHBOARD_WIDGETS } from '../config/dashboard.config'
+import { StatCard, DepartmentCard, NotificationCard, SkeletonCard } from '../components/Dashboard/DashboardWidgets'
+import { API_BASE_URL } from '../config/api.config'
+import { BellIcon, ArrowPathIcon, ChartBarIcon, Cog6ToothIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { FEATURE_FLAGS } from '../config/features.config'
+import FeaturesBrowser from '../components/Features/FeaturesBrowser'
+import AdvancedMetricCard from '../components/Dashboard/AdvancedMetricCard'
+import { DASHBOARD_METRICS, DASHBOARD_LAYOUT } from '../config/dashboardMetrics.config'
+import RealTimeActivityFeed from '../components/Dashboard/RealTimeActivityFeed'
+import PredictiveAnalyticsDashboard from '../components/Dashboard/PredictiveAnalyticsDashboard'
 
 /**
  * Dashboard Page
- * Advanced dashboard with modern UI/UX
+ * Advanced dashboard with modern UI/UX and intelligent metrics
  * Scalable design for growing features
  */
 
@@ -20,10 +30,95 @@ const Dashboard = () => {
   const [activeCategory, setActiveCategory] = useState('all')
   const [showContactSupport, setShowContactSupport] = useState(false)
   const [showDocumentation, setShowDocumentation] = useState(false)
+  const [dashboardStats, setDashboardStats] = useState({})
+  const [notifications, setNotifications] = useState([])
+  const [departments, setDepartments] = useState({})
+  const [loadingStats, setLoadingStats] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [useAdvancedFeatures, setUseAdvancedFeatures] = useState(FEATURE_FLAGS.enableAdvancedFeaturesCatalog)
+  
+  // Advanced metrics state
+  const [metricsData, setMetricsData] = useState({})
+  const [loadingMetrics, setLoadingMetrics] = useState(true)
 
   useEffect(() => {
     dispatch(fetchFeatures())
+    fetchDashboardData()
+    fetchAdvancedMetrics()
   }, [dispatch])
+
+  // Auto-refresh dashboard data
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => {
+      fetchDashboardData()
+      fetchAdvancedMetrics()
+    }, 60000) // Refresh every minute
+    return () => clearInterval(interval)
+  }, [autoRefresh])
+
+  // Fetch advanced metrics from backend
+  const fetchAdvancedMetrics = async () => {
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
+      const response = await fetch(`${API_BASE_URL}/dashboard/metrics/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setMetricsData(data)
+      }
+    } catch (error) {
+      console.error('Error fetching advanced metrics:', error)
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }
+
+  // Fetch comprehensive dashboard data
+  const fetchDashboardData = async () => {
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+
+      // Fetch data in parallel
+      const [notificationsRes, projectsRes, engineeringRes, procurementRes] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/notifications/`, { headers }).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE_URL}/projects/stats/`, { headers }).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE_URL}/pid/stats/`, { headers }).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE_URL}/procurement/orders/dashboard/`, { headers }).then(r => r.ok ? r.json() : null)
+      ])
+
+      // Process results safely
+      if (notificationsRes.status === 'fulfilled' && notificationsRes.value) {
+        setNotifications(notificationsRes.value.results || [])
+      }
+
+      const stats = {}
+      if (projectsRes.status === 'fulfilled' && projectsRes.value) {
+        stats.projects = projectsRes.value
+      }
+      if (engineeringRes.status === 'fulfilled' && engineeringRes.value) {
+        stats.engineering = engineeringRes.value
+      }
+      if (procurementRes.status === 'fulfilled' && procurementRes.value) {
+        stats.procurement = procurementRes.value
+      }
+
+      setDashboardStats(stats)
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoadingStats(false)
+    }
+  }
 
   // Get current time-based greeting
   const getGreeting = () => {
@@ -55,9 +150,24 @@ const Dashboard = () => {
 
   const stats = [
     {
+      id: 'projects',
+      label: 'Active Projects',
+      value: dashboardStats.projects?.active_count || 0,
+      change: '+0%',
+      trend: 'up',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      ),
+      gradient: 'from-purple-500 to-pink-500',
+      bgGradient: 'from-purple-50 to-pink-50',
+      onClick: () => navigate('/projects')
+    },
+    {
       id: 'drawings',
-      label: 'Total Drawings',
-      value: '0',
+      label: 'Engineering Drawings',
+      value: dashboardStats.engineering?.total_drawings || 0,
       change: '+0%',
       trend: 'up',
       icon: (
@@ -69,33 +179,19 @@ const Dashboard = () => {
       bgGradient: 'from-blue-50 to-cyan-50'
     },
     {
-      id: 'completed',
-      label: 'Completed',
-      value: '0',
-      change: '+0%',
-      trend: 'up',
-      icon: (
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      gradient: 'from-green-500 to-emerald-500',
-      bgGradient: 'from-green-50 to-emerald-50'
-    },
-    {
-      id: 'projects',
-      label: 'Active Projects',
-      value: 'NEW',
-      change: 'Launch',
+      id: 'notifications',
+      label: 'Pending Notifications',
+      value: notifications.filter(n => !n.is_read).length,
+      change: 'New',
       trend: 'new',
       icon: (
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
       ),
-      gradient: 'from-purple-500 to-pink-500',
-      bgGradient: 'from-purple-50 to-pink-50',
-      onClick: () => navigate('/projects')
+      gradient: 'from-orange-500 to-red-500',
+      bgGradient: 'from-orange-50 to-red-50',
+      onClick: () => navigate('/notifications')
     },
     {
       id: 'efficiency',
@@ -108,8 +204,8 @@ const Dashboard = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       ),
-      gradient: 'from-amber-500 to-orange-500',
-      bgGradient: 'from-amber-50 to-orange-50'
+      gradient: 'from-green-500 to-emerald-500',
+      bgGradient: 'from-green-50 to-emerald-50'
     }
   ]
 
@@ -153,16 +249,114 @@ const Dashboard = () => {
               )}
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => fetchDashboardData()}
+                className="px-4 py-2 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 transition-all"
+              >
+                <ArrowPathIcon className="w-5 h-5 inline text-gray-700" />
+              </button>
               <button 
                 onClick={() => navigate('/notifications')}
-                className="px-5 py-2.5 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all flex items-center gap-2 text-gray-700 font-medium cursor-pointer"
+                className="relative px-5 py-2.5 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all flex items-center gap-2 text-gray-700 font-medium cursor-pointer"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 <span className="hidden sm:inline">Notifications</span>
+                {notifications.filter(n => !n.is_read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                    {notifications.filter(n => !n.is_read).length}
+                  </span>
+                )}
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Advanced Metrics Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <ChartBarIcon className="w-7 h-7 text-blue-600" />
+              System Metrics & Utilization
+            </h2>
+            <button
+              onClick={() => fetchAdvancedMetrics()}
+              disabled={loadingMetrics}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${loadingMetrics ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Hero Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.totalDocuments}
+              value={metricsData.documents?.total_documents || 0}
+              previousValue={metricsData.documents?.total_documents_previous || 0}
+              loading={loadingMetrics}
+              size="medium"
+              showTrend={true}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.activeUsers}
+              value={metricsData.users?.active_users || 0}
+              previousValue={metricsData.users?.active_users_previous || 0}
+              loading={loadingMetrics}
+              size="medium"
+              showTrend={true}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.totalUsers}
+              value={metricsData.users?.total_users || 0}
+              previousValue={metricsData.users?.total_users_previous || 0}
+              loading={loadingMetrics}
+              size="medium"
+              showTrend={true}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.featureUsage}
+              value={metricsData.features?.utilization_percentage || 0}
+              loading={loadingMetrics}
+              size="medium"
+              showTrend={false}
+            />
+          </div>
+
+          {/* Secondary Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.documentsToday}
+              value={metricsData.documents?.documents_today || 0}
+              previousValue={metricsData.documents?.documents_yesterday || 0}
+              loading={loadingMetrics}
+              size="small"
+              showTrend={true}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.newUsersToday}
+              value={metricsData.users?.new_users_today || 0}
+              previousValue={metricsData.users?.new_users_yesterday || 0}
+              loading={loadingMetrics}
+              size="small"
+              showTrend={true}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.pidDrawings}
+              value={metricsData.documents?.pid_drawings || 0}
+              loading={loadingMetrics}
+              size="small"
+              showTrend={false}
+            />
+            <AdvancedMetricCard
+              metricConfig={DASHBOARD_METRICS.pfdDocuments}
+              value={metricsData.documents?.pfd_documents || 0}
+              loading={loadingMetrics}
+              size="small"
+              showTrend={false}
+            />
           </div>
         </div>
 
@@ -198,6 +392,69 @@ const Dashboard = () => {
           ))}
         </div>
 
+        {/* Department Activity Overview - NEW */}
+        {!loadingStats && DASHBOARD_WIDGETS.departmentOverview.enabled && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <Cog6ToothIcon className="w-7 h-7 text-purple-600" />
+              Department Activity
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {DASHBOARD_WIDGETS.departmentOverview.departments.map(dept => (
+                <DepartmentCard
+                  key={dept.id}
+                  department={dept}
+                  data={departments[dept.id] || {}}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Real-time Notifications - NEW */}
+        {!loadingStats && notifications.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                <BellIcon className="w-7 h-7 text-orange-600" />
+                Recent Notifications
+              </h2>
+              <button
+                onClick={() => navigate('/notifications')}
+                className="text-sm text-blue-600 hover:text-blue-700 font-semibold"
+              >
+                View All →
+              </button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {notifications.slice(0, 4).map(notification => (
+                <NotificationCard
+                  key={notification.id}
+                  notification={notification}
+                  category={DASHBOARD_WIDGETS.notifications.categories.find(c => c.id === notification.priority) || DASHBOARD_WIDGETS.notifications.categories[2]}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Predictive Analytics Dashboard - INTELLIGENT FORECASTING */}
+        <div className="mb-8">
+          <PredictiveAnalyticsDashboard 
+            refreshInterval={60000}
+          />
+        </div>
+
+        {/* Real-Time Activity Feed - LIVE MONITORING */}
+        <div className="mb-8">
+          <RealTimeActivityFeed 
+            apiEndpoint="/activity/recent/"
+            maxHeight="500px"
+            showFilters={true}
+            autoRefresh={true}
+          />
+        </div>
+
         {/* Category Filter Pills */}
         <div className="mb-8 bg-white rounded-2xl shadow-lg p-4 border border-gray-200">
           <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
@@ -225,13 +482,33 @@ const Dashboard = () => {
             <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
               <span className="w-1 h-8 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-full"></span>
               Available Features
-              <span className="text-sm font-normal text-gray-500">
-                ({filteredFeatures?.length || 0})
-              </span>
+              {!useAdvancedFeatures && (
+                <span className="text-sm font-normal text-gray-500">
+                  ({filteredFeatures?.length || 0})
+                </span>
+              )}
             </h2>
+            {FEATURE_FLAGS.enableAdvancedFeaturesCatalog && (
+              <button
+                onClick={() => setUseAdvancedFeatures(!useAdvancedFeatures)}
+                className={`px-4 py-2 rounded-xl font-medium transition-all flex items-center gap-2 ${
+                  useAdvancedFeatures
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <SparklesIcon className="w-5 h-5" />
+                {useAdvancedFeatures ? 'Advanced Mode' : 'Switch to Advanced'}
+              </button>
+            )}
           </div>
 
-          {loading ? (
+          {useAdvancedFeatures ? (
+            <FeaturesBrowser 
+              userModules={user?.modules || []} 
+              isAdmin={user?.is_admin || false}
+            />
+          ) : loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="relative">
                 <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
@@ -266,6 +543,15 @@ const Dashboard = () => {
                   View All Features
                 </button>
               )}
+              <div className="mt-4">
+                <button
+                  onClick={() => setUseAdvancedFeatures(true)}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all font-medium inline-flex items-center gap-2"
+                >
+                  <SparklesIcon className="w-5 h-5" />
+                  Try Advanced Features Catalog
+                </button>
+              </div>
             </div>
           )}
         </div>

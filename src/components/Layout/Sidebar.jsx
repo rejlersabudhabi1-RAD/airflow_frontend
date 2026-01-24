@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { API_BASE_URL } from '../../config/api.config'
+import { getSectionTitle } from '../../config/navigationLabels.config'
+import { getEngineeringDisciplines } from '../../config/engineeringStructure.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -34,6 +36,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
+    // Engineering disciplines
+    process: false,
+    piping: false,
+    instrument: false,
+    electrical: false,
+    civil: false,
+    mechanical: false,
+    digitization: false,
+    // Other sections
     crs: true,
     finance: true,
     projectControl: true,
@@ -120,40 +131,33 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
     {
       id: 'processEngineering',
-      title: '1. Process Eng.',
+      title: getSectionTitle('processEngineering'),
       icon: BeakerIcon,
       type: 'section',
       expanded: expandedSections.processEngineering,
-      children: [
-        {
-          id: 'pid',
-          title: '1.1 P&ID Design Verification',
-          icon: DocumentTextIcon,
-          path: '/pid/upload',
-          description: 'AI-powered engineering review',
-          moduleCode: 'pid_analysis'
-        },
-        {
-          id: 'designiq',
-          title: '1.2 DesignIQ',
-          icon: BeakerIcon,
-          path: '/designiq',
-          description: 'AI-powered design optimization',
-          moduleCode: 'designiq'
-        },
-        {
-          id: 'pfd',
-          title: '1.3 PFD Converter',
-          icon: DocumentTextIcon,
-          path: '/pfd/upload',
-          description: 'Intelligent conversion',
-          moduleCode: 'pfd_to_pid'
-        }
-      ]
+      children: getEngineeringDisciplines().map((discipline, index) => ({
+        id: discipline.id,
+        title: `1.${index + 1} ${discipline.name}`,
+        icon: discipline.icon,
+        type: 'subsection',
+        expanded: expandedSections[discipline.id],
+        description: discipline.description,
+        color: discipline.color,
+        gradient: discipline.gradient,
+        children: discipline.subFeatures.map((subFeature, subIndex) => ({
+          id: subFeature.id,
+          title: subFeature.name,
+          icon: subFeature.icon,
+          path: subFeature.path,
+          description: subFeature.description,
+          moduleCode: subFeature.moduleCode,
+          badge: subFeature.badge
+        }))
+      }))
     },
     {
       id: 'crs',
-      title: '2. CRS',
+      title: getSectionTitle('crs'),
       icon: ChartBarIcon,
       type: 'section',
       expanded: expandedSections.crs,
@@ -173,11 +177,38 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           path: '/crs/multiple-revision',
           description: 'AI-powered revision tracking',
           moduleCode: 'crs_documents'
+        },
+        {
+          id: 'pid',
+          title: '2.3 P&ID Checker',
+          icon: DocumentTextIcon,
+          path: '/pid/upload',
+          description: 'AI-powered P&ID verification',
+          moduleCode: 'pid_analysis',
+          badge: 'AI'
+        },
+        {
+          id: 'designiq',
+          title: '2.4 DesignIQ',
+          icon: BeakerIcon,
+          path: '/designiq',
+          description: 'AI-powered design optimization',
+          moduleCode: 'designiq',
+          badge: 'AI'
+        },
+        {
+          id: 'pfd',
+          title: '2.5 PFD to P&ID',
+          icon: DocumentTextIcon,
+          path: '/pfd/upload',
+          description: 'Intelligent PFD conversion',
+          moduleCode: 'pfd_to_pid',
+          badge: 'AI'
         }
       ]
     },      {
         id: 'finance',
-        title: '3. Finance',
+        title: getSectionTitle('finance'),
         icon: CurrencyDollarIcon,
         type: 'section',
         expanded: expandedSections.finance,
@@ -200,7 +231,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       },
       {
         id: 'projectControl',
-        title: '4. Project Control',
+        title: getSectionTitle('projectControl'),
       icon: BriefcaseIcon,
       type: 'section',
       expanded: expandedSections.projectControl,
@@ -217,7 +248,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
     {
       id: 'procurement',
-      title: '5. Procurement',
+      title: getSectionTitle('procurement'),
       icon: BriefcaseIcon,
       type: 'section',
       expanded: expandedSections.procurement,
@@ -266,7 +297,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     },
     {
       id: 'qhse',
-      title: '6. QHSE',
+      title: getSectionTitle('hse'),
       icon: ShieldCheckIcon,
       type: 'section',
       expanded: expandedSections.qhse,
@@ -327,7 +358,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const hasModuleAccess = (item) => {
     // Dashboard and admin sections are handled separately
     if (item.requiresModule === false) return true
-    if (item.type === 'section') return true // Sections are shown if they have accessible children
+    if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
     
     // Check if user has the required module
     if (item.moduleCode) {
@@ -340,9 +371,19 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Filter menu items based on user's modules
   const filterMenuByModules = (items) => {
     return items.map(item => {
-      if (item.type === 'section' && item.children) {
-        // Filter children based on module access
-        const accessibleChildren = item.children.filter(hasModuleAccess)
+      if ((item.type === 'section' || item.type === 'subsection') && item.children) {
+        // Recursively filter children
+        const accessibleChildren = item.children.map(child => {
+          if (child.type === 'subsection' && child.children) {
+            // Filter nested children for subsections
+            const accessibleNestedChildren = child.children.filter(hasModuleAccess)
+            if (accessibleNestedChildren.length > 0) {
+              return { ...child, children: accessibleNestedChildren }
+            }
+            return null
+          }
+          return hasModuleAccess(child) ? child : null
+        }).filter(child => child !== null)
         
         // Only show section if it has accessible children
         if (accessibleChildren.length > 0) {
@@ -521,30 +562,107 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                   {!isCollapsed && item.expanded && (
                     <div className="ml-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-1">
                       {item.children.map((child) => (
-                        <button
-                          key={child.id}
-                          onClick={() => handleNavigation(child.path)}
-                          className={`
-                            w-full flex items-start space-x-3 px-3 py-2.5 rounded-lg
-                            transition-all duration-200 text-left
-                            ${isActiveRoute(child.path)
-                              ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 font-medium shadow-sm'
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200'
-                            }
-                          `}
-                        >
-                          <child.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isActiveRoute(child.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-sm ${isActiveRoute(child.path) ? 'font-semibold' : 'font-medium'}`}>
-                              {child.title}
-                            </div>
-                            {child.description && (
-                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                                {child.description}
+                        child.type === 'subsection' ? (
+                          // Subsection with nested children (like Engineering disciplines)
+                          <div key={child.id} className="space-y-1">
+                            <button
+                              onClick={() => toggleSection(child.id)}
+                              className={`
+                                w-full flex items-center justify-between px-3 py-2 rounded-lg
+                                transition-all duration-200
+                                ${expandedSections[child.id] 
+                                  ? 'bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100' 
+                                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }
+                              `}
+                            >
+                              <div className="flex items-center space-x-2">
+                                <child.icon className="w-4 h-4" />
+                                <span className="text-sm font-medium">{child.title}</span>
+                              </div>
+                              {expandedSections[child.id] ? (
+                                <ChevronDownIcon className="w-3 h-3" />
+                              ) : (
+                                <ChevronRightIcon className="w-3 h-3" />
+                              )}
+                            </button>
+                            
+                            {/* Nested sub-features */}
+                            {expandedSections[child.id] && (
+                              <div className="ml-4 pl-3 border-l-2 border-gray-100 dark:border-gray-600 space-y-0.5">
+                                {child.children.map((subFeature) => (
+                                  <button
+                                    key={subFeature.id}
+                                    onClick={() => handleNavigation(subFeature.path)}
+                                    className={`
+                                      w-full flex items-center justify-between px-2.5 py-2 rounded-md
+                                      transition-all duration-200 text-left group
+                                      ${isActiveRoute(subFeature.path)
+                                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 text-blue-700 dark:text-blue-300 font-medium shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-200'
+                                      }
+                                    `}
+                                  >
+                                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                      <subFeature.icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActiveRoute(subFeature.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                                      <span className="text-xs truncate">{subFeature.title}</span>
+                                    </div>
+                                    {subFeature.badge && (
+                                      <span className={`
+                                        px-1.5 py-0.5 text-[10px] font-bold rounded-full flex-shrink-0
+                                        ${subFeature.badge === 'AI' 
+                                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                                          : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                                        }
+                                      `}>
+                                        {subFeature.badge}
+                                      </span>
+                                    )}
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </div>
-                        </button>
+                        ) : (
+                          // Regular child item (no nested children)
+                          <button
+                            key={child.id}
+                            onClick={() => handleNavigation(child.path)}
+                            className={`
+                              w-full flex items-center justify-between px-3 py-2.5 rounded-lg
+                              transition-all duration-200 text-left
+                              ${isActiveRoute(child.path)
+                                ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 font-medium shadow-sm'
+                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200'
+                              }
+                            `}
+                          >
+                            <div className="flex items-start space-x-3 flex-1 min-w-0">
+                              <child.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isActiveRoute(child.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-sm ${isActiveRoute(child.path) ? 'font-semibold' : 'font-medium'}`}>
+                                  {child.title}
+                                </div>
+                                {child.description && (
+                                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                    {child.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {child.badge && (
+                              <span className={`
+                                px-2 py-0.5 text-[10px] font-bold rounded-full flex-shrink-0 ml-2
+                                ${child.badge === 'AI' 
+                                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                                  : 'bg-gradient-to-r from-green-500 to-emerald-500 text-white'
+                                }
+                              `}>
+                                {child.badge}
+                              </span>
+                            )}
+                          </button>
+                        )
                       ))}
                     </div>
                   )}

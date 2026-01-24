@@ -23,6 +23,38 @@ console.log('[Feature Config]   - isProduction:', isProduction)
 console.log('[Feature Config]   - hostname:', window.location.hostname)
 
 /**
+ * Feature Status Types
+ */
+export const FEATURE_STATUS = {
+  ACTIVE: 'active',
+  BETA: 'beta',
+  NEW: 'new',
+  COMING_SOON: 'coming_soon',
+  PREVIEW: 'preview'
+}
+
+/**
+ * Feature View Modes
+ */
+export const FEATURE_VIEW_MODES = {
+  GRID: 'grid',
+  LIST: 'list',
+  COMPACT: 'compact',
+  DETAILED: 'detailed'
+}
+
+/**
+ * Feature Sort Options
+ */
+export const FEATURE_SORT = {
+  NAME: 'name',
+  CATEGORY: 'category',
+  RECENTLY_USED: 'recently_used',
+  POPULARITY: 'popularity',
+  STATUS: 'status'
+}
+
+/**
  * Feature Flags
  * Control which version of components to use
  * Reads from environment variables with fallback defaults
@@ -51,6 +83,12 @@ export const FEATURE_FLAGS = {
   // Analysis Features
   enableFiveStageAnalysis: true,
   enableComprehensiveReports: true,
+  
+  // Dashboard Features
+  enableAdvancedFeaturesCatalog: true,
+  enableFeatureSearch: true,
+  enableFeatureFilters: true,
+  enableFeatureMetrics: true,
   
   // Debug & Development
   enableDebugMode: import.meta.env.VITE_ENABLE_DEBUG === 'true' || (import.meta.env.VITE_ENABLE_DEBUG === undefined && isDevelopment),

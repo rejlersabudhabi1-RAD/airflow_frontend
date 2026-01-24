@@ -44,6 +44,7 @@ import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
+import UserDetail from './pages/UserDetail'
 import SubscriptionManagement from './pages/SubscriptionManagement'
 import SubscriptionPlans from './pages/SubscriptionPlans'
 import ContactSupportPage from './pages/ContactSupportPage'
@@ -545,6 +546,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/users/:id"
+          element={
+            <ProtectedRoute>
+              <UserDetail />
             </ProtectedRoute>
           }
         />

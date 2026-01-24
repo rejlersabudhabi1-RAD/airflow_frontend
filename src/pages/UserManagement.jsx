@@ -1547,8 +1547,8 @@ const UserManagement = ({ pageControls }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => openUserDetails(user)}
-                          className="text-purple-600 hover:text-purple-900"
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
+                          className="text-purple-600 hover:text-purple-900 transition-colors"
                           title="View Details"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
