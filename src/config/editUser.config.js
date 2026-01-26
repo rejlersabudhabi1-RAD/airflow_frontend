@@ -83,20 +83,22 @@ export const EDIT_USER_CONFIG = {
         {
           name: 'department',
           label: 'Department',
-          type: 'text',
-          placeholder: 'e.g., Engineering, Finance, Operations',
+          type: 'select',
+          placeholder: 'Select Department',
           required: false,
           gridCols: 'md:col-span-1',
-          helpText: 'User\'s department or division'
+          helpText: 'User\'s department (from database)',
+          options: [] // Populated dynamically from departments API
         },
         {
           name: 'job_title',
           label: 'Job Title',
-          type: 'text',
-          placeholder: 'e.g., Senior Engineer, Project Manager',
+          type: 'select',
+          placeholder: 'Select Job Title',
           required: false,
           gridCols: 'md:col-span-1',
-          helpText: 'User\'s role or position'
+          helpText: 'User\'s job title (from database)',
+          options: [] // Populated dynamically from job titles API
         },
         {
           name: 'phone',

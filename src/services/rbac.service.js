@@ -77,6 +77,14 @@ class RBACService {
     return apiService.get(`${RBAC_BASE_URL}/users/stats/`);
   }
 
+  async getDepartments() {
+    return apiService.get(`${RBAC_BASE_URL}/users/departments/`);
+  }
+
+  async getJobTitles() {
+    return apiService.get(`${RBAC_BASE_URL}/users/job-titles/`);
+  }
+
   // ==================== Bulk Operations ====================
   async bulkUploadUsers(formData) {
     return apiService.post(`${RBAC_BASE_URL}/users/bulk_upload/`, formData, {

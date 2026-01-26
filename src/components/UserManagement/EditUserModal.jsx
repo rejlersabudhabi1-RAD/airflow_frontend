@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchDepartments, fetchJobTitles } from '../../store/slices/rbacSlice';
 import { EDIT_USER_CONFIG, initializeFormData, validateField, hasChanges } from '../../config/editUser.config';
 import { groupModulesByCategory, MODULE_CATEGORIES_CONFIG } from '../../config/moduleCategories.config';
 
@@ -18,12 +20,20 @@ const EditUserModal = ({
   loading = false,
   currentUser = null
 }) => {
+  const dispatch = useDispatch();
+  const { departments, jobTitles } = useSelector((state) => state.rbac);
   const [formData, setFormData] = useState({});
   const [originalData, setOriginalData] = useState({});
   const [errors, setErrors] = useState({});
   const [expandedSections, setExpandedSections] = useState({});
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [moduleSearch, setModuleSearch] = useState('');
+
+  // Fetch departments and job titles on mount
+  useEffect(() => {
+    dispatch(fetchDepartments());
+    dispatch(fetchJobTitles());
+  }, [dispatch]);
 
   // Initialize form data when user changes
   useEffect(() => {
@@ -210,6 +220,18 @@ const EditUserModal = ({
         );
 
       case 'select':
+        // Determine options based on field name
+        let selectOptions = [];
+        if (field.name === 'organization_id') {
+          selectOptions = organizations;
+        } else if (field.name === 'department') {
+          selectOptions = departments.map(dept => ({ id: dept, name: dept }));
+        } else if (field.name === 'job_title') {
+          selectOptions = jobTitles.map(title => ({ id: title, name: title }));
+        } else {
+          selectOptions = field.options || [];
+        }
+
         return (
           <div key={field.name} className={`${field.gridCols || 'col-span-2'}`}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -223,8 +245,8 @@ const EditUserModal = ({
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
             >
               <option value="">{field.placeholder || 'Select...'}</option>
-              {(field.name === 'organization_id' ? organizations : field.options || []).map((option) => (
-                <option key={option.id} value={option.id}>
+              {selectOptions.map((option) => (
+                <option key={option.id || option.name} value={option.id || option.name}>
                   {option.name}
                 </option>
               ))}
