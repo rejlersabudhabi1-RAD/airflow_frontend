@@ -27,6 +27,46 @@ import {
   calculateConfidenceInterval
 } from '../../config/predictiveAnalytics.config';
 
+/**
+ * Error Boundary Component for safe rendering
+ */
+class PredictiveAnalyticsErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('PredictiveAnalyticsDashboard Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 text-center">
+          <div className="text-red-600 text-4xl mb-2">⚠️</div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Component Error</h3>
+          <p className="text-gray-600 mb-4">
+            {this.state.error?.message || 'An unexpected error occurred'}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-all shadow-sm"
+          >
+            🔄 Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
   const [predictions, setPredictions] = useState({});
   const [insights, setInsights] = useState([]);
@@ -35,39 +75,78 @@ const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
   const [selectedMetric, setSelectedMetric] = useState('document_uploads');
   const [selectedModel, setSelectedModel] = useState('linear_regression');
   const [liveMode, setLiveMode] = useState(true);
+  const [error, setError] = useState(null);
+
+  console.log('[PredictiveAnalytics] Component mounted');
 
   /**
    * Fetch predictive analytics data
    */
   const fetchPredictiveData = useCallback(async () => {
+    console.log('[PredictiveAnalytics] Fetching data...');
     try {
-      const response = await fetch(`${API_BASE_URL}/analytics/predictions/`, {
+      setError(null); // Clear any previous errors
+      
+      // Get authentication token from localStorage
+      const token = localStorage.getItem('access_token');
+      
+      console.log('[PredictiveAnalytics] Token found:', !!token);
+      
+      if (!token) {
+        console.warn('[PredictiveAnalytics] No authentication token found');
+        setError('Authentication required. Please log in.');
+        setLoading(false);
+        return;
+      }
+      
+      const url = `${API_BASE_URL}/analytics/predictions/`;
+      console.log('[PredictiveAnalytics] Fetching from:', url);
+      
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log('[PredictiveAnalytics] Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('[PredictiveAnalytics] Data received:', data);
+        
+        // Safety check for data
+        if (!data || !data.historical) {
+          console.warn('[PredictiveAnalytics] No historical data in response');
+          setError('No data available from server');
+          setLoading(false);
+          return;
+        }
         
         // Process predictions for each metric
         const processedPredictions = {};
         
         PREDICTION_METRICS.forEach(metric => {
-          const historicalData = data.historical?.[metric.id] || [];
-          const forecastData = forecastNextDays(historicalData, metric.model, metric.forecastDays);
-          const detectedAnomalies = detectAnomalies(historicalData);
-          const confidenceInterval = calculateConfidenceInterval(forecastData, 0.95);
-          
-          processedPredictions[metric.id] = {
-            historical: historicalData,
-            forecast: forecastData,
-            confidence: confidenceInterval,
-            anomalies: detectedAnomalies,
-            model: metric.model,
-            accuracy: PREDICTION_MODELS[metric.model.toUpperCase()]?.accuracy || 75
-          };
+          try {
+            const historicalData = data.historical?.[metric.id] || [];
+            // Use selectedModel for forecasting, allowing dynamic model switching
+            const activeModel = selectedModel || metric.model;
+            const forecastData = forecastNextDays(historicalData, activeModel, metric.forecastDays);
+            const detectedAnomalies = detectAnomalies(historicalData);
+            const confidenceInterval = calculateConfidenceInterval(forecastData, 0.95);
+            
+            processedPredictions[metric.id] = {
+              historical: historicalData,
+              forecast: forecastData,
+              confidence: confidenceInterval,
+              anomalies: detectedAnomalies,
+              model: activeModel,
+              accuracy: PREDICTION_MODELS[activeModel?.toUpperCase()]?.accuracy || 75
+            };
+          } catch (metricError) {
+            console.error(`Error processing metric ${metric.id}:`, metricError);
+          }
         });
         
         setPredictions(processedPredictions);
@@ -75,21 +154,26 @@ const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
         // Generate intelligent insights
         const currentMetric = processedPredictions[selectedMetric];
         if (currentMetric) {
-          const generatedInsights = generateInsights(
-            currentMetric.historical,
-            currentMetric.forecast,
-            currentMetric.anomalies
-          );
-          setInsights(generatedInsights);
-          setAnomalies(currentMetric.anomalies);
+          try {
+            const generatedInsights = generateInsights(
+              currentMetric.historical,
+              currentMetric.forecast,
+              currentMetric.anomalies
+            );
+            setInsights(generatedInsights);
+            setAnomalies(currentMetric.anomalies);
+          } catch (insightError) {
+            console.error('Error generating insights:', insightError);
+          }
         }
       }
     } catch (error) {
       console.error('Predictive analytics fetch error:', error);
+      setError(error.message || 'Failed to load predictive analytics');
     } finally {
       setLoading(false);
     }
-  }, [selectedMetric]);
+  }, [selectedMetric, selectedModel]);
 
   // Auto-refresh
   useEffect(() => {
@@ -99,7 +183,7 @@ const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
       const interval = setInterval(fetchPredictiveData, refreshInterval);
       return () => clearInterval(interval);
     }
-  }, [fetchPredictiveData, liveMode, refreshInterval]);
+  }, [fetchPredictiveData, liveMode, refreshInterval, selectedModel]);
 
   /**
    * Get color classes for metric (soft-coded)
@@ -408,6 +492,40 @@ const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
     );
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 text-center">
+        <div className="text-red-600 text-4xl mb-2">⚠️</div>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">Error Loading Analytics</h3>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <button
+          onClick={fetchPredictiveData}
+          className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-all shadow-sm"
+        >
+          🔄 Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Safety check - ensure we have predictions data
+  if (!predictions || Object.keys(predictions).length === 0) {
+    return (
+      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-8 text-center">
+        <div className="text-yellow-600 mb-2">⚠️</div>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">No Prediction Data Available</h3>
+        <p className="text-gray-600 mb-4">Unable to load predictive analytics data. Please try refreshing.</p>
+        <button
+          onClick={fetchPredictiveData}
+          className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-all shadow-sm"
+        >
+          🔄 Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -505,4 +623,11 @@ const PredictiveAnalyticsDashboard = ({ refreshInterval = 60000 }) => {
   );
 };
 
-export default PredictiveAnalyticsDashboard;
+// Export with Error Boundary wrapper
+export default function PredictiveAnalyticsDashboardWrapper(props) {
+  return (
+    <PredictiveAnalyticsErrorBoundary>
+      <PredictiveAnalyticsDashboard {...props} />
+    </PredictiveAnalyticsErrorBoundary>
+  );
+}
