@@ -84,21 +84,21 @@ const DesignIQLists = () => {
   const STRICT_LINE_PATTERNS = {
     line_size: '\\d{1,2}',
     area: '\\d{2,3}',
-    fluid_code: '[A-Z]{1,2}',
+    fluid_code: '[A-Z]{1,3}',
     sequence_no: '\\d{3,5}',
-    pipe_class: '\\d{3,6}[0-9][A-Z]',
+    pipe_class: '[A-Z0-9]{3,6}',
     insulation: '[A-Z]{1,2}'
   };
   const [showFormatConfigModal, setShowFormatConfigModal] = useState(false);
   const [lineNumberFormat, setLineNumberFormat] = useState({
     template: '',  // e.g., "SIZE-AREA-FLUID-SEQUENCE-PIPECLASS-INSULATION"
     components: [
-      { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '2' },
-      { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '120' },
-      { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,2}', example: 'PU' },
-      { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '15234' },
-      { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 5, pattern: '\\d{3,6}[0-9][A-Z]', example: '5010A' },
-      { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'PP' }
+      { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+      { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '41' },
+      { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,3}', example: 'SWR' },
+      { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '60302' },
+      { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 5, pattern: '[A-Z0-9]{3,6}', example: 'A2AU16' },
+      { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
     ],
     separator: '-',  // Separator between components
     allowVariableSeparators: true  // Allow -, –, —, etc.
@@ -1121,12 +1121,12 @@ const DesignIQLists = () => {
                       setLineNumberFormat({
                         ...lineNumberFormat,
                         components: [
-                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '2' },
-                          { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '120' },
-                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 2, pattern: '[A-Z]{1,2}', example: 'PU' },
-                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 3, pattern: '\\d{3,5}', example: '15234' },
+                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+                          { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '41' },
+                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 2, pattern: '[A-Z]{1,3}', example: 'SWR' },
+                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 3, pattern: '\\d{3,5}', example: '60302' },
                           { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 4, pattern: '\\d{3,5}', example: '5010' },
-                          { id: 'insulation', name: 'Insulation', enabled: false, order: 5, pattern: '[A-Z]{1,2}', example: 'PP' }
+                          { id: 'insulation', name: 'Insulation', enabled: false, order: 5, pattern: '[A-Z]{1,2}', example: 'V' }
                         ]
                       });
                     }}
@@ -1142,12 +1142,12 @@ const DesignIQLists = () => {
                       setLineNumberFormat({
                         ...lineNumberFormat,
                         components: [
-                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '2' },
-                          { id: 'area', name: 'Area', enabled: true, order: 2, pattern: '\\d{2,3}', example: '120' },
-                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,2}', example: 'PU' },
-                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '15234' },
+                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+                          { id: 'area', name: 'Area', enabled: true, order: 2, pattern: '\\d{2,3}', example: '41' },
+                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,3}', example: 'SWR' },
+                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '60302' },
                           { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 5, pattern: '\\d{3,5}', example: '5010' },
-                          { id: 'insulation', name: 'Insulation', enabled: true, order: 6, pattern: '[A-Z]{1,2}', example: 'PP' }
+                          { id: 'insulation', name: 'Insulation', enabled: true, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
                         ]
                       });
                     }}
@@ -1213,3 +1213,4 @@ const DesignIQLists = () => {
 };
 
 export default DesignIQLists;
+
