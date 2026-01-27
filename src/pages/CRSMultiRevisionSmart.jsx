@@ -271,25 +271,42 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
 
   // Check if there are open comments from previous revisions
   const checkForOpenComments = () => {
-    if (uploadedRevisions.length === 0) return false;
+    console.log('[CRS] Checking for open comments...');
+    console.log('[CRS] Current uploadedRevisions:', uploadedRevisions);
+    console.log('[CRS] Current revision number:', currentRevisionNumber);
     
-    // Get all previous revisions (exclude the latest/current one)
-    const previousRevisions = uploadedRevisions.slice(0, -1);
+    if (uploadedRevisions.length === 0) {
+      console.log('[CRS] No revisions uploaded yet');
+      return false;
+    }
     
-    // Check each previous revision for open comments
+    // For REV 2 upload, check REV 1. For REV 3, check REV 1 & 2, etc.
+    // We check ALL previous revisions (not just the latest)
+    const previousRevisions = uploadedRevisions;
+    
+    console.log(`[CRS] Checking ${previousRevisions.length} previous revision(s)`);
+    
+    // Check each revision for open comments
     for (const rev of previousRevisions) {
       const comments = rev.comments || rev.data?.comments || [];
-      const hasOpenComments = comments.some(comment => {
+      console.log(`[CRS] ${rev.label}: ${comments.length} total comments`);
+      
+      const openComments = comments.filter(comment => {
         const status = (comment.status || 'open').toLowerCase();
-        return status === 'open';
+        const isOpen = status === 'open';
+        if (isOpen) {
+          console.log(`[CRS]   - OPEN: "${(comment.comment_text || comment.text || '').substring(0, 50)}..."`);
+        }
+        return isOpen;
       });
       
-      if (hasOpenComments) {
-        console.log(`[CRS] Found open comments in ${rev.label}`);
+      if (openComments.length > 0) {
+        console.log(`[CRS] ❌ FOUND ${openComments.length} open comment(s) in ${rev.label}`);
         return true;
       }
     }
     
+    console.log('[CRS] ✅ All comments are closed');
     return false;
   };
 
@@ -297,6 +314,17 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   const handleUploadRevision = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // ⚠️ CRITICAL: Client-side validation FIRST - check local state
+    if (uploadedRevisions.length > 0) {
+      const hasOpenComments = checkForOpenComments();
+      if (hasOpenComments) {
+        setError('⚠️ BLOCKED: You have open comments from previous revisions! Please close all comments before uploading the next revision.');
+        e.target.value = ''; // Reset file input
+        console.error('[CRS] ❌ Upload blocked - open comments detected in frontend state');
+        return; // BLOCK IMMEDIATELY
+      }
+    }
 
     // Smart validation
     if (!file.name.toLowerCase().endsWith('.pdf')) {
@@ -310,7 +338,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       return;
     }
 
-    // ⚠️ CRITICAL VALIDATION: Check if previous revision comments are all closed
+    // ⚠️ CRITICAL VALIDATION: Double-check with backend API
     if (uploadedRevisions.length > 0) {
       setLoading(true);
       setError(null);
@@ -384,6 +412,15 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       } else if (data.data?.document_details?.comments) {
         extractedComments = data.data.document_details.comments;
       }
+      
+      // Ensure all comments have a status field (default to 'open')
+      extractedComments = extractedComments.map(comment => ({
+        ...comment,
+        status: comment.status || 'open' // CRITICAL: Default to 'open'
+      }));
+      
+      console.log(`[CRS] Extracted ${extractedComments.length} comments with status:`, 
+        extractedComments.map(c => ({ id: c.id, status: c.status })));
       
       // Store revision with extracted comments
       const revisionData = {
@@ -1140,6 +1177,18 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
               <Typography variant="h6" gutterBottom>
                 Chain: {createdChain?.chain_id} - Upload Revisions
               </Typography>
+
+              {/* Debug Info: Show open comment count */}
+              {uploadedRevisions.length > 0 && (() => {
+                const allComments = uploadedRevisions.flatMap(r => r.comments || []);
+                const openCount = allComments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+                const closedCount = allComments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+                return (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <strong>📊 Comment Status:</strong> {openCount} Open | {closedCount} Closed | {allComments.length} Total
+                  </Alert>
+                );
+              })()}
 
               {/* Warning: Open Comments from Previous Revisions */}
               {uploadedRevisions.length > 0 && (() => {
