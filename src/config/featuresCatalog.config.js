@@ -560,9 +560,9 @@ export const FEATURES_CATALOG = {
     features: [
       {
         id: 'qhse-general',
-        name: 'General QHSE',
-        shortName: 'QHSE',
-        description: 'Comprehensive QHSE management system',
+        name: 'Project Quality',
+        shortName: 'Project Quality',
+        description: 'Comprehensive project quality management system',
         path: '/qhse/general',
         moduleCode: 'qhse',
         status: FEATURE_STATUS.ACTIVE,

@@ -304,18 +304,18 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'generalQHSE',
-          title: '6.1 General QHSE',
+          title: '6.1 Project Quality',
           icon: ShieldCheckIcon,
           path: '/qhse/general',
-          description: 'General QHSE management',
+          description: 'Project quality management',
           moduleCode: 'qhse'
         },
         {
           id: 'detailedView',
-          title: '6.2 Detailed View',
+          title: '6.2 Project Quality Details',
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
-          description: 'Detailed project view',
+          description: 'Detailed project quality view',
           moduleCode: 'qhse'
         },
         {

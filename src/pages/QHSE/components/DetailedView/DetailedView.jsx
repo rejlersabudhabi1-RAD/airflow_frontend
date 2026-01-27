@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useQHSERunningProjects } from '../../hooks/useQHSEProjects'; // Add this import
 import {
-  Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip
+  Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw, Plus } from "lucide-react";
+import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { withDashboardControls } from '../../../../hoc/withPageControls';
 import { PageControlButtons } from '../../../../components/PageControlButtons';
+import axios from 'axios';
 
 // Import common components for consistent loading/error states
 import { LoadingState } from "../Common/LoadingState"
@@ -64,6 +66,9 @@ const DetailedView = ({ pageControls }) => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Debug: Log first project to verify field structure (only when data exists)
   if (projectsData && projectsData.length > 0) {
@@ -188,6 +193,47 @@ const DetailedView = ({ pageControls }) => {
     refetch();
   };
 
+  // Handle delete project
+  const handleDeleteProject = (project) => {
+    setProjectToDelete(project);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm delete project
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      await axios.delete(`http://localhost:8000/api/qhse/projects/${projectToDelete.id}/`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Close dialog and refresh data
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+      refetch();
+      
+      // Optional: Show success message (you can add a snackbar here)
+      console.log('✅ Project deleted successfully');
+    } catch (error) {
+      console.error('❌ Error deleting project:', error);
+      // Optional: Show error message (you can add a snackbar here)
+      alert('Failed to delete project. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setProjectToDelete(null);
+  };
+
   // DataGrid columns with simple rendering
   const columns = useMemo(
     () => [
@@ -195,7 +241,7 @@ const DetailedView = ({ pageControls }) => {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 100,
+        width: 120,
         headerAlign: 'center',
         align: 'center',
         sortable: false,
@@ -207,15 +253,31 @@ const DetailedView = ({ pageControls }) => {
           </Box>
         ),
         renderCell: (params) => (
-          <Tooltip title="Edit Project">
-            <IconButton
-              size="small"
-              onClick={() => handleEditProject(params.row)}
-              sx={{ color: 'primary.main' }}
-            >
-              <Edit size={18} />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            <Tooltip title="Edit Project">
+              <IconButton
+                size="small"
+                onClick={() => handleEditProject(params.row)}
+                sx={{ color: 'primary.main' }}
+              >
+                <Edit size={16} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete Project">
+              <IconButton
+                size="small"
+                onClick={() => handleDeleteProject(params.row)}
+                sx={{ 
+                  color: 'error.main',
+                  '&:hover': {
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </IconButton>
+            </Tooltip>
+          </Box>
         ),
       },
       // Existing columns
@@ -354,6 +416,89 @@ const DetailedView = ({ pageControls }) => {
         onClose={() => setCreateModalOpen(false)}
         onSuccess={handleProjectCreateSuccess}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDelete}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            minWidth: '400px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          pb: 1
+        }}>
+          <AlertTriangle size={24} color="#ef4444" />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Confirm Delete
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: 'text.primary', mb: 2 }}>
+            Are you sure you want to delete this project? This action cannot be undone and will permanently remove the project from the database.
+          </DialogContentText>
+          {projectToDelete && (
+            <Box sx={{ 
+              backgroundColor: '#f9fafb', 
+              p: 2, 
+              borderRadius: 1,
+              border: '1px solid #e5e7eb'
+            }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Project Details:
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Project No:</strong> {projectToDelete.projectNo}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Title:</strong> {projectToDelete.projectTitle}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Client:</strong> {projectToDelete.client}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={cancelDelete}
+            disabled={isDeleting}
+            sx={{
+              color: 'text.secondary',
+              textTransform: 'none',
+              fontWeight: 500,
+              '&:hover': {
+                backgroundColor: '#f3f4f6'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteProject}
+            disabled={isDeleting}
+            variant="contained"
+            color="error"
+            startIcon={isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              backgroundColor: '#ef4444',
+              '&:hover': {
+                backgroundColor: '#dc2626'
+              }
+            }}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete Project'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageLayout>
   );
 };
