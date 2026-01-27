@@ -247,6 +247,9 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       setSuccess(`✅ Status updated to "${newStatus}" successfully!`);
       setTimeout(() => setSuccess(''), 3000);
       
+      // Force re-check of open comments after status change
+      console.log('[CRS] Status updated, checking for remaining open comments...');
+      
     } catch (err) {
       setError(`❌ Failed to update status: ${err.message}`);
       console.error('[CRS] Status change error:', err);
@@ -270,16 +273,24 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   const checkForOpenComments = () => {
     if (uploadedRevisions.length === 0) return false;
     
-    // Get revision numbers for previous revisions (not the current one)
-    const previousRevisions = uploadedRevisions.slice(0, -1).map(r => r.number);
+    // Get all previous revisions (exclude the latest/current one)
+    const previousRevisions = uploadedRevisions.slice(0, -1);
     
-    // Check if any comments from previous revisions are open
-    const openPreviousComments = allComments.filter(comment => {
-      const revNum = parseInt(comment.revision_label?.replace('Rev ', '') || '0');
-      return previousRevisions.includes(revNum) && comment.status === 'open';
-    });
+    // Check each previous revision for open comments
+    for (const rev of previousRevisions) {
+      const comments = rev.comments || rev.data?.comments || [];
+      const hasOpenComments = comments.some(comment => {
+        const status = (comment.status || 'open').toLowerCase();
+        return status === 'open';
+      });
+      
+      if (hasOpenComments) {
+        console.log(`[CRS] Found open comments in ${rev.label}`);
+        return true;
+      }
+    }
     
-    return openPreviousComments.length > 0;
+    return false;
   };
 
   // Upload Revision with smart file validation
@@ -392,6 +403,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         setAllComments(prev => [...prev, ...extractedComments.map(c => ({
           ...c,
           revision: revisionData.label,
+          revision_label: revisionData.label,
           revisionNumber: currentRevisionNumber
         }))]);
       }
@@ -1130,7 +1142,15 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
               </Typography>
 
               {/* Warning: Open Comments from Previous Revisions */}
-              {uploadedRevisions.length > 0 && checkForOpenComments() && (
+              {uploadedRevisions.length > 0 && (() => {
+                const hasOpen = checkForOpenComments();
+                console.log('[CRS] Upload button check:', { 
+                  uploadedRevisionsCount: uploadedRevisions.length,
+                  currentRevisionNumber,
+                  hasOpenComments: hasOpen 
+                });
+                return hasOpen;
+              })() && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
                   <strong>⚠️ Cannot Upload Next Revision!</strong>
                   <br />
@@ -1138,7 +1158,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
                   Please close all comments before uploading <strong>Rev {currentRevisionNumber}</strong>.
                   <br />
                   <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
-                    💡 Scroll down to the "All Comments Across Revisions" table and use the "Close" action for each open comment.
+                    💡 Scroll down to the "All Comments Across Revisions" table and change the "Status" dropdown from "Open" to "Closed" for each comment.
                   </Typography>
                 </Alert>
               )}
