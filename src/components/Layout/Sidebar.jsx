@@ -20,7 +20,8 @@ import {
   BriefcaseIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
-  TableCellsIcon
+  TableCellsIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -349,6 +350,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           path: '/qhse/general/energy',
           description: 'Energy management',
           moduleCode: 'qhse'
+        },
+        {
+          id: 'interconnectedDemo',
+          title: '6.7 AI Interconnected System',
+          icon: SparklesIcon,
+          path: '/qhse/interconnected-demo',
+          description: 'AI-powered cross-module intelligence demo',
+          moduleCode: 'qhse',
+          badge: 'AI'
         }
       ]
     }
