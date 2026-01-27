@@ -66,6 +66,7 @@ const DesignIQLists = () => {
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
   const fileInputWithAreaRef = useRef(null);
+  const fileInputOffshoreRef = useRef(null);
   const [selectedListType, setSelectedListType] = useState(searchParams.get('type') || 'line_list');
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -182,7 +183,7 @@ const DesignIQLists = () => {
     }
   };
 
-  const handlePIDUpload = async (event, includeArea = false) => {
+  const handlePIDUpload = async (event, includeArea = false, formatType = 'onshore') => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -203,6 +204,7 @@ const DesignIQLists = () => {
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
       formData.append('include_area', includeArea ? 'true' : 'false');
+      formData.append('format_type', formatType);
 
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
@@ -430,6 +432,13 @@ const DesignIQLists = () => {
                   onChange={(e) => handlePIDUpload(e, true)}
                   className="hidden"
                 />
+                <input
+                  type="file"
+                  ref={fileInputOffshoreRef}
+                  accept=".pdf"
+                  onChange={(e) => handlePIDUpload(e, false, 'offshore')}
+                  className="hidden"
+                />
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPID || processing}
@@ -447,7 +456,7 @@ const DesignIQLists = () => {
                   ) : (
                     <>
                       <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : ' Upload P&ID (Standard)'}
+                      {uploadingPID ? 'Uploading...' : ' ADNOC Onshore'}
                     </>
                   )}
                 </button>
@@ -468,7 +477,7 @@ const DesignIQLists = () => {
                   ) : (
                     <>
                       <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : ' Upload P&ID (With Area)'}
+                      {uploadingPID ? 'Uploading...' : ' General'}
                     </>
                   )}
                 </button>
@@ -476,11 +485,25 @@ const DesignIQLists = () => {
             )}
 
             <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              onClick={() => fileInputOffshoreRef.current?.click()}
+              disabled={uploadingPID || processing}
+              className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
+                uploadingPID || processing
+                  ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'border-purple-500 text-purple-600 hover:bg-purple-50'
+              }`}
             >
-              <PlusIcon className="w-5 h-5 mr-2" />
-              Add Item
+              {processing ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-600 border-t-transparent mr-2"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                  {uploadingPID ? 'Uploading...' : 'ADNOC Offshore'}
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -521,11 +544,10 @@ const DesignIQLists = () => {
             <p className="mt-1 text-sm text-gray-500">Get started by adding a new item.</p>
             <div className="mt-6">
               <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Add Item
+                className="flex items-center px-4 py-2 border border-purple-500 text-purple-600 rounded-lg hover:bg-purple-50"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+              ADNOC Offshore
               </button>
             </div>
           </div>
@@ -896,6 +918,7 @@ const DesignIQLists = () => {
 };
 
 export default DesignIQLists;
+
 
 
 
