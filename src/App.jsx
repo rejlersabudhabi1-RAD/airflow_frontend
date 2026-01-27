@@ -61,6 +61,7 @@ import NotFound from './pages/NotFound'
 // DesignIQ Components
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
@@ -458,6 +459,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="designiq">
               <DesignIQLists />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="designiq/projects/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <DesignIQProjectDetail />
             </ModuleProtectedRoute>
           }
         />
