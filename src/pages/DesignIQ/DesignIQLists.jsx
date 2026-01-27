@@ -65,6 +65,7 @@ const DesignIQLists = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
+  const fileInputWithAreaRef = useRef(null);
   const [selectedListType, setSelectedListType] = useState(searchParams.get('type') || 'line_list');
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -181,7 +182,7 @@ const DesignIQLists = () => {
     }
   };
 
-  const handlePIDUpload = async (event) => {
+  const handlePIDUpload = async (event, includeArea = false) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -201,6 +202,7 @@ const DesignIQLists = () => {
       const formData = new FormData();
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
+      formData.append('include_area', includeArea ? 'true' : 'false');
 
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
@@ -212,7 +214,7 @@ const DesignIQLists = () => {
         return;
       }
 
-      console.log('[P&ID Upload] 🚀 Starting upload with extended timeout (10 minutes)...');
+      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
       // Use long timeout client for OCR processing (10 minutes)
@@ -226,12 +228,12 @@ const DesignIQLists = () => {
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('[P&ID Upload] 📊 Upload progress:', percentCompleted + '%');
+            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      console.log('[P&ID Upload] ✅ Processing complete');
+      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
       
       const data = response.data;
       setExtractedData({
@@ -247,7 +249,7 @@ const DesignIQLists = () => {
       });
       setUploadingPID(false);
     } catch (error) {
-      console.error('[P&ID Upload] ❌ Error:', error);
+      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
@@ -418,7 +420,14 @@ const DesignIQLists = () => {
                   type="file"
                   ref={fileInputRef}
                   accept=".pdf"
-                  onChange={handlePIDUpload}
+                  onChange={(e) => handlePIDUpload(e, false)}
+                  className="hidden"
+                />
+                <input
+                  type="file"
+                  ref={fileInputWithAreaRef}
+                  accept=".pdf"
+                  onChange={(e) => handlePIDUpload(e, true)}
                   className="hidden"
                 />
                 <button
@@ -438,7 +447,28 @@ const DesignIQLists = () => {
                   ) : (
                     <>
                       <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : '📤 Upload P&ID PDF'}
+                      {uploadingPID ? 'Uploading...' : ' Upload P&ID (Standard)'}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => fileInputWithAreaRef.current?.click()}
+                  disabled={uploadingPID || processing}
+                  className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
+                    uploadingPID || processing
+                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'border-green-500 text-green-600 hover:bg-green-50'
+                  }`}
+                >
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-600 border-t-transparent mr-2"></div>
+                      Processing OCR...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                      {uploadingPID ? 'Uploading...' : ' Upload P&ID (With Area)'}
                     </>
                   )}
                 </button>
@@ -602,8 +632,8 @@ const DesignIQLists = () => {
                 </p>
                 {uploadResult.success && uploadResult.data?.extracted_lines && (
                   <div className="mt-3 text-xs text-green-600 font-medium">
-                    <p>✓ OCR processing completed</p>
-                    <p>✓ {uploadResult.data.extracted_lines.length} line numbers detected</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ OCR processing completed</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {uploadResult.data.extracted_lines.length} line numbers detected</p>
                   </div>
                 )}
               </div>
@@ -652,7 +682,7 @@ const DesignIQLists = () => {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-4 text-center">
-                ⏱️ <strong>Processing time:</strong> 2-10 minutes for complex PDFs
+                ÃƒÂ¢Ã‚ÂÃ‚Â±ÃƒÂ¯Ã‚Â¸Ã‚Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
                 <br />
                 <span className="text-xs">Please keep this window open</span>
               </p>
@@ -866,3 +896,6 @@ const DesignIQLists = () => {
 };
 
 export default DesignIQLists;
+
+
+
