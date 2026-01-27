@@ -595,14 +595,19 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       <head>
         <meta charset="UTF-8">
         <style>
-          table { border-collapse: collapse; width: 100%; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
           th, td { border: 1px solid black; padding: 8px; text-align: left; }
           th { background-color: #4CAF50; color: white; font-weight: bold; }
-          .section-header { background-color: #2196F3; color: white; font-weight: bold; }
+          .section-header { background-color: #2196F3; color: white; font-weight: bold; font-size: 14px; }
+          .revision-header { background-color: #FF9800; color: white; font-weight: bold; font-size: 13px; }
+          .status-open { background-color: #FFEBEE; color: #C62828; font-weight: bold; }
+          .status-closed { background-color: #E8F5E9; color: #2E7D32; font-weight: bold; }
+          .rev-separator { height: 20px; background-color: #F5F5F5; }
         </style>
       </head>
       <body>
-        <h2>CRS Multi-Revision Report - ALL REVISIONS</h2>
+        <h2>CRS Multi-Revision Comparison Report</h2>
+        <p><i>Generated on: ${new Date().toLocaleString()}</i></p>
         
         <!-- Chain Information -->
         <table>
@@ -619,54 +624,85 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         
         <!-- Revisions Summary -->
         <table>
-          <tr class="section-header"><th colspan="5">Revisions Summary</th></tr>
+          <tr class="section-header"><th colspan="6">Revisions Summary</th></tr>
           <tr>
             <th>Revision</th>
             <th>File Name</th>
             <th>Total Comments</th>
+            <th>Open Comments</th>
+            <th>Closed Comments</th>
             <th>Uploaded At</th>
-            <th>Status</th>
           </tr>
-          ${revisions.map(rev => `
+          ${revisions.map(rev => {
+            const comments = rev.comments || rev.data?.comments || [];
+            const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+            const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+            return `
             <tr>
-              <td>${rev.label}</td>
+              <td><b>${rev.label}</b></td>
               <td>${rev.fileName}</td>
-              <td>${rev.data?.extraction_summary?.total_comments || 0}</td>
+              <td>${comments.length}</td>
+              <td class="status-open">${openCount}</td>
+              <td class="status-closed">${closedCount}</td>
               <td>${new Date(rev.uploadedAt).toLocaleString()}</td>
-              <td>${rev.data?.revision?.status || 'N/A'}</td>
             </tr>
-          `).join('')}
+          `}).join('')}
         </table>
         <br/>
         
-        <!-- All Comments -->
-        <table>
-          <tr class="section-header"><th colspan="7">All Comments</th></tr>
-          <tr>
-            <th>Page</th>
-            <th>Reviewer</th>
-            <th>Comment</th>
-            <th>Type</th>
-            <th>Discipline</th>
-            <th>Drawing Ref</th>
-            <th>Status</th>
-          </tr>
-          ${revisions.map(rev => {
-            // Smart comment extraction
-            const comments = rev.comments || rev.data?.comments || rev.data?.document_details?.recent_activities || [];
-            return comments.length > 0 ? comments.map(comment => `
+        <!-- Comments by Revision (Separated) -->
+        ${revisions.map((rev, revIdx) => {
+          const comments = rev.comments || rev.data?.comments || [];
+          const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+          const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+          
+          return `
+          ${revIdx > 0 ? '<br/><br/>' : ''}
+          <table>
+            <tr class="revision-header">
+              <th colspan="8">
+                📄 ${rev.label} - ${comments.length} Comment${comments.length !== 1 ? 's' : ''} 
+                (🔴 ${openCount} Open | ✅ ${closedCount} Closed)
+              </th>
+            </tr>
+            <tr>
+              <th>Page</th>
+              <th>Reviewer</th>
+              <th>Comment</th>
+              <th>Type</th>
+              <th>Discipline</th>
+              <th>Drawing Ref</th>
+              <th>Status</th>
+              <th>Serial #</th>
+            </tr>
+            ${comments.length > 0 ? comments.map((comment, idx) => {
+              const status = (comment.status || 'open').toLowerCase();
+              const statusClass = status === 'open' ? 'status-open' : 'status-closed';
+              return `
               <tr>
                 <td>${comment.page_number || 'N/A'}</td>
                 <td>${comment.reviewer_name || 'Not Provided'}</td>
                 <td>${comment.comment_text || comment.text || 'N/A'}</td>
-                <td>${comment.comment_type || comment.type || 'General'}</td>
+                <td>${comment.comment_type || comment.type || 'GENERAL'}</td>
                 <td>${comment.discipline || 'Not Provided'}</td>
                 <td>${comment.drawing_ref || 'N/A'}</td>
-                <td>${comment.status || 'Open'}</td>
+                <td class="${statusClass}">${status.toUpperCase()}</td>
+                <td>${comment.serial_number || idx + 1}</td>
               </tr>
-            `).join('') : `<tr><td colspan="7">No comments found for ${rev.label}</td></tr>`;
-          }).join('')}
-        </table>
+            `}).join('') : `
+              <tr><td colspan="8" style="text-align: center; font-style: italic;">No comments found for ${rev.label}</td></tr>
+            `}
+          </table>
+        `}).join('')}
+        
+        <br/><br/>
+        <p style="font-size: 12px; color: #666;">
+          <b>Legend:</b><br/>
+          🔴 Open = Comment requires action<br/>
+          ✅ Closed = Comment resolved<br/>
+          <br/>
+          <i>This report contains ${revisions.length} revision${revisions.length !== 1 ? 's' : ''} with detailed comment tracking.</i>
+        </p>
       </body>
       </html>
     `;
@@ -675,20 +711,25 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   // Generate HTML for SINGLE revision - soft-coded
   const generateSingleRevisionHTML = (chainData, revision) => {
     const comments = revision.comments || revision.data?.comments || revision.data?.document_details?.recent_activities || [];
+    const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+    const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
     
     return `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
       <head>
         <meta charset="UTF-8">
         <style>
-          table { border-collapse: collapse; width: 100%; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 15px; }
           th, td { border: 1px solid black; padding: 8px; text-align: left; }
           th { background-color: #4CAF50; color: white; font-weight: bold; }
           .section-header { background-color: #2196F3; color: white; font-weight: bold; }
+          .status-open { background-color: #FFEBEE; color: #C62828; font-weight: bold; }
+          .status-closed { background-color: #E8F5E9; color: #2E7D32; font-weight: bold; }
         </style>
       </head>
       <body>
         <h2>CRS Report - ${revision.label}</h2>
+        <p><i>Generated on: ${new Date().toLocaleString()}</i></p>
         
         <!-- Chain Context -->
         <table>
@@ -708,13 +749,14 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
           <tr><td><b>File Name</b></td><td>${revision.fileName}</td></tr>
           <tr><td><b>Uploaded At</b></td><td>${new Date(revision.uploadedAt).toLocaleString()}</td></tr>
           <tr><td><b>Total Comments</b></td><td>${comments.length}</td></tr>
-          <tr><td><b>Status</b></td><td>${revision.data?.revision?.status || 'N/A'}</td></tr>
+          <tr><td><b>Open Comments</b></td><td class="status-open">${openCount}</td></tr>
+          <tr><td><b>Closed Comments</b></td><td class="status-closed">${closedCount}</td></tr>
         </table>
         <br/>
         
         <!-- Comments for this revision -->
         <table>
-          <tr class="section-header"><th colspan="7">Comments - ${revision.label}</th></tr>
+          <tr class="section-header"><th colspan="8">Comments - ${revision.label} (${comments.length} Total)</th></tr>
           <tr>
             <th>Page</th>
             <th>Reviewer</th>
@@ -723,19 +765,31 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
             <th>Discipline</th>
             <th>Drawing Ref</th>
             <th>Status</th>
+            <th>Serial #</th>
           </tr>
-          ${comments.length > 0 ? comments.map(comment => `
+          ${comments.length > 0 ? comments.map((comment, idx) => {
+            const status = (comment.status || 'open').toLowerCase();
+            const statusClass = status === 'open' ? 'status-open' : 'status-closed';
+            return `
             <tr>
               <td>${comment.page_number || 'N/A'}</td>
               <td>${comment.reviewer_name || 'Not Provided'}</td>
               <td>${comment.comment_text || comment.text || 'N/A'}</td>
-              <td>${comment.comment_type || comment.type || 'General'}</td>
+              <td>${comment.comment_type || comment.type || 'GENERAL'}</td>
               <td>${comment.discipline || 'Not Provided'}</td>
               <td>${comment.drawing_ref || 'N/A'}</td>
-              <td>${comment.status || 'Open'}</td>
+              <td class="${statusClass}">${status.toUpperCase()}</td>
+              <td>${comment.serial_number || idx + 1}</td>
             </tr>
-          `).join('') : '<tr><td colspan="7">No comments found for this revision</td></tr>'}
+          `}).join('') : '<tr><td colspan="8" style="text-align: center; font-style: italic;">No comments found for this revision</td></tr>'}
         </table>
+        
+        <br/>
+        <p style="font-size: 12px; color: #666;">
+          <b>Legend:</b><br/>
+          🔴 Open = Comment requires action<br/>
+          ✅ Closed = Comment resolved<br/>
+        </p>
       </body>
       </html>
     `;
