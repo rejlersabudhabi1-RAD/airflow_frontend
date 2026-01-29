@@ -68,6 +68,8 @@ const Profile = () => {
       
       const data = await response.json();
       console.log('[Profile] Fetched data:', data); // Debug log
+      console.log('[Profile] Profile photo from data:', data.profile_photo); // Debug log
+      console.log('[Profile] User from data:', data.user); // Debug log
       setProfileData(data);
       
       // Set form data
@@ -85,6 +87,8 @@ const Profile = () => {
       if (data.profile_photo) {
         console.log('[Profile] Setting photo preview:', data.profile_photo); // Debug log
         setPhotoPreview(data.profile_photo);
+      } else {
+        console.log('[Profile] No profile photo found in response'); // Debug log
       }
       
     } catch (error) {
@@ -195,10 +199,13 @@ const Profile = () => {
       }
       
       const updatedProfile = await response.json();
+      console.log('[Profile] Upload response:', updatedProfile); // Debug log
+      console.log('[Profile] Updated profile photo:', updatedProfile.profile_photo); // Debug log
       setUploadProgress(100);
       
       // Update Redux store
       dispatch(updateUser(updatedProfile));
+      console.log('[Profile] Redux store updated with:', updatedProfile); // Debug log
       
       // Re-fetch profile to get the complete updated data with photo URL
       await fetchProfile();

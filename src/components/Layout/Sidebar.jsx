@@ -76,6 +76,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         
         const data = await response.json()
         console.log('🔐 Full user data:', data)
+        console.log('🖼️ Profile photo URL:', data.profile_photo)
         
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
@@ -99,8 +100,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Debug logging
   React.useEffect(() => {
     console.log('=== SIDEBAR DEBUG ===')
-    console.log('User object:', user)
-    console.log('is_staff:', user?.is_staff)
+    console.log('User object:', user)    console.log('User profile_photo:', user?.profile_photo)    console.log('is_staff:', user?.is_staff)
     console.log('is_superuser:', user?.is_superuser)
     console.log('isAdmin:', isAdmin)
     console.log('User Modules:', userModules)
