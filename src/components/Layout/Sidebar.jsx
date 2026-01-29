@@ -100,7 +100,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Debug logging
   React.useEffect(() => {
     console.log('=== SIDEBAR DEBUG ===')
-    console.log('User object:', user)    console.log('User profile_photo:', user?.profile_photo)    console.log('is_staff:', user?.is_staff)
+    console.log('User object:', user)
+    console.log('User profile_photo:', user?.profile_photo)
+    console.log('is_staff:', user?.is_staff)
     console.log('is_superuser:', user?.is_superuser)
     console.log('isAdmin:', isAdmin)
     console.log('User Modules:', userModules)
