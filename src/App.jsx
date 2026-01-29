@@ -7,9 +7,11 @@ import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import ChangePasswordModal from './components/Auth/ChangePasswordModal'
+import PasswordExpiryBanner from './components/PasswordExpiryBanner'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import SetupPassword from './pages/SetupPassword'
+import ChangePassword from './pages/ChangePassword'
 import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
@@ -38,6 +40,7 @@ import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
+import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
@@ -69,6 +72,8 @@ import VendorManagement from './pages/Procurement/VendorManagement'
 import RequisitionManagement from './pages/Procurement/RequisitionManagement'
 import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
+// Process Datasheet Components
+import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -217,6 +222,9 @@ function App() {
 
   return (
     <>
+      {/* Password Expiry Banner - shown globally when password is expiring or expired */}
+      {isAuthenticated && <PasswordExpiryBanner />}
+      
       {/* Password Change Modal - shown globally when required */}
       {isAuthenticated && mustChangePassword && (
         <ChangePasswordModal
@@ -266,11 +274,21 @@ function App() {
         {/* Password Reset Routes - Public */}
         <Route path="setup-password" element={<SetupPassword />} />
         <Route path="reset-password" element={<SetupPassword />} />
+        <Route path="request-password-reset" element={<RequestPasswordReset />} />
+        <Route path="forgot-password" element={<RequestPasswordReset />} />
+        
+        {/* Change Password - Protected Route */}
+        <Route 
+          path="change-password" 
+          element={
+            <ProtectedRoute>
+              <ChangePassword />
+            </ProtectedRoute>
+          } 
+        />
         
         {/* Finance Approval - Public Route */}
         <Route path="finance/approve/:token" element={<InvoiceApproval />} />
-        <Route path="request-password-reset" element={<RequestPasswordReset />} />
-        <Route path="forgot-password" element={<RequestPasswordReset />} />
         
         <Route path="terms-of-service" element={<TermsOfService />} />
         <Route path="privacy-policy" element={<PrivacyPolicy />} />
@@ -522,6 +540,16 @@ function App() {
           }
         />
 
+        {/* Process Datasheet Routes */}
+        <Route
+          path="engineering/process/datasheet/*"
+          element={
+            <ProtectedRoute>
+              <ProcessDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Project Control */}
         <Route
           path="projects"
@@ -538,6 +566,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="qhse">
               <GeneralQHSE />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="qhse/interconnected-demo/:projectId?"
+          element={
+            <ModuleProtectedRoute moduleCode="qhse">
+              <QHSEInterconnectedDemo />
             </ModuleProtectedRoute>
           }
         />

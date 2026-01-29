@@ -91,6 +91,19 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     console.log('[API Response] ✅', response.status, response.config.method?.toUpperCase(), response.config.url);
+    
+    // Check for password expiry headers
+    if (response.headers['x-password-expiry-warning'] === 'true' || 
+        response.headers['x-password-expiry-grace'] === 'true') {
+      // Import dynamically to avoid circular dependency
+      import('./passwordExpiry.service').then(module => {
+        const passwordExpiryService = module.default;
+        passwordExpiryService.handleResponseHeaders(response.headers);
+      }).catch(err => {
+        console.warn('[API] Failed to load password expiry service:', err);
+      });
+    }
+    
     return response
   },
   async (error) => {
@@ -147,6 +160,22 @@ apiClient.interceptors.response.use(
       
       toast.error('Network error - please check your internet connection.');
       return Promise.reject(networkError);
+    }
+
+    // Handle password expiry errors
+    if (error.response?.status === 403 && error.response?.data?.error === 'password_expired') {
+      console.warn('[API] 🔒 Password expired, redirecting to change password...');
+      
+      toast.error(error.response.data.message || 'Your password has expired. Please change it.');
+      
+      // Redirect to change password page
+      if (!window.location.pathname.includes('/change-password')) {
+        setTimeout(() => {
+          window.location.href = '/change-password';
+        }, 1000);
+      }
+      
+      return Promise.reject(error);
     }
 
     // Handle token refresh

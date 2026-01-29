@@ -11,6 +11,18 @@ export const PASSWORD_RESET_API = {
   requestReset: '/users/request-password-reset/',
   verifyToken: '/users/verify-reset-token/',
   resetPassword: '/users/reset-password/',
+  changePassword: '/users/change-password/',
+  checkExpiry: '/users/check-password-expiry/',
+}
+
+/**
+ * Password Expiry Configuration
+ */
+export const PASSWORD_EXPIRY_CONFIG = {
+  policyDays: 30,
+  warningDays: 7,
+  graceDays: 3,
+  checkInterval: 3600000, // Check every hour (in milliseconds)
 }
 
 /**

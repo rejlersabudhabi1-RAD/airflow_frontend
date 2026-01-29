@@ -128,6 +128,15 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                 >
                   Profile
                 </Link>
+                <Link
+                  to="/change-password"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-amber-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span>Change Password</span>
+                </Link>
                 <span className="text-blue-200 font-medium">
                   Hello, {user?.username || 'User'}
                 </span>
