@@ -148,9 +148,17 @@ function App() {
       return <Navigate to="/login" replace />
     }
     
-    // Allow access for admins
-    const isAdmin = user?.is_staff || user?.is_superuser
+    // Smart admin check: Check nested user object AND roles array
+    const userData = user?.user || user
+    const hasAdminFlags = userData?.is_staff || userData?.is_superuser
+    const hasSuperAdminRole = user?.roles?.some(role => 
+      role.code === 'super_admin' || role.name === 'Super Administrator'
+    )
+    const isAdmin = hasAdminFlags || hasSuperAdminRole
+    
+    // Super Administrators and Staff have access to all modules
     if (isAdmin) {
+      console.log('✅ App: Admin access granted for module:', moduleCode)
       return children
     }
     

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { API_BASE_URL } from '../config/api.config';
+import { isUserAdmin } from '../utils/rbac.utils';
 import {
   CurrencyDollarIcon,
   CheckCircleIcon,
@@ -27,7 +28,8 @@ const SubscriptionManagement = () => {
   const [activeTab, setActiveTab] = useState('plans');
 
   // Check admin access
-  const isAdmin = user?.is_staff || user?.is_superuser;
+  // Smart admin check using utility function
+  const isAdmin = isUserAdmin(user);
 
   useEffect(() => {
     if (!isAdmin) {

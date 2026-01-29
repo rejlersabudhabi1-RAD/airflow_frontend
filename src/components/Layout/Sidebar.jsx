@@ -54,7 +54,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     admin: true
   })
 
-  const isAdmin = user?.is_staff || user?.is_superuser
+  // Handle nested user object from API response (user.user.is_staff vs user.is_staff)
+  const userData = user?.user || user
+  // Check admin status from multiple sources:
+  // 1. Django User flags (is_staff, is_superuser)
+  // 2. Roles array (contains 'Super Administrator' role)
+  const hasAdminFlags = userData?.is_staff || userData?.is_superuser
+  const hasSuperAdminRole = user?.roles?.some(role => 
+    role.code === 'super_admin' || role.name === 'Super Administrator'
+  )
+  const isAdmin = hasAdminFlags || hasSuperAdminRole
 
   // Fetch user's accessible modules
   React.useEffect(() => {
@@ -100,14 +109,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Debug logging
   React.useEffect(() => {
     console.log('=== SIDEBAR DEBUG ===')
-    console.log('User object:', user)
+    console.log('Full user object:', user)
+    console.log('Nested userData:', userData)
     console.log('User profile_photo:', user?.profile_photo)
-    console.log('is_staff:', user?.is_staff)
-    console.log('is_superuser:', user?.is_superuser)
+    console.log('userData.is_staff:', userData?.is_staff)
+    console.log('userData.is_superuser:', userData?.is_superuser)
     console.log('isAdmin:', isAdmin)
+    console.log('User roles:', user?.roles)
     console.log('User Modules:', userModules)
     console.log('==================')
-  }, [user, isAdmin, userModules])
+  }, [user, userData, isAdmin, userModules])
 
   // Toggle section expansion
   const toggleSection = (section) => {
@@ -372,9 +383,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     if (item.requiresModule === false) return true
     if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
     
+    // Super Administrators and Staff have access to all modules
+    if (isAdmin) return true
+    
     // Check if user has the required module
     if (item.moduleCode) {
-      return isAdmin || userModules.includes(item.moduleCode)
+      return userModules.includes(item.moduleCode)
     }
     
     return true
@@ -691,7 +705,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
               {user?.profile_photo ? (
                 <img 
                   src={user.profile_photo} 
-                  alt={user?.first_name || 'User'} 
+                  alt={userData?.first_name || 'User'} 
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     // Fallback to initials if image fails to load
@@ -704,7 +718,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 className={`w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${user?.profile_photo ? 'hidden' : 'flex'}`}
               >
                 <span className="text-white font-semibold text-sm">
-                  {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                  {userData?.first_name?.[0] || userData?.email?.[0]?.toUpperCase() || 'U'}
                 </span>
               </div>
               {isAdmin && isCollapsed && (
@@ -714,10 +728,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {user?.first_name || user?.email?.split('@')[0] || 'User'}
+                  {userData?.first_name || userData?.email?.split('@')[0] || 'User'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {user?.email || 'user@example.com'}
+                  {userData?.email || 'user@example.com'}
                 </p>
                 {isAdmin && (
                   <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full mt-1">

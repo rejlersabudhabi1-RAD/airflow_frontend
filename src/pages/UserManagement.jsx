@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 import { STORAGE_KEYS } from '../config/app.config';
+import { isUserAdmin } from '../utils/rbac.utils';
 import { withDashboardControls } from '@/hoc/withPageControls';
 import { PageControlButtons } from '@/components/PageControlButtons';
 import { 
@@ -482,7 +483,8 @@ const UserManagement = ({ pageControls }) => {
     const hasRBACRole = currentUser?.roles?.some(
       role => ['super_admin', 'admin'].includes(role.code)
     );
-    const isDjangoAdmin = authUser?.is_superuser || authUser?.is_staff;
+    // Smart admin check using utility function
+    const isDjangoAdmin = isUserAdmin(authUser);
     return hasRBACRole || isDjangoAdmin;
   }, [currentUser, authUser]);
   

@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, fetchUserStats } from '../store/slices/rbacSlice';
 import analyticsService from '../services/analyticsService';
+import { isUserAdmin } from '../utils/rbac.utils';
 import RealTimeActivityTab from '../components/admin/RealTimeActivityTab';
 import SecurityAlertsTab from '../components/admin/SecurityAlertsTab';
 import PredictionsTab from '../components/admin/PredictionsTab';
@@ -261,7 +262,8 @@ const AdminDashboard = () => {
     role => ['super_admin', 'admin'].includes(role.code)
   );
   
-  const isDjangoSuperuser = authUser?.is_superuser || authUser?.is_staff;
+  // Smart admin check using utility function
+  const isDjangoSuperuser = isUserAdmin(authUser);
   
   const hasAdminAccess = hasRBACAdminRole || isDjangoSuperuser;
 
@@ -296,6 +298,23 @@ const AdminDashboard = () => {
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
+              {/* Personalized Greeting with nested user data extraction */}
+              {(() => {
+                // Extract nested user object (user.user.first_name)
+                const userData = authUser?.user || authUser;
+                const firstName = userData?.first_name || userData?.email?.split('@')[0] || 'Admin';
+                const getGreeting = () => {
+                  const hour = new Date().getHours();
+                  if (hour < 12) return 'Good Morning';
+                  if (hour < 18) return 'Good Afternoon';
+                  return 'Good Evening';
+                };
+                return (
+                  <p className="text-lg sm:text-xl text-gray-700 mb-1 font-medium">
+                    {getGreeting()}, <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent font-bold">{firstName}</span>! 👋
+                  </p>
+                );
+              })()}
               <div className="flex items-center space-x-3 mb-2">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   AI-Powered Admin Dashboard

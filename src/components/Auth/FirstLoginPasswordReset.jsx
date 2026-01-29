@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/api.config';
+import { STORAGE_KEYS } from '../../config/app.config';
 
 /**
  * First Login Password Reset Component
@@ -98,7 +99,19 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('access_token');
+      // Get token using proper storage key
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) || 
+                    localStorage.getItem('access_token') || 
+                    localStorage.getItem('access');
+      
+      console.log('[FirstLoginPasswordReset] Token found:', !!token);
+      
+      if (!token) {
+        setErrors({ submit: 'Authentication token not found. Please login again.' });
+        setLoading(false);
+        return;
+      }
+
       const response = await axios.post(
         `${API_BASE_URL}/users/reset-first-login-password/`,
         {
@@ -117,10 +130,15 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
       if (response.data.success) {
         alert('Password successfully updated! Please login again with your new password.');
         
-        // Clear tokens and redirect to login
+        // Clear all possible token storage keys
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
+        localStorage.removeItem('access');
+        localStorage.removeItem('refresh');
         
         if (onSuccess) {
           onSuccess();
@@ -130,7 +148,25 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
       }
     } catch (error) {
       console.error('Error resetting password:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to reset password';
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      let errorMessage = 'Failed to reset password';
+      
+      if (error.response) {
+        if (error.response.status === 401) {
+          errorMessage = 'Authentication failed. Your session may have expired. Please login again.';
+        } else if (error.response.status === 400) {
+          errorMessage = error.response.data?.error || error.response.data?.message || 'Invalid request. Please check your passwords.';
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.request) {
+        errorMessage = 'Cannot connect to server. Please check your connection.';
+      }
+      
       setErrors({ submit: errorMessage });
     } finally {
       setLoading(false);
@@ -145,7 +181,11 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
             Password Reset Required
           </h2>
           <p className="text-gray-600">
-            Welcome, {user?.first_name || 'User'}! For security reasons, please change your temporary password before continuing.
+            Welcome, {(() => {
+              // Extract nested user object (user.user.first_name)
+              const userData = user?.user || user;
+              return userData?.first_name || userData?.email?.split('@')[0] || 'User';
+            })()}! For security reasons, please change your temporary password before continuing.
           </p>
         </div>
 
