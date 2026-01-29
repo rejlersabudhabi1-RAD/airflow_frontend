@@ -685,10 +685,26 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {/* Sidebar Footer - User Info */}
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center relative">
-              <span className="text-white font-semibold text-sm">
-                {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-              </span>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-lg">
+              {user?.profile_photo ? (
+                <img 
+                  src={user.profile_photo} 
+                  alt={user?.first_name || 'User'} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback to initials if image fails to load
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className={`w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${user?.profile_photo ? 'hidden' : 'flex'}`}
+              >
+                <span className="text-white font-semibold text-sm">
+                  {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+                </span>
+              </div>
               {isAdmin && isCollapsed && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full border-2 border-white"></span>
               )}
