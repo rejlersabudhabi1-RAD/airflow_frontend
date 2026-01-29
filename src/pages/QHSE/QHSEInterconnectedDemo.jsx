@@ -10,7 +10,7 @@ import { PageLayout } from '@/layouts/PageLayout';
 import { MainHeader } from './components/Common/MainHeader';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
 import { useQHSEIntelligence } from '@/hooks/useQHSEIntelligence';
-import QHSEAIInsightsPanel from '@/components/QHSE/QHSEAIInsightsPanel';
+import QHSEAIInsightsPanel from '@/components/qhse/QHSEAIInsightsPanel';
 import { 
   Network, 
   Activity,
