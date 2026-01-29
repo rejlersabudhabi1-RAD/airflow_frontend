@@ -60,7 +60,8 @@ export const API_ENDPOINTS = {
   
   // User endpoints
   USERS: '/users/',
-  USER_ME: '/users/me/',
+  // User endpoints (changed from /users/ to /user-management/ to avoid route conflicts)
+  USER_ME: '/user-management/me/',
   USER_PROFILE: '/users/update_profile/',
   
   // Health check
