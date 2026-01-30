@@ -119,8 +119,8 @@ const DesignIQLists = () => {
       
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json();
-        // API returns either array directly or object with items property
-        setItems(Array.isArray(itemsData) ? itemsData : (itemsData.items || []));
+        // API returns either array directly or object with results property (DRF pagination)
+        setItems(Array.isArray(itemsData) ? itemsData : (itemsData.results || []));
       } else {
         setItems([]);
       }
@@ -562,6 +562,16 @@ const DesignIQLists = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
                   </th>
+                  {selectedListType === 'line_list' && (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        FROM
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        TO
+                      </th>
+                    </>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
@@ -588,6 +598,16 @@ const DesignIQLists = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {item.description || '-'}
                     </td>
+                    {selectedListType === 'line_list' && (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {item.data?.from_line || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {item.data?.to_line || '-'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(item.status)}
                     </td>
@@ -779,8 +799,8 @@ const DesignIQLists = () => {
                         row.sequence_no || '',
                         row.pipr_class || '',
                         row.insulation || '',
-                        row.from || '',
-                        row.to || ''
+                        row.from_line || row.from || '',
+                        row.to_line || row.to || ''
                       ]);
                     });
                     
@@ -886,10 +906,10 @@ const DesignIQLists = () => {
                         {line.insulation || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.from || '-'}
+                        {line.from_line || line.from || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.to || '-'}
+                        {line.to_line || line.to || '-'}
                       </td>
                     </tr>
                   ))}
