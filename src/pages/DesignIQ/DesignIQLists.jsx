@@ -65,6 +65,8 @@ const DesignIQLists = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
+  const fileInputWithAreaRef = useRef(null);
+  const fileInputOffshoreRef = useRef(null);
   const [selectedListType, setSelectedListType] = useState(searchParams.get('type') || 'line_list');
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -161,8 +163,8 @@ const DesignIQLists = () => {
       
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json();
-        // API returns either array directly or object with items property
-        setItems(Array.isArray(itemsData) ? itemsData : (itemsData.items || []));
+        // API returns either array directly or object with results property (DRF pagination)
+        setItems(Array.isArray(itemsData) ? itemsData : (itemsData.results || []));
       } else {
         setItems([]);
       }
@@ -225,7 +227,7 @@ const DesignIQLists = () => {
     }
   };
 
-  const handlePIDUpload = async (event) => {
+  const handlePIDUpload = async (event, includeArea = false, formatType = 'onshore') => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -245,6 +247,8 @@ const DesignIQLists = () => {
       const formData = new FormData();
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
+      formData.append('include_area', includeArea ? 'true' : 'false');
+      formData.append('format_type', formatType);
       
       // Add line number format configuration
       const enabledComponents = lineNumberFormat.components
@@ -272,7 +276,7 @@ const DesignIQLists = () => {
         return;
       }
 
-      console.log('[P&ID Upload] 🚀 Starting upload with extended timeout (10 minutes)...');
+      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
       // Use long timeout client for OCR processing (10 minutes)
@@ -286,12 +290,12 @@ const DesignIQLists = () => {
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('[P&ID Upload] 📊 Upload progress:', percentCompleted + '%');
+            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      console.log('[P&ID Upload] ✅ Processing complete');
+      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
       
       const data = response.data;
       setExtractedData({
@@ -307,7 +311,7 @@ const DesignIQLists = () => {
       });
       setUploadingPID(false);
     } catch (error) {
-      console.error('[P&ID Upload] ❌ Error:', error);
+      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
@@ -478,32 +482,24 @@ const DesignIQLists = () => {
                   type="file"
                   ref={fileInputRef}
                   accept=".pdf"
-                  onChange={handlePIDUpload}
+                  onChange={(e) => handlePIDUpload(e, false, 'general')}
                   className="hidden"
                 />
-                
-                {/* Format Status Badge */}
-                <div className="flex items-center px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg text-sm">
-                  <span className="text-purple-700 font-semibold mr-2">Format:</span>
-                  <code className="text-purple-900 font-mono text-xs">
-                    {lineNumberFormat.components
-                      .filter(c => c.enabled)
-                      .sort((a, b) => a.order - b.order)
-                      .map(c => c.id.split('_').map(w => w[0].toUpperCase()).join(''))
-                      .join(lineNumberFormat.separator) || 'Not Set'}
-                  </code>
-                </div>
+                <input
+                  type="file"
+                  ref={fileInputWithAreaRef}
+                  accept=".pdf"
+                  onChange={(e) => handlePIDUpload(e, true, 'onshore')}
+                  className="hidden"
+                />
+                <input
+                  type="file"
+                  ref={fileInputOffshoreRef}
+                  accept=".pdf"
+                  onChange={(e) => handlePIDUpload(e, false, 'offshore')}
+                  className="hidden"
+                />
 
-                <button
-                  onClick={() => setShowFormatConfigModal(true)}
-                  className="flex items-center px-4 py-2 border border-purple-500 text-purple-600 rounded-lg hover:bg-purple-50"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Configure
-                </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPID || processing}
@@ -521,7 +517,28 @@ const DesignIQLists = () => {
                   ) : (
                     <>
                       <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : '📤 Upload P&ID PDF'}
+                      {uploadingPID ? 'Uploading...' : ' ADNOC Onshore'}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => fileInputWithAreaRef.current?.click()}
+                  disabled={uploadingPID || processing}
+                  className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
+                    uploadingPID || processing
+                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'border-green-500 text-green-600 hover:bg-green-50'
+                  }`}
+                >
+                  {processing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-600 border-t-transparent mr-2"></div>
+                      Processing OCR...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                      {uploadingPID ? 'Uploading...' : ' General'}
                     </>
                   )}
                 </button>
@@ -529,11 +546,25 @@ const DesignIQLists = () => {
             )}
 
             <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              onClick={() => fileInputOffshoreRef.current?.click()}
+              disabled={uploadingPID || processing}
+              className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
+                uploadingPID || processing
+                  ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'border-purple-500 text-purple-600 hover:bg-purple-50'
+              }`}
             >
-              <PlusIcon className="w-5 h-5 mr-2" />
-              Add Item
+              {processing ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-600 border-t-transparent mr-2"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                  {uploadingPID ? 'Uploading...' : 'ADNOC Offshore'}
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -574,11 +605,10 @@ const DesignIQLists = () => {
             <p className="mt-1 text-sm text-gray-500">Get started by adding a new item.</p>
             <div className="mt-6">
               <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Add Item
+                className="flex items-center px-4 py-2 border border-purple-500 text-purple-600 rounded-lg hover:bg-purple-50"
+            >
+              <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+              ADNOC Offshore
               </button>
             </div>
           </div>
@@ -593,6 +623,22 @@ const DesignIQLists = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Description
                   </th>
+                  {selectedListType === 'line_list' && (
+                    <>
+                      {/* Smart Area Column Detection: Only show if any items have area */}
+                      {items.some(item => item.data?.area && item.data.area !== '' && item.data.area !== '-') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Area
+                        </th>
+                      )}
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        FROM
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        TO
+                      </th>
+                    </>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
@@ -619,6 +665,22 @@ const DesignIQLists = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {item.description || '-'}
                     </td>
+                    {selectedListType === 'line_list' && (
+                      <>
+                        {/* Smart Area Column: Only show if any items have area */}
+                        {items.some(i => i.data?.area && i.data.area !== '' && i.data.area !== '-') && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
+                            {item.data?.area || '-'}
+                          </td>
+                        )}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {item.data?.from_line || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {item.data?.to_line || '-'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(item.status)}
                     </td>
@@ -685,8 +747,8 @@ const DesignIQLists = () => {
                 </p>
                 {uploadResult.success && uploadResult.data?.extracted_lines && (
                   <div className="mt-3 text-xs text-green-600 font-medium">
-                    <p>✓ OCR processing completed</p>
-                    <p>✓ {uploadResult.data.extracted_lines.length} line numbers detected</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ OCR processing completed</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {uploadResult.data.extracted_lines.length} line numbers detected</p>
                   </div>
                 )}
               </div>
@@ -735,7 +797,7 @@ const DesignIQLists = () => {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-4 text-center">
-                ⏱️ <strong>Processing time:</strong> 2-10 minutes for complex PDFs
+                ÃƒÂ¢Ã‚ÂÃ‚Â±ÃƒÂ¯Ã‚Â¸Ã‚Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
                 <br />
                 <span className="text-xs">Please keep this window open</span>
               </p>
@@ -796,24 +858,34 @@ const DesignIQLists = () => {
                     // Create workbook
                     const wb = XLSX.utils.book_new();
                     
+                    // Smart Area Detection: Only include Area column if any lines have area (numbers like 41, 604 count!)
+                    const hasArea = data.some(row => {
+                      const area = row.area;
+                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                    });
+                    
                     // Prepare data with headers
-                    const wsData = [
-                      ['Original Detection', 'Fluid Code', 'Size', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To']
-                    ];
+                    const headers = ['Original Detection', 'Fluid Code', 'Size'];
+                    if (hasArea) headers.push('Area');
+                    headers.push('Sequence No', 'PIPR Class', 'Insulation', 'From', 'To');
+                    const wsData = [headers];
                     
                     // Add data rows
                     data.forEach(row => {
-                      wsData.push([
+                      const rowData = [
                         row.original_detection || row.line_number || '',
                         row.fluid_code || '',
-                        row.size || '',
-                        row.area || '',
+                        row.size || ''
+                      ];
+                      if (hasArea) rowData.push(row.area || '');
+                      rowData.push(
                         row.sequence_no || '',
                         row.pipr_class || '',
                         row.insulation || '',
-                        row.from || '',
-                        row.to || ''
-                      ]);
+                        row.from_line || row.from || '',
+                        row.to_line || row.to || ''
+                      );
+                      wsData.push(rowData);
                     });
                     
                     // Create worksheet
@@ -880,9 +952,15 @@ const DesignIQLists = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Size
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Area
-                    </th>
+                    {/* Smart Area Column: Only show if any lines have area (checks numbers too like 41, 604) */}
+                    {extractedData.lines.some(line => {
+                      const area = line.area;
+                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                    }) && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Area
+                      </th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Sequence No
                     </th>
@@ -912,9 +990,15 @@ const DesignIQLists = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.size || '-'}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.area || '-'}
-                      </td>
+                      {/* Smart Area Column: Only show if any lines have area (checks numbers too) */}
+                      {extractedData.lines.some(l => {
+                        const area = l.area;
+                        return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                      }) && (
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
+                          {line.area || '-'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.sequence_no || '-'}
                       </td>
@@ -925,10 +1009,10 @@ const DesignIQLists = () => {
                         {line.insulation || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.from || '-'}
+                        {line.from_line || line.from || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.to || '-'}
+                        {line.to_line || line.to || '-'}
                       </td>
                     </tr>
                   ))}
