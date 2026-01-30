@@ -29,25 +29,32 @@ export const NAVIGATION_LABELS = {
     number: '3'
   },
   
-  // Section 4: Project Control
-  projectControl: {
-    main: 'Project Control',
-    fullName: 'Project Control & Management',
+  // Section 4: Dept of Sales
+  sales: {
+    main: 'Dept of Sales',
+    fullName: 'Department of Sales',
     number: '4'
   },
   
-  // Section 5: Procurement
-  procurement: {
-    main: 'Procurement',
-    fullName: 'Procurement & Supply Chain',
+  // Section 5: Project Control
+  projectControl: {
+    main: 'Project Control',
+    fullName: 'Project Control & Management',
     number: '5'
   },
   
-  // Section 6: HSE
-  hse: {
-    main: 'HSE',
-    fullName: 'Health, Safety & Environment',
+  // Section 6: Procurement
+  procurement: {
+    main: 'Procurement',
+    fullName: 'Procurement & Supply Chain',
     number: '6'
+  },
+  
+  // Section 7: QHSE
+  hse: {
+    main: 'QHSE',
+    fullName: 'Quality, Health, Safety & Environment',
+    number: '7'
   }
 }
 

@@ -138,15 +138,39 @@ const Dashboard = () => {
 
   const categories = [
     { id: 'all', name: 'All Features', icon: '🚀' },
-    { id: 'process_engineering', name: 'Process Engineering', icon: '⚙️' },
-    { id: 'crs', name: 'CRS', icon: '📋' },
+    { id: 'engineering', name: 'Process Engineering', icon: '⚙️' },
+    { id: 'document_management', name: 'CRS Documents', icon: '📋' },
+    { id: 'finance', name: 'Finance', icon: '💰' },
+    { id: 'sales', name: 'Dept of Sales', icon: '💼' },
     { id: 'project_control', name: 'Project Control', icon: '📊' },
+    { id: 'procurement', name: 'Procurement', icon: '🚚' },
+    { id: 'quality_assurance', name: 'QHSE', icon: '🛡️' },
     { id: 'other', name: 'Other', icon: '📦' }
   ]
 
   const filteredFeatures = activeCategory === 'all' 
     ? features?.filter(f => f.category !== 'other') 
     : categorizedFeatures[activeCategory] || []
+
+  // Debug logging - AFTER all variables are defined
+  console.log('🔍 Dashboard Debug:')
+  console.log('Total features:', features?.length)
+  console.log('Features array:', features)
+  console.log('Categorized features:', categorizedFeatures)
+  console.log('Sales features:', categorizedFeatures.sales || [])
+  console.log('Active category:', activeCategory)
+  console.log('Filtered features:', filteredFeatures)
+  console.log('Filtered features length:', filteredFeatures?.length)
+  
+  // Detailed sales feature analysis
+  if (categorizedFeatures.sales) {
+    console.log('✅ Sales features found:', categorizedFeatures.sales.length)
+    categorizedFeatures.sales.forEach(f => {
+      console.log(`  - ${f.name} (${f.id}) - category: ${f.category}`)
+    })
+  } else {
+    console.log('❌ No sales features in categorizedFeatures')
+  }
 
   const stats = [
     {
@@ -459,20 +483,38 @@ const Dashboard = () => {
         <div className="mb-8 bg-white rounded-2xl shadow-lg p-4 border border-gray-200">
           <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
             <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Filter:</span>
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setActiveCategory(category.id)}
-                className={`px-5 py-2.5 rounded-xl font-medium whitespace-nowrap transition-all duration-300 ${
-                  activeCategory === category.id
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <span className="mr-2">{category.icon}</span>
-                {category.name}
-              </button>
-            ))}
+            {categories.map((category) => {
+              const categoryCount = category.id === 'all' 
+                ? features?.filter(f => f.category !== 'other').length || 0
+                : categorizedFeatures[category.id]?.length || 0
+              
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => {
+                    console.log('🔵 Category clicked:', category.id)
+                    setActiveCategory(category.id)
+                  }}
+                  className={`px-5 py-2.5 rounded-xl font-medium whitespace-nowrap transition-all duration-300 ${
+                    activeCategory === category.id
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="mr-2">{category.icon}</span>
+                  {category.name}
+                  {categoryCount > 0 && (
+                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                      activeCategory === category.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {categoryCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
 

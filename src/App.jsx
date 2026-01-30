@@ -45,6 +45,7 @@ import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
+import DeptOfSales from './pages/Finance/DeptOfSales'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
@@ -74,6 +75,8 @@ import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
+// Debug Components
+import FeaturesDebug from './pages/FeaturesDebug'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -311,6 +314,14 @@ function App() {
           }
         />
         <Route
+          path="features-debug"
+          element={
+            <ProtectedRoute>
+              <FeaturesDebug />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="profile"
           element={
             <ProtectedRoute>
@@ -469,6 +480,22 @@ function App() {
             <ModuleProtectedRoute moduleCode="finance">
               <InvoiceDetail />
             </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/sales"
+          element={
+            <ProtectedRoute>
+              <DeptOfSales />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="sales"
+          element={
+            <ProtectedRoute>
+              <DeptOfSales />
+            </ProtectedRoute>
           }
         />
 

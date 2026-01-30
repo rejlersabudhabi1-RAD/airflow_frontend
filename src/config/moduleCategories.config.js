@@ -51,12 +51,24 @@ export const MODULE_CATEGORIES_CONFIG = {
       badgeColor: 'bg-green-100'
     },
     {
+      id: 'sales',
+      name: 'Dept of Sales',
+      icon: '💼',
+      color: 'cyan',
+      description: 'Sales CRM and pipeline management',
+      order: 4,
+      bgColor: 'bg-cyan-50',
+      borderColor: 'border-cyan-200',
+      textColor: 'text-cyan-700',
+      badgeColor: 'bg-cyan-100'
+    },
+    {
       id: 'project_control',
       name: 'Project Control',
       icon: '📊',
       color: 'indigo',
       description: 'Project tracking and control systems',
-      order: 4,
+      order: 5,
       bgColor: 'bg-indigo-50',
       borderColor: 'border-indigo-200',
       textColor: 'text-indigo-700',
@@ -68,7 +80,7 @@ export const MODULE_CATEGORIES_CONFIG = {
       icon: '🛒',
       color: 'orange',
       description: 'Procurement and purchasing management',
-      order: 5,
+      order: 6,
       bgColor: 'bg-orange-50',
       borderColor: 'border-orange-200',
       textColor: 'text-orange-700',
@@ -80,7 +92,7 @@ export const MODULE_CATEGORIES_CONFIG = {
       icon: '🛡️',
       color: 'red',
       description: 'Quality, Health, Safety & Environment',
-      order: 6,
+      order: 7,
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200',
       textColor: 'text-red-700',
@@ -92,7 +104,7 @@ export const MODULE_CATEGORIES_CONFIG = {
       icon: '⚡',
       color: 'gray',
       description: 'System administration and user management',
-      order: 7,
+      order: 8,
       bgColor: 'bg-gray-50',
       borderColor: 'border-gray-200',
       textColor: 'text-gray-700',
@@ -123,6 +135,9 @@ export const MODULE_CATEGORIES_CONFIG = {
     
     // Finance
     finance: ['finance', 'invoice', 'billing', 'payment', 'accounting_'],
+    
+    // Sales
+    sales: ['sales', 'crm', 'client', 'deal', 'pipeline', 'quote', 'lead', 'opportunity'],
     
     // Project Control
     project_control: ['project_control', 'milestone', 'tracking', 'schedule_'],

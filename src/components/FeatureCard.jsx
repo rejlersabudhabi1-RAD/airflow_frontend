@@ -17,9 +17,13 @@ const FeatureCard = ({ feature }) => {
   const getCategoryBadgeColor = () => {
     const category = feature.category || 'other'
     const colors = {
-      'process_engineering': 'bg-blue-100 text-blue-700 border-blue-200',
-      'crs': 'bg-green-100 text-green-700 border-green-200',
+      'engineering': 'bg-blue-100 text-blue-700 border-blue-200',
+      'document_management': 'bg-green-100 text-green-700 border-green-200',
       'project_control': 'bg-purple-100 text-purple-700 border-purple-200',
+      'finance': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      'sales': 'bg-cyan-100 text-cyan-700 border-cyan-200',
+      'quality_assurance': 'bg-amber-100 text-amber-700 border-amber-200',
+      'procurement': 'bg-indigo-100 text-indigo-700 border-indigo-200',
       'other': 'bg-gray-100 text-gray-700 border-gray-200'
     }
     return colors[category] || colors.other
@@ -28,9 +32,13 @@ const FeatureCard = ({ feature }) => {
   const getCategoryName = () => {
     const category = feature.category || 'other'
     const names = {
-      'process_engineering': 'Process Engineering',
-      'crs': 'CRS',
+      'engineering': 'Process Engineering',
+      'document_management': 'Document Management',
       'project_control': 'Project Control',
+      'finance': 'Finance',
+      'sales': 'Sales',
+      'quality_assurance': 'QHSE',
+      'procurement': 'Procurement',
       'other': 'Other'
     }
     return names[category] || 'Other'

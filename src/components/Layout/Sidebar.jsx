@@ -244,6 +244,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         ]
       },
       {
+        id: 'sales',
+        title: getSectionTitle('sales'),
+        icon: ChartBarIcon,
+        type: 'section',
+        path: '/finance/sales',
+        moduleCode: 'finance'
+      },
+      {
         id: 'projectControl',
         title: getSectionTitle('projectControl'),
       icon: BriefcaseIcon,
@@ -252,7 +260,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'projectManagement',
-          title: '4.1 Projects',
+          title: '5.1 Projects',
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
@@ -269,7 +277,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'procurementDashboard',
-          title: '5.1 Dashboard',
+          title: '6.1 Dashboard',
           icon: HomeIcon,
           path: '/procurement',
           description: 'Procurement overview',
@@ -277,7 +285,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'vendors',
-          title: '5.2 Vendors',
+          title: '6.2 Vendors',
           icon: UsersIcon,
           path: '/procurement/vendors',
           description: 'Vendor management',
@@ -285,7 +293,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'requisitions',
-          title: '5.3 Recommendations',
+          title: '6.3 Recommendations',
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
           description: 'Purchase recommendations',
@@ -293,7 +301,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'purchaseOrders',
-          title: '5.4 Purchase Orders',
+          title: '6.4 Purchase Orders',
           icon: DocumentPlusIcon,
           path: '/procurement/orders',
           description: 'PO management',
@@ -301,7 +309,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'receipts',
-          title: '5.5 Receipts',
+          title: '6.5 Receipts',
           icon: FolderIcon,
           path: '/procurement/receipts',
           description: 'Goods receipt',
@@ -318,7 +326,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'generalQHSE',
-          title: '6.1 Project Quality',
+          title: '7.1 Project Quality',
           icon: ShieldCheckIcon,
           path: '/qhse/general',
           description: 'Project quality management',
@@ -326,7 +334,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'detailedView',
-          title: '6.2 Project Quality Details',
+          title: '7.2 Project Quality Details',
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
           description: 'Detailed project quality view',
@@ -334,7 +342,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'qualityManagement',
-          title: '6.3 Quality Management',
+          title: '7.3 Quality Management',
           icon: ChartBarIcon,
           path: '/qhse/general/quality',
           description: 'Quality metrics and audits',
@@ -342,7 +350,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'healthSafety',
-          title: '6.4 Health & Safety',
+          title: '7.4 Health & Safety',
           icon: ShieldCheckIcon,
           path: '/qhse/general/health-safety',
           description: 'Health and safety management',
@@ -350,7 +358,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'environmental',
-          title: '6.5 Environmental',
+          title: '7.5 Environmental',
           icon: DocumentTextIcon,
           path: '/qhse/general/environmental',
           description: 'Environmental management',
@@ -358,7 +366,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'energy',
-          title: '6.6 Energy',
+          title: '7.6 Energy',
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
@@ -366,7 +374,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'interconnectedDemo',
-          title: '6.7 AI Interconnected System',
+          title: '7.7 AI Interconnected System',
           icon: SparklesIcon,
           path: '/qhse/interconnected-demo',
           description: 'AI-powered cross-module intelligence demo',
@@ -433,7 +441,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '7. Admin',
+      title: '8. Admin',
       icon: CogIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -441,21 +449,21 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '7.1 Dashboard',
+          title: '8.1 Dashboard',
           icon: ChartBarIcon,
           path: '/admin/dashboard',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '7.2 Users & Roles',
+          title: '8.2 Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
         },
         {
           id: 'subscriptionManagement',
-          title: '7.3 Subscription',
+          title: '8.3 Subscription',
           icon: CurrencyDollarIcon,
           path: '/admin/subscriptions',
           description: 'Plans & billing management'
