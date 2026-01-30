@@ -21,7 +21,9 @@ import {
   CurrencyDollarIcon,
   ShieldCheckIcon,
   TableCellsIcon,
-  SparklesIcon
+  SparklesIcon,
+  BuildingOffice2Icon,
+  RocketLaunchIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -246,10 +248,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       {
         id: 'sales',
         title: getSectionTitle('sales'),
-        icon: ChartBarIcon,
-        type: 'section',
-        path: '/finance/sales',
-        moduleCode: 'finance'
+        icon: RocketLaunchIcon,
+        type: 'single',
+        path: '/sales',
+        moduleCode: 'sales',
+        badge: 'AI',
+        description: 'AI-Powered Sales Intelligence & CRM'
       },
       {
         id: 'projectControl',
@@ -548,17 +552,30 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 <button
                   onClick={() => handleNavigation(item.path)}
                   className={`
-                    w-full flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2.5 rounded-lg
-                    transition-all duration-200
+                    w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-3 py-2.5 rounded-lg
+                    transition-all duration-200 relative overflow-hidden group
                     ${isActiveRoute(item.path)
-                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 font-semibold shadow-sm'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 text-blue-700 dark:text-blue-300 font-semibold shadow-md ring-2 ring-blue-200'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:shadow-sm'
                     }
                   `}
-                  title={isCollapsed ? item.title : ''}
+                  title={isCollapsed ? item.title : (item.description || '')}
                 >
-                  <item.icon className={`w-5 h-5 ${isActiveRoute(item.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                  {!isCollapsed && <span>{item.title}</span>}
+                  <div className="flex items-center space-x-3">
+                    <item.icon className={`w-5 h-5 ${isActiveRoute(item.path) ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                    {!isCollapsed && (
+                      <span className="flex-1 text-left">{item.title}</span>
+                    )}
+                  </div>
+                  {!isCollapsed && item.badge && (
+                    <span className="px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full shadow-sm animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                  {/* Hover effect background */}
+                  {!isActiveRoute(item.path) && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+                  )}
                 </button>
               ) : (
                 // Section with children

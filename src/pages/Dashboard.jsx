@@ -14,7 +14,6 @@ import FeaturesBrowser from '../components/Features/FeaturesBrowser'
 import AdvancedMetricCard from '../components/Dashboard/AdvancedMetricCard'
 import { DASHBOARD_METRICS, DASHBOARD_LAYOUT } from '../config/dashboardMetrics.config'
 import RealTimeActivityFeed from '../components/Dashboard/RealTimeActivityFeed'
-import PredictiveAnalyticsDashboard from '../components/Dashboard/PredictiveAnalyticsDashboard'
 
 /**
  * Dashboard Page
@@ -148,9 +147,56 @@ const Dashboard = () => {
     { id: 'other', name: 'Other', icon: '📦' }
   ]
 
-  const filteredFeatures = activeCategory === 'all' 
+  // Smart feature grouping - Group features by route
+  const groupFeaturesByRoute = (featuresList) => {
+    const routeGroups = {}
+    const groupedFeatures = []
+    
+    featuresList?.forEach(feature => {
+      const route = feature.frontendRoute
+      if (!routeGroups[route]) {
+        routeGroups[route] = []
+      }
+      routeGroups[route].push(feature)
+    })
+    
+    // Convert groups to feature objects
+    Object.entries(routeGroups).forEach(([route, featuresInRoute]) => {
+      if (featuresInRoute.length === 1) {
+        groupedFeatures.push(featuresInRoute[0])
+      } else {
+        // Multiple features - create grouped card
+        const mainFeature = featuresInRoute[0]
+        const isSalesModule = featuresInRoute.some(f => f.category === 'sales')
+        
+        groupedFeatures.push({
+          ...mainFeature,
+          isGrouped: true,
+          subFeatures: featuresInRoute,
+          name: isSalesModule ? 'Dept of Sales' : mainFeature.name,
+          description: isSalesModule 
+            ? 'Complete sales management platform with CRM, pipeline tracking, and AI-powered insights'
+            : `${featuresInRoute.length} integrated features available`,
+          capabilities: isSalesModule 
+            ? [
+                '📊 Sales Dashboard - Real-time metrics & KPIs',
+                '👥 CRM - Client & contact management',
+                '🎯 Pipeline - Visual deal tracking',
+                '🤖 AI Insights - Predictive analytics'
+              ]
+            : mainFeature.capabilities
+        })
+      }
+    })
+    
+    return groupedFeatures
+  }
+
+  const rawFilteredFeatures = activeCategory === 'all' 
     ? features?.filter(f => f.category !== 'other') 
     : categorizedFeatures[activeCategory] || []
+  
+  const filteredFeatures = groupFeaturesByRoute(rawFilteredFeatures)
 
   // Debug logging - AFTER all variables are defined
   console.log('🔍 Dashboard Debug:')
@@ -159,7 +205,8 @@ const Dashboard = () => {
   console.log('Categorized features:', categorizedFeatures)
   console.log('Sales features:', categorizedFeatures.sales || [])
   console.log('Active category:', activeCategory)
-  console.log('Filtered features:', filteredFeatures)
+  console.log('Raw filtered features:', rawFilteredFeatures)
+  console.log('Grouped filtered features:', filteredFeatures)
   console.log('Filtered features length:', filteredFeatures?.length)
   
   // Detailed sales feature analysis
@@ -462,13 +509,6 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Predictive Analytics Dashboard - INTELLIGENT FORECASTING */}
-        <div className="mb-8">
-          <PredictiveAnalyticsDashboard 
-            refreshInterval={60000}
-          />
-        </div>
-
         {/* Real-Time Activity Feed - LIVE MONITORING */}
         <div className="mb-8">
           <RealTimeActivityFeed 
@@ -484,9 +524,11 @@ const Dashboard = () => {
           <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
             <span className="text-sm font-semibold text-gray-600 whitespace-nowrap">Filter:</span>
             {categories.map((category) => {
-              const categoryCount = category.id === 'all' 
-                ? features?.filter(f => f.category !== 'other').length || 0
-                : categorizedFeatures[category.id]?.length || 0
+              const rawCategoryFeatures = category.id === 'all' 
+                ? features?.filter(f => f.category !== 'other') 
+                : categorizedFeatures[category.id] || []
+              const groupedCategoryFeatures = groupFeaturesByRoute(rawCategoryFeatures)
+              const categoryCount = groupedCategoryFeatures.length
               
               return (
                 <button

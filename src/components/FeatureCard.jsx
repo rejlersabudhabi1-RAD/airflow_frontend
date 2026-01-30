@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 
 const FeatureCard = ({ feature }) => {
   const navigate = useNavigate()
+  const [showSubFeatures, setShowSubFeatures] = React.useState(false)
   
   const getGradientClass = () => {
     return feature.colorScheme?.gradient || 'from-blue-500 to-indigo-600'
@@ -97,6 +98,48 @@ const FeatureCard = ({ feature }) => {
                 ))}
               </div>
             )}
+            
+            {/* Sub-features list (for grouped features) */}
+            {feature.isGrouped && feature.subFeatures && feature.subFeatures.length > 1 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <h4 className="text-sm font-bold text-gray-900">
+                    {feature.subFeatures.length} Integrated Modules
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {feature.subFeatures.map((subFeature, idx) => (
+                    <div 
+                      key={idx} 
+                      className="group/sub flex items-start gap-3 p-3 bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-default"
+                    >
+                      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl shadow-sm">
+                        {subFeature.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm mb-1 truncate">
+                          {subFeature.name}
+                        </div>
+                        <div className="text-xs text-gray-600 line-clamp-2">
+                          {subFeature.description}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-800 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Click "View All Modules" to access the complete integrated platform
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Right section - Action button */}
@@ -105,7 +148,10 @@ const FeatureCard = ({ feature }) => {
               onClick={() => navigate(feature.frontendRoute)}
               className={`group/btn relative px-8 py-4 bg-gradient-to-r ${getGradientClass()} text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 flex items-center gap-3 whitespace-nowrap`}
             >
-              <span>{feature.hasUpload ? 'Upload File' : 'Open Feature'}</span>
+              <span>
+                {feature.isGrouped ? 'View All Modules' : 
+                 feature.hasUpload ? 'Upload File' : 'Open Feature'}
+              </span>
               <svg className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
