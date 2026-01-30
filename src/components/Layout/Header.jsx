@@ -138,7 +138,7 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                   <span>Change Password</span>
                 </Link>
                 <span className="text-blue-200 font-medium">
-                  Hello, {user?.username || 'User'}
+                  Hello, {user?.first_name || user?.username || 'User'}
                 </span>
                 <button
                   onClick={handleLogout}
