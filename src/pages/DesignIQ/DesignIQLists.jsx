@@ -1,3 +1,4 @@
+// Updated: 2026-01-30 - Production: Area column smart detection
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
