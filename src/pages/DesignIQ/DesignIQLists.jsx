@@ -625,6 +625,12 @@ const DesignIQLists = () => {
                   </th>
                   {selectedListType === 'line_list' && (
                     <>
+                      {/* Smart Area Column Detection: Only show if any items have area */}
+                      {items.some(item => item.data?.area && item.data.area !== '' && item.data.area !== '-') && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Area
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         FROM
                       </th>
@@ -661,6 +667,12 @@ const DesignIQLists = () => {
                     </td>
                     {selectedListType === 'line_list' && (
                       <>
+                        {/* Smart Area Column: Only show if any items have area */}
+                        {items.some(i => i.data?.area && i.data.area !== '' && i.data.area !== '-') && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
+                            {item.data?.area || '-'}
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                           {item.data?.from_line || '-'}
                         </td>
@@ -846,24 +858,34 @@ const DesignIQLists = () => {
                     // Create workbook
                     const wb = XLSX.utils.book_new();
                     
+                    // Smart Area Detection: Only include Area column if any lines have area (numbers like 41, 604 count!)
+                    const hasArea = data.some(row => {
+                      const area = row.area;
+                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                    });
+                    
                     // Prepare data with headers
-                    const wsData = [
-                      ['Original Detection', 'Fluid Code', 'Size', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To']
-                    ];
+                    const headers = ['Original Detection', 'Fluid Code', 'Size'];
+                    if (hasArea) headers.push('Area');
+                    headers.push('Sequence No', 'PIPR Class', 'Insulation', 'From', 'To');
+                    const wsData = [headers];
                     
                     // Add data rows
                     data.forEach(row => {
-                      wsData.push([
+                      const rowData = [
                         row.original_detection || row.line_number || '',
                         row.fluid_code || '',
-                        row.size || '',
-                        row.area || '',
+                        row.size || ''
+                      ];
+                      if (hasArea) rowData.push(row.area || '');
+                      rowData.push(
                         row.sequence_no || '',
                         row.pipr_class || '',
                         row.insulation || '',
                         row.from_line || row.from || '',
                         row.to_line || row.to || ''
-                      ]);
+                      );
+                      wsData.push(rowData);
                     });
                     
                     // Create worksheet
@@ -930,9 +952,15 @@ const DesignIQLists = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Size
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Area
-                    </th>
+                    {/* Smart Area Column: Only show if any lines have area (checks numbers too like 41, 604) */}
+                    {extractedData.lines.some(line => {
+                      const area = line.area;
+                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                    }) && (
+                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Area
+                      </th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Sequence No
                     </th>
@@ -962,9 +990,15 @@ const DesignIQLists = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.size || '-'}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.area || '-'}
-                      </td>
+                      {/* Smart Area Column: Only show if any lines have area (checks numbers too) */}
+                      {extractedData.lines.some(l => {
+                        const area = l.area;
+                        return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
+                      }) && (
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
+                          {line.area || '-'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.sequence_no || '-'}
                       </td>
