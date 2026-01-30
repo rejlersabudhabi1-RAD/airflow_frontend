@@ -9,6 +9,7 @@
     "@emotion/styled": "^11.11.0",
     "@heroicons/react": "^2.2.0",
     "@mui/icons-material": "^5.15.3",
+    "@mui/lab": "^5.0.0-alpha.158",
     "@mui/material": "^5.15.3",
     "@mui/x-data-grid": "^6.20.4",
     "@reduxjs/toolkit": "^2.0.1",

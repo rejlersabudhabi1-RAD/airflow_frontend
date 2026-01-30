@@ -81,6 +81,30 @@ const DesignIQLists = () => {
   const [processing, setProcessing] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
+  
+  // Line Number Format Configuration
+  const STRICT_LINE_PATTERNS = {
+    line_size: '\\d{1,2}',
+    area: '\\d{2,3}',
+    fluid_code: '[A-Z]{1,3}',
+    sequence_no: '\\d{3,5}',
+    pipe_class: '[A-Z0-9]{3,6}',
+    insulation: '[A-Z]{1,2}'
+  };
+  const [showFormatConfigModal, setShowFormatConfigModal] = useState(false);
+  const [lineNumberFormat, setLineNumberFormat] = useState({
+    template: '',  // e.g., "SIZE-AREA-FLUID-SEQUENCE-PIPECLASS-INSULATION"
+    components: [
+      { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+      { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '41' },
+      { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,3}', example: 'SWR' },
+      { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '60302' },
+      { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 5, pattern: '[A-Z0-9]{3,6}', example: 'A2AU16' },
+      { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
+    ],
+    separator: '-',  // Separator between components
+    allowVariableSeparators: true  // Allow -, –, —, etc.
+  });
 
   const currentListConfig = LIST_TYPES[selectedListType];
 
@@ -90,6 +114,26 @@ const DesignIQLists = () => {
     autoRefreshInterval: 30000, // 30 seconds
     storageKey: `designiq_lists_${selectedListType}`,
   });
+
+  // Load saved line format configuration from localStorage
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('designiq_line_format_config');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        const normalized = {
+          ...parsed,
+          components: (parsed.components || []).map((component) => ({
+            ...component,
+            pattern: STRICT_LINE_PATTERNS[component.id] || component.pattern
+          }))
+        };
+        setLineNumberFormat(normalized);
+      } catch (error) {
+        console.error('Error loading saved format config:', error);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -205,6 +249,22 @@ const DesignIQLists = () => {
       formData.append('list_type', 'line_list');
       formData.append('include_area', includeArea ? 'true' : 'false');
       formData.append('format_type', formatType);
+      
+      // Add line number format configuration
+      const enabledComponents = lineNumberFormat.components
+        .filter(c => c.enabled)
+        .sort((a, b) => a.order - b.order);
+      
+      formData.append('line_format_config', JSON.stringify({
+        components: enabledComponents.map(c => ({
+          id: c.id,
+          name: c.name,
+          order: c.order,
+          pattern: STRICT_LINE_PATTERNS[c.id] || c.pattern
+        })),
+        separator: lineNumberFormat.separator,
+        allowVariableSeparators: lineNumberFormat.allowVariableSeparators
+      }));
 
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
@@ -422,14 +482,14 @@ const DesignIQLists = () => {
                   type="file"
                   ref={fileInputRef}
                   accept=".pdf"
-                  onChange={(e) => handlePIDUpload(e, false)}
+                  onChange={(e) => handlePIDUpload(e, false, 'general')}
                   className="hidden"
                 />
                 <input
                   type="file"
                   ref={fileInputWithAreaRef}
                   accept=".pdf"
-                  onChange={(e) => handlePIDUpload(e, true)}
+                  onChange={(e) => handlePIDUpload(e, true, 'onshore')}
                   className="hidden"
                 />
                 <input
@@ -439,6 +499,7 @@ const DesignIQLists = () => {
                   onChange={(e) => handlePIDUpload(e, false, 'offshore')}
                   className="hidden"
                 />
+
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPID || processing}
@@ -787,7 +848,7 @@ const DesignIQLists = () => {
                     
                     // Prepare data with headers
                     const wsData = [
-                      ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To']
+                      ['Original Detection', 'Fluid Code', 'Size', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To']
                     ];
                     
                     // Add data rows
@@ -796,6 +857,7 @@ const DesignIQLists = () => {
                         row.original_detection || row.line_number || '',
                         row.fluid_code || '',
                         row.size || '',
+                        row.area || '',
                         row.sequence_no || '',
                         row.pipr_class || '',
                         row.insulation || '',
@@ -810,15 +872,15 @@ const DesignIQLists = () => {
                     // Format specific columns as text to preserve leading zeros
                     const range = XLSX.utils.decode_range(ws['!ref']);
                     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                      // Column D (index 3) - Sequence No
-                      const seqCell = XLSX.utils.encode_cell({ r: R, c: 3 });
+                      // Column E (index 4) - Sequence No
+                      const seqCell = XLSX.utils.encode_cell({ r: R, c: 4 });
                       if (ws[seqCell]) {
                         ws[seqCell].t = 's'; // Set cell type to string
                         ws[seqCell].v = String(ws[seqCell].v); // Ensure value is string
                       }
                       
-                      // Column E (index 4) - PIPR Class
-                      const piprCell = XLSX.utils.encode_cell({ r: R, c: 4 });
+                      // Column F (index 5) - PIPR Class
+                      const piprCell = XLSX.utils.encode_cell({ r: R, c: 5 });
                       if (ws[piprCell]) {
                         ws[piprCell].t = 's'; // Set cell type to string
                         ws[piprCell].v = String(ws[piprCell].v); // Ensure value is string
@@ -830,6 +892,7 @@ const DesignIQLists = () => {
                       { wch: 20 }, // Original Detection
                       { wch: 12 }, // Fluid Code
                       { wch: 8 },  // Size
+                      { wch: 10 }, // Area
                       { wch: 15 }, // Sequence No
                       { wch: 15 }, // PIPR Class
                       { wch: 12 }, // Insulation
@@ -868,6 +931,9 @@ const DesignIQLists = () => {
                       Size
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Area
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Sequence No
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
@@ -895,6 +961,9 @@ const DesignIQLists = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.size || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.area || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.sequence_no || '-'}
@@ -933,12 +1002,265 @@ const DesignIQLists = () => {
           </div>
         </div>
       )}
+
+      {/* Line Number Format Configuration Modal */}
+      {showFormatConfigModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4">
+              <h2 className="text-2xl font-bold text-white">Custom Line Number Format</h2>
+              <p className="text-purple-100 text-sm mt-1">
+                Configure components and order for your specific P&ID format
+              </p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-6 space-y-6">
+              
+              {/* Format Template Preview */}
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">📋 Current Format Template</h3>
+                <div className="bg-white px-4 py-3 rounded-lg border border-indigo-300 font-mono text-lg">
+                  {lineNumberFormat.components
+                    .filter(c => c.enabled)
+                    .sort((a, b) => a.order - b.order)
+                    .map(c => c.id.toUpperCase())
+                    .join(lineNumberFormat.separator) || 'No components selected'}
+                </div>
+                <div className="mt-2 text-sm text-gray-600">
+                  Example: {lineNumberFormat.components
+                    .filter(c => c.enabled)
+                    .sort((a, b) => a.order - b.order)
+                    .map(c => c.example)
+                    .join(lineNumberFormat.separator) || 'Configure components below'}
+                </div>
+              </div>
+
+              {/* Separator Configuration */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  🔗 Component Separator
+                </label>
+                <div className="flex items-center space-x-4">
+                  <input
+                    type="text"
+                    value={lineNumberFormat.separator}
+                    onChange={(e) => setLineNumberFormat({
+                      ...lineNumberFormat,
+                      separator: e.target.value
+                    })}
+                    maxLength={3}
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-center font-mono text-lg"
+                    placeholder="-"
+                  />
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={lineNumberFormat.allowVariableSeparators}
+                      onChange={(e) => setLineNumberFormat({
+                        ...lineNumberFormat,
+                        allowVariableSeparators: e.target.checked
+                      })}
+                      className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-gray-700">Allow variable separators (-, –, —, etc.)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Components Configuration */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">⚙️ Line Number Components</h3>
+                <div className="space-y-3">
+                  {lineNumberFormat.components.map((component, idx) => (
+                    <div key={component.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      {/* Enable Checkbox */}
+                      <input
+                        type="checkbox"
+                        checked={component.enabled}
+                        onChange={(e) => {
+                          const updated = [...lineNumberFormat.components];
+                          updated[idx].enabled = e.target.checked;
+                          setLineNumberFormat({ ...lineNumberFormat, components: updated });
+                        }}
+                        className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                      />
+                      
+                      {/* Component Name */}
+                      <div className="flex-1 min-w-[150px]">
+                        <span className={`font-semibold ${component.enabled ? 'text-gray-900' : 'text-gray-400'}`}>
+                          {component.name}
+                        </span>
+                      </div>
+
+                      {/* Order */}
+                      <div className="flex items-center space-x-2">
+                        <label className="text-sm text-gray-600 whitespace-nowrap">Order:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="6"
+                          value={component.order}
+                          onChange={(e) => {
+                            const updated = [...lineNumberFormat.components];
+                            updated[idx].order = parseInt(e.target.value) || 1;
+                            setLineNumberFormat({ ...lineNumberFormat, components: updated });
+                          }}
+                          disabled={!component.enabled}
+                          className={`w-16 px-2 py-1 border rounded-lg text-center ${
+                            component.enabled 
+                              ? 'border-gray-300 focus:ring-2 focus:ring-purple-500' 
+                              : 'bg-gray-100 border-gray-200 text-gray-400'
+                          }`}
+                        />
+                      </div>
+
+                      {/* Pattern */}
+                      <div className="flex items-center space-x-2 flex-1 min-w-[200px]">
+                        <label className="text-sm text-gray-600 whitespace-nowrap">Regex:</label>
+                        <input
+                          type="text"
+                          value={component.pattern}
+                          onChange={(e) => {
+                            const updated = [...lineNumberFormat.components];
+                            updated[idx].pattern = e.target.value;
+                            setLineNumberFormat({ ...lineNumberFormat, components: updated });
+                          }}
+                          disabled={!component.enabled}
+                          className={`flex-1 px-3 py-1 border rounded-lg font-mono text-sm ${
+                            component.enabled 
+                              ? 'border-gray-300 focus:ring-2 focus:ring-purple-500' 
+                              : 'bg-gray-100 border-gray-200 text-gray-400'
+                          }`}
+                          placeholder="\\d{1,2}"
+                        />
+                      </div>
+
+                      {/* Example */}
+                      <div className="flex items-center space-x-2 min-w-[100px]">
+                        <label className="text-sm text-gray-600">Ex:</label>
+                        <input
+                          type="text"
+                          value={component.example}
+                          onChange={(e) => {
+                            const updated = [...lineNumberFormat.components];
+                            updated[idx].example = e.target.value;
+                            setLineNumberFormat({ ...lineNumberFormat, components: updated });
+                          }}
+                          disabled={!component.enabled}
+                          className={`w-20 px-2 py-1 border rounded-lg text-sm ${
+                            component.enabled 
+                              ? 'border-gray-300 focus:ring-2 focus:ring-purple-500' 
+                              : 'bg-gray-100 border-gray-200 text-gray-400'
+                          }`}
+                          placeholder="2"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preset Templates */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">🎯 Common Configurations</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => {
+                      setLineNumberFormat({
+                        ...lineNumberFormat,
+                        components: [
+                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+                          { id: 'area', name: 'Area', enabled: false, order: 2, pattern: '\\d{2,3}', example: '41' },
+                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 2, pattern: '[A-Z]{1,3}', example: 'SWR' },
+                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 3, pattern: '\\d{3,5}', example: '60302' },
+                          { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 4, pattern: '\\d{3,5}', example: '5010' },
+                          { id: 'insulation', name: 'Insulation', enabled: false, order: 5, pattern: '[A-Z]{1,2}', example: 'V' }
+                        ]
+                      });
+                    }}
+                    className="px-4 py-3 bg-blue-50 border-2 border-blue-200 rounded-lg hover:bg-blue-100 text-left"
+                  >
+                    <div className="font-semibold text-blue-700">Standard Format</div>
+                    <div className="text-xs text-blue-600 font-mono mt-1">SIZE-FLUID-SEQ-CLASS</div>
+                    <div className="text-xs text-gray-600 mt-1">Example: 2-PU-152-50100A</div>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setLineNumberFormat({
+                        ...lineNumberFormat,
+                        components: [
+                          { id: 'line_size', name: 'Line Size', enabled: true, order: 1, pattern: '\\d{1,2}', example: '36' },
+                          { id: 'area', name: 'Area', enabled: true, order: 2, pattern: '\\d{2,3}', example: '41' },
+                          { id: 'fluid_code', name: 'Fluid Code', enabled: true, order: 3, pattern: '[A-Z]{1,3}', example: 'SWR' },
+                          { id: 'sequence_no', name: 'Sequence No', enabled: true, order: 4, pattern: '\\d{3,5}', example: '60302' },
+                          { id: 'pipe_class', name: 'Pipe Class', enabled: true, order: 5, pattern: '\\d{3,5}', example: '5010' },
+                          { id: 'insulation', name: 'Insulation', enabled: true, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
+                        ]
+                      });
+                    }}
+                    className="px-4 py-3 bg-green-50 border-2 border-green-200 rounded-lg hover:bg-green-100 text-left"
+                  >
+                    <div className="font-semibold text-green-700">Extended Format</div>
+                    <div className="text-xs text-green-600 font-mono mt-1">SIZE-AREA-FLUID-SEQ-CLASS-INS</div>
+                    <div className="text-xs text-gray-600 mt-1">Example: 2-41-PU-152-50100A-X</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Help Text */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-semibold mb-1">How to use:</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>Enable/disable components using checkboxes</li>
+                      <li>Set the order (1-6) for each enabled component</li>
+                      <li>Adjust regex patterns if needed for specific formats</li>
+                      <li>Use Quick Presets to load common configurations</li>
+                      <li>The backend will use this configuration to extract line numbers from P&ID PDFs</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowFormatConfigModal(false)}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Validate at least one component is enabled
+                  const hasEnabled = lineNumberFormat.components.some(c => c.enabled);
+                  if (!hasEnabled) {
+                    alert('Please enable at least one component');
+                    return;
+                  }
+                  setShowFormatConfigModal(false);
+                  // Save to localStorage for persistence
+                  localStorage.setItem('designiq_line_format_config', JSON.stringify(lineNumberFormat));
+                }}
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold"
+              >
+                Save Configuration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default DesignIQLists;
-
-
-
 

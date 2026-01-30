@@ -7,9 +7,11 @@ import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import ChangePasswordModal from './components/Auth/ChangePasswordModal'
+import PasswordExpiryBanner from './components/PasswordExpiryBanner'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import SetupPassword from './pages/SetupPassword'
+import ChangePassword from './pages/ChangePassword'
 import RequestPasswordReset from './pages/RequestPasswordReset'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
@@ -38,10 +40,12 @@ import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
+import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
+import DeptOfSales from './pages/Finance/DeptOfSales'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
@@ -61,12 +65,18 @@ import NotFound from './pages/NotFound'
 // DesignIQ Components
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
+import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
 import RequisitionManagement from './pages/Procurement/RequisitionManagement'
 import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
+// Process Datasheet Components
+import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
+// Debug Components
+import FeaturesDebug from './pages/FeaturesDebug'
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth)
@@ -141,9 +151,17 @@ function App() {
       return <Navigate to="/login" replace />
     }
     
-    // Allow access for admins
-    const isAdmin = user?.is_staff || user?.is_superuser
+    // Smart admin check: Check nested user object AND roles array
+    const userData = user?.user || user
+    const hasAdminFlags = userData?.is_staff || userData?.is_superuser
+    const hasSuperAdminRole = user?.roles?.some(role => 
+      role.code === 'super_admin' || role.name === 'Super Administrator'
+    )
+    const isAdmin = hasAdminFlags || hasSuperAdminRole
+    
+    // Super Administrators and Staff have access to all modules
     if (isAdmin) {
+      console.log('✅ App: Admin access granted for module:', moduleCode)
       return children
     }
     
@@ -215,6 +233,9 @@ function App() {
 
   return (
     <>
+      {/* Password Expiry Banner - shown globally when password is expiring or expired */}
+      {isAuthenticated && <PasswordExpiryBanner />}
+      
       {/* Password Change Modal - shown globally when required */}
       {isAuthenticated && mustChangePassword && (
         <ChangePasswordModal
@@ -264,11 +285,21 @@ function App() {
         {/* Password Reset Routes - Public */}
         <Route path="setup-password" element={<SetupPassword />} />
         <Route path="reset-password" element={<SetupPassword />} />
+        <Route path="request-password-reset" element={<RequestPasswordReset />} />
+        <Route path="forgot-password" element={<RequestPasswordReset />} />
+        
+        {/* Change Password - Protected Route */}
+        <Route 
+          path="change-password" 
+          element={
+            <ProtectedRoute>
+              <ChangePassword />
+            </ProtectedRoute>
+          } 
+        />
         
         {/* Finance Approval - Public Route */}
         <Route path="finance/approve/:token" element={<InvoiceApproval />} />
-        <Route path="request-password-reset" element={<RequestPasswordReset />} />
-        <Route path="forgot-password" element={<RequestPasswordReset />} />
         
         <Route path="terms-of-service" element={<TermsOfService />} />
         <Route path="privacy-policy" element={<PrivacyPolicy />} />
@@ -279,6 +310,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="features-debug"
+          element={
+            <ProtectedRoute>
+              <FeaturesDebug />
             </ProtectedRoute>
           }
         />
@@ -443,6 +482,22 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        <Route
+          path="finance/sales"
+          element={
+            <ProtectedRoute>
+              <DeptOfSales />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="sales"
+          element={
+            <ProtectedRoute>
+              <DeptOfSales />
+            </ProtectedRoute>
+          }
+        />
 
         {/* DesignIQ Routes */}
         <Route
@@ -454,10 +509,26 @@ function App() {
           }
         />
         <Route
+          path="designiq/new"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <DesignIQNewProject />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="designiq/lists"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
               <DesignIQLists />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="designiq/projects/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <DesignIQProjectDetail />
             </ModuleProtectedRoute>
           }
         />
@@ -504,6 +575,16 @@ function App() {
           }
         />
 
+        {/* Process Datasheet Routes */}
+        <Route
+          path="engineering/process/datasheet/*"
+          element={
+            <ProtectedRoute>
+              <ProcessDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Project Control */}
         <Route
           path="projects"
@@ -520,6 +601,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="qhse">
               <GeneralQHSE />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="qhse/interconnected-demo/:projectId?"
+          element={
+            <ModuleProtectedRoute moduleCode="qhse">
+              <QHSEInterconnectedDemo />
             </ModuleProtectedRoute>
           }
         />

@@ -11,9 +11,22 @@ export const fetchFeatures = createAsyncThunk(
   'features/fetchAll',
   async (filters = {}, { rejectWithValue }) => {
     try {
+      console.log('🚀 [fetchFeatures] Starting fetch with filters:', filters)
       const response = await featureService.getFeatures(filters)
+      console.log('📦 [fetchFeatures] Response received:', response)
+      console.log('📊 [fetchFeatures] Features count:', response?.features?.length)
+      console.log('📋 [fetchFeatures] Features array:', response?.features)
+      
+      // Check for sales features specifically
+      const salesFeatures = response?.features?.filter(f => f.category === 'sales') || []
+      console.log('💼 [fetchFeatures] Sales features found:', salesFeatures.length)
+      salesFeatures.forEach(f => {
+        console.log(`  ✅ ${f.name} (${f.id})`)
+      })
+      
       return response
     } catch (error) {
+      console.error('❌ [fetchFeatures] Error:', error)
       return rejectWithValue(error.response?.data || 'Failed to fetch features')
     }
   }

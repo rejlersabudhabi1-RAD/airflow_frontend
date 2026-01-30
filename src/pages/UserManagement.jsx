@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 import { STORAGE_KEYS } from '../config/app.config';
+import { isUserAdmin } from '../utils/rbac.utils';
 import { withDashboardControls } from '@/hoc/withPageControls';
 import { PageControlButtons } from '@/components/PageControlButtons';
 import { 
@@ -482,7 +483,8 @@ const UserManagement = ({ pageControls }) => {
     const hasRBACRole = currentUser?.roles?.some(
       role => ['super_admin', 'admin'].includes(role.code)
     );
-    const isDjangoAdmin = authUser?.is_superuser || authUser?.is_staff;
+    // Smart admin check using utility function
+    const isDjangoAdmin = isUserAdmin(authUser);
     return hasRBACRole || isDjangoAdmin;
   }, [currentUser, authUser]);
   
@@ -1548,7 +1550,7 @@ const UserManagement = ({ pageControls }) => {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => navigate(`/admin/users/${user.id}`)}
-                          className="text-purple-600 hover:text-purple-900 transition-colors"
+                          className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-all"
                           title="View Details"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1559,8 +1561,8 @@ const UserManagement = ({ pageControls }) => {
                         <button
                           onClick={() => openEditModal(user)}
                           disabled={actionLoading[`edit_${user.id}`]}
-                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
-                          title="Edit"
+                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Edit User"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1569,11 +1571,11 @@ const UserManagement = ({ pageControls }) => {
                         <button
                           onClick={() => handleStatusToggle(user.id, user.status)}
                           disabled={actionLoading[`status_${user.id}`]}
-                          className={`${
+                          className={`p-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                             user.status === 'active'
-                              ? 'text-red-600 hover:text-red-900'
-                              : 'text-green-600 hover:text-green-900'
-                          } disabled:opacity-50`}
+                              ? 'text-red-600 hover:text-red-900 hover:bg-red-50'
+                              : 'text-green-600 hover:text-green-900 hover:bg-green-50'
+                          }`}
                           title={user.status === 'active' ? 'Deactivate' : 'Activate'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1587,7 +1589,7 @@ const UserManagement = ({ pageControls }) => {
                         <button
                           onClick={() => handleResetPassword(user.id, user.user?.email)}
                           disabled={actionLoading[`reset_${user.id}`]}
-                          className="text-orange-600 hover:text-orange-900 disabled:opacity-50"
+                          className="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Reset Password to Default"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1597,8 +1599,8 @@ const UserManagement = ({ pageControls }) => {
                         <button
                           onClick={() => handleDeleteUser(user.id)}
                           disabled={actionLoading[`delete_${user.id}`]}
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                          title="Delete"
+                          className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete User"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

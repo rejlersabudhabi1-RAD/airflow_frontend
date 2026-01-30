@@ -126,6 +126,38 @@ export const fetchOrganizations = createAsyncThunk(
   }
 );
 
+export const fetchDepartments = createAsyncThunk(
+  'rbac/fetchDepartments',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await rbacService.getDepartments();
+      // Soft-coded: Handle both direct data and nested data.data responses
+      const departmentsData = response?.data?.departments || response?.data || response;
+      console.log('[fetchDepartments] Extracted departmentsData:', departmentsData);
+      return departmentsData;
+    } catch (error) {
+      console.error('[fetchDepartments] Error:', error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const fetchJobTitles = createAsyncThunk(
+  'rbac/fetchJobTitles',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await rbacService.getJobTitles();
+      // Soft-coded: Handle both direct data and nested data.data responses
+      const jobTitlesData = response?.data?.job_titles || response?.data || response;
+      console.log('[fetchJobTitles] Extracted jobTitlesData:', jobTitlesData);
+      return jobTitlesData;
+    } catch (error) {
+      console.error('[fetchJobTitles] Error:', error);
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 export const fetchUserStats = createAsyncThunk(
   'rbac/fetchUserStats',
   async (_, { rejectWithValue }) => {
@@ -146,6 +178,8 @@ const initialState = {
   permissions: [],
   modules: [],
   organizations: [],
+  departments: [],
+  jobTitles: [],
   stats: null,
   loading: false,
   error: null
@@ -325,6 +359,66 @@ const rbacSlice = createSlice({
         state.error = action.payload;
         state.organizations = []; // Ensure organizations is always an array
         console.error('[Redux] fetchOrganizations.rejected:', action.payload);
+      })
+      
+      // Departments
+      .addCase(fetchDepartments.pending, (state) => {
+        state.loading = true;
+        console.log('[Redux] fetchDepartments.pending');
+      })
+      .addCase(fetchDepartments.fulfilled, (state, action) => {
+        state.loading = false;
+        const payload = action.payload;
+        console.log('[Redux] fetchDepartments.fulfilled - payload:', payload);
+        
+        // Soft-coded: Handle multiple response structures
+        let departmentsArray = [];
+        if (Array.isArray(payload)) {
+          departmentsArray = payload;
+        } else if (payload?.results && Array.isArray(payload.results)) {
+          departmentsArray = payload.results;
+        } else if (payload?.data && Array.isArray(payload.data)) {
+          departmentsArray = payload.data;
+        }
+        
+        state.departments = departmentsArray;
+        console.log('[Redux] Departments set:', departmentsArray.length, 'departments');
+      })
+      .addCase(fetchDepartments.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.departments = []; // Ensure departments is always an array
+        console.error('[Redux] fetchDepartments.rejected:', action.payload);
+      })
+      
+      // Job Titles
+      .addCase(fetchJobTitles.pending, (state) => {
+        state.loading = true;
+        console.log('[Redux] fetchJobTitles.pending');
+      })
+      .addCase(fetchJobTitles.fulfilled, (state, action) => {
+        state.loading = false;
+        const payload = action.payload;
+        console.log('[Redux] fetchJobTitles.fulfilled - payload:', payload);
+        
+        // Soft-coded: Handle multiple response structures
+        let jobTitlesArray = [];
+        if (Array.isArray(payload)) {
+          jobTitlesArray = payload;
+        } else if (payload?.results && Array.isArray(payload.results)) {
+          jobTitlesArray = payload.results;
+        } else if (payload?.data && Array.isArray(payload.data)) {
+          jobTitlesArray = payload.data;
+        }
+        
+        state.jobTitles = jobTitlesArray;
+        console.log('[Redux] Job Titles set:', jobTitlesArray.length, 'job titles');
+      })
+      .addCase(fetchJobTitles.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        state.jobTitles = []; // Ensure jobTitles is always an array
+        console.error('[Redux] fetchJobTitles.rejected:', action.payload);
       })
       
       // Stats

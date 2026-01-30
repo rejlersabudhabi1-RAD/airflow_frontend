@@ -1,10 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, Download, RefreshCw, Eye, Calendar, DollarSign, Users, TrendingUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, Download, RefreshCw, Eye, Calendar, DollarSign, Users, TrendingUp, Building2, UserCircle, CheckCircle2, AlertCircle, Clock, Target } from 'lucide-react';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
 import { MainHeader } from './components/Common/MainHeader';
 import { Card, CardContent } from './components/ui/Card';
 import { ProjectForm, Toast } from './components/ProjectForm';
 import { PROJECT_STATUS_OPTIONS, PRIORITY_OPTIONS } from './utils/projectFormConfig';
+import { qhseProjectsAPI } from '../../services/qhse.service';
+
+/**
+ * Helper function to parse percentage values
+ * Handles strings like "83%" or numbers like 83
+ */
+const parsePercentage = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    // Remove % sign and parse as float
+    const cleaned = value.replace('%', '').trim();
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
 
 /**
  * Project Management Page
@@ -72,34 +89,21 @@ const Projects = () => {
   // Handle form submit (create or update)
   const handleFormSubmit = async (formData) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const url = editingProject
-        ? `http://localhost:8000/api/qhse-projects/${editingProject.id}/`
-        : 'http://localhost:8000/api/qhse-projects/';
+      let savedProject;
       
-      const method = editingProject ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save project');
+      if (editingProject) {
+        // Update existing project
+        savedProject = await qhseProjectsAPI.update(editingProject.id, formData);
+      } else {
+        // Create new project
+        savedProject = await qhseProjectsAPI.create(formData);
       }
-
-      const savedProject = await response.json();
       
       setToast({
         type: 'success',
         message: editingProject 
-          ? `Project "${savedProject.project_name}" updated successfully!`
-          : `Project "${savedProject.project_name}" created successfully!`
+          ? `Project "${savedProject.project_name || savedProject.projectTitle}" updated successfully!`
+          : `Project "${savedProject.project_name || savedProject.projectTitle}" created successfully!`
       });
       
       setShowForm(false);
@@ -116,28 +120,18 @@ const Projects = () => {
 
   // Handle delete project
   const handleDelete = async (project) => {
-    if (!confirm(`Are you sure you want to delete project "${project.project_name}"? This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete project "${project.project_name || project.projectTitle}"? This action cannot be undone.`)) {
       return;
     }
 
     setIsDeleting(true);
     
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://localhost:8000/api/qhse-projects/${project.id}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete project');
-      }
-
+      await qhseProjectsAPI.delete(project.id, { hardDelete: true });
+      
       setToast({
         type: 'success',
-        message: `Project "${project.project_name}" deleted successfully!`
+        message: `Project "${project.project_name || project.projectTitle}" deleted successfully!`
       });
       
       refetch(); // Refresh project list
@@ -145,7 +139,7 @@ const Projects = () => {
       console.error('Error deleting project:', error);
       setToast({
         type: 'error',
-        message: 'Failed to delete project. Please try again.'
+        message: error.message || 'Failed to delete project. Please try again.'
       });
     } finally {
       setIsDeleting(false);
@@ -187,10 +181,10 @@ const Projects = () => {
     completed: projects.filter(p => p.status === 'completed').length,
     totalBudget: projects.reduce((sum, p) => sum + (parseFloat(p.budget) || 0), 0),
     avgCompletion: projects.length > 0 
-      ? projects.reduce((sum, p) => sum + (parseFloat(p.completion_percentage) || 0), 0) / projects.length 
+      ? projects.reduce((sum, p) => sum + parsePercentage(p.projectKPIsAchievedPercent || p.completion_percentage), 0) / projects.length 
       : 0,
     avgKPI: projects.length > 0
-      ? projects.reduce((sum, p) => sum + (parseFloat(p.overall_kpi) || 0), 0) / projects.length
+      ? projects.reduce((sum, p) => sum + parsePercentage(p.overall_kpi), 0) / projects.length
       : 0
   };
 
@@ -374,93 +368,188 @@ const Projects = () => {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Project</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Client</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Priority</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Timeline</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Completion</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">KPI</th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProjects.map(project => (
-                      <tr key={project.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div>
-                            <p className="font-medium text-gray-900">{project.project_name}</p>
-                            <p className="text-sm text-gray-500">{project.project_number}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="text-gray-900">{project.client_name || '-'}</p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="px-2 py-1 rounded-full text-xs font-medium text-white"
-                            style={{ backgroundColor: getStatusColor(project.status) }}
-                          >
-                            {getStatusLabel(project.status)}
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredProjects.map(project => (
+                  <div
+                    key={project.id}
+                    className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow duration-200"
+                  >
+                    {/* Header with Status */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">
+                          {project.projectTitle || project.project_name}
+                        </h3>
+                        <p className="text-sm text-gray-500 font-mono">
+                          {project.projectNo || project.project_number}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span
+                          className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                          style={{ backgroundColor: getStatusColor(project.status) }}
+                        >
+                          {getStatusLabel(project.status)}
+                        </span>
+                        <span
+                          className="px-3 py-1 rounded-full text-xs font-medium text-white whitespace-nowrap"
+                          style={{ backgroundColor: getPriorityColor(project.priority) }}
+                        >
+                          {getPriorityLabel(project.priority)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Client & Team Info */}
+                    <div className="space-y-3 mb-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Building2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-gray-700 font-medium">Client:</span>
+                        <span className="text-gray-900 truncate">
+                          {project.client || project.client_name || '-'}
+                        </span>
+                      </div>
+                      
+                      {(project.projectManager || project.project_manager) && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <UserCircle className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                          <span className="text-gray-700 font-medium">PM:</span>
+                          <span className="text-gray-900 truncate">
+                            {project.projectManager || project.project_manager}
                           </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="px-2 py-1 rounded-full text-xs font-medium text-white"
-                            style={{ backgroundColor: getPriorityColor(project.priority) }}
-                          >
-                            {getPriorityLabel(project.priority)}
+                        </div>
+                      )}
+                      
+                      {(project.projectQualityEng || project.quality_engineer) && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                          <span className="text-gray-700 font-medium">QE:</span>
+                          <span className="text-gray-900 truncate">
+                            {project.projectQualityEng || project.quality_engineer}
                           </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-sm">
-                            <p className="text-gray-900">{project.start_date}</p>
-                            <p className="text-gray-500">{project.planned_end_date}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                              <div
-                                className="bg-blue-600 h-2 rounded-full"
-                                style={{ width: `${Math.min(project.completion_percentage || 0, 100)}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-gray-700">{(project.completion_percentage || 0).toFixed(0)}%</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="text-sm font-medium text-gray-900">
-                            {(project.overall_kpi || 0).toFixed(1)}%
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Timeline */}
+                    <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          <span className="text-gray-600">Timeline</span>
+                        </div>
+                        <Clock className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-700">
+                          Start: {project.projectStartingDate || project.start_date || '-'}
+                        </span>
+                        <span className="text-gray-700">
+                          End: {project.projectEndDate || project.planned_end_date || '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Metrics */}
+                    <div className="space-y-3 mb-4">
+                      {/* Completion Progress */}
+                      <div>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-gray-600 font-medium">Completion</span>
+                          <span className="text-blue-600 font-bold">
+                            {parsePercentage(project.projectKPIsAchievedPercent || project.completion_percentage).toFixed(0)}%
                           </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleEdit(project)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit project"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(project)}
-                              disabled={isDeleting}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Delete project"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${Math.min(parsePercentage(project.projectKPIsAchievedPercent || project.completion_percentage), 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* KPI Performance */}
+                      <div>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <div className="flex items-center gap-1">
+                            <Target className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-600 font-medium">Overall KPI</span>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className={`font-bold ${
+                            parsePercentage(project.overall_kpi) >= 80 ? 'text-green-600' :
+                            parsePercentage(project.overall_kpi) >= 60 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {parsePercentage(project.overall_kpi).toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div
+                            className={`h-2.5 rounded-full transition-all duration-300 ${
+                              parsePercentage(project.overall_kpi) >= 80 ? 'bg-gradient-to-r from-green-500 to-green-600' :
+                              parsePercentage(project.overall_kpi) >= 60 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' :
+                              'bg-gradient-to-r from-red-500 to-red-600'
+                            }`}
+                            style={{ 
+                              width: `${Math.min(parsePercentage(project.overall_kpi), 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Key Stats */}
+                    <div className="grid grid-cols-3 gap-3 mb-4 pt-4 border-t border-gray-200">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mx-auto mb-1">
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        </div>
+                        <p className="text-xs text-gray-500 mb-1">CAR Closed</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {project.carsClosed || 0}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-10 h-10 bg-yellow-100 rounded-lg mx-auto mb-1">
+                          <AlertCircle className="w-5 h-5 text-yellow-600" />
+                        </div>
+                        <p className="text-xs text-gray-500 mb-1">CAR Open</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {project.carsOpen || 0}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-lg mx-auto mb-1">
+                          <Eye className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <p className="text-xs text-gray-500 mb-1">Obs Open</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {project.obsOpen || 0}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-4 border-t border-gray-200">
+                      <button
+                        onClick={() => handleEdit(project)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(project)}
+                        disabled={isDeleting}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

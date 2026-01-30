@@ -549,6 +549,162 @@ export const FEATURES_CATALOG = {
     ]
   },
 
+  // Sales Features (Section 4)
+  sales: {
+    id: 'sales',
+    name: 'Dept of Sales',
+    icon: '💼',
+    color: 'cyan',
+    description: 'Sales CRM and pipeline management',
+    order: 4,
+    features: [
+      {
+        id: 'sales-dashboard',
+        name: 'Sales Dashboard',
+        shortName: 'Dashboard',
+        description: 'Comprehensive sales overview with AI-powered insights',
+        longDescription: 'Real-time sales metrics, revenue tracking, pipeline analytics, and AI-powered forecasting for data-driven decision making.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.AI_POWERED, FEATURE_BADGES.POPULAR, FEATURE_BADGES.NEW],
+        capabilities: [
+          'Real-time KPI tracking',
+          'Revenue & pipeline analytics',
+          'AI-powered forecasting',
+          'Performance metrics',
+          'Interactive charts & graphs'
+        ],
+        metrics: {
+          activeDeals: 0,
+          totalRevenue: '$0',
+          winRate: '0%',
+          pipelineValue: '$0'
+        },
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      },
+      {
+        id: 'sales-crm',
+        name: 'Client Management (CRM)',
+        shortName: 'CRM',
+        description: 'Complete customer relationship management system',
+        longDescription: 'Manage clients, contacts, interactions, and relationships with AI-powered insights and lead scoring.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.AI_POWERED, FEATURE_BADGES.NEW],
+        capabilities: [
+          'Client & contact management',
+          'Interaction history tracking',
+          'AI-powered lead scoring',
+          'Relationship analytics',
+          'Contact segmentation'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      },
+      {
+        id: 'sales-pipeline',
+        name: 'Sales Pipeline',
+        shortName: 'Pipeline',
+        description: 'Visual deal tracking and stage management',
+        longDescription: 'Manage your sales pipeline with drag-and-drop interface, deal stages, probability tracking, and automated workflows.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.POPULAR, FEATURE_BADGES.NEW],
+        capabilities: [
+          'Visual pipeline management',
+          'Deal stage tracking',
+          'Win/loss probability',
+          'Pipeline value analytics',
+          'Automated stage updates'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      },
+      {
+        id: 'sales-ai-insights',
+        name: 'AI Sales Insights',
+        shortName: 'AI Insights',
+        description: 'Machine learning powered sales intelligence',
+        longDescription: 'Leverage AI for predictive sales forecasting, deal prioritization, churn risk analysis, and next best action recommendations.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.AI_POWERED, FEATURE_BADGES.ADVANCED, FEATURE_BADGES.NEW],
+        capabilities: [
+          'Predictive sales forecasting',
+          'Deal prioritization AI',
+          'Churn risk analysis',
+          'Next best action recommendations',
+          'Sentiment analysis'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      },
+      {
+        id: 'sales-quotes',
+        name: 'Quote Management',
+        shortName: 'Quotes',
+        description: 'Professional quote creation and tracking',
+        longDescription: 'Generate professional quotes, track revisions, manage approvals, and convert to deals seamlessly.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Professional quote generation',
+          'Template management',
+          'Revision tracking',
+          'Approval workflows',
+          'Quote-to-deal conversion'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      },
+      {
+        id: 'sales-activities',
+        name: 'Sales Activities',
+        shortName: 'Activities',
+        description: 'Track all sales interactions and tasks',
+        longDescription: 'Comprehensive activity tracking including calls, meetings, emails, and follow-ups with automated reminders.',
+        path: '/finance/sales',
+        moduleCode: 'sales',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Activity logging',
+          'Task management',
+          'Automated reminders',
+          'Activity analytics',
+          'Team collaboration'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 5.0
+        }
+      }
+    ]
+  },
+
   // QHSE Features
   qhse: {
     id: 'qhse',
@@ -560,9 +716,9 @@ export const FEATURES_CATALOG = {
     features: [
       {
         id: 'qhse-general',
-        name: 'General QHSE',
-        shortName: 'QHSE',
-        description: 'Comprehensive QHSE management system',
+        name: 'Project Quality',
+        shortName: 'Project Quality',
+        description: 'Comprehensive project quality management system',
         path: '/qhse/general',
         moduleCode: 'qhse',
         status: FEATURE_STATUS.ACTIVE,

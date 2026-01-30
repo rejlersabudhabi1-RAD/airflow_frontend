@@ -1,6 +1,7 @@
 import apiClient from './api.service'
 import { API_ENDPOINTS } from '../config/api.config'
 import { STORAGE_KEYS } from '../config/app.config'
+import passwordExpiryService from './passwordExpiry.service'
 
 /**
  * Authentication Service
@@ -63,6 +64,16 @@ export const authService = {
       
       console.log('[AuthService] ✅ Login process completed successfully')
       
+      // Start password expiry checking
+      try {
+        await passwordExpiryService.checkPasswordExpiry()
+        passwordExpiryService.startPeriodicCheck()
+        console.log('[AuthService] 🔒 Password expiry monitoring started')
+      } catch (expiryError) {
+        console.warn('[AuthService] ⚠️ Failed to initialize password expiry checking:', expiryError)
+        // Don't fail login if expiry check fails
+      }
+      
       return userData
     } catch (error) {
       console.error('[AuthService] ❌ Login failed:', error.message)
@@ -96,9 +107,15 @@ export const authService = {
    * Logout user
    */
   logout() {
+    // Stop password expiry checking
+    passwordExpiryService.stopPeriodicCheck()
+    passwordExpiryService.clearStatus()
+    
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
     localStorage.removeItem(STORAGE_KEYS.USER_DATA)
+    
+    console.log('[AuthService] 🚪 Logged out successfully')
   },
 
   /**

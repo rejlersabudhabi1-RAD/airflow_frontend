@@ -8,7 +8,7 @@ import {
   Box, Button, Card, CardContent, TextField, Typography, Grid, Alert,
   Paper, Stepper, Step, StepLabel, CircularProgress, Divider,
   List, ListItem, ListItemText, Chip, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, IconButton, Tooltip
+  TableContainer, TableHead, TableRow, IconButton, Tooltip, Select, MenuItem, FormControl
 } from '@mui/material';
 import {
   CloudUpload as UploadIcon, CheckCircle as CheckIcon,
@@ -48,6 +48,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [hasOpenComments, setHasOpenComments] = useState(false); // Track if previous revisions have open comments
 
   // Smart auto-generation of unique chain_id
   const generateUniqueChainId = () => {
@@ -186,10 +187,144 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
     }
   };
 
+  // Smart Status Change Handler with Dropdown
+  const handleStatusChange = async (commentId, newStatus, revisionLabel, commentText) => {
+    if (!createdChain?.id) {
+      setError('❌ No revision chain found');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${CONFIG.API_BASE_URL}/crs/revision-chains/${createdChain.id}/close_comment/`,
+        {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ comment_id: commentId, status: newStatus })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update comment status');
+      }
+
+      // Smart state update: Update the comment status in local state
+      setUploadedRevisions(prevRevisions => 
+        prevRevisions.map(rev => {
+          if (rev.comments && rev.comments.length > 0) {
+            return {
+              ...rev,
+              comments: rev.comments.map(comment => 
+                (comment.id === commentId || comment.comment_id === commentId)
+                  ? { ...comment, status: newStatus }
+                  : comment
+              )
+            };
+          }
+          // Also check nested data structure
+          if (rev.data?.comments && rev.data.comments.length > 0) {
+            return {
+              ...rev,
+              data: {
+                ...rev.data,
+                comments: rev.data.comments.map(comment =>
+                  (comment.id === commentId || comment.comment_id === commentId)
+                    ? { ...comment, status: newStatus }
+                    : comment
+                )
+              }
+            };
+          }
+          return rev;
+        })
+      );
+
+      setSuccess(`✅ Status updated to "${newStatus}" successfully!`);
+      setTimeout(() => setSuccess(''), 3000);
+      
+      // Force re-check of open comments after status change
+      console.log('[CRS] Status updated, checking for remaining open comments...');
+      
+    } catch (err) {
+      setError(`❌ Failed to update status: ${err.message}`);
+      console.error('[CRS] Status change error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Smart Close Comment Handler (for Action button)
+  const handleCloseComment = async (commentId, revisionLabel, commentText) => {
+    const confirmClose = window.confirm(
+      `🔒 Close this comment?\n\nRevision: ${revisionLabel}\nComment: ${commentText?.substring(0, 100)}${commentText?.length > 100 ? '...' : ''}\n\nThis action will mark the comment as CLOSED.`
+    );
+
+    if (!confirmClose) return;
+
+    await handleStatusChange(commentId, 'closed', revisionLabel, commentText);
+  };
+
+  // Check if there are open comments from previous revisions
+  const checkForOpenComments = () => {
+    console.log('[CRS] Checking for open comments...');
+    console.log('[CRS] Current uploadedRevisions:', uploadedRevisions);
+    console.log('[CRS] Current revision number:', currentRevisionNumber);
+    
+    if (uploadedRevisions.length === 0) {
+      console.log('[CRS] No revisions uploaded yet');
+      return false;
+    }
+    
+    // For REV 2 upload, check REV 1. For REV 3, check REV 1 & 2, etc.
+    // We check ALL previous revisions (not just the latest)
+    const previousRevisions = uploadedRevisions;
+    
+    console.log(`[CRS] Checking ${previousRevisions.length} previous revision(s)`);
+    
+    // Check each revision for open comments
+    for (const rev of previousRevisions) {
+      const comments = rev.comments || rev.data?.comments || [];
+      console.log(`[CRS] ${rev.label}: ${comments.length} total comments`);
+      
+      const openComments = comments.filter(comment => {
+        const status = (comment.status || 'open').toLowerCase();
+        const isOpen = status === 'open';
+        if (isOpen) {
+          console.log(`[CRS]   - OPEN: "${(comment.comment_text || comment.text || '').substring(0, 50)}..."`);
+        }
+        return isOpen;
+      });
+      
+      if (openComments.length > 0) {
+        console.log(`[CRS] ❌ FOUND ${openComments.length} open comment(s) in ${rev.label}`);
+        return true;
+      }
+    }
+    
+    console.log('[CRS] ✅ All comments are closed');
+    return false;
+  };
+
   // Upload Revision with smart file validation
   const handleUploadRevision = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // ⚠️ CRITICAL: Client-side validation FIRST - check local state
+    if (uploadedRevisions.length > 0) {
+      const hasOpenComments = checkForOpenComments();
+      if (hasOpenComments) {
+        setError('⚠️ BLOCKED: You have open comments from previous revisions! Please close all comments before uploading the next revision.');
+        e.target.value = ''; // Reset file input
+        console.error('[CRS] ❌ Upload blocked - open comments detected in frontend state');
+        return; // BLOCK IMMEDIATELY
+      }
+    }
 
     // Smart validation
     if (!file.name.toLowerCase().endsWith('.pdf')) {
@@ -203,8 +338,46 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    // ⚠️ CRITICAL VALIDATION: Double-check with backend API
+    if (uploadedRevisions.length > 0) {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const checkResponse = await fetch(
+          `${CONFIG.API_BASE_URL}/crs/revision-chains/${createdChain.id}/check_previous_comments_status/`,
+          { headers: getAuthHeaders() }
+        );
+
+        if (!checkResponse.ok) {
+          throw new Error(`Failed to verify comment status: ${checkResponse.status}`);
+        }
+
+        const checkData = await checkResponse.json();
+        
+        // BLOCK upload if any comments are still open
+        if (!checkData.all_closed && checkData.open_count > 0) {
+          setError(`⚠️ Cannot upload next revision! You must close all ${checkData.open_count} open comment(s) from previous revisions first. Use the "Close" action in the comments table below.`);
+          setLoading(false);
+          e.target.value = ''; // Reset file input to allow retry
+          return;
+        }
+        
+        // All comments closed - proceed with upload
+        console.log(`[CRS] ✅ All previous comments closed, proceeding with REV ${currentRevisionNumber} upload`);
+        
+      } catch (err) {
+        console.error('[CRS] Comment status check failed:', err);
+        setError(`⚠️ Could not verify comment status: ${err.message}. Please ensure all previous comments are closed before uploading.`);
+        setLoading(false);
+        e.target.value = ''; // Reset file input
+        return; // BLOCK upload on validation error
+      }
+    } else {
+      // First revision - no validation needed
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const formData = new FormData();
@@ -240,6 +413,15 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         extractedComments = data.data.document_details.comments;
       }
       
+      // Ensure all comments have a status field (default to 'open')
+      extractedComments = extractedComments.map(comment => ({
+        ...comment,
+        status: comment.status || 'open' // CRITICAL: Default to 'open'
+      }));
+      
+      console.log(`[CRS] Extracted ${extractedComments.length} comments with status:`, 
+        extractedComments.map(c => ({ id: c.id, status: c.status })));
+      
       // Store revision with extracted comments
       const revisionData = {
         number: currentRevisionNumber,
@@ -258,6 +440,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         setAllComments(prev => [...prev, ...extractedComments.map(c => ({
           ...c,
           revision: revisionData.label,
+          revision_label: revisionData.label,
           revisionNumber: currentRevisionNumber
         }))]);
       }
@@ -412,14 +595,19 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
       <head>
         <meta charset="UTF-8">
         <style>
-          table { border-collapse: collapse; width: 100%; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
           th, td { border: 1px solid black; padding: 8px; text-align: left; }
           th { background-color: #4CAF50; color: white; font-weight: bold; }
-          .section-header { background-color: #2196F3; color: white; font-weight: bold; }
+          .section-header { background-color: #2196F3; color: white; font-weight: bold; font-size: 14px; }
+          .revision-header { background-color: #FF9800; color: white; font-weight: bold; font-size: 13px; }
+          .status-open { background-color: #FFEBEE; color: #C62828; font-weight: bold; }
+          .status-closed { background-color: #E8F5E9; color: #2E7D32; font-weight: bold; }
+          .rev-separator { height: 20px; background-color: #F5F5F5; }
         </style>
       </head>
       <body>
-        <h2>CRS Multi-Revision Report - ALL REVISIONS</h2>
+        <h2>CRS Multi-Revision Comparison Report</h2>
+        <p><i>Generated on: ${new Date().toLocaleString()}</i></p>
         
         <!-- Chain Information -->
         <table>
@@ -436,54 +624,85 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
         
         <!-- Revisions Summary -->
         <table>
-          <tr class="section-header"><th colspan="5">Revisions Summary</th></tr>
+          <tr class="section-header"><th colspan="6">Revisions Summary</th></tr>
           <tr>
             <th>Revision</th>
             <th>File Name</th>
             <th>Total Comments</th>
+            <th>Open Comments</th>
+            <th>Closed Comments</th>
             <th>Uploaded At</th>
-            <th>Status</th>
           </tr>
-          ${revisions.map(rev => `
+          ${revisions.map(rev => {
+            const comments = rev.comments || rev.data?.comments || [];
+            const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+            const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+            return `
             <tr>
-              <td>${rev.label}</td>
+              <td><b>${rev.label}</b></td>
               <td>${rev.fileName}</td>
-              <td>${rev.data?.extraction_summary?.total_comments || 0}</td>
+              <td>${comments.length}</td>
+              <td class="status-open">${openCount}</td>
+              <td class="status-closed">${closedCount}</td>
               <td>${new Date(rev.uploadedAt).toLocaleString()}</td>
-              <td>${rev.data?.revision?.status || 'N/A'}</td>
             </tr>
-          `).join('')}
+          `}).join('')}
         </table>
         <br/>
         
-        <!-- All Comments -->
-        <table>
-          <tr class="section-header"><th colspan="7">All Comments</th></tr>
-          <tr>
-            <th>Page</th>
-            <th>Reviewer</th>
-            <th>Comment</th>
-            <th>Type</th>
-            <th>Discipline</th>
-            <th>Drawing Ref</th>
-            <th>Status</th>
-          </tr>
-          ${revisions.map(rev => {
-            // Smart comment extraction
-            const comments = rev.comments || rev.data?.comments || rev.data?.document_details?.recent_activities || [];
-            return comments.length > 0 ? comments.map(comment => `
+        <!-- Comments by Revision (Separated) -->
+        ${revisions.map((rev, revIdx) => {
+          const comments = rev.comments || rev.data?.comments || [];
+          const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+          const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+          
+          return `
+          ${revIdx > 0 ? '<br/><br/>' : ''}
+          <table>
+            <tr class="revision-header">
+              <th colspan="8">
+                📄 ${rev.label} - ${comments.length} Comment${comments.length !== 1 ? 's' : ''} 
+                (🔴 ${openCount} Open | ✅ ${closedCount} Closed)
+              </th>
+            </tr>
+            <tr>
+              <th>Page</th>
+              <th>Reviewer</th>
+              <th>Comment</th>
+              <th>Type</th>
+              <th>Discipline</th>
+              <th>Drawing Ref</th>
+              <th>Status</th>
+              <th>Serial #</th>
+            </tr>
+            ${comments.length > 0 ? comments.map((comment, idx) => {
+              const status = (comment.status || 'open').toLowerCase();
+              const statusClass = status === 'open' ? 'status-open' : 'status-closed';
+              return `
               <tr>
                 <td>${comment.page_number || 'N/A'}</td>
                 <td>${comment.reviewer_name || 'Not Provided'}</td>
                 <td>${comment.comment_text || comment.text || 'N/A'}</td>
-                <td>${comment.comment_type || comment.type || 'General'}</td>
+                <td>${comment.comment_type || comment.type || 'GENERAL'}</td>
                 <td>${comment.discipline || 'Not Provided'}</td>
                 <td>${comment.drawing_ref || 'N/A'}</td>
-                <td>${comment.status || 'Open'}</td>
+                <td class="${statusClass}">${status.toUpperCase()}</td>
+                <td>${comment.serial_number || idx + 1}</td>
               </tr>
-            `).join('') : `<tr><td colspan="7">No comments found for ${rev.label}</td></tr>`;
-          }).join('')}
-        </table>
+            `}).join('') : `
+              <tr><td colspan="8" style="text-align: center; font-style: italic;">No comments found for ${rev.label}</td></tr>
+            `}
+          </table>
+        `}).join('')}
+        
+        <br/><br/>
+        <p style="font-size: 12px; color: #666;">
+          <b>Legend:</b><br/>
+          🔴 Open = Comment requires action<br/>
+          ✅ Closed = Comment resolved<br/>
+          <br/>
+          <i>This report contains ${revisions.length} revision${revisions.length !== 1 ? 's' : ''} with detailed comment tracking.</i>
+        </p>
       </body>
       </html>
     `;
@@ -492,20 +711,25 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
   // Generate HTML for SINGLE revision - soft-coded
   const generateSingleRevisionHTML = (chainData, revision) => {
     const comments = revision.comments || revision.data?.comments || revision.data?.document_details?.recent_activities || [];
+    const openCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+    const closedCount = comments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
     
     return `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
       <head>
         <meta charset="UTF-8">
         <style>
-          table { border-collapse: collapse; width: 100%; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 15px; }
           th, td { border: 1px solid black; padding: 8px; text-align: left; }
           th { background-color: #4CAF50; color: white; font-weight: bold; }
           .section-header { background-color: #2196F3; color: white; font-weight: bold; }
+          .status-open { background-color: #FFEBEE; color: #C62828; font-weight: bold; }
+          .status-closed { background-color: #E8F5E9; color: #2E7D32; font-weight: bold; }
         </style>
       </head>
       <body>
         <h2>CRS Report - ${revision.label}</h2>
+        <p><i>Generated on: ${new Date().toLocaleString()}</i></p>
         
         <!-- Chain Context -->
         <table>
@@ -525,13 +749,14 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
           <tr><td><b>File Name</b></td><td>${revision.fileName}</td></tr>
           <tr><td><b>Uploaded At</b></td><td>${new Date(revision.uploadedAt).toLocaleString()}</td></tr>
           <tr><td><b>Total Comments</b></td><td>${comments.length}</td></tr>
-          <tr><td><b>Status</b></td><td>${revision.data?.revision?.status || 'N/A'}</td></tr>
+          <tr><td><b>Open Comments</b></td><td class="status-open">${openCount}</td></tr>
+          <tr><td><b>Closed Comments</b></td><td class="status-closed">${closedCount}</td></tr>
         </table>
         <br/>
         
         <!-- Comments for this revision -->
         <table>
-          <tr class="section-header"><th colspan="7">Comments - ${revision.label}</th></tr>
+          <tr class="section-header"><th colspan="8">Comments - ${revision.label} (${comments.length} Total)</th></tr>
           <tr>
             <th>Page</th>
             <th>Reviewer</th>
@@ -540,19 +765,31 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
             <th>Discipline</th>
             <th>Drawing Ref</th>
             <th>Status</th>
+            <th>Serial #</th>
           </tr>
-          ${comments.length > 0 ? comments.map(comment => `
+          ${comments.length > 0 ? comments.map((comment, idx) => {
+            const status = (comment.status || 'open').toLowerCase();
+            const statusClass = status === 'open' ? 'status-open' : 'status-closed';
+            return `
             <tr>
               <td>${comment.page_number || 'N/A'}</td>
               <td>${comment.reviewer_name || 'Not Provided'}</td>
               <td>${comment.comment_text || comment.text || 'N/A'}</td>
-              <td>${comment.comment_type || comment.type || 'General'}</td>
+              <td>${comment.comment_type || comment.type || 'GENERAL'}</td>
               <td>${comment.discipline || 'Not Provided'}</td>
               <td>${comment.drawing_ref || 'N/A'}</td>
-              <td>${comment.status || 'Open'}</td>
+              <td class="${statusClass}">${status.toUpperCase()}</td>
+              <td>${comment.serial_number || idx + 1}</td>
             </tr>
-          `).join('') : '<tr><td colspan="7">No comments found for this revision</td></tr>'}
+          `}).join('') : '<tr><td colspan="8" style="text-align: center; font-style: italic;">No comments found for this revision</td></tr>'}
         </table>
+        
+        <br/>
+        <p style="font-size: 12px; color: #666;">
+          <b>Legend:</b><br/>
+          🔴 Open = Comment requires action<br/>
+          ✅ Closed = Comment resolved<br/>
+        </p>
       </body>
       </html>
     `;
@@ -673,6 +910,7 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Revision</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Page</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Reviewer</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white', minWidth: 300 }}>Comment</TableCell>
@@ -680,48 +918,169 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Discipline</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Drawing Ref</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', bgcolor: '#4CAF50', color: 'white' }}>Action</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {uploadedRevisions.map((rev) => {
+                {uploadedRevisions.map((rev, revIdx) => {
                   // Smart comment extraction: try multiple paths
                   const comments = rev.comments || rev.data?.comments || rev.data?.document_details?.recent_activities || [];
                   
-                  return comments.length > 0 ? (
-                    comments.map((comment, idx) => (
-                      <TableRow key={`${rev.number}-${idx}`}>
-                        <TableCell>{comment.page_number || 'N/A'}</TableCell>
-                        <TableCell>{comment.reviewer_name || 'Not Provided'}</TableCell>
-                        <TableCell sx={{ wordBreak: 'break-word' }}>{comment.comment_text || comment.text || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={comment.comment_type || comment.type || 'General'}
-                            size="small"
-                            color={comment.comment_type?.includes('RED') || comment.type?.includes('RED') ? 'error' : 'warning'}
-                          />
-                        </TableCell>
-                        <TableCell>{comment.discipline || 'Not Provided'}</TableCell>
-                        <TableCell>{comment.drawing_ref || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={comment.status || 'Open'}
-                            size="small"
-                            color="default"
-                          />
-                        </TableCell>
+                  console.log(`[CRS Debug] Revision ${revIdx}:`, {
+                    label: rev.label,
+                    number: rev.number,
+                    commentsCount: comments.length,
+                    comments: comments
+                  });
+                  
+                  // Create array to hold all rows for this revision
+                  const revisionRows = [];
+                  
+                  // Add revision header separator row (only if not first revision)
+                  if (revIdx > 0) {
+                    revisionRows.push(
+                      <TableRow key={`separator-${rev.number}`}>
+                        <TableCell colSpan={9} sx={{ 
+                          bgcolor: '#E0E0E0', 
+                          height: '8px', 
+                          padding: 0,
+                          borderTop: '2px solid #9E9E9E'
+                        }} />
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow key={`${rev.number}-empty`}>
-                      <TableCell colSpan={7} align="center" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                        No comments found for {rev.label}
+                    );
+                  }
+                  
+                  // Add revision section header
+                  revisionRows.push(
+                    <TableRow key={`header-${rev.number}`}>
+                      <TableCell colSpan={9} sx={{ 
+                        bgcolor: '#2196F3',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '1rem',
+                        py: 1.5
+                      }}>
+                        📄 {rev.label || `Revision ${rev.number}`} - {comments.length} Comment{comments.length !== 1 ? 's' : ''}
                       </TableCell>
                     </TableRow>
                   );
+                  
+                  if (comments.length > 0) {
+                    comments.forEach((comment, idx) => {
+                      const commentId = comment.id || comment.comment_id;
+                      const commentStatus = comment.status || 'open';
+                      const isOpen = commentStatus.toLowerCase() === 'open';
+                      
+                      console.log(`[CRS Debug] Comment ${idx}:`, {
+                        commentId,
+                        commentStatus,
+                        isOpen,
+                        hasId: !!commentId,
+                        comment
+                      });
+                      
+                      revisionRows.push(
+                        <TableRow key={`${rev.number}-comment-${idx}`} sx={{
+                          bgcolor: isOpen ? '#FFF3E0' : 'inherit',
+                          '&:hover': { bgcolor: isOpen ? '#FFE0B2' : '#F5F5F5' }
+                        }}>
+                          <TableCell>
+                            <Chip 
+                              label={rev.label || `Rev ${rev.number}`}
+                              size="small"
+                              color={isOpen ? 'warning' : 'success'}
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell>{comment.page_number || 'N/A'}</TableCell>
+                          <TableCell>{comment.reviewer_name || 'Not Provided'}</TableCell>
+                          <TableCell sx={{ wordBreak: 'break-word' }}>{comment.comment_text || comment.text || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={comment.comment_type || comment.type || 'General'}
+                              size="small"
+                              color={comment.comment_type?.includes('RED') || comment.type?.includes('RED') ? 'error' : 'warning'}
+                            />
+                          </TableCell>
+                          <TableCell>{comment.discipline || 'Not Provided'}</TableCell>
+                          <TableCell>{comment.drawing_ref || 'N/A'}</TableCell>
+                          <TableCell>
+                            <FormControl size="small" fullWidth>
+                              <Select
+                                value={commentStatus.toLowerCase()}
+                                onChange={(e) => {
+                                  console.log('[CRS] Status change:', { commentId, newStatus: e.target.value });
+                                  handleStatusChange(
+                                    commentId, 
+                                    e.target.value, 
+                                    rev.label || `Rev ${rev.number}`, 
+                                    comment.comment_text || comment.text
+                                  );
+                                }}
+                                disabled={loading || !commentId}
+                                sx={{
+                                  minWidth: 120,
+                                  bgcolor: commentStatus.toLowerCase() === 'open' ? '#FFEBEE' : 
+                                           commentStatus.toLowerCase() === 'closed' ? '#E8F5E9' :
+                                           commentStatus.toLowerCase() === 'in_progress' ? '#FFF3E0' :
+                                           commentStatus.toLowerCase() === 'resolved' ? '#E3F2FD' : '#F3E5F5',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.875rem'
+                                }}
+                              >
+                                <MenuItem value="open">🔴 Open</MenuItem>
+                                <MenuItem value="in_progress">🟡 In Progress</MenuItem>
+                                <MenuItem value="resolved">🟢 Resolved</MenuItem>
+                                <MenuItem value="closed">✅ Closed</MenuItem>
+                                <MenuItem value="rejected">❌ Rejected</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </TableCell>
+                          <TableCell>
+                            {commentId ? (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => {
+                                  console.log('[CRS] Close button clicked:', { commentId, revLabel: rev.label, comment });
+                                  handleCloseComment(commentId, rev.label || `Rev ${rev.number}`, comment.comment_text || comment.text);
+                                }}
+                                disabled={loading || commentStatus.toLowerCase() === 'closed'}
+                                sx={{ minWidth: 80 }}
+                              >
+                                {commentStatus.toLowerCase() === 'closed' ? '✓ Closed' : 'Close'}
+                              </Button>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                No ID
+                              </Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  } else {
+                    // No comments for this revision
+                    revisionRows.push(
+                      <TableRow key={`${rev.number}-empty`}>
+                        <TableCell colSpan={9} align="center" sx={{ 
+                          fontStyle: 'italic', 
+                          color: 'text.secondary',
+                          py: 2,
+                          bgcolor: '#FAFAFA'
+                        }}>
+                          No comments found for {rev.label}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                  
+                  return revisionRows;
                 })}
                 {uploadedRevisions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                    <TableCell colSpan={9} align="center" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
                       No revisions uploaded yet
                     </TableCell>
                   </TableRow>
@@ -872,28 +1231,68 @@ const CRSMultiRevisionSmart = ({ pageControls }) => {
               <Typography variant="h6" gutterBottom>
                 Chain: {createdChain?.chain_id} - Upload Revisions
               </Typography>
+
+              {/* Debug Info: Show open comment count */}
+              {uploadedRevisions.length > 0 && (() => {
+                const allComments = uploadedRevisions.flatMap(r => r.comments || []);
+                const openCount = allComments.filter(c => (c.status || 'open').toLowerCase() === 'open').length;
+                const closedCount = allComments.filter(c => (c.status || 'open').toLowerCase() === 'closed').length;
+                return (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <strong>📊 Comment Status:</strong> {openCount} Open | {closedCount} Closed | {allComments.length} Total
+                  </Alert>
+                );
+              })()}
+
+              {/* Warning: Open Comments from Previous Revisions */}
+              {uploadedRevisions.length > 0 && (() => {
+                const hasOpen = checkForOpenComments();
+                console.log('[CRS] Upload button check:', { 
+                  uploadedRevisionsCount: uploadedRevisions.length,
+                  currentRevisionNumber,
+                  hasOpenComments: hasOpen 
+                });
+                return hasOpen;
+              })() && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <strong>⚠️ Cannot Upload Next Revision!</strong>
+                  <br />
+                  You have open comments from previous revisions. 
+                  Please close all comments before uploading <strong>Rev {currentRevisionNumber}</strong>.
+                  <br />
+                  <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                    💡 Scroll down to the "All Comments Across Revisions" table and change the "Status" dropdown from "Open" to "Closed" for each comment.
+                  </Typography>
+                </Alert>
+              )}
               
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
-                {Array.from({ length: createdChain?.max_allowed_revisions || 5 }).map((_, idx) => (
-                  <Button
-                    key={idx}
-                    variant={idx < currentRevisionNumber - 1 ? "outlined" : idx === currentRevisionNumber - 1 ? "contained" : "text"}
-                    color={idx < currentRevisionNumber - 1 ? "success" : "primary"}
-                    startIcon={idx < currentRevisionNumber - 1 ? <CheckIcon /> : <UploadIcon />}
-                    component="label"
-                    disabled={idx !== currentRevisionNumber - 1 || loading}
-                    sx={{ minWidth: 150 }}
-                  >
-                    Rev {idx + 1} {idx < currentRevisionNumber - 1 ? "✓" : ""}
-                    <input
-                      type="file"
-                      accept={CONFIG.ACCEPTED_FILE_TYPE}
-                      hidden
-                      onChange={handleUploadRevision}
-                      disabled={idx !== currentRevisionNumber - 1}
-                    />
-                  </Button>
-                ))}
+                {Array.from({ length: createdChain?.max_allowed_revisions || 5 }).map((_, idx) => {
+                  const isNextRevision = idx === currentRevisionNumber - 1;
+                  const hasOpenPrevComments = isNextRevision && uploadedRevisions.length > 0 && checkForOpenComments();
+                  
+                  return (
+                    <Button
+                      key={idx}
+                      variant={idx < currentRevisionNumber - 1 ? "outlined" : idx === currentRevisionNumber - 1 ? "contained" : "text"}
+                      color={idx < currentRevisionNumber - 1 ? "success" : "primary"}
+                      startIcon={idx < currentRevisionNumber - 1 ? <CheckIcon /> : <UploadIcon />}
+                      component="label"
+                      disabled={idx !== currentRevisionNumber - 1 || loading || hasOpenPrevComments}
+                      sx={{ minWidth: 150 }}
+                      title={hasOpenPrevComments ? "Close all previous comments before uploading this revision" : ""}
+                    >
+                      Rev {idx + 1} {idx < currentRevisionNumber - 1 ? "✓" : ""}
+                      <input
+                        type="file"
+                        accept={CONFIG.ACCEPTED_FILE_TYPE}
+                        hidden
+                        onChange={handleUploadRevision}
+                        disabled={idx !== currentRevisionNumber - 1 || hasOpenPrevComments}
+                      />
+                    </Button>
+                  );
+                })}
               </Box>
 
               {loading && (

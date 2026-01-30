@@ -101,18 +101,32 @@ export const qhseProjectsAPI = {
   },
 
   /**
-   * Delete project
+   * Delete project (soft or hard)
    * @param {number} id - Project ID
-   * @returns {Promise<void>}
+   * @param {Object} options - Delete options
+   * @param {boolean} options.hardDelete - If true, permanently delete. If false, soft delete (default)
+   * @returns {Promise<Object>} Response with success message
    */
-  async delete(id) {
-    const response = await fetch(`${API_BASE_URL}/qhse/projects/${id}/`, {
+  async delete(id, options = {}) {
+    const { hardDelete = false } = options;
+    const queryParams = hardDelete ? '?hard_delete=true' : '';
+    const url = `${API_BASE_URL}/qhse/projects/${id}/${queryParams}`;
+    
+    console.log('[QHSE Service] 🗑️ Delete request:', {
+      id,
+      hardDelete,
+      url,
+      API_BASE_URL
+    });
+    
+    const response = await fetch(url, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    if (!response.ok) {
-      throw new Error('Failed to delete project');
-    }
+    
+    console.log('[QHSE Service] 📡 Delete response:', response.status, response.statusText);
+    
+    return handleResponse(response);
   },
 
   /**

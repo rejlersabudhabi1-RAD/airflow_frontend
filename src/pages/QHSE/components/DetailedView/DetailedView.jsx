@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useQHSERunningProjects } from '../../hooks/useQHSEProjects'; // Add this import
 import {
-  Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip
+  Paper, Typography, Box, Chip, Button, Stack, TextField, InputAdornment, IconButton, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw, Plus } from "lucide-react";
+import { AlertTriangle, Star, Info, User, Calendar, ClipboardList, BadgeCheck, TrendingUp, Search, X, Edit, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { withDashboardControls } from '../../../../hoc/withPageControls';
 import { PageControlButtons } from '../../../../components/PageControlButtons';
+import { qhseProjectsAPI } from '../../../../services/qhse.service';
 
 // Import common components for consistent loading/error states
 import { LoadingState } from "../Common/LoadingState"
@@ -64,6 +66,10 @@ const DetailedView = ({ pageControls }) => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteType, setDeleteType] = useState('soft'); // 'soft' or 'hard'
 
   // Debug: Log first project to verify field structure (only when data exists)
   if (projectsData && projectsData.length > 0) {
@@ -159,8 +165,8 @@ const DetailedView = ({ pageControls }) => {
     // Only include rows where srNo has a value (not empty, not 0, not undefined)
     return filteredData
       .filter(row => row.srNo && Number(row.srNo) > 0)
-      .map((row, idx) => ({
-        id: idx + 1, // DataGrid unique id
+      .map((row) => ({
+        id: row.id || row.srNo, // Use database ID or fallback to srNo
         ...row,
       }));
   }, [projectsData, searchTerm]);
@@ -188,6 +194,59 @@ const DetailedView = ({ pageControls }) => {
     refetch();
   };
 
+  // Handle delete project
+  const handleDeleteProject = (project) => {
+    setProjectToDelete(project);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm delete project
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    setIsDeleting(true);
+    console.log('🗑️ Deleting project:', projectToDelete.id, 'Type:', deleteType);
+    
+    try {
+      // Use soft-coded API service with smart delete options
+      const response = await qhseProjectsAPI.delete(projectToDelete.id, {
+        hardDelete: deleteType === 'hard'
+      });
+      
+      console.log('✅ Delete response:', response);
+      
+      // Close dialog and refresh data
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+      setDeleteType('soft');
+      refetch();
+      
+      // Show success message from API response or default message
+      const message = response?.message || (deleteType === 'hard' 
+        ? 'Project permanently deleted from database'
+        : 'Project marked as inactive (can be restored)');
+      console.log('✅ ' + message);
+      alert(message);
+    } catch (error) {
+      console.error('❌ Error deleting project:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      const errorMsg = error.message || 'Failed to delete project. Please try again.';
+      alert(errorMsg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setProjectToDelete(null);
+    setDeleteType('soft');
+  };
+
   // DataGrid columns with simple rendering
   const columns = useMemo(
     () => [
@@ -195,7 +254,7 @@ const DetailedView = ({ pageControls }) => {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 100,
+        width: 120,
         headerAlign: 'center',
         align: 'center',
         sortable: false,
@@ -207,15 +266,31 @@ const DetailedView = ({ pageControls }) => {
           </Box>
         ),
         renderCell: (params) => (
-          <Tooltip title="Edit Project">
-            <IconButton
-              size="small"
-              onClick={() => handleEditProject(params.row)}
-              sx={{ color: 'primary.main' }}
-            >
-              <Edit size={18} />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            <Tooltip title="Edit Project">
+              <IconButton
+                size="small"
+                onClick={() => handleEditProject(params.row)}
+                sx={{ color: 'primary.main' }}
+              >
+                <Edit size={16} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete Project">
+              <IconButton
+                size="small"
+                onClick={() => handleDeleteProject(params.row)}
+                sx={{ 
+                  color: 'error.main',
+                  '&:hover': {
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+              </IconButton>
+            </Tooltip>
+          </Box>
         ),
       },
       // Existing columns
@@ -354,6 +429,184 @@ const DetailedView = ({ pageControls }) => {
         onClose={() => setCreateModalOpen(false)}
         onSuccess={handleProjectCreateSuccess}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDelete}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            minWidth: '500px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          pb: 1
+        }}>
+          <AlertTriangle size={24} color="#ef4444" />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Confirm Delete
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: 'text.primary', mb: 2 }}>
+            Choose how you want to delete this project:
+          </DialogContentText>
+          
+          {/* Delete Type Selection */}
+          <Box sx={{ mb: 3 }}>
+            <Box 
+              onClick={() => setDeleteType('soft')}
+              sx={{ 
+                p: 2, 
+                mb: 2,
+                borderRadius: 1,
+                border: deleteType === 'soft' ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                backgroundColor: deleteType === 'soft' ? '#eff6ff' : '#f9fafb',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: '#3b82f6',
+                  backgroundColor: '#eff6ff'
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Box sx={{ 
+                  width: 20, 
+                  height: 20, 
+                  borderRadius: '50%', 
+                  border: '2px solid',
+                  borderColor: deleteType === 'soft' ? '#3b82f6' : '#9ca3af',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mr: 1.5
+                }}>
+                  {deleteType === 'soft' && (
+                    <Box sx={{ 
+                      width: 10, 
+                      height: 10, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#3b82f6' 
+                    }} />
+                  )}
+                </Box>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: deleteType === 'soft' ? '#1e40af' : 'text.primary' }}>
+                  Soft Delete (Recommended)
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', ml: 4.5 }}>
+                Mark project as inactive. Can be restored later if needed. Project will be hidden from the main view.
+              </Typography>
+            </Box>
+
+            <Box 
+              onClick={() => setDeleteType('hard')}
+              sx={{ 
+                p: 2, 
+                borderRadius: 1,
+                border: deleteType === 'hard' ? '2px solid #ef4444' : '1px solid #e5e7eb',
+                backgroundColor: deleteType === 'hard' ? '#fef2f2' : '#f9fafb',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: '#ef4444',
+                  backgroundColor: '#fef2f2'
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Box sx={{ 
+                  width: 20, 
+                  height: 20, 
+                  borderRadius: '50%', 
+                  border: '2px solid',
+                  borderColor: deleteType === 'hard' ? '#ef4444' : '#9ca3af',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mr: 1.5
+                }}>
+                  {deleteType === 'hard' && (
+                    <Box sx={{ 
+                      width: 10, 
+                      height: 10, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#ef4444' 
+                    }} />
+                  )}
+                </Box>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: deleteType === 'hard' ? '#991b1b' : 'text.primary' }}>
+                  Hard Delete (Permanent)
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', ml: 4.5 }}>
+                Permanently remove from database. This action cannot be undone and all data will be lost.
+              </Typography>
+            </Box>
+          </Box>
+
+          {projectToDelete && (
+            <Box sx={{ 
+              backgroundColor: '#f9fafb', 
+              p: 2, 
+              borderRadius: 1,
+              border: '1px solid #e5e7eb'
+            }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Project Details:
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Project No:</strong> {projectToDelete.projectNo}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Title:</strong> {projectToDelete.projectTitle}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <strong>Client:</strong> {projectToDelete.client}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={cancelDelete}
+            disabled={isDeleting}
+            sx={{
+              color: 'text.secondary',
+              textTransform: 'none',
+              fontWeight: 500,
+              '&:hover': {
+                backgroundColor: '#f3f4f6'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteProject}
+            disabled={isDeleting}
+            variant="contained"
+            color={deleteType === 'hard' ? 'error' : 'primary'}
+            startIcon={isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              backgroundColor: deleteType === 'hard' ? '#ef4444' : '#3b82f6',
+              '&:hover': {
+                backgroundColor: deleteType === 'hard' ? '#dc2626' : '#2563eb'
+              }
+            }}
+          >
+            {isDeleting ? 'Deleting...' : deleteType === 'hard' ? 'Permanently Delete' : 'Mark as Inactive'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageLayout>
   );
 };

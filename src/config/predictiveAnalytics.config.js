@@ -276,6 +276,67 @@ export const movingAverage = (dataPoints, window = 7) => {
 };
 
 /**
+ * Seasonal Decomposition - Identifies and predicts seasonal patterns
+ */
+export const seasonalDecomposition = (dataPoints, seasonLength = 7) => {
+  if (!dataPoints || dataPoints.length < seasonLength * 2) return dataPoints;
+  
+  // Calculate seasonal components
+  const seasons = [];
+  for (let i = 0; i < seasonLength; i++) {
+    const seasonalValues = [];
+    for (let j = i; j < dataPoints.length; j += seasonLength) {
+      seasonalValues.push(dataPoints[j]);
+    }
+    const seasonalAvg = seasonalValues.reduce((a, b) => a + b, 0) / seasonalValues.length;
+    seasons.push(seasonalAvg);
+  }
+  
+  return seasons;
+};
+
+/**
+ * Polynomial Regression - Complex curve fitting for non-linear trends
+ */
+export const polynomialRegression = (dataPoints, degree = 2) => {
+  if (!dataPoints || dataPoints.length < 3) return null;
+  
+  // For simplicity, use quadratic (degree 2) polynomial
+  const n = dataPoints.length;
+  let sumX = 0, sumY = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0, sumXY = 0, sumX2Y = 0;
+  
+  dataPoints.forEach((point, index) => {
+    const x = index;
+    const x2 = x * x;
+    const x3 = x2 * x;
+    const x4 = x2 * x2;
+    
+    sumX += x;
+    sumY += point;
+    sumX2 += x2;
+    sumX3 += x3;
+    sumX4 += x4;
+    sumXY += x * point;
+    sumX2Y += x2 * point;
+  });
+  
+  // Solve system of equations for coefficients a, b, c where y = ax^2 + bx + c
+  // Using simplified matrix solution for quadratic
+  const denominator = (n * sumX2 * sumX4) - (sumX2 * sumX2 * sumX2);
+  
+  if (denominator === 0) {
+    // Fall back to linear if quadratic doesn't work
+    return linearRegression(dataPoints);
+  }
+  
+  const a = ((n * sumX2Y - sumX2 * sumY) * sumX2 - (n * sumXY - sumX * sumY) * sumX3) / denominator;
+  const b = ((n * sumXY - sumX * sumY) * sumX4 - (n * sumX2Y - sumX2 * sumY) * sumX3) / denominator;
+  const c = (sumY - b * sumX - a * sumX2) / n;
+  
+  return { a, b, c };
+};
+
+/**
  * Forecast Next N Days - Generates future predictions
  */
 export const forecastNextDays = (dataPoints, model, days = 7) => {
@@ -312,8 +373,49 @@ export const forecastNextDays = (dataPoints, model, days = 7) => {
       break;
     }
     
+    case 'seasonal': {
+      const seasonLength = 7; // Weekly pattern
+      const seasonal = seasonalDecomposition(dataPoints, seasonLength);
+      const trend = linearRegression(dataPoints);
+      
+      for (let i = 1; i <= days; i++) {
+        const seasonalIndex = (lastIndex + i - 1) % seasonLength;
+        const trendValue = trend.slope * (lastIndex + i) + trend.intercept;
+        const seasonalFactor = seasonal[seasonalIndex] || seasonal[0];
+        const overall = dataPoints.reduce((a, b) => a + b, 0) / dataPoints.length;
+        
+        // Combine trend with seasonal pattern
+        predictions.push(Math.max(0, trendValue * (seasonalFactor / overall)));
+      }
+      break;
+    }
+    
+    case 'polynomial': {
+      const coeffs = polynomialRegression(dataPoints);
+      
+      if (!coeffs || !coeffs.a) {
+        // Fall back to linear if polynomial fails
+        const linear = linearRegression(dataPoints);
+        for (let i = 1; i <= days; i++) {
+          predictions.push(Math.max(0, linear.slope * (lastIndex + i) + linear.intercept));
+        }
+      } else {
+        for (let i = 1; i <= days; i++) {
+          const x = lastIndex + i;
+          const y = coeffs.a * x * x + coeffs.b * x + coeffs.c;
+          predictions.push(Math.max(0, y));
+        }
+      }
+      break;
+    }
+    
     default:
-      return [];
+      // Default to linear regression for unknown models
+      const defaultLinear = linearRegression(dataPoints);
+      for (let i = 1; i <= days; i++) {
+        predictions.push(Math.max(0, defaultLinear.slope * (lastIndex + i) + defaultLinear.intercept));
+      }
+      break;
   }
   
   return predictions.map(v => Math.round(v * 100) / 100);
@@ -460,6 +562,8 @@ export default {
   linearRegression,
   exponentialSmoothing,
   movingAverage,
+  seasonalDecomposition,
+  polynomialRegression,
   forecastNextDays,
   detectAnomalies,
   calculateConfidenceInterval,

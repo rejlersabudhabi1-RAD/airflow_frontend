@@ -60,7 +60,9 @@ export const API_ENDPOINTS = {
   
   // User endpoints
   USERS: '/users/',
-  USER_ME: '/users/me/',
+  // User endpoints (changed from /users/ to /user-management/ to avoid route conflicts)
+  // Note: Use RBAC endpoint for complete profile data including photo
+  USER_ME: '/rbac/users/me/',  // RBAC endpoint with profile_photo
   USER_PROFILE: '/users/update_profile/',
   
   // Health check

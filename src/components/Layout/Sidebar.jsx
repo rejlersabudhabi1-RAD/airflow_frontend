@@ -20,7 +20,8 @@ import {
   BriefcaseIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
-  TableCellsIcon
+  TableCellsIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 
 /**
@@ -53,7 +54,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     admin: true
   })
 
-  const isAdmin = user?.is_staff || user?.is_superuser
+  // Handle nested user object from API response (user.user.is_staff vs user.is_staff)
+  const userData = user?.user || user
+  // Check admin status from multiple sources:
+  // 1. Django User flags (is_staff, is_superuser)
+  // 2. Roles array (contains 'Super Administrator' role)
+  const hasAdminFlags = userData?.is_staff || userData?.is_superuser
+  const hasSuperAdminRole = user?.roles?.some(role => 
+    role.code === 'super_admin' || role.name === 'Super Administrator'
+  )
+  const isAdmin = hasAdminFlags || hasSuperAdminRole
 
   // Fetch user's accessible modules
   React.useEffect(() => {
@@ -75,6 +85,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         
         const data = await response.json()
         console.log('🔐 Full user data:', data)
+        console.log('🖼️ Profile photo URL:', data.profile_photo)
         
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
@@ -98,13 +109,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // Debug logging
   React.useEffect(() => {
     console.log('=== SIDEBAR DEBUG ===')
-    console.log('User object:', user)
-    console.log('is_staff:', user?.is_staff)
-    console.log('is_superuser:', user?.is_superuser)
+    console.log('Full user object:', user)
+    console.log('Nested userData:', userData)
+    console.log('User profile_photo:', user?.profile_photo)
+    console.log('userData.is_staff:', userData?.is_staff)
+    console.log('userData.is_superuser:', userData?.is_superuser)
     console.log('isAdmin:', isAdmin)
+    console.log('User roles:', user?.roles)
     console.log('User Modules:', userModules)
     console.log('==================')
-  }, [user, isAdmin, userModules])
+  }, [user, userData, isAdmin, userModules])
 
   // Toggle section expansion
   const toggleSection = (section) => {
@@ -230,6 +244,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         ]
       },
       {
+        id: 'sales',
+        title: getSectionTitle('sales'),
+        icon: ChartBarIcon,
+        type: 'section',
+        path: '/finance/sales',
+        moduleCode: 'finance'
+      },
+      {
         id: 'projectControl',
         title: getSectionTitle('projectControl'),
       icon: BriefcaseIcon,
@@ -238,7 +260,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'projectManagement',
-          title: '4.1 Projects',
+          title: '5.1 Projects',
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
@@ -255,7 +277,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'procurementDashboard',
-          title: '5.1 Dashboard',
+          title: '6.1 Dashboard',
           icon: HomeIcon,
           path: '/procurement',
           description: 'Procurement overview',
@@ -263,7 +285,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'vendors',
-          title: '5.2 Vendors',
+          title: '6.2 Vendors',
           icon: UsersIcon,
           path: '/procurement/vendors',
           description: 'Vendor management',
@@ -271,7 +293,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'requisitions',
-          title: '5.3 Recommendations',
+          title: '6.3 Recommendations',
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
           description: 'Purchase recommendations',
@@ -279,7 +301,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'purchaseOrders',
-          title: '5.4 Purchase Orders',
+          title: '6.4 Purchase Orders',
           icon: DocumentPlusIcon,
           path: '/procurement/orders',
           description: 'PO management',
@@ -287,7 +309,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'receipts',
-          title: '5.5 Receipts',
+          title: '6.5 Receipts',
           icon: FolderIcon,
           path: '/procurement/receipts',
           description: 'Goods receipt',
@@ -304,23 +326,23 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'generalQHSE',
-          title: '6.1 General QHSE',
+          title: '7.1 Project Quality',
           icon: ShieldCheckIcon,
           path: '/qhse/general',
-          description: 'General QHSE management',
+          description: 'Project quality management',
           moduleCode: 'qhse'
         },
         {
           id: 'detailedView',
-          title: '6.2 Detailed View',
+          title: '7.2 Project Quality Details',
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
-          description: 'Detailed project view',
+          description: 'Detailed project quality view',
           moduleCode: 'qhse'
         },
         {
           id: 'qualityManagement',
-          title: '6.3 Quality Management',
+          title: '7.3 Quality Management',
           icon: ChartBarIcon,
           path: '/qhse/general/quality',
           description: 'Quality metrics and audits',
@@ -328,7 +350,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'healthSafety',
-          title: '6.4 Health & Safety',
+          title: '7.4 Health & Safety',
           icon: ShieldCheckIcon,
           path: '/qhse/general/health-safety',
           description: 'Health and safety management',
@@ -336,7 +358,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'environmental',
-          title: '6.5 Environmental',
+          title: '7.5 Environmental',
           icon: DocumentTextIcon,
           path: '/qhse/general/environmental',
           description: 'Environmental management',
@@ -344,11 +366,20 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'energy',
-          title: '6.6 Energy',
+          title: '7.6 Energy',
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
           moduleCode: 'qhse'
+        },
+        {
+          id: 'interconnectedDemo',
+          title: '7.7 AI Interconnected System',
+          icon: SparklesIcon,
+          path: '/qhse/interconnected-demo',
+          description: 'AI-powered cross-module intelligence demo',
+          moduleCode: 'qhse',
+          badge: 'AI'
         }
       ]
     }
@@ -360,9 +391,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     if (item.requiresModule === false) return true
     if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
     
+    // Super Administrators and Staff have access to all modules
+    if (isAdmin) return true
+    
     // Check if user has the required module
     if (item.moduleCode) {
-      return isAdmin || userModules.includes(item.moduleCode)
+      return userModules.includes(item.moduleCode)
     }
     
     return true
@@ -407,7 +441,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '7. Admin',
+      title: '8. Admin',
       icon: CogIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -415,21 +449,21 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '7.1 Dashboard',
+          title: '8.1 Dashboard',
           icon: ChartBarIcon,
           path: '/admin/dashboard',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '7.2 Users & Roles',
+          title: '8.2 Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
         },
         {
           id: 'subscriptionManagement',
-          title: '7.3 Subscription',
+          title: '8.3 Subscription',
           icon: CurrencyDollarIcon,
           path: '/admin/subscriptions',
           description: 'Plans & billing management'
@@ -675,10 +709,26 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {/* Sidebar Footer - User Info */}
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center relative">
-              <span className="text-white font-semibold text-sm">
-                {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
-              </span>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-lg">
+              {user?.profile_photo ? (
+                <img 
+                  src={user.profile_photo} 
+                  alt={userData?.first_name || 'User'} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback to initials if image fails to load
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div 
+                className={`w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${user?.profile_photo ? 'hidden' : 'flex'}`}
+              >
+                <span className="text-white font-semibold text-sm">
+                  {userData?.first_name?.[0] || userData?.email?.[0]?.toUpperCase() || 'U'}
+                </span>
+              </div>
               {isAdmin && isCollapsed && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full border-2 border-white"></span>
               )}
@@ -686,10 +736,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {user?.first_name || user?.email?.split('@')[0] || 'User'}
+                  {userData?.first_name || userData?.email?.split('@')[0] || 'User'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {user?.email || 'user@example.com'}
+                  {userData?.email || 'user@example.com'}
                 </p>
                 {isAdmin && (
                   <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full mt-1">
