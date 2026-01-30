@@ -3,6 +3,15 @@ import { Link } from 'react-router-dom'
 import { REJLERS_COLORS, BRAND_TEXT } from '../config/theme.config'
 import { LOGO_CONFIG, getLogoPath, getLogoSize } from '../config/logo.config'
 import { FOOTER_CONFIG } from '../config/footer.config'
+import {
+  HERO_CONFIG,
+  PLATFORM_STATS,
+  MODULES_CONFIG,
+  KEY_FEATURES,
+  AI_CAPABILITIES,
+  CTA_CONFIG,
+  SOCIAL_PROOF
+} from '../config/homeContent.config'
 
 /**
  * Home Page - REJLERS RADAI Landing Page
@@ -170,7 +179,7 @@ const Home = () => {
             
             <p className="text-sm sm:text-base lg:text-lg text-gray-600 mb-6 lg:mb-8 leading-relaxed max-w-2xl mx-auto animate-fade-in" style={{ animationDelay: '0.5s' }}>
               Transform your engineering workflows with <span className="font-bold text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${REJLERS_COLORS.secondary.green.base}, ${REJLERS_COLORS.secondary.turbine.base})` }}>intelligent P&ID verification</span>, 
-              automated compliance checking, and seamless collaboration.
+              automated compliance checking, seamless collaboration, and AI-powered insights across <span className="font-bold">Engineering, Finance, Sales, and Quality Management</span>.
             </p>
 
             {/* CTA Buttons - AI-Enhanced with Glow Effects */}
@@ -394,6 +403,210 @@ const Home = () => {
                 <div className="text-sm lg:text-base font-semibold text-gray-700">Compliant</div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Comprehensive Modules Showcase - NEW */}
+      <section className="py-16 lg:py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="text-center mb-12 lg:mb-16">
+            <div className="inline-flex items-center px-4 py-2 rounded-full mb-6" style={{ 
+              background: `linear-gradient(to right, ${REJLERS_COLORS.secondary.green.base}15, ${REJLERS_COLORS.secondary.turbine.base}15)`,
+              border: `1px solid ${REJLERS_COLORS.secondary.green.base}40`
+            }}>
+              <span className="text-2xl mr-2">🎯</span>
+              <span className="font-bold" style={{ color: REJLERS_COLORS.secondary.green.base }}>
+                Complete Platform Suite
+              </span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900 mb-4 lg:mb-6">
+              {MODULES_CONFIG.title}
+            </h2>
+            <p className="text-base lg:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
+              {MODULES_CONFIG.subtitle}
+            </p>
+          </div>
+
+          {/* Modules Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            {MODULES_CONFIG.modules.map((module, index) => (
+              <div
+                key={module.id}
+                className="group relative"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                {/* Glow Effect on Hover */}
+                <div 
+                  className={`absolute -inset-1 bg-gradient-to-r from-${module.gradient.from} to-${module.gradient.to} rounded-3xl blur opacity-0 group-hover:opacity-30 transition duration-500`}
+                ></div>
+                
+                {/* Card Content */}
+                <div className="relative bg-white rounded-2xl border-2 border-gray-100 p-6 lg:p-7 hover:shadow-2xl transition-all duration-300 h-full flex flex-col group-hover:border-transparent">
+                  {/* Header with Icon and Badge */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div 
+                      className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center text-3xl lg:text-4xl group-hover:scale-110 transition-transform duration-300 shadow-lg"
+                      style={{ background: `linear-gradient(to bottom right, var(--tw-gradient-stops))` }}
+                      className={`bg-gradient-to-br from-${module.gradient.from} to-${module.gradient.to}`}
+                    >
+                      <span className="filter drop-shadow-md">{module.icon}</span>
+                    </div>
+                    
+                    {/* Badge */}
+                    {module.badge && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        module.isNew 
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {module.badge}
+                      </span>
+                    )}
+                    
+                    {/* Highlight Star for Special Modules */}
+                    {module.highlight && (
+                      <span className="absolute -top-2 -right-2 text-3xl animate-bounce">⭐</span>
+                    )}
+                  </div>
+
+                  {/* Module Info */}
+                  <div className="flex-grow">
+                    <h3 className="text-lg lg:text-xl font-bold text-gray-900 mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r" style={{
+                      backgroundImage: module.gradient ? `linear-gradient(to right, var(--tw-gradient-stops))` : 'none'
+                    }} className={`bg-gradient-to-r from-${module.gradient.from} to-${module.gradient.to}`}>
+                      {module.name}
+                    </h3>
+                    
+                    <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                      {module.description}
+                    </p>
+
+                    {/* Capabilities List */}
+                    <ul className="space-y-2 mb-4">
+                      {module.capabilities.slice(0, 3).map((capability, idx) => (
+                        <li key={idx} className="flex items-start text-xs lg:text-sm text-gray-700">
+                          <svg className="w-4 h-4 lg:w-5 lg:h-5 mr-2 flex-shrink-0 mt-0.5" style={{ color: REJLERS_COLORS.secondary.green.base }} fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          <span>{capability}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* Stats */}
+                    {module.stats && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {Object.entries(module.stats).map(([key, value]) => (
+                          <span 
+                            key={key}
+                            className="px-2 py-1 rounded-lg text-xs font-semibold"
+                            style={{ 
+                              background: `${REJLERS_COLORS.secondary.green.base}15`,
+                              color: REJLERS_COLORS.secondary.green.base
+                            }}
+                          >
+                            {value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CTA Link */}
+                  <Link
+                    to={module.route}
+                    className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100 font-semibold text-sm group-hover:border-transparent"
+                    style={{ color: REJLERS_COLORS.secondary.green.base }}
+                  >
+                    <span>Explore {module.category}</span>
+                    <svg className="w-5 h-5 transform group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Platform Stats Banner */}
+          <div className="mt-16 lg:mt-20">
+            <div className="bg-gradient-to-r from-gray-50 to-white rounded-3xl p-8 lg:p-12 border border-gray-100">
+              <div className="text-center mb-8">
+                <h3 className="text-2xl lg:text-3xl font-black text-gray-900 mb-2">
+                  {PLATFORM_STATS.title}
+                </h3>
+                <p className="text-gray-600">{PLATFORM_STATS.subtitle}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+                {PLATFORM_STATS.metrics.map((metric) => (
+                  <div key={metric.id} className="text-center group">
+                    <div className="text-4xl lg:text-5xl mb-2">{metric.icon}</div>
+                    <div 
+                      className="text-3xl lg:text-4xl font-black mb-1 bg-gradient-to-r bg-clip-text text-transparent"
+                      style={{ backgroundImage: `linear-gradient(to right, ${metric.gradient.from}, ${metric.gradient.to})` }}
+                    >
+                      {metric.value}
+                    </div>
+                    <div className="text-sm lg:text-base font-bold text-gray-900 mb-1">{metric.label}</div>
+                    <div className="text-xs text-gray-600">{metric.description}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* AI Capabilities Section - NEW */}
+      <section className="py-16 lg:py-20 bg-gradient-to-br from-gray-50 via-white to-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 lg:mb-16">
+            <div className="inline-flex items-center px-4 py-2 rounded-full mb-6" style={{ 
+              background: `linear-gradient(to right, ${REJLERS_COLORS.secondary.turbine.base}15, ${REJLERS_COLORS.secondary.green.base}15)`,
+              border: `1px solid ${REJLERS_COLORS.secondary.turbine.base}40`
+            }}>
+              <span className="text-2xl mr-2">🤖</span>
+              <span className="font-bold" style={{ color: REJLERS_COLORS.secondary.turbine.base }}>
+                AI-First Platform
+              </span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-gray-900 mb-4">
+              {AI_CAPABILITIES.title}
+            </h2>
+            <p className="text-base lg:text-lg text-gray-600 max-w-3xl mx-auto">
+              {AI_CAPABILITIES.subtitle}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {AI_CAPABILITIES.capabilities.map((capability, index) => (
+              <div
+                key={capability.id}
+                className="bg-white rounded-2xl p-6 border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300 group"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div 
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform bg-gradient-to-br from-${capability.gradient.from} to-${capability.gradient.to}`}
+                >
+                  {capability.icon}
+                </div>
+                <h4 className="text-lg font-bold text-gray-900 mb-2">{capability.name}</h4>
+                <p className="text-sm text-gray-600 mb-3">{capability.description}</p>
+                <div className="flex flex-wrap gap-1">
+                  {capability.modules.map((moduleName, idx) => (
+                    <span 
+                      key={idx}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700"
+                    >
+                      {moduleName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

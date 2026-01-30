@@ -75,6 +75,10 @@ import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
+// Report Generator Components
+import ReportGenerator from './pages/Admin/ReportGenerator'
+import PredictiveInsights from './pages/Admin/PredictiveInsights'
+import AdvancedAnalytics from './pages/Admin/AdvancedAnalytics'
 // Debug Components
 import FeaturesDebug from './pages/FeaturesDebug'
 
@@ -651,6 +655,30 @@ function App() {
           element={
             <ProtectedRoute>
               <SubscriptionManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/reports"
+          element={
+            <ProtectedRoute>
+              <ReportGenerator />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/reports/predictive"
+          element={
+            <ProtectedRoute>
+              <PredictiveInsights />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/reports/analytics"
+          element={
+            <ProtectedRoute>
+              <AdvancedAnalytics />
             </ProtectedRoute>
           }
         />

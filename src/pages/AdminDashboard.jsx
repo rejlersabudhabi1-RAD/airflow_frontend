@@ -469,6 +469,23 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   </button>
+
+                  <button
+                    onClick={() => navigate('/admin/reports')}
+                    className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-200 rounded-lg text-left transition-all group shadow-md hover:shadow-xl"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-orange-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">Report Generator</p>
+                        <p className="text-xs text-gray-600">CEO reports & analytics</p>
+                      </div>
+                    </div>
+                  </button>
                 </div>
 
                 {/* Enhanced Performance Banner */}
