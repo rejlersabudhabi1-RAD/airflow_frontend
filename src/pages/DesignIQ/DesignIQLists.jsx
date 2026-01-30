@@ -84,10 +84,6 @@ const DesignIQLists = () => {
   const [extractedData, setExtractedData] = useState(null);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
-  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
-  const [clearingHistory, setClearingHistory] = useState(false);
-  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
-  const [clearingHistory, setClearingHistory] = useState(false);
   
   // Line Number Format Configuration
   const STRICT_LINE_PATTERNS = {
