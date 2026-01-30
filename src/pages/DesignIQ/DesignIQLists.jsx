@@ -84,6 +84,7 @@ const DesignIQLists = () => {
   const [extractedData, setExtractedData] = useState(null);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 100, status: '' });
   
   // Line Number Format Configuration
   const STRICT_LINE_PATTERNS = {
@@ -290,11 +291,13 @@ const DesignIQLists = () => {
     setUploadingPID(true);
     setProcessing(true);
     setUploadResult(null);
+    setUploadProgress({ current: 0, total: 100, status: 'Uploading file...' });
     
     try {
       const formData = new FormData();
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
+      formData.append('use_async', 'true'); // Enable async processing
       formData.append('include_area', includeArea ? 'true' : 'false');
       formData.append('format_type', formatType);
       
@@ -321,56 +324,133 @@ const DesignIQLists = () => {
           success: false,
           message: 'Authentication token not found. Please log in again.'
         });
+        setUploadingPID(false);
+        setProcessing(false);
         return;
       }
 
-      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
+      console.log('[P&ID Upload] 🚀 Starting async upload...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Use long timeout client for OCR processing (10 minutes)
+      // Submit for async processing
       const response = await apiClientLongTimeout.post(
         '/designiq/lists/upload_pid/',
         formData,
         {
           headers: {
             'Authorization': `Bearer ${token}`
-            // Content-Type will be set automatically by axios for FormData
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
+            setUploadProgress({ current: percentCompleted, total: 100, status: 'Uploading file...' });
+            console.log('[P&ID Upload] 📤 Upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
+      const { task_id, filename, extracted_lines, total_items } = response.data;
       
-      const data = response.data;
-      setExtractedData({
-        lines: data.extracted_lines || [],
-        fileName: file.name,
-        itemsCreated: data.items_created || 0
-      });
-      setShowPreviewModal(true);
-      setUploadResult({
-        success: true,
-        message: `Successfully extracted ${data.extracted_lines?.length || 0} line numbers from ${file.name}`,
-        data: data
-      });
-      setUploadingPID(false);
+      // Check if response is synchronous (backward compatibility)
+      if (!task_id && extracted_lines) {
+        console.log('[P&ID Upload] ✅ Sync response received');
+        setExtractedData({
+          lines: extracted_lines || [],
+          fileName: file.name,
+          itemsCreated: total_items || 0
+        });
+        setShowPreviewModal(true);
+        setUploadResult({
+          success: true,
+          message: `Successfully extracted ${extracted_lines?.length || 0} line numbers from ${file.name}`
+        });
+        setUploadingPID(false);
+        setProcessing(false);
+        event.target.value = '';
+        return;
+      }
+
+      console.log('[P&ID Upload] ⏳ Task queued:', task_id);
+      setUploadProgress({ current: 10, total: 100, status: 'Processing P&ID in background...' });
+
+      // Poll for task status
+      let attempts = 0;
+      const maxAttempts = 120; // 10 minutes max (5 seconds * 120)
+      const pollInterval = 5000; // 5 seconds
+
+      const pollStatus = async () => {
+        try {
+          const statusResponse = await apiClientLongTimeout.get(
+            `/designiq/lists/upload_pid_status/${task_id}/`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
+
+          const { state, status: statusMsg, current, total, result, error } = statusResponse.data;
+
+          // Update progress
+          setUploadProgress({ current: current || 0, total: total || 100, status: statusMsg || 'Processing...' });
+          console.log(`[P&ID Upload] 📈 Progress: ${current}/${total} - ${statusMsg}`);
+
+          if (state === 'SUCCESS') {
+            console.log('[P&ID Upload] ✅ Processing complete');
+            
+            if (result && result.success) {
+              setExtractedData({
+                lines: result.extracted_lines || [],
+                fileName: filename || file.name,
+                itemsCreated: result.total_items || 0
+              });
+              setShowPreviewModal(true);
+              setUploadResult({
+                success: true,
+                message: `Successfully extracted ${result.total_items || 0} line numbers from ${filename || file.name}`
+              });
+            } else {
+              throw new Error(result?.error || 'Processing failed');
+            }
+            setUploadingPID(false);
+            setProcessing(false);
+            event.target.value = '';
+            return;
+          }
+
+          if (state === 'FAILURE') {
+            throw new Error(error || 'Task failed');
+          }
+
+          // Continue polling if still in progress
+          if (state === 'PENDING' || state === 'PROGRESS') {
+            attempts++;
+            if (attempts < maxAttempts) {
+              setTimeout(pollStatus, pollInterval);
+            } else {
+              throw new Error('Processing timeout - task took too long');
+            }
+          }
+
+        } catch (pollError) {
+          console.error('[P&ID Upload] ❌ Polling error:', pollError);
+          throw pollError;
+        }
+      };
+
+      // Start polling after a delay
+      setTimeout(pollStatus, pollInterval);
+
     } catch (error) {
-      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
+      console.error('[P&ID Upload] ❌ Error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Upload timed out. The PDF might be too large or complex. Please try a smaller file or contact support.';
+        errorMessage = 'Request timeout - server is not responding';
       } else if (error.response) {
-        // Server responded with error
         const errorData = error.response.data;
         errorMessage = errorData.detail || errorData.error || error.response.statusText || errorMessage;
       } else if (error.request) {
-        // Request made but no response
         errorMessage = 'No response from server. Please check your connection and try again.';
       } else {
         errorMessage = error.message || errorMessage;
@@ -380,7 +460,6 @@ const DesignIQLists = () => {
         success: false,
         message: errorMessage
       });
-    } finally {
       setProcessing(false);
       setUploadingPID(false);
       event.target.value = '';
@@ -629,6 +708,22 @@ const DesignIQLists = () => {
             </button>
           </div>
         </div>
+
+        {/* Progress Indicator */}
+        {uploadingPID && uploadProgress.current > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-blue-900">{uploadProgress.status}</span>
+              <span className="text-sm text-blue-700">{uploadProgress.current}%</span>
+            </div>
+            <div className="w-full bg-blue-200 rounded-full h-2.5">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress.current}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
 
         {/* Filter Panel */}
         {showFilters && (
