@@ -169,7 +169,7 @@ export const getPublicRequestConfig = () => {
 
 export const ADMIN_PASSWORD_RESET_CONFIG = {
   // Default password for reset
-  DEFAULT_PASSWORD: 'Welcome@123',
+  DEFAULT_PASSWORD: 'Rejlers@123',
   
   // Password requirements (for display)
   REQUIREMENTS: {
@@ -185,7 +185,7 @@ export const ADMIN_PASSWORD_RESET_CONFIG = {
   UI: {
     confirmationMessage: 'Are you sure you want to reset this user\'s password?',
     warningMessage: 'The password will be reset to the default password. The user should change it on first login.',
-    successMessage: 'Password reset successfully. Default password: Welcome@123',
+    successMessage: 'Password reset successfully. Default password: Rejlers@123',
     errorMessage: 'Failed to reset password',
     buttonLabel: 'Reset Password',
     buttonIcon: '🔑',

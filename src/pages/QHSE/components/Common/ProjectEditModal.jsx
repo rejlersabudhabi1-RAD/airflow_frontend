@@ -119,11 +119,21 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
       }
 
       // Determine API endpoint and method based on mode
+      // CRITICAL: Use project.id (primary key) not project.srNo for updates
+      const projectId = project?.id || project?.pk;
+      
+      if (!isCreateMode && !projectId) {
+        throw new Error('Project ID is required for updates');
+      }
+
       const url = isCreateMode 
         ? `${API_BASE_URL}/qhse/projects/`
-        : `${API_BASE_URL}/qhse/projects/${project.srNo}/`;
+        : `${API_BASE_URL}/qhse/projects/${projectId}/`;
       
       const method = isCreateMode ? 'POST' : 'PATCH';
+
+      console.log(`[ProjectEditModal] ${method} request to: ${url}`);
+      console.log('[ProjectEditModal] Payload:', formData);
 
       const response = await fetch(url, {
         method,
@@ -136,11 +146,13 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Failed to ${isCreateMode ? 'create' : 'update'} project`);
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error occurred' }));
+        console.error('[ProjectEditModal] Error response:', errorData);
+        throw new Error(errorData.detail || errorData.error || `Failed to ${isCreateMode ? 'create' : 'update'} project`);
       }
 
       const savedProject = await response.json();
+      console.log('[ProjectEditModal] Success:', savedProject);
       setSuccess(true);
       
       // Notify parent component
