@@ -1,4 +1,3 @@
-// Updated: 2026-01-30 - Production: Area column smart detection
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -82,9 +81,12 @@ const DesignIQLists = () => {
   const [processing, setProcessing] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
-  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
-  const [clearingHistory, setClearingHistory] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 100, status: '' });
+  
+  // Document management states
+  const [showDocumentsView, setShowDocumentsView] = useState(true);
+  const [documents, setDocuments] = useState([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
+  const [exportingDocId, setExportingDocId] = useState(null);
   
   // Line Number Format Configuration
   const STRICT_LINE_PATTERNS = {
@@ -140,8 +142,47 @@ const DesignIQLists = () => {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [selectedListType, statusFilter]);
+    if (selectedListType === 'line_list') {
+      if (showDocumentsView) {
+        fetchDocuments();
+      } else {
+        fetchData();
+      }
+    } else {
+      fetchData();
+    }
+  }, [selectedListType, statusFilter, showDocumentsView]);
+
+  const fetchDocuments = async (isAutoRefresh = false) => {
+    if (isAutoRefresh) setIsRefreshing(true);
+    else setLoadingDocuments(true);
+    
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(
+        `${API_BASE_URL}/designiq/lists/documents/?list_type=${selectedListType}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data.documents || []);
+      } else {
+        setDocuments([]);
+      }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setDocuments([]);
+    } finally {
+      setLoadingDocuments(false);
+      setIsRefreshing(false);
+    }
+  };
 
   const fetchData = async (isAutoRefresh = false) => {
     if (isAutoRefresh) setIsRefreshing(true);
@@ -231,51 +272,6 @@ const DesignIQLists = () => {
     }
   };
 
-  const handleClearHistory = async () => {
-    setClearingHistory(true);
-    try {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/clear_history/`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            list_type: selectedListType,
-            confirm: true
-          })
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        setUploadResult({
-          success: true,
-          message: `${data.deleted_count} items deleted successfully from ${data.list_type_name}`
-        });
-        setShowClearHistoryModal(false);
-        fetchData(); // Refresh the list
-      } else {
-        const errorData = await response.json();
-        setUploadResult({
-          success: false,
-          message: errorData.error || 'Failed to clear history'
-        });
-      }
-    } catch (error) {
-      console.error('Error clearing history:', error);
-      setUploadResult({
-        success: false,
-        message: 'Network error: Failed to clear history'
-      });
-    } finally {
-      setClearingHistory(false);
-    }
-  };
-
   const handlePIDUpload = async (event, includeArea = false, formatType = 'onshore') => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -291,13 +287,11 @@ const DesignIQLists = () => {
     setUploadingPID(true);
     setProcessing(true);
     setUploadResult(null);
-    setUploadProgress({ current: 0, total: 100, status: 'Uploading file...' });
     
     try {
       const formData = new FormData();
       formData.append('pid_file', file);
       formData.append('list_type', 'line_list');
-      formData.append('use_async', 'true'); // Enable async processing
       formData.append('include_area', includeArea ? 'true' : 'false');
       formData.append('format_type', formatType);
       
@@ -324,133 +318,56 @@ const DesignIQLists = () => {
           success: false,
           message: 'Authentication token not found. Please log in again.'
         });
-        setUploadingPID(false);
-        setProcessing(false);
         return;
       }
 
-      console.log('[P&ID Upload] 🚀 Starting async upload...');
+      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Submit for async processing
+      // Use long timeout client for OCR processing (10 minutes)
       const response = await apiClientLongTimeout.post(
         '/designiq/lists/upload_pid/',
         formData,
         {
           headers: {
             'Authorization': `Bearer ${token}`
+            // Content-Type will be set automatically by axios for FormData
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress({ current: percentCompleted, total: 100, status: 'Uploading file...' });
-            console.log('[P&ID Upload] 📤 Upload progress:', percentCompleted + '%');
+            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      const { task_id, filename, extracted_lines, total_items } = response.data;
+      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
       
-      // Check if response is synchronous (backward compatibility)
-      if (!task_id && extracted_lines) {
-        console.log('[P&ID Upload] ✅ Sync response received');
-        setExtractedData({
-          lines: extracted_lines || [],
-          fileName: file.name,
-          itemsCreated: total_items || 0
-        });
-        setShowPreviewModal(true);
-        setUploadResult({
-          success: true,
-          message: `Successfully extracted ${extracted_lines?.length || 0} line numbers from ${file.name}`
-        });
-        setUploadingPID(false);
-        setProcessing(false);
-        event.target.value = '';
-        return;
-      }
-
-      console.log('[P&ID Upload] ⏳ Task queued:', task_id);
-      setUploadProgress({ current: 10, total: 100, status: 'Processing P&ID in background...' });
-
-      // Poll for task status
-      let attempts = 0;
-      const maxAttempts = 120; // 10 minutes max (5 seconds * 120)
-      const pollInterval = 5000; // 5 seconds
-
-      const pollStatus = async () => {
-        try {
-          const statusResponse = await apiClientLongTimeout.get(
-            `/designiq/lists/upload_pid_status/${task_id}/`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            }
-          );
-
-          const { state, status: statusMsg, current, total, result, error } = statusResponse.data;
-
-          // Update progress
-          setUploadProgress({ current: current || 0, total: total || 100, status: statusMsg || 'Processing...' });
-          console.log(`[P&ID Upload] 📈 Progress: ${current}/${total} - ${statusMsg}`);
-
-          if (state === 'SUCCESS') {
-            console.log('[P&ID Upload] ✅ Processing complete');
-            
-            if (result && result.success) {
-              setExtractedData({
-                lines: result.extracted_lines || [],
-                fileName: filename || file.name,
-                itemsCreated: result.total_items || 0
-              });
-              setShowPreviewModal(true);
-              setUploadResult({
-                success: true,
-                message: `Successfully extracted ${result.total_items || 0} line numbers from ${filename || file.name}`
-              });
-            } else {
-              throw new Error(result?.error || 'Processing failed');
-            }
-            setUploadingPID(false);
-            setProcessing(false);
-            event.target.value = '';
-            return;
-          }
-
-          if (state === 'FAILURE') {
-            throw new Error(error || 'Task failed');
-          }
-
-          // Continue polling if still in progress
-          if (state === 'PENDING' || state === 'PROGRESS') {
-            attempts++;
-            if (attempts < maxAttempts) {
-              setTimeout(pollStatus, pollInterval);
-            } else {
-              throw new Error('Processing timeout - task took too long');
-            }
-          }
-
-        } catch (pollError) {
-          console.error('[P&ID Upload] ❌ Polling error:', pollError);
-          throw pollError;
-        }
-      };
-
-      // Start polling after a delay
-      setTimeout(pollStatus, pollInterval);
-
+      const data = response.data;
+      setExtractedData({
+        lines: data.extracted_lines || [],
+        fileName: file.name,
+        itemsCreated: data.items_created || 0
+      });
+      setShowPreviewModal(true);
+      setUploadResult({
+        success: true,
+        message: `Successfully uploaded document ${data.document_id || file.name} with ${data.extracted_lines?.length || 0} line items`,
+        data: data
+      });
+      setUploadingPID(false);
     } catch (error) {
-      console.error('[P&ID Upload] ❌ Error:', error);
+      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Request timeout - server is not responding';
+        errorMessage = 'Upload timed out. The PDF might be too large or complex. Please try a smaller file or contact support.';
       } else if (error.response) {
+        // Server responded with error
         const errorData = error.response.data;
         errorMessage = errorData.detail || errorData.error || error.response.statusText || errorMessage;
       } else if (error.request) {
+        // Request made but no response
         errorMessage = 'No response from server. Please check your connection and try again.';
       } else {
         errorMessage = error.message || errorMessage;
@@ -460,9 +377,158 @@ const DesignIQLists = () => {
         success: false,
         message: errorMessage
       });
+    } finally {
       setProcessing(false);
       setUploadingPID(false);
       event.target.value = '';
+    }
+  };
+
+  // View PDF functionality removed - users can download Excel directly from the table
+
+  const handleExportDocumentExcel = async (documentId, filename) => {
+    // CRS MULTI-REVISION PATTERN: Backend generates Excel, frontend downloads it
+    try {
+      console.log('📊 Excel export request for:', { documentId, filename });
+      
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+      
+      setExportingDocId(documentId);
+      
+      // URL encode document ID for query parameter
+      const encodedDocId = encodeURIComponent(documentId);
+      const exportUrl = `${API_BASE_URL}/designiq/lists/export-document-excel/?document_id=${encodedDocId}`;
+      
+      console.log('📡 Calling backend export endpoint:', exportUrl);
+      
+      // Call backend endpoint to generate Excel
+      const response = await fetch(exportUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg;
+        try {
+          const error = JSON.parse(errorText);
+          errorMsg = error.error || error.detail || error.message;
+        } catch {
+          errorMsg = errorText || `HTTP ${response.status}`;
+        }
+        
+        console.error('❌ Export failed:', { status: response.status, error: errorMsg });
+        alert(`Failed to export Excel:\n${errorMsg}\n\nStatus: ${response.status}`);
+        return;
+      }
+      
+      // Get item count from response header
+      const itemCount = response.headers.get('X-Item-Count') || '?';
+      
+      // Download the Excel file
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Extract filename from Content-Disposition or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let downloadFilename = `${filename || documentId}_line_list.xlsx`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) {
+          downloadFilename = filenameMatch[1];
+        }
+      }
+      
+      a.download = downloadFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('✅ Excel downloaded:', downloadFilename);
+      alert(`✅ Excel exported successfully!\n\n${itemCount} line items downloaded`);
+      
+    } catch (error) {
+      console.error('❌ Error exporting document:', error);
+      alert(`Failed to export Excel file: ${error.message}\n\nCheck console for details.`);
+    } finally {
+      setExportingDocId(null);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId, filename, lineCount) => {
+    if (!confirm(`⚠️ Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\n• The document entry\n• All ${lineCount} extracted line items\n• Cannot be undone\n\nClick OK to proceed with deletion.`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      // Optimistically remove from UI
+      setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
+      
+      // Properly encode the document_id for URL
+      const encodedDocId = encodeURIComponent(documentId);
+      
+      console.log('🗑️ Deleting document:', {
+        original: documentId,
+        encoded: encodedDocId,
+        url: `${API_BASE_URL}/designiq/lists/documents/${encodedDocId}/`
+      });
+      
+      const response = await fetch(
+        `${API_BASE_URL}/designiq/lists/documents/${encodedDocId}/`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Document deleted:', result);
+        // Refresh to ensure sync with backend
+        fetchDocuments();
+        // Show success notification
+        alert(`✅ Successfully deleted "${filename}"\n\n${result.items_deleted} line items removed from database`);
+      } else {
+        const errorText = await response.text();
+        let errorMsg;
+        try {
+          const error = JSON.parse(errorText);
+          errorMsg = error.message || error.detail || error.error || 'Unknown error';
+        } catch {
+          errorMsg = errorText || `HTTP ${response.status}`;
+        }
+        
+        console.error('❌ Delete failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMsg
+        });
+        
+        // Revert optimistic update on error
+        fetchDocuments();
+        alert(`❌ Failed to delete document:\n${errorMsg}\n\nStatus: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error deleting document:', error);
+      // Revert optimistic update on error
+      fetchDocuments();
+      alert(`❌ Failed to delete document:\n${error.message}\n\nPlease check your connection and try again.`);
     }
   };
 
@@ -536,6 +602,19 @@ const DesignIQLists = () => {
           </nav>
         </div>
 
+        {/* Toggle Button for Documents View (Line List only) */}
+        {selectedListType === 'line_list' && (
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+            <button
+              onClick={() => setShowDocumentsView(!showDocumentsView)}
+              className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              <ViewColumnsIcon className="w-5 h-5 mr-2" />
+              {showDocumentsView ? 'View Line Items' : 'View Documents'}
+            </button>
+          </div>
+        )}
+
         {/* Stats Cards */}
         {stats && (
           <div className="grid grid-cols-5 gap-6 p-6">
@@ -601,19 +680,6 @@ const DesignIQLists = () => {
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
               Export
             </button>
-            
-            {/* Clear All History Button - Only show when items exist */}
-            {items.length > 0 && (
-              <button
-                onClick={() => setShowClearHistoryModal(true)}
-                className="flex items-center px-4 py-2 border-2 border-red-500 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Clear All History
-              </button>
-            )}
             
             {/* P&ID Upload Button - Only for Line List */}
             {selectedListType === 'line_list' && (
@@ -709,22 +775,6 @@ const DesignIQLists = () => {
           </div>
         </div>
 
-        {/* Progress Indicator */}
-        {uploadingPID && uploadProgress.current > 0 && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-blue-900">{uploadProgress.status}</span>
-              <span className="text-sm text-blue-700">{uploadProgress.current}%</span>
-            </div>
-            <div className="w-full bg-blue-200 rounded-full h-2.5">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress.current}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-
         {/* Filter Panel */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-200">
@@ -749,10 +799,116 @@ const DesignIQLists = () => {
 
       {/* Items Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {loading ? (
+        {(loading || loadingDocuments) ? (
           <div className="p-12 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading items...</p>
+            <p className="mt-4 text-gray-600">{loadingDocuments ? 'Loading documents...' : 'Loading items...'}</p>
+          </div>
+        ) : showDocumentsView && selectedListType === 'line_list' ? (
+          // Documents View
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Document ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Filename
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Upload Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Uploaded By
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Format
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Line Count
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {documents.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                      No documents found. Upload a P&ID to get started.
+                    </td>
+                  </tr>
+                ) : (
+                  documents.map((doc) => (
+                    <tr key={doc.document_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
+                        {doc.document_id}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {doc.original_filename || doc.document_id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(doc.created_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {doc.created_by || 'Unknown'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {doc.format_type || 'ADNOC'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {doc.line_count} lines
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                        <button
+                          onClick={() => handleExportDocumentExcel(doc.document_id, doc.original_filename)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          title="Download Excel with all line items"
+                          disabled={exportingDocId === doc.document_id}
+                        >
+                          {exportingDocId === doc.document_id ? (
+                            <>
+                              <svg className="animate-spin -ml-0.5 mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Exporting...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="-ml-0.5 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Download Excel
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDocument(doc.document_id, doc.original_filename, doc.line_count)}
+                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                          title="Delete document and all line items"
+                        >
+                          <svg className="-ml-0.5 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         ) : items.length === 0 ? (
           <div className="p-12 text-center">
@@ -1449,92 +1605,7 @@ const DesignIQLists = () => {
         </div>
       )}
 
-      {/* Clear History Confirmation Modal */}
-      {showClearHistoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-red-50 to-orange-50">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Clear All History</h3>
-                  <p className="text-sm text-gray-600">This action cannot be undone</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Body */}
-            <div className="px-6 py-6">
-              <div className="space-y-4">
-                <p className="text-gray-700">
-                  Are you sure you want to delete <span className="font-bold text-red-600">{items.length} item{items.length !== 1 ? 's' : ''}</span> from{' '}
-                  <span className="font-semibold">{currentListConfig?.name || 'this list'}</span>?
-                </p>
-                
-                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
-                  <div className="flex items-start space-x-3">
-                    <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <div className="text-sm text-red-800">
-                      <p className="font-semibold">Warning:</p>
-                      <ul className="list-disc list-inside mt-1 space-y-1">
-                        <li>All items will be permanently deleted</li>
-                        <li>This operation cannot be reversed</li>
-                        <li>You will need to re-upload files to restore data</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-xs text-blue-800">
-                    <span className="font-semibold">Tip:</span> Use the Export button before clearing to save a backup of your data.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowClearHistoryModal(false)}
-                disabled={clearingHistory}
-                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleClearHistory}
-                disabled={clearingHistory}
-                className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl hover:shadow-lg transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                {clearingHistory ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span>Delete All</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PDF Viewer Modal removed - Excel download available directly from table */}
     </div>
   );
 };
