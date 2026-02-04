@@ -26,7 +26,8 @@ export const fetchUsers = createAsyncThunk(
       // User can override page_size if needed for specific use cases
       const fetchParams = {
         ...params,
-        page_size: params.page_size || 1000  // Increased to 1000 to fetch all users
+        page_size: params.page_size || 1000,  // Increased to 1000 to fetch all users
+        is_deleted: 'false'  // Only fetch non-deleted profiles (synced with Railway DB)
       };
       
       console.log('[fetchUsers] 📄 Fetching users with params:', fetchParams);
