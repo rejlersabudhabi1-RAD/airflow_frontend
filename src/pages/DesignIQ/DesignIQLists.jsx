@@ -72,6 +72,7 @@ const DesignIQLists = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState('onshore');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -706,72 +707,58 @@ const DesignIQLists = () => {
                   className="hidden"
                 />
 
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingPID || processing}
-                  className={`flex items-center px-4 py-2 border rounded-lg ${
-                    uploadingPID || processing
-                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'border-blue-500 text-blue-600 hover:bg-blue-50'
-                  }`}
-                >
-                  {processing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent mr-2"></div>
-                      Processing OCR...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : ' ADNOC Onshore'}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => fileInputWithAreaRef.current?.click()}
-                  disabled={uploadingPID || processing}
-                  className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
-                    uploadingPID || processing
-                      ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'border-green-500 text-green-600 hover:bg-green-50'
-                  }`}
-                >
-                  {processing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-600 border-t-transparent mr-2"></div>
-                      Processing OCR...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                      {uploadingPID ? 'Uploading...' : ' General'}
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center space-x-3">
+                  <select
+                    value={selectedFormat}
+                    onChange={(e) => setSelectedFormat(e.target.value)}
+                    disabled={uploadingPID || processing}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="onshore">ADNOC Onshore</option>
+                    <option value="general">General</option>
+                    <option value="offshore">ADNOC Offshore</option>
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      if (selectedFormat === 'onshore') {
+                        fileInputRef.current?.click();
+                      } else if (selectedFormat === 'general') {
+                        fileInputWithAreaRef.current?.click();
+                      } else if (selectedFormat === 'offshore') {
+                        fileInputOffshoreRef.current?.click();
+                      }
+                    }}
+                    disabled={uploadingPID || processing}
+                    className={`flex items-center px-4 py-2 border-2 rounded-lg ${
+                      uploadingPID || processing
+                        ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : selectedFormat === 'onshore'
+                        ? 'border-blue-500 text-blue-600 hover:bg-blue-50'
+                        : selectedFormat === 'general'
+                        ? 'border-green-500 text-green-600 hover:bg-green-50'
+                        : 'border-purple-500 text-purple-600 hover:bg-purple-50'
+                    }`}
+                  >
+                    {processing ? (
+                      <>
+                        <div className={`animate-spin rounded-full h-5 w-5 border-2 ${
+                          selectedFormat === 'onshore' ? 'border-blue-600' :
+                          selectedFormat === 'general' ? 'border-green-600' :
+                          'border-purple-600'
+                        } border-t-transparent mr-2`}></div>
+                        Processing OCR...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
+                        {uploadingPID ? 'Uploading...' : 'Upload P&ID'}
+                      </>
+                    )}
+                  </button>
+                </div>
               </>
             )}
-
-            <button
-              onClick={() => fileInputOffshoreRef.current?.click()}
-              disabled={uploadingPID || processing}
-              className={`flex items-center px-4 py-2 border rounded-lg ml-2 ${
-                uploadingPID || processing
-                  ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'border-purple-500 text-purple-600 hover:bg-purple-50'
-              }`}
-            >
-              {processing ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-600 border-t-transparent mr-2"></div>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                  {uploadingPID ? 'Uploading...' : 'ADNOC Offshore'}
-                </>
-              )}
-            </button>
           </div>
         </div>
 
