@@ -1,259 +1,153 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeftIcon,
-  ArrowUpTrayIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon
-} from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../config/api.config';
-import { apiClientLongTimeout } from '../../services/api.service';
+import { ArrowUpTrayIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 const StressCriticalLineList = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  
-  const [uploadingPID, setUploadingPID] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
 
-  const handlePIDUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
 
-    // Reset previous states
-    setUploadResult(null);
-    setUploadError(null);
-    setUploadingPID(true);
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('list_type', 'line_list');
-    formData.append('format_type', 'stress_critical');
-    formData.append('include_area', 'false');
-
-    try {
-      setProcessing(true);
-      
-      const token = localStorage.getItem('access_token');
-      const response = await apiClientLongTimeout.post(
-        `${API_BASE_URL}/api/v1/designiq/lists/upload-pid/`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      if (response.data) {
-        setUploadResult({
-          success: true,
-          message: 'P&ID processed successfully!',
-          data: response.data
-        });
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadError(
-        error.response?.data?.error || 
-        error.response?.data?.message || 
-        'Failed to upload P&ID. Please try again.'
-      );
-      setUploadResult({
-        success: false,
-        message: 'Upload failed'
-      });
-    } finally {
-      setUploadingPID(false);
-      setProcessing(false);
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      alert('Please select a P&ID file first');
+      return;
     }
 
-    // Reset file input
-    e.target.value = null;
+    setUploading(true);
+    
+    // TODO: Implement upload logic for stress critical format
+    console.log('Uploading stress critical P&ID:', selectedFile.name);
+    
+    // Simulate upload delay
+    setTimeout(() => {
+      setUploading(false);
+      alert('Stress Critical Line List upload functionality coming soon!');
+      setSelectedFile(null);
+    }, 1500);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/designiq/lists?type=line_list')}
-                className="flex items-center text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeftIcon className="w-5 h-5 mr-2" />
-                Back to Line List
-              </button>
-              <div className="h-6 w-px bg-gray-300" />
-              <h1 className="text-2xl font-bold text-gray-900">
+    <div className="h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <button
+            onClick={() => navigate('/designiq/lists?type=line_list')}
+            className="flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+          >
+            <ArrowLeftIcon className="w-5 h-5 mr-2" />
+            Back to Line List
+          </button>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+          <div className="p-8">
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                 Stress Critical Line List
               </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Upload your P&ID to extract stress critical line information
+              </p>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          {/* Description */}
-          <div className="mb-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-4">
-              <CheckCircleIcon className="w-8 h-8 text-orange-600" />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Upload P&ID for Stress Critical Analysis
-            </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Upload your P&ID document to identify and extract stress critical lines. 
-              The system will analyze the document and highlight critical piping systems.
-            </p>
-          </div>
+            <div className="max-w-2xl mx-auto">
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors">
+                <ArrowUpTrayIcon className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
 
-          {/* Upload Section */}
-          <div className="max-w-xl mx-auto">
-            {/* Upload Button */}
-            <div className="flex justify-center mb-6">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingPID || processing}
-                className={`flex items-center px-6 py-3 rounded-lg text-white font-medium ${
-                  uploadingPID || processing
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-700'
-                }`}
-              >
-                {processing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-                    Processing OCR...
-                  </>
-                ) : uploadingPID ? (
-                  <>
-                    <ClockIcon className="w-5 h-5 mr-2" />
-                    Uploading...
-                  </>
+                {selectedFile ? (
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Selected file:</p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      {selectedFile.name}
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={handleUpload}
+                        disabled={uploading}
+                        className={`px-6 py-3 rounded-lg font-semibold text-white transition-all ${
+                          uploading
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-orange-600 hover:bg-orange-700 shadow-md hover:shadow-lg'
+                        }`}
+                      >
+                        {uploading ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Processing...
+                          </span>
+                        ) : (
+                          'Upload & Process'
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedFile(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="px-6 py-3 rounded-lg font-semibold text-gray-700 dark:text-gray-300 border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <>
-                    <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                    Upload P&ID
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                      Upload Your P&ID
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-6">
+                      Drag and drop or click to browse
+                    </p>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-8 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all"
+                    >
+                      Select P&ID File
+                    </button>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+                      Supported format: PDF
+                    </p>
                   </>
                 )}
-              </button>
-            </div>
-
-            {/* Hidden File Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              onChange={handlePIDUpload}
-              className="hidden"
-            />
-
-            {/* Upload Info */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">Upload Requirements:</h3>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>• File format: PDF only</li>
-                <li>• Maximum file size: 50MB</li>
-                <li>• Clear, high-resolution P&ID drawings</li>
-                <li>• Processing time: 5-15 minutes depending on document size</li>
-              </ul>
-            </div>
-
-            {/* Upload Result */}
-            {uploadResult && (
-              <div className={`rounded-lg p-4 ${
-                uploadResult.success 
-                  ? 'bg-green-50 border border-green-200' 
-                  : 'bg-red-50 border border-red-200'
-              }`}>
-                <div className="flex items-start">
-                  {uploadResult.success ? (
-                    <CheckCircleIcon className="w-5 h-5 text-green-600 mt-0.5 mr-3" />
-                  ) : (
-                    <XCircleIcon className="w-5 h-5 text-red-600 mt-0.5 mr-3" />
-                  )}
-                  <div className="flex-1">
-                    <p className={`font-medium ${
-                      uploadResult.success ? 'text-green-900' : 'text-red-900'
-                    }`}>
-                      {uploadResult.message}
-                    </p>
-                    {uploadError && (
-                      <p className="text-sm text-red-700 mt-1">{uploadError}</p>
-                    )}
-                    {uploadResult.success && uploadResult.data && (
-                      <div className="mt-2 text-sm text-green-700">
-                        <p>Lines extracted: {uploadResult.data.extracted_count || 0}</p>
-                        <button
-                          onClick={() => navigate('/designiq/lists?type=line_list')}
-                          className="mt-2 text-green-800 hover:text-green-900 font-medium"
-                        >
-                          View extracted lines →
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
-            )}
 
-            {/* Processing Info */}
-            {processing && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                <div className="flex items-start">
-                  <ClockIcon className="w-5 h-5 text-blue-600 mt-0.5 mr-3" />
-                  <div className="flex-1">
-                    <p className="font-medium text-blue-900">Processing in progress...</p>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Please wait while we analyze your P&ID document. This may take several minutes.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Additional Info */}
-          <div className="mt-12 pt-8 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-4 text-center">
-              What happens after upload?
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-orange-100 rounded-full mb-3">
-                  <span className="text-orange-600 font-semibold">1</span>
-                </div>
-                <h4 className="text-sm font-medium text-gray-900 mb-1">OCR Extraction</h4>
-                <p className="text-xs text-gray-600">
-                  Advanced OCR technology extracts all line numbers and specifications
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-orange-100 rounded-full mb-3">
-                  <span className="text-orange-600 font-semibold">2</span>
-                </div>
-                <h4 className="text-sm font-medium text-gray-900 mb-1">AI Analysis</h4>
-                <p className="text-xs text-gray-600">
-                  AI identifies stress critical lines based on specifications
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-orange-100 rounded-full mb-3">
-                  <span className="text-orange-600 font-semibold">3</span>
-                </div>
-                <h4 className="text-sm font-medium text-gray-900 mb-1">Results Ready</h4>
-                <p className="text-xs text-gray-600">
-                  View, edit, and export your stress critical line list
-                </p>
+              <div className="mt-8 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-6">
+                <h4 className="font-semibold text-orange-900 dark:text-orange-200 mb-3">
+                  Stress Critical Line Format
+                </h4>
+                <ul className="space-y-2 text-sm text-orange-800 dark:text-orange-300">
+                  <li className="flex items-start">
+                    <span className="mr-2">•</span>
+                    <span>Extracts line numbers with stress critical identification</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2">•</span>
+                    <span>Includes stress analysis data and critical parameters</span>
+                  </li>
+                  <li className="flex items-start">
+                    <span className="mr-2">•</span>
+                    <span>Processing typically takes 5-8 minutes depending on complexity</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>

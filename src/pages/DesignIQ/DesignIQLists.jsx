@@ -681,7 +681,16 @@ const DesignIQLists = () => {
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
               Export
             </button>
-            
+
+            {/* Stress Critical Line List Button */}
+            <button
+              onClick={() => navigate('/designiq/stress-critical-line-list')}
+              className="flex items-center px-4 py-2 border-2 border-orange-500 text-orange-600 rounded-lg hover:bg-orange-50"
+            >
+              <BellAlertIcon className="w-5 h-5 mr-2" />
+              Stress Critical Line List
+            </button>
+
             {/* P&ID Upload Button - Only for Line List */}
             {selectedListType === 'line_list' && (
               <>

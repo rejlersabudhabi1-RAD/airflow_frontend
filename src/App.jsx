@@ -65,6 +65,7 @@ import NotFound from './pages/NotFound'
 // DesignIQ Components
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
 import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
 import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
@@ -529,6 +530,14 @@ function App() {
           }
         />
         <Route
+          path="designiq/stress-critical-line-list"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <StressCriticalLineList />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="designiq/projects/:id"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
@@ -713,3 +722,4 @@ function App() {
 }
 
 export default App
+
