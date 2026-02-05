@@ -65,6 +65,8 @@ import NotFound from './pages/NotFound'
 // DesignIQ Components
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
+import PFDVerification from './pages/DesignIQ/PFDVerification'
 import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
 import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
@@ -524,7 +526,7 @@ function App() {
           path="designiq/lists"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQLists />
+              <DesignIQLists />`n        <Route`n          path="designiq/stress-critical-line-list"`n          element={`n            <ModuleProtectedRoute moduleCode="designiq">`n              <StressCriticalLineList />`n            </ModuleProtectedRoute>`n          }`n        />`n        <Route`n          path="designiq/pfd-verification"`n          element={`n            <ModuleProtectedRoute moduleCode="designiq">`n              <PFDVerification />`n            </ModuleProtectedRoute>`n          }`n        />
             </ModuleProtectedRoute>
           }
         />
@@ -713,3 +715,4 @@ function App() {
 }
 
 export default App
+

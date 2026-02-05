@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { API_BASE_URL } from '../../config/api.config'
 import { getSectionTitle } from '../../config/navigationLabels.config'
 import { getEngineeringDisciplines } from '../../config/engineeringStructure.config'
+import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -743,7 +744,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 className={`w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${user?.profile_photo ? 'hidden' : 'flex'}`}
               >
                 <span className="text-white font-semibold text-sm">
-                  {userData?.first_name?.[0] || userData?.email?.[0]?.toUpperCase() || 'U'}
+                  {USER_DISPLAY_CONFIG.formatting.getUserInitials(userData)}
                 </span>
               </div>
               {isAdmin && isCollapsed && (
@@ -753,10 +754,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {userData?.first_name || userData?.email?.split('@')[0] || 'User'}
+                  {USER_DISPLAY_CONFIG.formatting.getDisplayName(userData)}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {userData?.email || 'user@example.com'}
+                  {USER_DISPLAY_CONFIG.formatting.getEmailDisplay(userData)}
                 </p>
                 {isAdmin && (
                   <span className="inline-flex items-center px-2 py-0.5 text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full mt-1">
@@ -781,6 +782,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 }
 
 export default Sidebar
+
+
+
+
 
 
 
