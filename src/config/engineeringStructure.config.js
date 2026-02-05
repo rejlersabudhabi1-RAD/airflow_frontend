@@ -44,6 +44,16 @@ export const ENGINEERING_DISCIPLINES = {
         badge: 'AI'
       },
       {
+        id: 'pfdVerification',
+        name: 'PFD Verification',
+        fullName: 'Process Flow Diagram Verification',
+        icon: DocumentTextIcon,
+        path: '/designiq/pfd-verification',
+        description: 'AI-powered PFD design verification with reference documents',
+        moduleCode: 'designiq',
+        badge: 'NEW'
+      },
+      {
         id: 'processDataSheet',
         name: 'Data Sheet',
         fullName: 'Process Data Sheets',
@@ -354,3 +364,4 @@ export const hasAccess = (moduleCode, userModules, isAdmin) => {
 }
 
 export default ENGINEERING_DISCIPLINES
+

@@ -66,6 +66,7 @@ import NotFound from './pages/NotFound'
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
 import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
+import PFDVerification from './pages/DesignIQ/PFDVerification'
 import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
 import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
@@ -541,6 +542,14 @@ function App() {
           }
         />
         <Route
+          path="designiq/pfd-verification"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <PFDVerification />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="designiq/projects/:id"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
@@ -751,4 +760,6 @@ function App() {
 }
 
 export default App
+
+
 
