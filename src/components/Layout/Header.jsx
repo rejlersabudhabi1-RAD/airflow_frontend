@@ -6,6 +6,7 @@ import { toggleTheme } from '../../store/slices/themeSlice'
 import { Bars3Icon } from '@heroicons/react/24/outline'
 import { LOGO_CONFIG, getLogoPath } from '../../config/logo.config'
 import NotificationBell from '../notifications/NotificationBell'
+import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 
 /**
  * Header Component - REJLERS RADAI  
@@ -138,7 +139,7 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                   <span>Change Password</span>
                 </Link>
                 <span className="text-blue-200 font-medium">
-                  Hello, {user?.first_name || user?.username || 'User'}
+                  Hello, {USER_DISPLAY_CONFIG.formatting.getDisplayName(user)}
                 </span>
                 <button
                   onClick={handleLogout}

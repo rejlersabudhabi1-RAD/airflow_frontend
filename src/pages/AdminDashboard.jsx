@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchCurrentUser, fetchUserStats } from '../store/slices/rbacSlice';
 import analyticsService from '../services/analyticsService';
 import { isUserAdmin } from '../utils/rbac.utils';
+import { USER_DISPLAY_CONFIG } from '../config/userDisplay.config';
 import RealTimeActivityTab from '../components/admin/RealTimeActivityTab';
 import SecurityAlertsTab from '../components/admin/SecurityAlertsTab';
 import PredictionsTab from '../components/admin/PredictionsTab';
@@ -298,11 +299,9 @@ const AdminDashboard = () => {
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              {/* Personalized Greeting with nested user data extraction */}
+              {/* Personalized Greeting with smart user display */}
               {(() => {
-                // Extract nested user object (user.user.first_name)
-                const userData = authUser?.user || authUser;
-                const firstName = userData?.first_name || userData?.email?.split('@')[0] || 'Admin';
+                const firstName = USER_DISPLAY_CONFIG.formatting.getDisplayName(authUser);
                 const getGreeting = () => {
                   const hour = new Date().getHours();
                   if (hour < 12) return 'Good Morning';
