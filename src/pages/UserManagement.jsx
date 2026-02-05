@@ -499,6 +499,17 @@ const UserManagement = ({ pageControls }) => {
       const department = user.department || '';
       const jobTitle = user.job_title || '';
       
+      // ✅ SYNC WITH RAILWAY DB: Exclude soft-deleted users
+      // Filter out users with .deleted_ in email (duplicate cleanup)
+      if (email.includes('.deleted_')) {
+        return false;
+      }
+      
+      // Filter out users marked as deleted in RBAC profile
+      if (user.is_deleted === true) {
+        return false;
+      }
+      
       const matchesSearch = !searchTerm || 
         email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||

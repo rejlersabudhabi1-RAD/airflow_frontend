@@ -531,6 +531,22 @@ function App() {
           }
         />
         <Route
+          path="designiq/stress-critical-line-list"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <StressCriticalLineList />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="designiq/pfd-verification"
+          element={
+            <ModuleProtectedRoute moduleCode="designiq">
+              <PFDVerification />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="designiq/projects/:id"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
@@ -715,4 +731,3 @@ function App() {
 }
 
 export default App
-

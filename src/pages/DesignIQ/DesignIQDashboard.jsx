@@ -21,6 +21,7 @@ const DesignIQDashboard = () => {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [moduleConfig, setModuleConfig] = useState(null);
 
   // Page controls (Fullscreen, Sidebar, Auto-refresh)
   const pageControls = usePageControls({
@@ -31,7 +32,24 @@ const DesignIQDashboard = () => {
 
   useEffect(() => {
     loadDashboardData();
+    loadModuleConfig();
   }, []);
+
+  const loadModuleConfig = async () => {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(`${API_BASE_URL}/designiq/projects/module-config/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const config = await response.json();
+        setModuleConfig(config);
+      }
+    } catch (err) {
+      console.error('[DesignIQ] Module config error:', err);
+    }
+  };
 
   const loadDashboardData = async (isAutoRefresh = false) => {
     if (isAutoRefresh) setIsRefreshing(true);
@@ -58,16 +76,8 @@ const DesignIQDashboard = () => {
     }
   };
 
-  const designTypes = [
-    { id: 'process_flow', name: 'Process Flow Design', icon: '🔄', color: 'blue' },
-    { id: 'equipment', name: 'Equipment Design', icon: '⚙️', color: 'green' },
-    { id: 'piping', name: 'Piping & Instrumentation', icon: '🔧', color: 'purple' },
-    { id: 'heat_exchanger', name: 'Heat Exchanger Design', icon: '🔥', color: 'red' },
-    { id: 'vessel', name: 'Pressure Vessel Design', icon: '🛢️', color: 'indigo' },
-    { id: 'pump', name: 'Pump Selection & Design', icon: '💧', color: 'cyan' },
-    { id: 'valve', name: 'Valve Sizing & Selection', icon: '🎚️', color: 'teal' },
-    { id: 'safety', name: 'Safety System Design', icon: '🛡️', color: 'yellow' },
-  ];
+  // Get enabled design modules from configuration
+  const enabledDesignModules = moduleConfig?.design_modules?.enabled_modules || [];
 
   if (loading) {
     return (
@@ -154,67 +164,71 @@ const DesignIQDashboard = () => {
         </div>
       </div>
 
-      {/* Design Types Grid */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Start New Design Analysis</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {designTypes.map((type) => (
+      {/* Design Types Grid - Only show if enabled in config */}
+      {moduleConfig?.features?.show_design_type_cards && enabledDesignModules.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Start New Design Analysis</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {enabledDesignModules.map((type) => (
+              <button
+                key={type.id}
+                onClick={() => navigate(`/designiq/new?type=${type.id}`)}
+                className={`bg-white rounded-lg shadow hover:shadow-lg transition-all p-6 text-left border-2 border-transparent hover:border-${type.color}-500`}
+              >
+                <div className="text-4xl mb-3">{type.icon}</div>
+                <h3 className="font-semibold text-gray-900 mb-1">{type.name}</h3>
+                <p className="text-sm text-gray-500">
+                  {stats?.by_design_type?.[type.id] || 0} projects
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Engineering Lists Section - Show by default (enabled unless explicitly disabled) */}
+      {(moduleConfig?.features?.show_engineering_lists !== false) && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Engineering Lists</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
-              key={type.id}
-              onClick={() => navigate(`/designiq/new?type=${type.id}`)}
-              className={`bg-white rounded-lg shadow hover:shadow-lg transition-all p-6 text-left border-2 border-transparent hover:border-${type.color}-500`}
+              onClick={() => navigate('/designiq/lists?type=line_list')}
+              className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
             >
-              <div className="text-4xl mb-3">{type.icon}</div>
-              <h3 className="font-semibold text-gray-900 mb-1">{type.name}</h3>
-              <p className="text-sm text-gray-500">
-                {stats?.by_design_type?.[type.id] || 0} projects
-              </p>
+              <ViewColumnsIcon className="w-10 h-10 mb-3" />
+              <h3 className="font-semibold text-lg mb-1">Line List</h3>
+              <p className="text-sm opacity-90">Piping line specifications</p>
             </button>
-          ))}
+
+            <button
+              onClick={() => navigate('/designiq/lists?type=equipment_list')}
+              className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
+            >
+              <CubeIcon className="w-10 h-10 mb-3" />
+              <h3 className="font-semibold text-lg mb-1">Equipment List</h3>
+              <p className="text-sm opacity-90">Equipment specifications</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/designiq/lists?type=tie_in_list')}
+              className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
+            >
+              <LinkIcon className="w-10 h-10 mb-3" />
+              <h3 className="font-semibold text-lg mb-1">Tie-In List</h3>
+              <p className="text-sm opacity-90">Connection specifications</p>
+            </button>
+
+            <button
+              onClick={() => navigate('/designiq/lists?type=alarm_trip_list')}
+              className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
+            >
+              <BellAlertIcon className="w-10 h-10 mb-3" />
+              <h3 className="font-semibold text-lg mb-1">Alarm/Trip List</h3>
+              <p className="text-sm opacity-90">Safety alarm setpoints</p>
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* Engineering Lists Section */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Engineering Lists</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button
-            onClick={() => navigate('/designiq/lists?type=line_list')}
-            className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
-          >
-            <ViewColumnsIcon className="w-10 h-10 mb-3" />
-            <h3 className="font-semibold text-lg mb-1">Line List</h3>
-            <p className="text-sm opacity-90">Piping line specifications</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/designiq/lists?type=equipment_list')}
-            className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
-          >
-            <CubeIcon className="w-10 h-10 mb-3" />
-            <h3 className="font-semibold text-lg mb-1">Equipment List</h3>
-            <p className="text-sm opacity-90">Equipment specifications</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/designiq/lists?type=tie_in_list')}
-            className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
-          >
-            <LinkIcon className="w-10 h-10 mb-3" />
-            <h3 className="font-semibold text-lg mb-1">Tie-In List</h3>
-            <p className="text-sm opacity-90">Connection specifications</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/designiq/lists?type=alarm_trip_list')}
-            className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg shadow-lg hover:shadow-xl transition-all p-6 text-left text-white"
-          >
-            <BellAlertIcon className="w-10 h-10 mb-3" />
-            <h3 className="font-semibold text-lg mb-1">Alarm/Trip List</h3>
-            <p className="text-sm opacity-90">Safety alarm setpoints</p>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Recent Projects */}
       {stats?.recent_projects && stats.recent_projects.length > 0 && (

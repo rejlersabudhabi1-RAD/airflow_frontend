@@ -154,7 +154,7 @@ const EnhancedDashboard = () => {
             <div>
               <h1 className="text-4xl sm:text-5xl font-extrabold mb-2">
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  {getGreeting()}, {user?.first_name || 'User'}
+                  {getGreeting()}, {USER_DISPLAY_CONFIG.formatting.getDisplayName(user)}
                 </span>
               </h1>
               <p className="text-gray-600 text-lg flex items-center gap-2">
