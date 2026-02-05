@@ -526,7 +526,7 @@ function App() {
           path="designiq/lists"
           element={
             <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQLists />`n        <Route`n          path="designiq/stress-critical-line-list"`n          element={`n            <ModuleProtectedRoute moduleCode="designiq">`n              <StressCriticalLineList />`n            </ModuleProtectedRoute>`n          }`n        />`n        <Route`n          path="designiq/pfd-verification"`n          element={`n            <ModuleProtectedRoute moduleCode="designiq">`n              <PFDVerification />`n            </ModuleProtectedRoute>`n          }`n        />
+              <DesignIQLists />
             </ModuleProtectedRoute>
           }
         />
@@ -731,3 +731,4 @@ function App() {
 }
 
 export default App
+
