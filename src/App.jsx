@@ -76,6 +76,9 @@ import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
+// Electrical Datasheet Components
+import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
+import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -595,6 +598,32 @@ function App() {
             <ProtectedRoute>
               <ProcessDatasheetPage />
             </ProtectedRoute>
+          }
+        />
+
+        {/* Electrical Datasheet Routes */}
+        <Route
+          path="engineering/electrical/datasheet"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <ElectricalDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/electrical/datasheet/create"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <ElectricalDatasheetFormPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/electrical/datasheet/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <ElectricalDatasheetFormPage />
+            </ModuleProtectedRoute>
           }
         />
 
