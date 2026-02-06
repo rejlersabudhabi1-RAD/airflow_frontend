@@ -33,11 +33,16 @@ import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
+<<<<<<< Updated upstream
 import CRSChainDetail from './pages/CRSChainDetail'
 // Soft-coded CRS Multi-Revision - Use Smart component with finish early logic
 import CRSMultipleRevisionClassic from './pages/CRSMultipleRevision'
 import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
+=======
+import CRSMultipleRevision from './pages/CRSMultipleRevision'
+import CRSMultiRevision from './pages/CRSMultiRevision'
+>>>>>>> Stashed changes
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
@@ -462,6 +467,14 @@ function App() {
           }
         />
 
+        <Route
+          path="crs/multi-revision"
+          element={
+            <ModuleProtectedRoute moduleCode="crs_documents">
+              <CRSMultiRevision />
+            </ModuleProtectedRoute>
+          }
+        />
 
         {/* Feature Routes - Finance Invoice Automation */}
         <Route
@@ -732,3 +745,8 @@ function App() {
 
 export default App
 
+<<<<<<< Updated upstream
+=======
+
+
+>>>>>>> Stashed changes

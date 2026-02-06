@@ -223,6 +223,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           badge: 'AI'
         }
       ]
+        },
+        {
+          id: 'crsMultiRevision',
+          title: '2.3 CRS Multi-Revision Manager',
+          icon: DocumentTextIcon,
+          path: '/crs/multi-revision',
+          description: 'Upload and manage multiple PDF revisions',
+          moduleCode: 'crs_documents'
     },      {
         id: 'finance',
         title: getSectionTitle('finance'),
