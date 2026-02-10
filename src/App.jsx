@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
@@ -84,6 +84,7 @@ import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDa
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
+import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -98,9 +99,9 @@ function App() {
   const [mustChangePassword, setMustChangePassword] = useState(false)
 
   // Log environment and component selection
-  console.log('ðŸŽ¯ App Environment:', ENV)
-  console.log('ðŸŽ›ï¸ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
-  console.log('ðŸ“‹ CRS Multi-Revision Component:', FEATURE_FLAGS.crsMultiRevisionVersion === 'smart' ? 'CRSMultiRevisionSmart (with Finish Early)' : 'CRSMultipleRevision (Classic)')
+  console.log('🎯 App Environment:', ENV)
+  console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
+  console.log('📋 CRS Multi-Revision Component:', FEATURE_FLAGS.crsMultiRevisionVersion === 'smart' ? 'CRSMultiRevisionSmart (with Finish Early)' : 'CRSMultipleRevision (Classic)')
 
   // Fetch user modules on mount
   useEffect(() => {
@@ -113,7 +114,7 @@ function App() {
       try {
         const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
         const apiUrl = `${API_BASE_URL}/rbac/users/me/`
-        console.log('ðŸ” App: Fetching modules from:', apiUrl)
+        console.log('🔐 App: Fetching modules from:', apiUrl)
         const response = await fetch(apiUrl, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -127,7 +128,7 @@ function App() {
         }
         
         const data = await response.json()
-        console.log('ðŸ” App: Full user data:', data)
+        console.log('🔐 App: Full user data:', data)
         
         // Check must_change_password flag
         if (data.must_change_password === true) {
@@ -137,7 +138,7 @@ function App() {
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
           setUserModules(moduleCodes)
-          console.log('ðŸ” App: User accessible modules:', moduleCodes)
+          console.log('🔐 App: User accessible modules:', moduleCodes)
         } else {
           console.warn('App: No modules found in response')
           setUserModules([])
@@ -174,7 +175,7 @@ function App() {
     
     // Super Administrators and Staff have access to all modules
     if (isAdmin) {
-      console.log('âœ… App: Admin access granted for module:', moduleCode)
+      console.log('✅ App: Admin access granted for module:', moduleCode)
       return children
     }
     
@@ -199,7 +200,7 @@ function App() {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
-          <div className="text-red-500 text-6xl mb-4">ðŸš«</div>
+          <div className="text-red-500 text-6xl mb-4">🚫</div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h2>
           <p className="text-gray-600 mb-4">
             You don't have permission to access this feature.
@@ -614,10 +615,20 @@ function App() {
             </ProtectedRoute>
           }
         />
+          {/* Piping Routes */}
+          {/* Piping Data Sheet - Main Page */}
+          <Route
+            path="engineering/piping/datasheet"
+            element={
+              <ProtectedRoute>
+                <PipingDataSheet />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Piping Routes */}
-        <Route
-          path="engineering/piping/critical-stress-lines"
+          {/* Piping Data Sheet - Critical Stress Lines Sub-Page */}
+          <Route
+            path="engineering/piping/datasheet/critical-stress-lines"
           element={
             <ProtectedRoute>
               <CriticalStressLineList />

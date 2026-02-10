@@ -94,16 +94,6 @@ export const ENGINEERING_DISCIPLINES = {
         path: '/engineering/piping/datasheet',
         description: 'Piping component data sheets',
         moduleCode: 'piping_datasheet',
-      },
-      {
-        id: 'criticalStress',
-        name: 'Critical Stress Line List',
-        fullName: 'Critical Stress Line List Analysis',
-        icon: TableCellsIcon,
-        path: '/engineering/piping/critical-stress-lines',
-        description: 'Critical stress analysis for piping systems',
-        moduleCode: 'piping_critical_stress',
-        badge: 'NEW'
       }
     ]
   },
