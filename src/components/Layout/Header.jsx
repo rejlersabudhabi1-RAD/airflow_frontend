@@ -102,7 +102,8 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                 >
                   Solutions
                 </Link>
-                <Link
+                {/* SOFT-CODED: Subscription link disabled for in-house deployment */}
+                {/* <Link
                   to="/pricing"
                   className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-bold rounded-lg shadow-lg hover:shadow-purple-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
                 >
@@ -110,7 +111,7 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>Subscription</span>
-                </Link>
+                </Link> */}
                 <Link
                   to="/about"
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
@@ -162,7 +163,8 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                 >
                   Solutions
                 </Link>
-                <Link
+                {/* SOFT-CODED: Subscription link disabled for in-house deployment */}
+                {/* <Link
                   to="/pricing"
                   className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-bold rounded-lg shadow-lg hover:shadow-purple-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
                 >
@@ -170,7 +172,7 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>Subscription</span>
-                </Link>
+                </Link> */}
                 <Link
                   to="/about"
                   className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"

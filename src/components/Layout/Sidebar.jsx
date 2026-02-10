@@ -224,6 +224,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         }
       ]
         },
+        // SOFT-CODED: CRS Multi-Revision Manager removed as per user request
+        // This duplicate menu item is disabled - use "2.2 Multi-Revision" under CRS section instead
+        /*
         {
           id: 'crsMultiRevision',
           title: '2.3 CRS Multi-Revision Manager',
@@ -231,7 +234,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           path: '/crs/multi-revision',
           description: 'Upload and manage multiple PDF revisions',
           moduleCode: 'crs_documents'
-    },      {
+        },
+        */
+        {
         id: 'finance',
         title: getSectionTitle('finance'),
         icon: CurrencyDollarIcon,
@@ -384,16 +389,17 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           path: '/qhse/general/energy',
           description: 'Energy management',
           moduleCode: 'qhse'
-        },
-        {
-          id: 'interconnectedDemo',
-          title: '7.7 AI Interconnected System',
-          icon: SparklesIcon,
-          path: '/qhse/interconnected-demo',
-          description: 'AI-powered cross-module intelligence demo',
-          moduleCode: 'qhse',
-          badge: 'AI'
         }
+        // SOFT-CODED: AI Interconnected System demo removed (not needed)
+        // {
+        //   id: 'interconnectedDemo',
+        //   title: '7.7 AI Interconnected System',
+        //   icon: SparklesIcon,
+        //   path: '/qhse/interconnected-demo',
+        //   description: 'AI-powered cross-module intelligence demo',
+        //   moduleCode: 'qhse',
+        //   badge: 'AI'
+        // }
       ]
     }
   ]
@@ -473,14 +479,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
-        },
-        {
-          id: 'subscriptionManagement',
-          title: '8.3 Subscription',
-          icon: CurrencyDollarIcon,
-          path: '/admin/subscriptions',
-          description: 'Plans & billing management'
         }
+        // SOFT-CODED: Subscription feature disabled for in-house deployment
+        // {
+        //   id: 'subscriptionManagement',
+        //   title: '8.3 Subscription',
+        //   icon: CurrencyDollarIcon,
+        //   path: '/admin/subscriptions',
+        //   description: 'Plans & billing management'
+        // }
       ]
     })
   }

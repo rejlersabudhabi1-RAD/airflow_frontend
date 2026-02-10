@@ -40,7 +40,8 @@ import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
-import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
+// SOFT-CODED: QHSEInterconnectedDemo removed (not needed)
+// import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
@@ -49,8 +50,9 @@ import DeptOfSales from './pages/Finance/DeptOfSales'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
-import SubscriptionManagement from './pages/SubscriptionManagement'
-import SubscriptionPlans from './pages/SubscriptionPlans'
+// SOFT-CODED: Subscription feature disabled for in-house deployment
+// import SubscriptionManagement from './pages/SubscriptionManagement'
+// import SubscriptionPlans from './pages/SubscriptionPlans'
 import ContactSupportPage from './pages/ContactSupportPage'
 import DocumentationPage from './pages/DocumentationPage'
 import Solutions from './pages/Solutions'
@@ -282,14 +284,15 @@ function App() {
             </PublicRoute>
           }
         />
-        <Route
+        {/* SOFT-CODED: Subscription pricing page disabled for in-house deployment */}
+        {/* <Route
           path="pricing"
           element={
             <PublicRoute>
               <SubscriptionPlans />
             </PublicRoute>
           }
-        />
+        /> */}
         
         {/* Password Reset Routes - Public */}
         <Route path="setup-password" element={<SetupPassword />} />
@@ -655,14 +658,15 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
-        <Route
+        {/* SOFT-CODED: QHSE Interconnected Demo route removed (not needed) */}
+        {/* <Route
           path="qhse/interconnected-demo/:projectId?"
           element={
             <ModuleProtectedRoute moduleCode="qhse">
               <QHSEInterconnectedDemo />
             </ModuleProtectedRoute>
           }
-        />
+        /> */}
 
         {/* Admin Routes */}
         <Route
@@ -697,14 +701,15 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
+        {/* SOFT-CODED: Subscription management disabled for in-house deployment */}
+        {/* <Route
           path="admin/subscriptions"
           element={
             <ProtectedRoute>
               <SubscriptionManagement />
             </ProtectedRoute>
           }
-        />
+        /> */}
         <Route
           path="admin/reports"
           element={

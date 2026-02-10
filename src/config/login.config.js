@@ -71,13 +71,14 @@ export const FORM_CONFIG = {
       text: 'Forgot password?',
       link: '/forgot-password',
     },
+    // SOFT-CODED: Subscription button disabled for in-house deployment
     subscription: {
-      enabled: true, // Soft-coded toggle
+      enabled: false, // Disabled for in-house use (no external subscriptions)
       text: 'View Subscription Plans',
-      icon: 'currency-dollar', // Icon identifier
+      icon: 'currency-dollar',
       link: '/pricing',
       description: 'Explore our pricing and features',
-      style: 'primary', // 'primary', 'secondary', 'outline'
+      style: 'primary',
     },
   },
   

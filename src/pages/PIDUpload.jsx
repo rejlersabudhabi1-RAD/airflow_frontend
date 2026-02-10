@@ -1,10 +1,57 @@
+/**
+ * P&ID Upload with Project Management & Reference Documents
+ * SOFT-CODED: Following PFD Verification design pattern
+ * - Project creation and selection
+ * - Reference document uploads (ISO standards, legends, datasheets)
+ * - Document upload within project context
+ * - Preserves core P&ID verification logic
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Package, FolderPlus, Edit, Trash2, X, CheckCircle, Loader, ArrowLeft, Upload as UploadIcon, FileText } from 'lucide-react';
 import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
 
 const PIDUpload = () => {
   const navigate = useNavigate();
+  
+  // SOFT-CODED: Reference documents configuration for P&ID verification
+  const referenceDocuments = [
+    { key: 'pfd_document', label: 'PFD (Process Flow Diagram)', icon: FileText, color: 'cyan', required: true, description: 'P&IDs are generated from PFDs - upload for cross-verification' },
+    { key: 'iso_standards', label: 'ISO Standards (ISO 15926, ISO 10628)', icon: FileText, color: 'blue', required: false },
+    { key: 'pid_standards', label: 'P&ID Standards & Guidelines', icon: FileText, color: 'green', required: true },
+    { key: 'legends_symbols', label: 'Legends and Symbols', icon: FileText, color: 'purple', required: true },
+    { key: 'equipment_datasheet', label: 'Equipment Datasheets', icon: FileText, color: 'orange', required: false },
+    { key: 'instrument_datasheet', label: 'Instrument Datasheets', icon: FileText, color: 'indigo', required: false },
+    { key: 'process_description', label: 'Process Description', icon: FileText, color: 'pink', required: false },
+    { key: 'safety_requirements', label: 'Safety Requirements (SIL, HAZOP)', icon: FileText, color: 'red', required: false },
+    { key: 'other_documents', label: 'Other Reference Documents', icon: FileText, color: 'gray', required: false }
+  ];
+  
+  // Project management state
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDescription, setNewProjectDescription] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  
+  // Reference documents state
+  const [referenceFiles, setReferenceFiles] = useState({});
+  
+  // Edit/Delete modals
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectDescription, setEditProjectDescription] = useState('');
+  const [updatingProject, setUpdatingProject] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Upload state (existing logic preserved)
   const [file, setFile] = useState(null);
   const [formData, setFormData] = useState({
     drawing_number: '',
@@ -26,8 +73,14 @@ const PIDUpload = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisStage, setAnalysisStage] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState({ type: '', text: '' });
   const [dragActive, setDragActive] = useState(false);
   const uploadTimeoutRef = useRef(null);
+  
+  // Fetch projects on mount
+  useEffect(() => {
+    fetchProjects();
+  }, []);
   
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -38,6 +91,190 @@ const PIDUpload = () => {
     };
   }, []);
 
+  
+  // ========== PROJECT MANAGEMENT FUNCTIONS ==========
+  const fetchProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await apiClient.get('/pid/projects/');
+      setProjects(response.data.projects || response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setMessage({ type: 'error', text: 'Failed to load projects' });
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    
+    if (!newProjectName.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a project name' });
+      return;
+    }
+
+    setCreatingProject(true);
+    try {
+      const response = await apiClient.post('/pid/projects/', {
+        name: newProjectName,
+        description: newProjectDescription
+      });
+
+      const newProject = response.data.project || response.data;
+      setSelectedProject(newProject);
+      setShowCreateModal(false);
+      setNewProjectName('');
+      setNewProjectDescription('');
+      
+      // Update form with project name
+      setFormData(prev => ({
+        ...prev,
+        project_name: newProject.project_name || newProject.name
+      }));
+      
+      fetchProjects();
+      setMessage({ type: 'success', text: `Project "${newProject.project_name || newProject.name}" created successfully!` });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error creating project:', error);
+      setMessage({ type: 'error', text: error.response?.data?.message || 'Failed to create project' });
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleEditClick = (e, project) => {
+    e.stopPropagation();
+    setEditingProject(project);
+    setEditProjectName(project.project_name || project.name);
+    setEditProjectDescription(project.description || '');
+    setShowEditModal(true);
+  };
+
+  const handleUpdateProject = async (e) => {
+    e.preventDefault();
+    
+    if (!editProjectName.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a project name' });
+      return;
+    }
+
+    setUpdatingProject(true);
+    try {
+      await apiClient.put(`/pid/projects/${editingProject.id}/`, {
+        project_name: editProjectName,
+        description: editProjectDescription
+      });
+
+      fetchProjects();
+      setShowEditModal(false);
+      setEditingProject(null);
+      setMessage({ type: 'success', text: 'Project updated successfully!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update project' });
+    } finally {
+      setUpdatingProject(false);
+    }
+  };
+
+  const handleDeleteClick = (e, project) => {
+    e.stopPropagation();
+    setDeletingProject(project);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await apiClient.delete(`/pid/projects/${deletingProject.id}/`);
+      fetchProjects();
+      setShowDeleteConfirm(false);
+      setDeletingProject(null);
+      setMessage({ type: 'success', text: 'Project deleted successfully' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to delete project' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  const handleSelectProject = (project) => {
+    setSelectedProject(project);
+    setFormData(prev => ({
+      ...prev,
+      project_name: project.project_name || project.name
+    }));
+  };
+
+  const handleBackToProjects = () => {
+    setSelectedProject(null);
+    setFormData({
+      project_name: '',
+      drawing_number: '',
+      revision: '',
+      description: '',
+      drawing_title: ''
+    });
+    setFile(null);
+    setPreviewUrl(null);
+    setError('');
+    setSuccess('');
+    setReferenceFiles({});
+    fetchProjects();
+  };
+
+  // ========== REFERENCE DOCUMENT HANDLERS (SOFT-CODED) ==========
+  
+  const handleReferenceFileChange = (key, e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.type === 'application/pdf') {
+        if (file.size <= 50 * 1024 * 1024) {
+          setReferenceFiles(prev => ({ ...prev, [key]: file }));
+          setMessage({ type: 'success', text: `Reference document selected: ${file.name}` });
+          setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+        } else {
+          setMessage({ type: 'error', text: 'File size exceeds 50MB limit' });
+          e.target.value = '';
+        }
+      } else {
+        setMessage({ type: 'error', text: 'Please select a PDF file' });
+        e.target.value = '';
+      }
+    }
+  };
+
+  const removeReferenceFile = (key) => {
+    setReferenceFiles(prev => {
+      const newFiles = { ...prev };
+      delete newFiles[key];
+      return newFiles;
+    });
+    const input = document.getElementById(`ref-${key}`);
+    if (input) input.value = '';
+    setMessage({ type: 'success', text: 'Reference document removed' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  };
+
+  const getColorClasses = (color) => {
+    const colors = {
+      blue: 'border-blue-200 bg-blue-50',
+      green: 'border-green-200 bg-green-50',
+      purple: 'border-purple-200 bg-purple-50',
+      orange: 'border-orange-200 bg-orange-50',
+      indigo: 'border-indigo-200 bg-indigo-50',
+      pink: 'border-pink-200 bg-pink-50',
+      red: 'border-red-200 bg-red-50',
+      gray: 'border-gray-200 bg-gray-50',
+      teal: 'border-teal-200 bg-teal-50'
+    };
+    return colors[color] || colors.gray;
+  };
+
+  // ========== FILE HANDLING FUNCTIONS (Preserved Core Logic) ==========
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -113,6 +350,11 @@ const PIDUpload = () => {
     // Add file first - this is critical for proper multipart encoding
     formDataToSend.append('file', file);
     
+    // SOFT-CODED: Include reference documents if uploaded
+    Object.keys(referenceFiles).forEach(key => {
+      formDataToSend.append(`reference_${key}`, referenceFiles[key]);
+    });
+    
     // Only append non-empty optional fields
     if (formData.drawing_number?.trim()) {
       formDataToSend.append('drawing_number', formData.drawing_number.trim());
@@ -142,6 +384,7 @@ const PIDUpload = () => {
       for (let [key, value] of formDataToSend.entries()) {
         console.log(`  ${key}:`, typeof value === 'object' ? `[File: ${value.name}]` : value);
       }
+      console.log('[DEBUG] Reference documents count:', Object.keys(referenceFiles).length);
       console.log('[DEBUG] API Endpoint:', apiClient.defaults.baseURL + '/pid/drawings/upload/');
       
       console.log('[DEBUG] Preparing API request...');
@@ -312,11 +555,361 @@ const PIDUpload = () => {
     }
   };
 
+  // ========== RENDER: Project Selection or Upload Interface ==========
+  
+  // Show project selection if no project selected
+  if (!selectedProject) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+              P&ID Verification Projects
+            </h1>
+            <p className="text-gray-600">
+              Select a project or create a new one to start uploading P&ID drawings
+            </p>
+          </div>
+
+          {/* Messages */}
+          {message.text && (
+            <div className={`mb-6 p-4 rounded-lg ${
+              message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+              message.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
+              'bg-blue-50 border border-blue-200 text-blue-800'
+            }`}>
+              <div className="flex items-center">
+                {message.type === 'success' && <CheckCircle className="w-5 h-5 mr-2" />}
+                {message.type === 'error' && <X className="w-5 h-5 mr-2" />}
+                <span>{message.text}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Create New Project Button */}
+          <div className="mb-6">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <FolderPlus className="w-5 h-5" />
+              Create New Project
+            </button>
+          </div>
+
+          {/* Projects Grid */}
+          {loadingProjects ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg shadow">
+              <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Projects Yet</h3>
+              <p className="text-gray-600">Create your first project to start uploading P&ID drawings</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  onClick={() => handleSelectProject(project)}
+                  className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow cursor-pointer p-6 border-2 border-transparent hover:border-blue-500"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        {project.project_name || project.name}
+                      </h3>
+                      {project.description && (
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {project.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                    <span>{project.drawing_count || 0} drawings</span>
+                    <span>{new Date(project.created_at).toLocaleDateString()}</span>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => handleEditClick(e, project)}
+                      className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteClick(e, project)}
+                      className="flex-1 px-3 py-2 bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Create Project Modal */}
+          {showCreateModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">Create New Project</h3>
+                  <button
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setNewProjectName('');
+                      setNewProjectDescription('');
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-6 h-6 text-gray-500" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateProject} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Project Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      placeholder="e.g., ADNOC Project XYZ"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description (Optional)
+                    </label>
+                    <textarea
+                      value={newProjectDescription}
+                      onChange={(e) => setNewProjectDescription(e.target.value)}
+                      placeholder="Brief project description..."
+                      rows="3"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateModal(false);
+                        setNewProjectName('');
+                        setNewProjectDescription('');
+                      }}
+                      className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creatingProject}
+                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium flex items-center justify-center transition-colors"
+                    >
+                      {creatingProject ? (
+                        <>
+                          <Loader className="w-5 h-5 mr-2 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-5 h-5 mr-2" />
+                          Create & Upload
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Project Modal */}
+          {showEditModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">Edit Project</h3>
+                  <button
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingProject(null);
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-6 h-6 text-gray-500" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleUpdateProject} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Project Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={editProjectName}
+                      onChange={(e) => setEditProjectName(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={editProjectDescription}
+                      onChange={(e) => setEditProjectDescription(e.target.value)}
+                      rows="3"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditingProject(null);
+                      }}
+                      className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={updatingProject}
+                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium flex items-center justify-center"
+                    >
+                      {updatingProject ? (
+                        <>
+                          <Loader className="w-5 h-5 mr-2 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        'Update'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-red-600">Delete Project</h3>
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeletingProject(null);
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-6 h-6 text-gray-500" />
+                  </button>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                      <Trash2 className="w-8 h-8 text-red-600" />
+                    </div>
+                  </div>
+                  <p className="text-gray-700 text-center mb-2">
+                    Are you sure you want to delete this project?
+                  </p>
+                  <p className="text-lg font-bold text-gray-900 text-center">
+                    {deletingProject?.project_name || deletingProject?.name}
+                  </p>
+                  <p className="text-sm text-red-600 text-center mt-4">
+                    This action cannot be undone. All associated drawings will be permanently removed.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeletingProject(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isDeleting}
+                    className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 font-medium flex items-center justify-center"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader className="w-5 h-5 mr-2 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-5 h-5 mr-2" />
+                        Delete
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ========== UPLOAD INTERFACE (Project Selected - PRESERVED CORE LOGIC) ==========
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
     <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl mx-auto">
-      {/* Header */}
+      {/* Back to Projects Button */}
+      <div className="mb-4">
+        <button
+          onClick={handleBackToProjects}
+          className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+        >
+          <span className="text-xl">←</span>
+          Back to Projects
+        </button>
+      </div>
+
+      {/* Header with Project Info */}
       <div className="mb-6 sm:mb-8">
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <Package className="w-6 h-6 text-blue-600" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {selectedProject.project_name || selectedProject.name}
+              </h2>
+              {selectedProject.description && (
+                <p className="text-sm text-gray-600">{selectedProject.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">
             P&ID Design Verification
@@ -332,6 +925,74 @@ const PIDUpload = () => {
         <p className="text-sm sm:text-base text-gray-600">
           Upload your P&ID drawing for AI-powered engineering review and compliance verification
         </p>
+      </div>
+
+      {/* SOFT-CODED: Reference Documents Section */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-center mb-6">
+          <FileText className="w-6 h-6 text-blue-500 mr-3" />
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Reference Documents</h2>
+            <p className="text-sm text-gray-600">Upload supporting documents for P&ID verification (Optional but Recommended)</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {referenceDocuments.map((doc) => (
+            <div
+              key={doc.key}
+              className={`p-4 border-2 rounded-lg ${getColorClasses(doc.color)}`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center">
+                    <doc.icon className="w-5 h-5 mr-2" />
+                    <span className="font-semibold text-sm">{doc.label}</span>
+                  </div>
+                  {doc.description && (
+                    <p className="text-xs text-gray-600 mt-1 ml-7">{doc.description}</p>
+                  )}
+                </div>
+                {!doc.required && (
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded ml-2">Optional</span>
+                )}
+              </div>
+
+              {referenceFiles[doc.key] ? (
+                <div className="flex items-center justify-between bg-white p-2 rounded">
+                  <div className="flex items-center flex-1 min-w-0 mr-2">
+                    <FileText className="w-4 h-4 mr-2 flex-shrink-0" />
+                    <span className="text-sm truncate">{referenceFiles[doc.key].name}</span>
+                  </div>
+                  <button
+                    onClick={() => removeReferenceFile(doc.key)}
+                    type="button"
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor={`ref-${doc.key}`} className="block">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center cursor-pointer hover:border-gray-400 transition-colors bg-white">
+                      <UploadIcon className="w-6 h-6 mx-auto mb-1 text-gray-400" />
+                      <p className="text-xs text-gray-600">Click to upload PDF</p>
+                      <p className="text-xs text-gray-500 mt-1">Max 50MB</p>
+                    </div>
+                  </label>
+                  <input
+                    type="file"
+                    id={`ref-${doc.key}`}
+                    accept=".pdf"
+                    onChange={(e) => handleReferenceFileChange(doc.key, e)}
+                    className="hidden"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Upload Form */}
