@@ -132,8 +132,33 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
       
       const method = isCreateMode ? 'POST' : 'PATCH';
 
+      // SOFT-CODED FIX: Convert empty strings to null for date fields and optional fields
+      // Django expects null, not empty string for optional date/text fields
+      const sanitizedData = { ...formData };
+      
+      // Date fields that should be null instead of empty string
+      const dateFields = [
+        'projectStartingDate', 'projectClosingDate', 'projectExtension',
+        'projectQualityPlanStatusIssueDate', 'projectAudit1', 'projectAudit2',
+        'projectAudit3', 'projectAudit4', 'clientAudit1', 'clientAudit2'
+      ];
+      
+      // Optional text fields that should be null instead of empty string
+      const optionalTextFields = [
+        'projectQualityEng', 'projectQualityPlanStatusRev', 'projectTitleKey',
+        'rejectionOfDeliverablesPercent', 'remarks'
+      ];
+      
+      // Convert empty strings to null
+      [...dateFields, ...optionalTextFields].forEach(field => {
+        if (sanitizedData[field] === '') {
+          sanitizedData[field] = null;
+        }
+      });
+
       console.log(`[ProjectEditModal] ${method} request to: ${url}`);
-      console.log('[ProjectEditModal] Payload:', formData);
+      console.log('[ProjectEditModal] Original payload:', formData);
+      console.log('[ProjectEditModal] Sanitized payload:', sanitizedData);
 
       const response = await fetch(url, {
         method,
@@ -141,7 +166,7 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(sanitizedData)
         }
       );
 
