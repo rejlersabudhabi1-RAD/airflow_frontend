@@ -24,6 +24,17 @@ const CriticalStressLineList = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   
+  // CRITICAL STRESS COLUMN CONFIGURATION - Soft coded for easy maintenance
+  const CRITICAL_STRESS_COLUMNS = [
+    { key: 'line_number', label: 'Line Number', altKeys: ['item_tag'], show: true },
+    { key: 'from_line', label: 'From', altKeys: ['from'], show: true },
+    { key: 'to_line', label: 'To', altKeys: ['to'], show: true },
+    { key: 'size', label: 'Size', altKeys: ['line_size'], show: true },
+    { key: 'temperature', label: 'Temperature', altKeys: [], show: true, empty: true },
+    { key: 'critical_stress', label: 'Critical Stress', altKeys: [], show: true, empty: true },
+    { key: 'spec', label: 'Spec', altKeys: [], show: true }
+  ];
+  
   // Line Number Format Configuration (same as Line List)
   const STRICT_LINE_PATTERNS = {
     line_size: '\\d{1,2}',
@@ -166,18 +177,31 @@ const CriticalStressLineList = () => {
       return;
     }
 
-    // Prepare data for Excel export
-    const exportData = extractedData.lines.map(line => ({
-      'Line Number': line.line_number || line.item_tag || '',
-      'From': line.from_line || line.from || '',
-      'To': line.to_line || line.to || '',
-      'Service': line.service || line.fluid_description || '',
-      'Size': line.size || line.line_size || '',
-      'Rating': line.rating || line.pressure_rating || '',
-      'Material': line.material || line.pipe_material || '',
-      'Pipe Class': line.pipe_class || '',
-      'Insulation': line.insulation_type || ''
-    }));
+    // Prepare data for Excel export using CRITICAL_STRESS_COLUMNS configuration
+    const exportData = extractedData.lines.map(line => {
+      const row = {};
+      
+      CRITICAL_STRESS_COLUMNS.filter(col => col.show).forEach(col => {
+        if (col.empty) {
+          // Empty column - leave blank
+          row[col.label] = '';
+        } else {
+          // Try primary key, then alternative keys, then default to empty
+          let value = line[col.key];
+          if (!value && col.altKeys && col.altKeys.length > 0) {
+            for (const altKey of col.altKeys) {
+              if (line[altKey]) {
+                value = line[altKey];
+                break;
+              }
+            }
+          }
+          row[col.label] = value || '';
+        }
+      });
+      
+      return row;
+    });
 
     // Create worksheet
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -350,25 +374,43 @@ const CriticalStressLineList = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Line Number</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">From</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">To</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Material</th>
+                      {CRITICAL_STRESS_COLUMNS.filter(col => col.show).map(col => (
+                        <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          {col.label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {extractedData.lines.map((line, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{line.line_number || line.item_tag}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{line.from_line || line.from || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{line.to_line || line.to || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{line.service || line.fluid_description || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{line.size || line.line_size || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{line.rating || line.pressure_rating || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{line.material || line.pipe_material || '-'}</td>
+                        {CRITICAL_STRESS_COLUMNS.filter(col => col.show).map(col => {
+                          // Handle empty columns
+                          if (col.empty) {
+                            return (
+                              <td key={col.key} className="px-4 py-3 text-sm text-gray-400">
+                                -
+                              </td>
+                            );
+                          }
+                          
+                          // Get value from primary key or alternative keys
+                          let value = line[col.key];
+                          if (!value && col.altKeys && col.altKeys.length > 0) {
+                            for (const altKey of col.altKeys) {
+                              if (line[altKey]) {
+                                value = line[altKey];
+                                break;
+                              }
+                            }
+                          }
+                          
+                          return (
+                            <td key={col.key} className={`px-4 py-3 text-sm ${col.key === 'line_number' ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                              {value || '-'}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
