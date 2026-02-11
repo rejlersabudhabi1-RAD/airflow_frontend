@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ViewColumnsIcon,
@@ -322,53 +322,115 @@ const DesignIQLists = () => {
         return;
       }
 
-      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
+      console.log('[P&ID Upload]  Starting async upload...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Use long timeout client for OCR processing (10 minutes)
-      const response = await apiClientLongTimeout.post(
+      // Step 1: Upload file and get task ID (fast <5s response)
+      const uploadResponse = await apiClient.post(
         '/designiq/lists/upload_pid/',
         formData,
         {
           headers: {
             'Authorization': `Bearer ${token}`
-            // Content-Type will be set automatically by axios for FormData
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
+            console.log('[P&ID Upload]  File upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
-      
-      const data = response.data;
-      setExtractedData({
-        lines: data.extracted_lines || [],
-        fileName: file.name,
-        itemsCreated: data.items_created || 0
-      });
-      setShowPreviewModal(true);
-      setUploadResult({
-        success: true,
-        message: `Successfully uploaded document ${data.document_id || file.name} with ${data.extracted_lines?.length || 0} line items`,
-        data: data
-      });
-      setUploadingPID(false);
+      const { task_id, status_endpoint } = uploadResponse.data;
+      console.log('[P&ID Upload]  File uploaded, task queued:', task_id);
+
+      // Step 2: Poll for task completion
+      const pollInterval = 3000; // 3 seconds
+      const maxAttempts = 400; // 20 minutes total (3s * 400 = 1200s)
+      let attempts = 0;
+      let lastProgress = 0;
+
+      const pollStatus = async () => {
+        try {
+          const statusResponse = await apiClient.get(
+            `/designiq/lists/upload_pid_status/${task_id}/`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
+
+          const statusData = statusResponse.data;
+          
+          // Log progress updates
+          if (statusData.progress !== lastProgress) {
+            console.log(`[P&ID Upload]  Progress: ${statusData.progress}% - ${statusData.status}`);
+            lastProgress = statusData.progress;
+          }
+
+          if (statusData.status === 'completed') {
+            console.log('[P&ID Upload]  Processing complete!');
+            
+            setExtractedData({
+              lines: statusData.result.extracted_lines || [],
+              fileName: file.name,
+              itemsCreated: statusData.result.items_created || 0
+            });
+            setShowPreviewModal(true);
+            setUploadResult({
+              success: true,
+              message: `Successfully processed ${statusData.result.document_id || file.name} with ${statusData.result.extracted_lines?.length || 0} line items`,
+              data: statusData.result
+            });
+            setUploadingPID(false);
+            setProcessing(false);
+            return;
+          }
+
+          if (statusData.status === 'failed') {
+            throw new Error(statusData.error || 'Processing failed');
+          }
+
+          // Continue polling
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(pollStatus, pollInterval);
+          } else {
+            throw new Error('Processing timeout - task took longer than 20 minutes');
+          }
+
+        } catch (pollError) {
+          console.error('[P&ID Upload]  Polling error:', pollError);
+          
+          let errorMessage = 'Failed to check processing status';
+          if (pollError.response) {
+            const errorData = pollError.response.data;
+            errorMessage = errorData.detail || errorData.error || pollError.response.statusText || errorMessage;
+          } else {
+            errorMessage = pollError.message || errorMessage;
+          }
+          
+          setUploadResult({
+            success: false,
+            message: errorMessage
+          });
+          setUploadingPID(false);
+          setProcessing(false);
+        }
+      };
+
+      // Start polling
+      setTimeout(pollStatus, pollInterval);
+
     } catch (error) {
-      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
+      console.error('[P&ID Upload]  Upload error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Upload timed out. The PDF might be too large or complex. Please try a smaller file or contact support.';
-      } else if (error.response) {
-        // Server responded with error
+      if (error.response) {
         const errorData = error.response.data;
         errorMessage = errorData.detail || errorData.error || error.response.statusText || errorMessage;
       } else if (error.request) {
-        // Request made but no response
         errorMessage = 'No response from server. Please check your connection and try again.';
       } else {
         errorMessage = error.message || errorMessage;
@@ -378,15 +440,12 @@ const DesignIQLists = () => {
         success: false,
         message: errorMessage
       });
-    } finally {
-      setProcessing(false);
       setUploadingPID(false);
+      setProcessing(false);
+    } finally {
       event.target.value = '';
     }
   };
-
-  // View PDF functionality removed - users can download Excel directly from the table
-
   const handleExportDocumentExcel = async (documentId, filename) => {
     // CRS MULTI-REVISION PATTERN: Backend generates Excel, frontend downloads it
     try {
