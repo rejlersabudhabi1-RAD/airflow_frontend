@@ -363,12 +363,12 @@ const DesignIQLists = () => {
           const statusData = statusResponse.data;
           
           // Log progress updates
-          if (statusData.progress !== lastProgress) {
-            console.log(`[P&ID Upload]  Progress: ${statusData.progress}% - ${statusData.status}`);
-            lastProgress = statusData.progress;
+          if (statusData.percent !== lastProgress) {
+            console.log(`[P&ID Upload]  Progress: ${statusData.percent}% - ${statusData.status}`);
+            lastProgress = statusData.percent;
           }
 
-          if (statusData.status === 'completed') {
+          if (statusData.state === 'SUCCESS') {
             console.log('[P&ID Upload]  Processing complete!');
             
             setExtractedData({
@@ -387,7 +387,7 @@ const DesignIQLists = () => {
             return;
           }
 
-          if (statusData.status === 'failed') {
+          if (statusData.state === 'FAILURE') {
             throw new Error(statusData.error || 'Processing failed');
           }
 
