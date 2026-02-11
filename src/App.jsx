@@ -44,6 +44,7 @@ import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 // import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
+import SalarySlip from './pages/Finance/SalarySlip'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import DeptOfSales from './pages/Finance/DeptOfSales'
@@ -494,6 +495,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="finance">
               <InvoiceDetail />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="finance/salary-slip"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <SalarySlip />
             </ModuleProtectedRoute>
           }
         />

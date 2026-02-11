@@ -256,6 +256,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             path: '/finance/invoices',
             icon: DocumentTextIcon,
             moduleCode: 'finance'
+          },
+          {
+            id: 'financeSalarySlip',
+            title: '3.3 Salary Slip',
+            path: '/finance/salary-slip',
+            icon: DocumentTextIcon,
+            moduleCode: 'finance',
+            description: 'Generate and manage employee salary slips'
           }
         ]
       },

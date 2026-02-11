@@ -380,6 +380,32 @@ export const FEATURES_CATALOG = {
           totalUses: 18790,
           avgRating: 4.6
         }
+      },
+      {
+        id: 'finance-salary-slip',
+        name: 'Salary Slip',
+        shortName: 'Salary',
+        description: 'Generate and manage employee salary slips',
+        path: '/finance/salary-slip',
+        moduleCode: 'finance',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Salary slip generation',
+          'Employee management',
+          'PDF export',
+          'Monthly tracking'
+        ],
+        metrics: {
+          slipsGenerated: 0,
+          employees: 0,
+          avgGenerationTime: 'Instant'
+        },
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 0
+        }
       }
     ]
   },
