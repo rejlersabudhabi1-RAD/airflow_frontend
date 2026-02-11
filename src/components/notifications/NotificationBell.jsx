@@ -19,18 +19,28 @@ const NotificationBell = () => {
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef(null)
   const bellRef = useRef(null)
+  const errorCountRef = useRef(0)
+  const pollingIntervalRef = useRef(null)
 
-  // Fetch unread count on mount and every 60 seconds - only if authenticated
+  // Fetch unread count on mount and every 2 minutes (optimized from 60s) - only if authenticated
   useEffect(() => {
     if (!isAuthenticated) {
       console.log('[NotificationBell] ⚠️ User not authenticated, skipping fetch')
+      errorCountRef.current = 0
       return
     }
     
-    console.log('[NotificationBell] ✅ User authenticated, starting notification polling')
+    console.log('[NotificationBell] ✅ User authenticated, starting notification polling (120s interval)')
     fetchUnreadCount()
-    const interval = setInterval(fetchUnreadCount, 60000) // Poll every 60 seconds
-    return () => clearInterval(interval)
+    
+    // Start polling with 2-minute interval (reduced load by 50%)
+    pollingIntervalRef.current = setInterval(fetchUnreadCount, 120000)
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
   }, [isAuthenticated])
 
   // Fetch notifications when dropdown opens
@@ -66,12 +76,44 @@ const NotificationBell = () => {
       const count = await notificationService.getUnreadCount()
       console.log('[NotificationBell] ✅ Unread count fetched:', count)
       setUnreadCount(count)
+      
+      // Reset error count on success
+      errorCountRef.current = 0
+      
     } catch (error) {
       console.error('[NotificationBell] ❌ Failed to fetch unread count:', error)
+      
+      // Increment error counter
+      errorCountRef.current += 1
+      
+      // Handle authentication errors
       if (error.response?.status === 401) {
         console.error('[NotificationBell] ⚠️ User not authenticated')
         setUnreadCount(0)
+        // Stop polling on auth error
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+        }
+        return
       }
+      
+      // Handle timeout errors with exponential backoff
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        console.warn(`[NotificationBell] ⏱️ Timeout error (attempt ${errorCountRef.current})`)
+        
+        // Stop aggressive polling after 3 consecutive failures
+        if (errorCountRef.current >= 3) {
+          console.warn('[NotificationBell] 🛑 Too many consecutive errors, slowing down polling')
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+          }
+          // Retry with longer interval (5 minutes)
+          pollingIntervalRef.current = setInterval(fetchUnreadCount, 300000)
+        }
+      }
+      
+      // Fallback to 0 on error (don't show stale count)
+      setUnreadCount(0)
     }
   }
 
@@ -112,6 +154,8 @@ const NotificationBell = () => {
       )
       // Update unread count
       setUnreadCount(prev => Math.max(0, prev - 1))
+      // Refresh count from server to sync cache
+      setTimeout(() => fetchUnreadCount(), 500)
     } catch (error) {
       console.error('Failed to mark as read:', error)
     }
@@ -123,6 +167,8 @@ const NotificationBell = () => {
       // Update local state
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
       setUnreadCount(0)
+      // Refresh count from server to sync cache
+      setTimeout(() => fetchUnreadCount(), 500)
     } catch (error) {
       console.error('Failed to mark all as read:', error)
     }
