@@ -18,7 +18,7 @@ import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { STORAGE_KEYS } from '../../config/app.config';
 import { API_BASE_URL } from '../../config/api.config';
-import { apiClientLongTimeout } from '../../services/api.service';
+import apiClient, { apiClientLongTimeout } from '../../services/api.service';
 import * as XLSX from 'xlsx';
 
 // List types configuration (matches backend)
