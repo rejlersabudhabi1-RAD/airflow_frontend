@@ -110,6 +110,105 @@ const PumpDataSheetView = () => {
     return parseFloat(value).toFixed(decimals);
   };
 
+  // Helper to get value with fallback from old fields
+  const getValueWithFallback = (newValue, oldValue, defaultValue = 'N/A') => {
+    // First try new field
+    if (newValue !== null && newValue !== undefined && newValue !== '') {
+      return newValue;
+    }
+    // Fallback to old field
+    if (oldValue !== null && oldValue !== undefined && oldValue !== '') {
+      return oldValue;
+    }
+    return defaultValue;
+  };
+
+  // Helper to safely display liquid characteristics with fallback
+  const getLiquidType = () => {
+    return displayValue(getValueWithFallback(pumpData.liquid_type, pumpData.service));
+  };
+
+  const getVaporPressureMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.vapor_pressure_max, pumpData.vapor_pressure));
+  };
+
+  const getVaporPressureMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.vapor_pressure_min, pumpData.vapor_pressure));
+  };
+
+  const getDensityMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.density_max, pumpData.density));
+  };
+
+  const getDensityMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.density_min, pumpData.density));
+  };
+
+  const getViscosityMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.viscosity_max, pumpData.fluid_viscosity_at_temp));
+  };
+
+  const getViscosityMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.viscosity_min, pumpData.fluid_viscosity_at_temp));
+  };
+
+  const getTemperatureMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.temperature_max, pumpData.temperature));
+  };
+
+  const getTemperatureMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.temperature_min, pumpData.temperature));
+  };
+
+  // Helper to safely display operating conditions with fallback
+  const getSuctionPressureMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.suction_pressure_max, pumpData.total_suction_pressure));
+  };
+
+  const getSuctionPressureNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.suction_pressure_normal, pumpData.total_suction_pressure));
+  };
+
+  const getSuctionPressureMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.suction_pressure_min, pumpData.total_suction_pressure));
+  };
+
+  const getDischargePressureMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.discharge_pressure_max, pumpData.total_discharge_pressure));
+  };
+
+  const getDischargePressureNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.discharge_pressure_normal, pumpData.total_discharge_pressure));
+  };
+
+  const getDischargePressureMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.discharge_pressure_min, pumpData.total_discharge_pressure));
+  };
+
+  const getDifferentialPressureMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_pressure_max, pumpData.differential_pressure));
+  };
+
+  const getDifferentialPressureNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_pressure_normal, pumpData.differential_pressure));
+  };
+
+  const getDifferentialPressureMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_pressure_min, pumpData.differential_pressure));
+  };
+
+  const getDifferentialHeadMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_head_max, pumpData.differential_head));
+  };
+
+  const getDifferentialHeadNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_head_normal, pumpData.differential_head));
+  };
+
+  const getDifferentialHeadMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.differential_head_min, pumpData.differential_head));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -279,31 +378,31 @@ const PumpDataSheetView = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Liquid Type / Service</td>
-                      <td colSpan="2" className="px-4 py-3 text-center text-gray-700">{displayValue(pumpData.liquid_type)}</td>
+                      <td colSpan="2" className="px-4 py-3 text-center text-gray-700">{getLiquidType()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">-</td>
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">Vapor Pressure</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.vapor_pressure_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.vapor_pressure_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getVaporPressureMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getVaporPressureMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">bar</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Density</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.density_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.density_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDensityMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDensityMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">kg/m³</td>
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">Viscosity</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.viscosity_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.viscosity_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getViscosityMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getViscosityMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">cP</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Temperature</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.temperature_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.temperature_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getTemperatureMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getTemperatureMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">°C</td>
                     </tr>
                   </tbody>
@@ -337,30 +436,30 @@ const PumpDataSheetView = () => {
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">Suction Pressure</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.suction_pressure_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.suction_pressure_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.suction_pressure_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getSuctionPressureMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getSuctionPressureNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getSuctionPressureMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">bar</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Discharge Pressure</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.discharge_pressure_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.discharge_pressure_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.discharge_pressure_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDischargePressureMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDischargePressureNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDischargePressureMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">bar</td>
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">Differential Pressure</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_pressure_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_pressure_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_pressure_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialPressureMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialPressureNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialPressureMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">bar</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Differential Head</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_head_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_head_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.differential_head_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialHeadMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialHeadNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getDifferentialHeadMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">m</td>
                     </tr>
                   </tbody>
