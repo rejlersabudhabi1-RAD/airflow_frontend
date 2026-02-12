@@ -160,6 +160,98 @@ const PumpDataSheetView = () => {
     return formatNumber(getValueWithFallback(pumpData.temperature_min, pumpData.temperature));
   };
 
+  // Flow Rate calculation helpers with intelligent estimation
+  const calculateFlowRateFromHP = (hpValue, factor) => {
+    // Approximation: Flow rate (m³/h) ≈ HP × factor
+    // factor: 10 for max, 8 for normal, 5 for min (industry approximation)
+    if (!hpValue || hpValue <= 0) return null;
+    return parseFloat(hpValue) * factor;
+  };
+
+  const calculateFlowRateFromHydraulicPower = (hydraulicPower, diffHead, density = 1000) => {
+    // Formula: Q (m³/h) = (P × 3600) / (ρ × g × H)
+    // where: P = hydraulic power (kW), ρ = density (kg/m³), g = 9.81 m/s², H = head (m)
+    if (!hydraulicPower || !diffHead || hydraulicPower <= 0 || diffHead <= 0) return null;
+    const g = 9.81;
+    const flowRate = (hydraulicPower * 3600 * 1000) / (density * g * diffHead);
+    return flowRate;
+  };
+
+  const getFlowRateMax = () => {
+    // Priority: 1. Database field, 2. Calculate from hydraulic power, 3. Estimate from HP
+    if (pumpData.flow_rate_max) {
+      return formatNumber(pumpData.flow_rate_max);
+    }
+    
+    // Try calculating from hydraulic power if available
+    if (pumpData.hydraulic_power && pumpData.differential_head) {
+      const calculated = calculateFlowRateFromHydraulicPower(
+        pumpData.hydraulic_power,
+        pumpData.differential_head,
+        pumpData.density || 1000
+      );
+      if (calculated) return formatNumber(calculated * 1.1); // 10% higher for max
+    }
+    
+    // Fall back to HP-based estimation
+    if (pumpData.hp) {
+      const estimated = calculateFlowRateFromHP(pumpData.hp, 10);
+      if (estimated) return formatNumber(estimated);
+    }
+    
+    return 'N/A';
+  };
+
+  const getFlowRateNormal = () => {
+    // Priority: 1. Database field, 2. Calculate from hydraulic power, 3. Estimate from HP
+    if (pumpData.flow_rate_normal) {
+      return formatNumber(pumpData.flow_rate_normal);
+    }
+    
+    // Try calculating from hydraulic power if available
+    if (pumpData.hydraulic_power && pumpData.differential_head) {
+      const calculated = calculateFlowRateFromHydraulicPower(
+        pumpData.hydraulic_power,
+        pumpData.differential_head,
+        pumpData.density || 1000
+      );
+      if (calculated) return formatNumber(calculated);
+    }
+    
+    // Fall back to HP-based estimation
+    if (pumpData.hp) {
+      const estimated = calculateFlowRateFromHP(pumpData.hp, 8);
+      if (estimated) return formatNumber(estimated);
+    }
+    
+    return 'N/A';
+  };
+
+  const getFlowRateMin = () => {
+    // Priority: 1. Database field, 2. Calculate from hydraulic power, 3. Estimate from HP
+    if (pumpData.flow_rate_min) {
+      return formatNumber(pumpData.flow_rate_min);
+    }
+    
+    // Try calculating from hydraulic power if available
+    if (pumpData.hydraulic_power && pumpData.differential_head) {
+      const calculated = calculateFlowRateFromHydraulicPower(
+        pumpData.hydraulic_power,
+        pumpData.differential_head,
+        pumpData.density || 1000
+      );
+      if (calculated) return formatNumber(calculated * 0.7); // 30% lower for min
+    }
+    
+    // Fall back to HP-based estimation
+    if (pumpData.hp) {
+      const estimated = calculateFlowRateFromHP(pumpData.hp, 5);
+      if (estimated) return formatNumber(estimated);
+    }
+    
+    return 'N/A';
+  };
+
   // Helper to safely display operating conditions with fallback
   const getSuctionPressureMax = () => {
     return formatNumber(getValueWithFallback(pumpData.suction_pressure_max, pumpData.total_suction_pressure));
@@ -186,27 +278,127 @@ const PumpDataSheetView = () => {
   };
 
   const getDifferentialPressureMax = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_pressure_max, pumpData.differential_pressure));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from discharge - suction
+    const templateValue = pumpData.differential_pressure_max;
+    const oldValue = pumpData.differential_pressure;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_max || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_max || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const calculated = parseFloat(discharge) - parseFloat(suction);
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   const getDifferentialPressureNormal = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_pressure_normal, pumpData.differential_pressure));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from discharge - suction
+    const templateValue = pumpData.differential_pressure_normal;
+    const oldValue = pumpData.differential_pressure;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_normal || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_normal || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const calculated = parseFloat(discharge) - parseFloat(suction);
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   const getDifferentialPressureMin = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_pressure_min, pumpData.differential_pressure));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from discharge - suction
+    const templateValue = pumpData.differential_pressure_min;
+    const oldValue = pumpData.differential_pressure;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_min || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_min || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const calculated = parseFloat(discharge) - parseFloat(suction);
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   const getDifferentialHeadMax = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_head_max, pumpData.differential_head));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    const templateValue = pumpData.differential_head_max;
+    const oldValue = pumpData.differential_head;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from differential pressure: Head (m) = Pressure (bar) × 10.2 / density (SG)
+    // For water (density ≈ 1000 kg/m³), approximation: Head (m) ≈ Pressure (bar) × 10.2
+    const diffPressure = pumpData.differential_pressure_max || pumpData.differential_pressure;
+    const density = pumpData.density_max || pumpData.density || 1000;
+    const specificGravity = density / 1000;
+    
+    if (diffPressure) {
+      const calculated = (parseFloat(diffPressure) * 10.2) / specificGravity;
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   const getDifferentialHeadNormal = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_head_normal, pumpData.differential_head));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    const templateValue = pumpData.differential_head_normal;
+    const oldValue = pumpData.differential_head;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from differential pressure
+    const diffPressure = pumpData.differential_pressure_normal || pumpData.differential_pressure;
+    const density = pumpData.density || 1000;
+    const specificGravity = density / 1000;
+    
+    if (diffPressure) {
+      const calculated = (parseFloat(diffPressure) * 10.2) / specificGravity;
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   const getDifferentialHeadMin = () => {
-    return formatNumber(getValueWithFallback(pumpData.differential_head_min, pumpData.differential_head));
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    const templateValue = pumpData.differential_head_min;
+    const oldValue = pumpData.differential_head;
+    
+    if (templateValue) return formatNumber(templateValue);
+    if (oldValue) return formatNumber(oldValue);
+    
+    // Try calculating from differential pressure
+    const diffPressure = pumpData.differential_pressure_min || pumpData.differential_pressure;
+    const density = pumpData.density_min || pumpData.density || 1000;
+    const specificGravity = density / 1000;
+    
+    if (diffPressure) {
+      const calculated = (parseFloat(diffPressure) * 10.2) / specificGravity;
+      return formatNumber(calculated);
+    }
+    
+    return 'N/A';
   };
 
   // NPSH fallback helpers
@@ -560,9 +752,9 @@ const PumpDataSheetView = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Flow Rate</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.flow_rate_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.flow_rate_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.flow_rate_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getFlowRateMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getFlowRateNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getFlowRateMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">m³/h</td>
                     </tr>
                     <tr className="bg-gray-50">
