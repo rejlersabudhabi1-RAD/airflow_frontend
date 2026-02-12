@@ -532,6 +532,415 @@ const PumpDataSheetView = () => {
     return displayValue(getDefaultMaterial('mechanical_seal', pumpData.service || pumpData.liquid_type));
   };
 
+  // ============================================================================
+  // AI-POWERED QUALITY ANALYSIS & INTELLIGENT RECOMMENDATIONS SYSTEM
+  // ============================================================================
+  
+  const generateQualityAnalysis = () => {
+    const analysis = {
+      critical: [],
+      warnings: [],
+      recommendations: [],
+      optimizations: [],
+      compliance: []
+    };
+
+    // 1. NPSH ADEQUACY CHECK (Critical Safety)
+    const checkNPSH = () => {
+      const npshAvailable = parseFloat(pumpData.npsh_available_max || pumpData.npsha);
+      const npshRequired = parseFloat(pumpData.npsh_required);
+      
+      if (npshAvailable && npshRequired) {
+        const margin = npshAvailable - npshRequired;
+        const marginPercent = (margin / npshRequired) * 100;
+        
+        if (margin < 0) {
+          analysis.critical.push({
+            title: '🚨 CRITICAL: Insufficient NPSH',
+            message: `NPSH Available (${npshAvailable.toFixed(2)}m) is LESS than NPSH Required (${npshRequired.toFixed(2)}m). This will cause cavitation, pump damage, and operational failure.`,
+            action: 'Immediate action required: Increase suction pressure, reduce fluid temperature, or change pump selection.'
+          });
+        } else if (margin < 0.6) {
+          analysis.warnings.push({
+            title: '⚠️ WARNING: Inadequate NPSH Margin',
+            message: `NPSH margin is only ${margin.toFixed(2)}m (${marginPercent.toFixed(1)}%). API 610 recommends minimum 0.6m or 3% margin.`,
+            action: 'Consider increasing NPSH margin to prevent cavitation risks.'
+          });
+        } else if (margin >= 0.6 && margin < 1.5) {
+          analysis.recommendations.push({
+            title: '✓ NPSH: Acceptable',
+            message: `NPSH margin of ${margin.toFixed(2)}m (${marginPercent.toFixed(1)}%) meets minimum requirements.`,
+            suggestion: 'Good design. Consider additional margin for future operating conditions.'
+          });
+        } else {
+          analysis.compliance.push({
+            title: '✓ NPSH: Excellent',
+            message: `NPSH margin of ${margin.toFixed(2)}m (${marginPercent.toFixed(1)}%) provides excellent cavitation protection.`
+          });
+        }
+      }
+    };
+
+    // 2. PUMP EFFICIENCY ANALYSIS
+    const checkEfficiency = () => {
+      const efficiency = parseFloat(pumpData.pump_efficiency_normal || pumpData.pump_efficiency);
+      
+      if (efficiency) {
+        if (efficiency < 50) {
+          analysis.warnings.push({
+            title: '⚠️ Low Pump Efficiency',
+            message: `Pump efficiency is ${efficiency}%, which is below typical centrifugal pump range (60-85%).`,
+            action: 'Review pump selection - may be operating far from BEP (Best Efficiency Point).'
+          });
+        } else if (efficiency >= 50 && efficiency < 65) {
+          analysis.recommendations.push({
+            title: '💡 Efficiency Optimization Opportunity',
+            message: `Current efficiency: ${efficiency}%. Consider pump optimization for energy savings.`,
+            suggestion: 'Review impeller trim, speed adjustment, or pump model selection.'
+          });
+        } else if (efficiency >= 65 && efficiency < 75) {
+          analysis.compliance.push({
+            title: '✓ Good Efficiency',
+            message: `Pump operating at ${efficiency}% efficiency - acceptable for most applications.`
+          });
+        } else {
+          analysis.compliance.push({
+            title: '✓ Excellent Efficiency',
+            message: `Pump operating at ${efficiency}% efficiency - excellent performance near BEP.`
+          });
+        }
+      }
+    };
+
+    // 3. MATERIAL COMPATIBILITY CHECK
+    const checkMaterials = () => {
+      const service = (pumpData.service || pumpData.liquid_type || '').toLowerCase();
+      const casing = (pumpData.casing || '').toLowerCase();
+      const impeller = (pumpData.impeller || '').toLowerCase();
+      
+      // Corrosive service checks
+      if (service.includes('acid') || service.includes('caustic') || service.includes('chemical')) {
+        if (!casing.includes('stainless') && !casing.includes('ss') && !casing.includes('316') && !casing.includes('duplex')) {
+          analysis.warnings.push({
+            title: '⚠️ Material Compatibility Concern',
+            message: `Corrosive service "${pumpData.service}" may require corrosion-resistant materials. Current casing: ${pumpData.casing || 'Not specified'}.`,
+            action: 'Verify material compatibility with process fluid. Consider SS316, Duplex, or special alloys.'
+          });
+        } else {
+          analysis.compliance.push({
+            title: '✓ Material Selection: Appropriate',
+            message: `Corrosion-resistant materials specified for ${pumpData.service} service.`
+          });
+        }
+      }
+      
+      // Seawater service checks
+      if (service.includes('seawater') || service.includes('sea water') || service.includes('brine')) {
+        if (!casing.includes('duplex') && !casing.includes('316') && !casing.includes('bronze')) {
+          analysis.recommendations.push({
+            title: '💡 Seawater Service Material Recommendation',
+            message: 'For seawater applications, consider Duplex Stainless Steel or Bronze for superior corrosion resistance.',
+            suggestion: 'Verify long-term corrosion performance and lifecycle cost.'
+          });
+        }
+      }
+    };
+
+    // 4. DIFFERENTIAL PRESSURE/HEAD VALIDATION
+    const checkPressureHead = () => {
+      const diffPressure = parseFloat(pumpData.differential_pressure_normal || pumpData.differential_pressure);
+      const diffHead = parseFloat(pumpData.differential_head_normal || pumpData.differential_head);
+      const density = parseFloat(pumpData.density || 1000);
+      
+      if (diffPressure && diffHead && density) {
+        const calculatedHead = (diffPressure * 10.2) / (density / 1000);
+        const headError = Math.abs(diffHead - calculatedHead);
+        const errorPercent = (headError / diffHead) * 100;
+        
+        if (errorPercent > 10) {
+          analysis.warnings.push({
+            title: '⚠️ Pressure-Head Conversion Inconsistency',
+            message: `Calculated head (${calculatedHead.toFixed(2)}m) differs from stated head (${diffHead.toFixed(2)}m) by ${errorPercent.toFixed(1)}%.`,
+            action: 'Verify density value and pressure/head calculations.'
+          });
+        } else {
+          analysis.compliance.push({
+            title: '✓ Pressure-Head Consistency',
+            message: `Differential pressure and head values are consistent with fluid density.`
+          });
+        }
+      }
+    };
+
+    // 5. POWER CONSUMPTION ANALYSIS
+    const checkPowerConsumption = () => {
+      const hydraulicPower = parseFloat(pumpData.hydraulic_power);
+      const bhp = parseFloat(pumpData.bhp_normal || pumpData.break_horse_power);
+      const absorbedPower = parseFloat(pumpData.absorbed_power_normal || pumpData.power_consumption);
+      const motorRating = parseFloat(pumpData.motor_rating);
+      
+      if (absorbedPower && motorRating) {
+        const loadFactor = (absorbedPower / motorRating) * 100;
+        
+        if (loadFactor < 50) {
+          analysis.warnings.push({
+            title: '⚠️ Motor Undersized Loading',
+            message: `Motor loaded at only ${loadFactor.toFixed(1)}%. Motor operates inefficiently below 50% load.`,
+            action: 'Consider downsizing motor for improved efficiency and power factor.'
+          });
+        } else if (loadFactor > 95) {
+          analysis.warnings.push({
+            title: '⚠️ Motor Near Maximum Capacity',
+            message: `Motor loaded at ${loadFactor.toFixed(1)}% of rating. Limited safety margin for transient conditions.`,
+            action: 'Verify motor service factor. Consider next larger frame for reliability.'
+          });
+        } else if (loadFactor >= 70 && loadFactor <= 85) {
+          analysis.compliance.push({
+            title: '✓ Optimal Motor Loading',
+            message: `Motor loaded at ${loadFactor.toFixed(1)}% - ideal range for efficiency and reliability (70-85%).`
+          });
+        } else {
+          analysis.compliance.push({
+            title: '✓ Acceptable Motor Loading',
+            message: `Motor loaded at ${loadFactor.toFixed(1)}% - within acceptable operating range.`
+          });
+        }
+      }
+    };
+
+    // 6. FLOW RATE OPERATING RANGE
+    const checkFlowRange = () => {
+      const flowMax = parseFloat(pumpData.flow_rate_max);
+      const flowNormal = parseFloat(pumpData.flow_rate_normal);
+      const flowMin = parseFloat(pumpData.flow_rate_min);
+      
+      if (flowMax && flowNormal && flowMin) {
+        const rangeMax = (flowMax / flowNormal - 1) * 100;
+        const rangeMin = (1 - flowMin / flowNormal) * 100;
+        
+        if (rangeMax > 30 || rangeMin > 40) {
+          analysis.recommendations.push({
+            title: '💡 Wide Operating Range',
+            message: `Flow varies from ${flowMin.toFixed(1)} to ${flowMax.toFixed(1)} m³/h (${rangeMin.toFixed(0)}% to +${rangeMax.toFixed(0)}%).`,
+            suggestion: 'Verify pump can operate efficiently across entire range. Consider VFD for optimization.'
+          });
+        }
+        
+        if (flowMin / flowNormal < 0.5) {
+          analysis.warnings.push({
+            title: '⚠️ Low Minimum Flow',
+            message: `Minimum flow (${flowMin.toFixed(1)} m³/h) is less than 50% of normal flow. Risk of recirculation.`,
+            action: 'Verify pump minimum continuous flow rating. Consider bypass or minimum flow valve.'
+          });
+        }
+      }
+    };
+
+    // 7. TEMPERATURE & VISCOSITY IMPACT
+    const checkFluidProperties = () => {
+      const temp = parseFloat(pumpData.temperature_max || pumpData.temperature);
+      const viscosity = parseFloat(pumpData.viscosity_max || pumpData.fluid_viscosity_at_temp);
+      
+      if (temp > 150) {
+        analysis.recommendations.push({
+          title: '💡 High Temperature Service',
+          message: `Operating temperature: ${temp}°C. Ensure high-temperature seal and bearing design.`,
+          suggestion: 'Verify thermal expansion clearances and API 610 high-temperature guidelines.'
+        });
+      }
+      
+      if (viscosity && viscosity > 20) {
+        analysis.recommendations.push({
+          title: '💡 Viscous Fluid Service',
+          message: `Fluid viscosity: ${viscosity} cP. Centrifugal pump efficiency degrades with viscosity > 20 cP.`,
+          suggestion: 'Apply viscosity correction factors per Hydraulic Institute standards. Consider PD pump above 200 cP.'
+        });
+      }
+    };
+
+    // 8. API 610 COMPLIANCE CHECKS
+    const checkAPI610Compliance = () => {
+      const complianceItems = [];
+      
+      // Check if motor classification is specified
+      if (pumpData.motor_classification) {
+        complianceItems.push(`Motor Classification: ${pumpData.motor_classification}`);
+      }
+      
+      // Check for proper materials
+      if (pumpData.casing && pumpData.impeller && pumpData.shaft) {
+        complianceItems.push('Material specifications documented');
+      }
+      
+      // Check for mechanical seal
+      if (pumpData.mechanical_seal) {
+        complianceItems.push(`Mechanical Seal: ${pumpData.mechanical_seal}`);
+      }
+      
+      if (complianceItems.length > 0) {
+        analysis.compliance.push({
+          title: '✓ API 610 Documentation',
+          message: 'Key API 610 requirements documented: ' + complianceItems.join(', ')
+        });
+      }
+    };
+
+    // Execute all checks
+    checkNPSH();
+    checkEfficiency();
+    checkMaterials();
+    checkPressureHead();
+    checkPowerConsumption();
+    checkFlowRange();
+    checkFluidProperties();
+    checkAPI610Compliance();
+
+    // Render the analysis UI
+    return (
+      <div className="space-y-4">
+        {/* Critical Issues */}
+        {analysis.critical.length > 0 && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-bold text-red-800 mb-2">Critical Issues Require Immediate Attention</h3>
+                {analysis.critical.map((item, idx) => (
+                  <div key={idx} className="mb-3">
+                    <p className="font-bold text-red-700">{item.title}</p>
+                    <p className="text-red-800 mt-1">{item.message}</p>
+                    <p className="text-red-900 mt-2 font-semibold bg-red-100 p-2 rounded">
+                      ⚡ Action: {item.action}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Warnings */}
+        {analysis.warnings.length > 0 && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-bold text-yellow-800 mb-2">Warnings & Concerns</h3>
+                {analysis.warnings.map((item, idx) => (
+                  <div key={idx} className="mb-3">
+                    <p className="font-bold text-yellow-700">{item.title}</p>
+                    <p className="text-yellow-800 mt-1">{item.message}</p>
+                    {item.action && (
+                      <p className="text-yellow-900 mt-2 font-semibold bg-yellow-100 p-2 rounded">
+                        💡 Recommendation: {item.action}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recommendations */}
+        {analysis.recommendations.length > 0 && (
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-bold text-blue-800 mb-2">Optimization Recommendations</h3>
+                {analysis.recommendations.map((item, idx) => (
+                  <div key={idx} className="mb-3">
+                    <p className="font-bold text-blue-700">{item.title}</p>
+                    <p className="text-blue-800 mt-1">{item.message}</p>
+                    {item.suggestion && (
+                      <p className="text-blue-900 mt-2 italic bg-blue-100 p-2 rounded">
+                        {item.suggestion}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Compliance & Good Status */}
+        {analysis.compliance.length > 0 && (
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-bold text-green-800 mb-2">Compliant & Satisfactory</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {analysis.compliance.map((item, idx) => (
+                    <div key={idx} className="bg-green-100 p-3 rounded">
+                      <p className="font-semibold text-green-800">{item.title}</p>
+                      <p className="text-green-700 text-sm mt-1">{item.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Overall Quality Score */}
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 p-6 rounded-lg">
+          <h3 className="text-lg font-bold text-purple-900 mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            AI Quality Assessment Summary
+          </h3>
+          <div className="grid grid-cols-4 gap-4 text-center">
+            <div className="bg-white p-3 rounded-lg shadow">
+              <div className="text-2xl font-bold text-red-600">{analysis.critical.length}</div>
+              <div className="text-xs text-gray-600">Critical</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg shadow">
+              <div className="text-2xl font-bold text-yellow-600">{analysis.warnings.length}</div>
+              <div className="text-xs text-gray-600">Warnings</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg shadow">
+              <div className="text-2xl font-bold text-blue-600">{analysis.recommendations.length}</div>
+              <div className="text-xs text-gray-600">Recommendations</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg shadow">
+              <div className="text-2xl font-bold text-green-600">{analysis.compliance.length}</div>
+              <div className="text-xs text-gray-600">Compliant</div>
+            </div>
+          </div>
+          <div className="mt-4 text-center">
+            <div className="text-sm text-purple-800 font-semibold">
+              {analysis.critical.length === 0 && analysis.warnings.length === 0 
+                ? '🌟 Excellent Design Quality - No critical issues detected'
+                : analysis.critical.length > 0 
+                ? '⚠️ Critical Issues Detected - Immediate Action Required'
+                : '✓ Good Design - Minor optimization opportunities identified'}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -930,6 +1339,17 @@ const PumpDataSheetView = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* AI-Powered Quality Analysis & Recommendations */}
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-purple-600 flex items-center gap-2">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+                INTELLIGENT QUALITY ANALYSIS & RECOMMENDATIONS
+              </h2>
+              {generateQualityAnalysis()}
             </div>
 
             {/* Notes and Remarks Section */}
