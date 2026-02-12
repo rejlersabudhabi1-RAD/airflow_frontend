@@ -338,7 +338,7 @@ const PumpDataSheetView = () => {
   };
 
   const getDifferentialHeadMax = () => {
-    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure, 4. Calculate from discharge-suction pressures, 5. Calculate from hydraulic power
     const templateValue = pumpData.differential_head_max;
     const oldValue = pumpData.differential_head;
     
@@ -346,7 +346,6 @@ const PumpDataSheetView = () => {
     if (oldValue) return formatNumber(oldValue);
     
     // Try calculating from differential pressure: Head (m) = Pressure (bar) × 10.2 / density (SG)
-    // For water (density ≈ 1000 kg/m³), approximation: Head (m) ≈ Pressure (bar) × 10.2
     const diffPressure = pumpData.differential_pressure_max || pumpData.differential_pressure;
     const density = pumpData.density_max || pumpData.density || 1000;
     const specificGravity = density / 1000;
@@ -356,11 +355,32 @@ const PumpDataSheetView = () => {
       return formatNumber(calculated);
     }
     
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_max || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_max || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const pressureDiff = parseFloat(discharge) - parseFloat(suction);
+      const headFromPressure = (pressureDiff * 10.2) / specificGravity;
+      return formatNumber(headFromPressure);
+    }
+    
+    // Try calculating from hydraulic power and flow rate
+    // Formula: H = (P × 1000) / (Q × ρ × g / 3600)
+    // Simplified: H = (P × 367.4) / (Q × ρ)
+    const hydraulicPower = pumpData.hydraulic_power;
+    const flowRate = pumpData.flow_rate_max || (pumpData.hp ? parseFloat(pumpData.hp) * 10 : null);
+    
+    if (hydraulicPower && flowRate && flowRate > 0) {
+      const head = (parseFloat(hydraulicPower) * 367.4) / (parseFloat(flowRate) * (density / 1000));
+      return formatNumber(head);
+    }
+    
     return 'N/A';
   };
 
   const getDifferentialHeadNormal = () => {
-    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure, 4. Calculate from discharge-suction pressures, 5. Calculate from hydraulic power
     const templateValue = pumpData.differential_head_normal;
     const oldValue = pumpData.differential_head;
     
@@ -377,11 +397,30 @@ const PumpDataSheetView = () => {
       return formatNumber(calculated);
     }
     
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_normal || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_normal || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const pressureDiff = parseFloat(discharge) - parseFloat(suction);
+      const headFromPressure = (pressureDiff * 10.2) / specificGravity;
+      return formatNumber(headFromPressure);
+    }
+    
+    // Try calculating from hydraulic power and flow rate
+    const hydraulicPower = pumpData.hydraulic_power;
+    const flowRate = pumpData.flow_rate_normal || (pumpData.hp ? parseFloat(pumpData.hp) * 8 : null);
+    
+    if (hydraulicPower && flowRate && flowRate > 0) {
+      const head = (parseFloat(hydraulicPower) * 367.4) / (parseFloat(flowRate) * (density / 1000));
+      return formatNumber(head);
+    }
+    
     return 'N/A';
   };
 
   const getDifferentialHeadMin = () => {
-    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure
+    // Priority: 1. Template field, 2. Old field, 3. Calculate from differential pressure, 4. Calculate from discharge-suction pressures, 5. Calculate from hydraulic power
     const templateValue = pumpData.differential_head_min;
     const oldValue = pumpData.differential_head;
     
@@ -396,6 +435,25 @@ const PumpDataSheetView = () => {
     if (diffPressure) {
       const calculated = (parseFloat(diffPressure) * 10.2) / specificGravity;
       return formatNumber(calculated);
+    }
+    
+    // Try calculating from discharge and suction pressures
+    const discharge = pumpData.discharge_pressure_min || pumpData.total_discharge_pressure;
+    const suction = pumpData.suction_pressure_min || pumpData.total_suction_pressure;
+    
+    if (discharge && suction) {
+      const pressureDiff = parseFloat(discharge) - parseFloat(suction);
+      const headFromPressure = (pressureDiff * 10.2) / specificGravity;
+      return formatNumber(headFromPressure);
+    }
+    
+    // Try calculating from hydraulic power and flow rate
+    const hydraulicPower = pumpData.hydraulic_power;
+    const flowRate = pumpData.flow_rate_min || (pumpData.hp ? parseFloat(pumpData.hp) * 5 : null);
+    
+    if (hydraulicPower && flowRate && flowRate > 0) {
+      const head = (parseFloat(hydraulicPower) * 367.4) / (parseFloat(flowRate) * (density / 1000));
+      return formatNumber(head);
     }
     
     return 'N/A';
