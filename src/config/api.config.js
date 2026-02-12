@@ -8,12 +8,12 @@ const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/
 
 // Determine API base URL (soft-coded for all environments)
 const getApiBaseUrl = () => {
-  // 1. PRIORITY: Check if running in browser (client-side) - most reliable
+  // 1. CRITICAL: For localhost development, ALWAYS use relative path for Vite proxy
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname
     console.log('[API Config] 🌐 Detected hostname:', hostname)
     
-    // 2. For localhost/127.0.0.1, use relative path for Vite proxy
+    // 2. For localhost/127.0.0.1, use relative path for Vite proxy (NEVER Docker service names)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       const localUrl = '/api/v1'
       console.log('[API Config] 🏠 Localhost detected, using Vite proxy:', localUrl)
@@ -37,7 +37,7 @@ const getApiBaseUrl = () => {
     return PRODUCTION_API_URL
   }
   
-  // 5. SSR or build-time fallback: ALWAYS use production for Vercel
+  // 6. SSR or build-time fallback: ALWAYS use production for Vercel
   // Vercel builds are for production, so we always want Railway backend
   console.log('[API Config] 📦 Build-time detected, using Railway backend:', PRODUCTION_API_URL)
   return PRODUCTION_API_URL
@@ -51,6 +51,7 @@ console.log('[API Config] Final API_BASE_URL:', API_BASE_URL)
 // Log API URL for debugging
 console.log('[API Config] API Base URL:', API_BASE_URL)
 console.log('[API Config] Environment:', import.meta.env.MODE)
+console.log('[API Config] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL)
 console.log('[API Config] VITE_API_URL:', import.meta.env.VITE_API_URL)
 
 export const API_ENDPOINTS = {
