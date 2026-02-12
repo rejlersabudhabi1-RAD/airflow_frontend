@@ -4,6 +4,65 @@ import apiClient from '../../services/api.service';
 import { ArrowLeftIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 
 /**
+ * ============================================================================
+ * PUMP HYDRAULIC CALCULATION DATASHEET - OFFICIAL TEMPLATE VIEW
+ * ============================================================================
+ * 
+ * 🔒 LOCKED & FINALIZED TEMPLATE - Version 1.0
+ * 
+ * PURPOSE:
+ * Universal template for displaying pump hydraulic calculations in professional
+ * format matching "Pump Data Sheet.xlsx" template (RAD-PR-TMP-0001, Rev 0)
+ * 
+ * ROUTE:
+ * /engineering/process/datasheet/view/:id
+ * 
+ * ACCESSIBILITY:
+ * - Automatically opened after form submission (ComprehensivePumpForm)
+ * - Accessible from dashboard for any saved calculation
+ * - Works for ALL pump calculations (old and new data)
+ * - Universal calculation ID parameter support
+ * 
+ * KEY FEATURES:
+ * ✅ AI-Powered Quality Analysis (8 intelligent modules)
+ * ✅ Smart Fallback System (5-tier calculation priority)
+ * ✅ Backward Compatibility (legacy data support)
+ * ✅ Intelligent Material Selection (service-based)
+ * ✅ Auto-Calculation (Flow, Pressure, Head, NPSH)
+ * ✅ API 610 Compliance Checking
+ * ✅ Professional PDF-Ready Layout
+ * ✅ Real-time Data Validation
+ * 
+ * INTELLIGENT SYSTEMS:
+ * 1. Flow Rate: 3-tier (Database → Hydraulic Power → HP Estimation)
+ * 2. Differential Pressure: 3-tier (Template → Fallback → Calculation)
+ * 3. Differential Head: 5-tier (Template → Pressure → Hydraulic Power)
+ * 4. NPSH: Fallback with safety margin analysis
+ * 5. Materials: Service-based intelligent defaults
+ * 6. Efficiency: Auto-benchmarking vs industry standards
+ * 
+ * QUALITY ANALYSIS MODULES:
+ * - NPSH Adequacy (Critical Safety)
+ * - Pump Efficiency Analysis
+ * - Material Compatibility Intelligence
+ * - Pressure-Head Validation
+ * - Power Consumption Optimization
+ * - Flow Range Analysis
+ * - Temperature & Viscosity Impact
+ * - API 610 Compliance Tracking
+ * 
+ * DATA SOURCES:
+ * API Endpoint: GET /api/process-datasheet/pump-calculations/:id/
+ * Response: Complete PumpCalculationData object (49+ fields)
+ * 
+ * MAINTAINED BY: Engineering Team
+ * LAST UPDATED: February 12, 2026
+ * STATUS: Production Ready ✅
+ * 
+ * ============================================================================
+ */
+
+/**
  * Pump Data Sheet View Component
  * Displays pump calculation data in the exact format of "Pump Data Sheet.xlsx" template
  * Soft-coded structure matching the template for professional presentation
