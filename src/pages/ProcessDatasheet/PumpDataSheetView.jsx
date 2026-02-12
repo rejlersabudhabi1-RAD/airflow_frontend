@@ -528,7 +528,38 @@ const PumpDataSheetView = () => {
   };
 
   const getNpshRequired = () => {
-    return formatNumber(pumpData.npsh_required);
+    // Priority 1: Check new template field
+    if (pumpData.npsh_required) {
+      return formatNumber(pumpData.npsh_required);
+    }
+    
+    // Priority 2: Check if stored in npsh_availability JSON
+    if (pumpData.npsh_availability && typeof pumpData.npsh_availability === 'object') {
+      if (pumpData.npsh_availability.npsh_required || pumpData.npsh_availability.npshr) {
+        return formatNumber(pumpData.npsh_availability.npsh_required || pumpData.npsh_availability.npshr);
+      }
+    }
+    
+    // Priority 3: Calculate from safety margin if available
+    // NPSHr = NPSHa - SafetyMargin
+    const npshAvailable = parseFloat(pumpData.npsh_available_max || pumpData.npsha);
+    const safetyMargin = parseFloat(pumpData.safety_margin_npsha);
+    
+    if (npshAvailable && safetyMargin && safetyMargin > 0) {
+      const npshRequired = npshAvailable - safetyMargin;
+      if (npshRequired > 0) {
+        return formatNumber(npshRequired);
+      }
+    }
+    
+    // Priority 4: Estimate as 60% of NPSH Available (conservative industry standard)
+    // For most centrifugal pumps, NPSHr is typically 50-70% of NPSHa
+    if (npshAvailable && npshAvailable > 0) {
+      const estimatedNpshr = npshAvailable * 0.60; // Conservative 60%
+      return formatNumber(estimatedNpshr) + ' (est.)';
+    }
+    
+    return 'N/A';
   };
 
   // Pump Performance fallback helpers
@@ -665,7 +696,27 @@ const PumpDataSheetView = () => {
     // 1. NPSH ADEQUACY CHECK (Critical Safety)
     const checkNPSH = () => {
       const npshAvailable = parseFloat(pumpData.npsh_available_max || pumpData.npsha);
-      const npshRequired = parseFloat(pumpData.npsh_required);
+      
+      // Calculate NPSH Required with fallback logic
+      let npshRequired = parseFloat(pumpData.npsh_required);
+      
+      // Fallback 1: Check npsh_availability JSON
+      if (!npshRequired && pumpData.npsh_availability && typeof pumpData.npsh_availability === 'object') {
+        npshRequired = parseFloat(pumpData.npsh_availability.npsh_required || pumpData.npsh_availability.npshr);
+      }
+      
+      // Fallback 2: Calculate from safety margin
+      if (!npshRequired && npshAvailable) {
+        const safetyMargin = parseFloat(pumpData.safety_margin_npsha);
+        if (safetyMargin && safetyMargin > 0) {
+          npshRequired = npshAvailable - safetyMargin;
+        }
+      }
+      
+      // Fallback 3: Estimate as 60% of NPSH Available
+      if (!npshRequired && npshAvailable && npshAvailable > 0) {
+        npshRequired = npshAvailable * 0.60;
+      }
       
       if (npshAvailable && npshRequired) {
         const margin = npshAvailable - npshRequired;
