@@ -693,9 +693,10 @@ const ComprehensivePumpForm = () => {
       pump_efficiency_normal: formData.pumpEfficiency ? parseFloat(formData.pumpEfficiency) : null,
       pump_efficiency_min: formData.pumpEfficiency ? parseFloat(formData.pumpEfficiency) : null,
       
-      bhp_max: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
-      bhp_normal: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
-      bhp_min: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
+      // Round to 2 decimal places to match database precision
+      bhp_max: formData.breakHorsePower ? parseFloat(parseFloat(formData.breakHorsePower).toFixed(2)) : null,
+      bhp_normal: formData.breakHorsePower ? parseFloat(parseFloat(formData.breakHorsePower).toFixed(2)) : null,
+      bhp_min: formData.breakHorsePower ? parseFloat(parseFloat(formData.breakHorsePower).toFixed(2)) : null,
       
       // Round to 2 decimal places to match database precision
       absorbed_power_max: formData.powerConsumption ? parseFloat(parseFloat(formData.powerConsumption).toFixed(2)) : null,
