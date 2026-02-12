@@ -209,6 +209,56 @@ const PumpDataSheetView = () => {
     return formatNumber(getValueWithFallback(pumpData.differential_head_min, pumpData.differential_head));
   };
 
+  // NPSH fallback helpers
+  const getNpshAvailableMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.npsh_available_max, pumpData.npsha));
+  };
+
+  const getNpshAvailableMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.npsh_available_min, pumpData.npsha));
+  };
+
+  const getNpshRequired = () => {
+    return formatNumber(pumpData.npsh_required);
+  };
+
+  // Pump Performance fallback helpers
+  const getPumpEfficiencyMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.pump_efficiency_max, pumpData.pump_efficiency));
+  };
+
+  const getPumpEfficiencyNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.pump_efficiency_normal, pumpData.pump_efficiency));
+  };
+
+  const getPumpEfficiencyMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.pump_efficiency_min, pumpData.pump_efficiency));
+  };
+
+  const getBhpMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.bhp_max, pumpData.break_horse_power));
+  };
+
+  const getBhpNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.bhp_normal, pumpData.break_horse_power));
+  };
+
+  const getBhpMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.bhp_min, pumpData.break_horse_power));
+  };
+
+  const getAbsorbedPowerMax = () => {
+    return formatNumber(getValueWithFallback(pumpData.absorbed_power_max, pumpData.power_consumption));
+  };
+
+  const getAbsorbedPowerNormal = () => {
+    return formatNumber(getValueWithFallback(pumpData.absorbed_power_normal, pumpData.power_consumption));
+  };
+
+  const getAbsorbedPowerMin = () => {
+    return formatNumber(getValueWithFallback(pumpData.absorbed_power_min, pumpData.power_consumption));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -478,19 +528,19 @@ const PumpDataSheetView = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs text-gray-500 mb-1">Maximum</div>
-                      <div className="text-2xl font-bold text-gray-800">{formatNumber(pumpData.npsh_available_max)}</div>
+                      <div className="text-2xl font-bold text-gray-800">{getNpshAvailableMax()}</div>
                       <div className="text-xs text-gray-500 mt-1">m</div>
                     </div>
                     <div>
                       <div className="text-xs text-gray-500 mb-1">Minimum</div>
-                      <div className="text-2xl font-bold text-gray-800">{formatNumber(pumpData.npsh_available_min)}</div>
+                      <div className="text-2xl font-bold text-gray-800">{getNpshAvailableMin()}</div>
                       <div className="text-xs text-gray-500 mt-1">m</div>
                     </div>
                   </div>
                 </div>
                 <div className="bg-orange-50 p-6 rounded-lg border-2 border-orange-200">
                   <div className="text-sm text-orange-600 font-semibold mb-2">NPSH Required</div>
-                  <div className="text-2xl font-bold text-gray-800">{formatNumber(pumpData.npsh_required)}</div>
+                  <div className="text-2xl font-bold text-gray-800">{getNpshRequired()}</div>
                   <div className="text-xs text-gray-500 mt-1">m</div>
                 </div>
               </div>
@@ -515,23 +565,23 @@ const PumpDataSheetView = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Pump Efficiency</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.pump_efficiency_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.pump_efficiency_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.pump_efficiency_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getPumpEfficiencyMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getPumpEfficiencyNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getPumpEfficiencyMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">%</td>
                     </tr>
                     <tr className="bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-800">BHP (Brake Horsepower)</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.bhp_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.bhp_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.bhp_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getBhpMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getBhpNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getBhpMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">HP</td>
                     </tr>
                     <tr>
                       <td className="px-4 py-3 font-medium text-gray-800">Absorbed Power</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.absorbed_power_max)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.absorbed_power_normal)}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{formatNumber(pumpData.absorbed_power_min)}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getAbsorbedPowerMax()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getAbsorbedPowerNormal()}</td>
+                      <td className="px-4 py-3 text-center text-gray-700">{getAbsorbedPowerMin()}</td>
                       <td className="px-4 py-3 text-center text-gray-500">kW</td>
                     </tr>
                   </tbody>
