@@ -259,6 +259,87 @@ const PumpDataSheetView = () => {
     return formatNumber(getValueWithFallback(pumpData.absorbed_power_min, pumpData.power_consumption));
   };
 
+  // Construction Materials fallback helpers with intelligent defaults
+  const getDefaultMaterial = (materialType, service = '') => {
+    const serviceLower = (service || '').toLowerCase();
+    
+    // Material selection based on service type
+    const materialDefaults = {
+      // Corrosive/Chemical services
+      corrosive: {
+        casing: 'Stainless Steel 316',
+        impeller: 'Stainless Steel 316',
+        shaft: 'Stainless Steel 316',
+        bearings: 'Rolling Element Bearings (Ceramic)',
+        mechanical_seal: 'Dual Mechanical Seal (Silicon Carbide/Silicon Carbide)'
+      },
+      // Seawater/Cooling water services  
+      seawater: {
+        casing: 'Duplex Stainless Steel',
+        impeller: 'Duplex Stainless Steel',
+        shaft: 'Stainless Steel 316',
+        bearings: 'Rolling Element Bearings (Stainless Steel)',
+        mechanical_seal: 'Mechanical Seal (Carbon/Ceramic)'
+      },
+      // Clean water/General purpose
+      water: {
+        casing: 'Cast Iron',
+        impeller: 'Bronze',
+        shaft: 'Carbon Steel',
+        bearings: 'Rolling Element Bearings',
+        mechanical_seal: 'Mechanical Seal (Carbon/Ceramic)'
+      },
+      // Default for unknown services
+      default: {
+        casing: 'Cast Iron / Ductile Iron',
+        impeller: 'Cast Iron / Bronze',
+        shaft: 'Carbon Steel / Stainless Steel',
+        bearings: 'Rolling Element Bearings',
+        mechanical_seal: 'Mechanical Seal (Standard)'
+      }
+    };
+
+    // Determine service category
+    let serviceCategory = 'default';
+    if (serviceLower.includes('acid') || serviceLower.includes('chemical') || 
+        serviceLower.includes('corrosive') || serviceLower.includes('caustic')) {
+      serviceCategory = 'corrosive';
+    } else if (serviceLower.includes('seawater') || serviceLower.includes('sea water') || 
+               serviceLower.includes('cooling water') || serviceLower.includes('brine')) {
+      serviceCategory = 'seawater';
+    } else if (serviceLower.includes('water') || serviceLower.includes('potable') || 
+               serviceLower.includes('fresh')) {
+      serviceCategory = 'water';
+    }
+
+    return materialDefaults[serviceCategory][materialType] || materialDefaults.default[materialType];
+  };
+
+  const getCasing = () => {
+    if (pumpData.casing) return displayValue(pumpData.casing);
+    return displayValue(getDefaultMaterial('casing', pumpData.service || pumpData.liquid_type));
+  };
+
+  const getImpeller = () => {
+    if (pumpData.impeller) return displayValue(pumpData.impeller);
+    return displayValue(getDefaultMaterial('impeller', pumpData.service || pumpData.liquid_type));
+  };
+
+  const getShaft = () => {
+    if (pumpData.shaft) return displayValue(pumpData.shaft);
+    return displayValue(getDefaultMaterial('shaft', pumpData.service || pumpData.liquid_type));
+  };
+
+  const getBearings = () => {
+    if (pumpData.bearings) return displayValue(pumpData.bearings);
+    return displayValue(getDefaultMaterial('bearings', pumpData.service || pumpData.liquid_type));
+  };
+
+  const getMechanicalSeal = () => {
+    if (pumpData.mechanical_seal) return displayValue(pumpData.mechanical_seal);
+    return displayValue(getDefaultMaterial('mechanical_seal', pumpData.service || pumpData.liquid_type));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -635,25 +716,25 @@ const PumpDataSheetView = () => {
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Casing</div>
-                    <div className="font-semibold text-gray-800">{displayValue(pumpData.casing)}</div>
+                    <div className="font-semibold text-gray-800">{getCasing()}</div>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Impeller</div>
-                    <div className="font-semibold text-gray-800">{displayValue(pumpData.impeller)}</div>
+                    <div className="font-semibold text-gray-800">{getImpeller()}</div>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Shaft</div>
-                    <div className="font-semibold text-gray-800">{displayValue(pumpData.shaft)}</div>
+                    <div className="font-semibold text-gray-800">{getShaft()}</div>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Bearings</div>
-                    <div className="font-semibold text-gray-800">{displayValue(pumpData.bearings)}</div>
+                    <div className="font-semibold text-gray-800">{getBearings()}</div>
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Mechanical Seal</div>
-                    <div className="font-semibold text-gray-800">{displayValue(pumpData.mechanical_seal)}</div>
+                    <div className="font-semibold text-gray-800">{getMechanicalSeal()}</div>
                   </div>
                 </div>
               </div>
