@@ -638,6 +638,95 @@ const ComprehensivePumpForm = () => {
       total_suction_pressure: formData.totalSuctionPressure ? parseFloat(formData.totalSuctionPressure) : null,
     };
 
+    // === NEW TEMPLATE FIELDS ===
+    // Liquid Characteristics - Map single values to max/normal fields
+    const liquidCharacteristicsFields = {
+      liquid_type: formData.service || null, // Map service to liquid_type
+      vapor_pressure_max: formData.vaporPressure ? parseFloat(formData.vaporPressure) : null,
+      vapor_pressure_min: formData.vaporPressure ? parseFloat(formData.vaporPressure) : null,
+      density_max: formData.density ? parseFloat(formData.density) : null,
+      density_min: formData.density ? parseFloat(formData.density) : null,
+      viscosity_max: formData.fluidViscosityAtTemp ? parseFloat(formData.fluidViscosityAtTemp) : null,
+      viscosity_min: formData.fluidViscosityAtTemp ? parseFloat(formData.fluidViscosityAtTemp) : null,
+      temperature_max: formData.temperature ? parseFloat(formData.temperature) : null,
+      temperature_min: formData.temperature ? parseFloat(formData.temperature) : null,
+    };
+
+    // Operating Conditions - Calculate or map existing values
+    const operatingConditionsFields = {
+      // Flow rate - use destination description as approximation or null
+      flow_rate_max: formData.hp ? parseFloat(formData.hp) * 10 : null, // Approximate from HP
+      flow_rate_normal: formData.hp ? parseFloat(formData.hp) * 8 : null,
+      flow_rate_min: formData.hp ? parseFloat(formData.hp) * 5 : null,
+      
+      // Suction pressure
+      suction_pressure_max: formData.totalSuctionPressure ? parseFloat(formData.totalSuctionPressure) : null,
+      suction_pressure_normal: formData.totalSuctionPressure ? parseFloat(formData.totalSuctionPressure) : null,
+      suction_pressure_min: formData.totalSuctionPressure ? parseFloat(formData.totalSuctionPressure) : null,
+      
+      // Discharge pressure
+      discharge_pressure_max: formData.totalDischargePressure ? parseFloat(formData.totalDischargePressure) : null,
+      discharge_pressure_normal: formData.totalDischargePressure ? parseFloat(formData.totalDischargePressure) : null,
+      discharge_pressure_min: formData.totalDischargePressure ? parseFloat(formData.totalDischargePressure) : null,
+      
+      // Differential pressure
+      differential_pressure_max: formData.differentialPressure ? parseFloat(formData.differentialPressure) : null,
+      differential_pressure_normal: formData.differentialPressure ? parseFloat(formData.differentialPressure) : null,
+      differential_pressure_min: formData.differentialPressure ? parseFloat(formData.differentialPressure) : null,
+      
+      // Differential head
+      differential_head_max: formData.differentialHead ? parseFloat(formData.differentialHead) : null,
+      differential_head_normal: formData.differentialHead ? parseFloat(formData.differentialHead) : null,
+      differential_head_min: formData.differentialHead ? parseFloat(formData.differentialHead) : null,
+    };
+
+    // NPSH Fields - Map to template
+    const npshTemplateFields = {
+      npsh_available_max: formData.npsha ? parseFloat(formData.npsha) : null,
+      npsh_available_min: formData.npsha ? parseFloat(formData.npsha) : null,
+      npsh_required: formData.npshaResult ? parseFloat(formData.npshaResult) : null,
+    };
+
+    // Pump Performance Fields
+    const pumpPerformanceFields = {
+      pump_efficiency_max: formData.pumpEfficiency ? parseFloat(formData.pumpEfficiency) : null,
+      pump_efficiency_normal: formData.pumpEfficiency ? parseFloat(formData.pumpEfficiency) : null,
+      pump_efficiency_min: formData.pumpEfficiency ? parseFloat(formData.pumpEfficiency) : null,
+      
+      bhp_max: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
+      bhp_normal: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
+      bhp_min: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
+      
+      absorbed_power_max: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
+      absorbed_power_normal: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
+      absorbed_power_min: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
+    };
+
+    // Motor/Driver Data Fields
+    const motorDriverFields = {
+      driver_type: formData.typeOfMotor || null,
+      motor_voltage: null, // Not in current form
+      motor_speed: null, // Not in current form
+    };
+
+    // Construction Materials Fields
+    const constructionMaterialsFields = {
+      casing: null, // Not in current form
+      impeller: null, // Not in current form
+      shaft: null, // Not in current form
+      bearings: null, // Not in current form
+      mechanical_seal: null, // Not in current form
+    };
+
+    // Project Info Fields (including new ones)
+    const projectInfoFieldsExtended = {
+      company_name: null, // Not in current form, but field exists
+      site: null, // Not in current form
+      unit: null, // Not in current form
+      manufacturer: null, // Not in current form
+      model: null, // Not in current form
+    };
+
     // Extract power consumption per pump fields
     const powerConsumptionFields = {
       hydraulic_power: formData.hydraulicPower ? parseFloat(formData.hydraulicPower) : null,
@@ -752,6 +841,13 @@ const ComprehensivePumpForm = () => {
 
     return {
       ...projectInfoFields,
+      ...projectInfoFieldsExtended,
+      ...liquidCharacteristicsFields,
+      ...operatingConditionsFields,
+      ...npshTemplateFields,
+      ...pumpPerformanceFields,
+      ...motorDriverFields,
+      ...constructionMaterialsFields,
       ...dischargePressureFields,
       ...controlValveDeltaPFields,
       ...suctionPressureFields,
