@@ -697,9 +697,10 @@ const ComprehensivePumpForm = () => {
       bhp_normal: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
       bhp_min: formData.breakHorsePower ? parseFloat(formData.breakHorsePower) : null,
       
-      absorbed_power_max: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
-      absorbed_power_normal: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
-      absorbed_power_min: formData.powerConsumption ? parseFloat(formData.powerConsumption) : null,
+      // Round to 2 decimal places to match database precision
+      absorbed_power_max: formData.powerConsumption ? parseFloat(parseFloat(formData.powerConsumption).toFixed(2)) : null,
+      absorbed_power_normal: formData.powerConsumption ? parseFloat(parseFloat(formData.powerConsumption).toFixed(2)) : null,
+      absorbed_power_min: formData.powerConsumption ? parseFloat(parseFloat(formData.powerConsumption).toFixed(2)) : null,
     };
 
     // Motor/Driver Data Fields
