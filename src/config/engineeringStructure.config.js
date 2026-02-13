@@ -55,7 +55,7 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'processDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Process Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/process/datasheet',
@@ -88,7 +88,7 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'pipingDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Piping Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/piping/datasheet',
@@ -120,7 +120,7 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'instrumentDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Instrument Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/instrument/datasheet',
@@ -153,7 +153,7 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'electricalDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Electrical Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/electrical/datasheet',
@@ -176,7 +176,7 @@ export const ENGINEERING_DISCIPLINES = {
     subFeatures: [
       {
         id: 'civilDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Civil Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/civil/datasheet',
@@ -199,7 +199,7 @@ export const ENGINEERING_DISCIPLINES = {
     subFeatures: [
       {
         id: 'mechanicalDataSheet',
-        name: 'Datasheets',
+        name: 'Data Sheet',
         fullName: 'Mechanical Data Sheets',
         icon: DocumentTextIcon,
         path: '/engineering/mechanical/datasheet',

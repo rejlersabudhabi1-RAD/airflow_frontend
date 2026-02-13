@@ -322,11 +322,11 @@ const DesignIQLists = () => {
         return;
       }
 
-      console.log('[P&ID Upload]  Starting async upload...');
+      console.log('[P&ID Upload]  Starting synchronous upload (10 min timeout)...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Step 1: Upload file and get task ID (fast <5s response)
-      const uploadResponse = await apiClient.post(
+      // Use long timeout client - wait for full processing (same as Critical Stress)
+      const response = await apiClientLongTimeout.post(
         '/designiq/lists/upload_pid/',
         formData,
         {
@@ -340,89 +340,22 @@ const DesignIQLists = () => {
         }
       );
 
-      const { task_id, status_endpoint } = uploadResponse.data;
-      console.log('[P&ID Upload]  File uploaded, task queued:', task_id);
-
-      // Step 2: Poll for task completion
-      const pollInterval = 3000; // 3 seconds
-      const maxAttempts = 400; // 20 minutes total (3s * 400 = 1200s)
-      let attempts = 0;
-      let lastProgress = 0;
-
-      const pollStatus = async () => {
-        try {
-          const statusResponse = await apiClient.get(
-            `/designiq/lists/upload_pid_status/${task_id}/`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            }
-          );
-
-          const statusData = statusResponse.data;
-          
-          // Log progress updates
-          if (statusData.percent !== lastProgress) {
-            console.log(`[P&ID Upload]  Progress: ${statusData.percent}% - ${statusData.status}`);
-            lastProgress = statusData.percent;
-          }
-
-          if (statusData.state === 'SUCCESS') {
-            console.log('[P&ID Upload]  Processing complete!');
-            
-            setExtractedData({
-              lines: statusData.result.extracted_lines || [],
-              fileName: file.name,
-              itemsCreated: statusData.result.items_created || 0
-            });
-            setShowPreviewModal(true);
-            setUploadResult({
-              success: true,
-              message: `Successfully processed ${statusData.result.document_id || file.name} with ${statusData.result.extracted_lines?.length || 0} line items`,
-              data: statusData.result
-            });
-            setUploadingPID(false);
-            setProcessing(false);
-            return;
-          }
-
-          if (statusData.state === 'FAILURE') {
-            throw new Error(statusData.error || 'Processing failed');
-          }
-
-          // Continue polling
-          attempts++;
-          if (attempts < maxAttempts) {
-            setTimeout(pollStatus, pollInterval);
-          } else {
-            throw new Error('Processing timeout - task took longer than 20 minutes');
-          }
-
-        } catch (pollError) {
-          console.error('[P&ID Upload]  Polling error:', pollError);
-          
-          let errorMessage = 'Failed to check processing status';
-          if (pollError.response) {
-            const errorData = pollError.response.data;
-            errorMessage = errorData.detail || errorData.error || pollError.response.statusText || errorMessage;
-          } else {
-            errorMessage = pollError.message || errorMessage;
-          }
-          
-          setUploadResult({
-            success: false,
-            message: errorMessage
-          });
-          setUploadingPID(false);
-          setProcessing(false);
-        }
-      };
-
-      // Start polling
-      setTimeout(pollStatus, pollInterval);
-
-    } catch (error) {
+      console.log('[P&ID Upload]  Processing complete!');
+      
+      const data = response.data;
+      setExtractedData({
+        lines: data.extracted_lines || [],
+        fileName: file.name,
+        itemsCreated: data.items_created || 0
+      });
+      setShowPreviewModal(true);
+      setUploadResult({
+        success: true,
+        message: `Successfully uploaded document ${data.document_id || file.name} with ${data.extracted_lines?.length || 0} line items`,
+        data: data
+      });
+      setUploadingPID(false);
+      setProcessing(false);
       console.error('[P&ID Upload]  Upload error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
