@@ -82,7 +82,7 @@ export const FEATURES_CATALOG = {
       {
         id: 'eng-process-datasheet',
         name: 'Process Data Sheets',
-        shortName: 'Data Sheets',
+        shortName: 'Datasheets',
         description: 'Equipment data sheets generation and management',
         path: '/engineering/process/datasheet',
         moduleCode: 'process_datasheet',
