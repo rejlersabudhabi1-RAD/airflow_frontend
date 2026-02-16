@@ -82,7 +82,7 @@ export const FEATURES_CATALOG = {
       {
         id: 'eng-process-datasheet',
         name: 'Process Data Sheets',
-        shortName: 'Data Sheets',
+        shortName: 'Datasheets',
         description: 'Equipment data sheets generation and management',
         path: '/engineering/process/datasheet',
         moduleCode: 'process_datasheet',
@@ -379,6 +379,32 @@ export const FEATURES_CATALOG = {
           monthlyUses: 2345,
           totalUses: 18790,
           avgRating: 4.6
+        }
+      },
+      {
+        id: 'finance-salary-slip',
+        name: 'Salary Slip',
+        shortName: 'Salary',
+        description: 'Generate and manage employee salary slips',
+        path: '/finance/salary-slip',
+        moduleCode: 'finance',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Salary slip generation',
+          'Employee management',
+          'PDF export',
+          'Monthly tracking'
+        ],
+        metrics: {
+          slipsGenerated: 0,
+          employees: 0,
+          avgGenerationTime: 'Instant'
+        },
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 0
         }
       }
     ]

@@ -44,6 +44,7 @@ import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 // import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
+import SalarySlip from './pages/Finance/SalarySlip'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import DeptOfSales from './pages/Finance/DeptOfSales'
@@ -79,6 +80,8 @@ import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
+import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
+import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 // Electrical Datasheet Components
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
@@ -498,6 +501,14 @@ function App() {
           }
         />
         <Route
+          path="finance/salary-slip"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <SalarySlip />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="finance/sales"
           element={
             <ProtectedRoute>
@@ -607,14 +618,36 @@ function App() {
         />
 
         {/* Process Datasheet Routes */}
+        {/* Process Data Sheet - Main Page */}
         <Route
-          path="engineering/process/datasheet/*"
+          path="engineering/process/datasheet"
           element={
             <ProtectedRoute>
               <ProcessDatasheetPage />
             </ProtectedRoute>
           }
         />
+
+        {/* Process Data Sheet - Pump Hydraulic Calculation Sub-Page */}
+        <Route
+          path="engineering/process/datasheet/pfd"
+          element={
+            <ProtectedRoute>
+              <ComprehensivePumpForm />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Process Data Sheet - View Pump Data (Template Format) */}
+        <Route
+          path="engineering/process/datasheet/view/:id"
+          element={
+            <ProtectedRoute>
+              <PumpDataSheetView />
+            </ProtectedRoute>
+          }
+        />
+
           {/* Piping Routes */}
           {/* Piping Data Sheet - Main Page */}
           <Route

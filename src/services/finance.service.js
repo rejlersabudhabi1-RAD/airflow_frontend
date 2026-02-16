@@ -123,6 +123,106 @@ const financeService = {
     const response = await apiClient.get(`${API_BASE}/audit-logs/?invoice=${invoiceId}`);
     return response.data;
   },
+
+  // ========================================
+  // SALARY SLIP API METHODS
+  // ========================================
+
+  /**
+   * Get salary slips with optional filtering
+   */
+  async getSalarySlips(params = {}) {
+    const queryParams = new URLSearchParams(params);
+    const response = await apiClient.get(`${API_BASE}/salary-slips/?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Get salary slip statistics for dashboard
+   */
+  async getSalarySlipStats() {
+    const response = await apiClient.get(`${API_BASE}/salary-slips/stats/`);
+    return response.data;
+  },
+
+  /**
+   * Get single salary slip details
+   */
+  async getSalarySlip(id) {
+    const response = await apiClient.get(`${API_BASE}/salary-slips/${id}/`);
+    return response.data;
+  },
+
+  /**
+   * Generate PDF for a salary slip
+   */
+  async generateSalarySlipPDF(id) {
+    const response = await apiClient.post(`${API_BASE}/salary-slips/${id}/generate_pdf/`);
+    return response.data;
+  },
+
+  /**
+   * Send salary slip email to employee
+   */
+  async sendSalarySlipEmail(id) {
+    const response = await apiClient.post(`${API_BASE}/salary-slips/${id}/send_email/`);
+    return response.data;
+  },
+
+  /**
+   * Send bulk salary slip emails
+   */
+  async bulkSendSalarySlipEmails(slipIds, customMessage = '') {
+    const response = await apiClient.post(`${API_BASE}/salary-slips/bulk_send_email/`, {
+      salary_slip_ids: slipIds,
+      custom_message: customMessage
+    });
+    return response.data;
+  },
+
+  /**
+   * Approve a salary slip
+   */
+  async approveSalarySlip(id) {
+    const response = await apiClient.post(`${API_BASE}/salary-slips/${id}/approve/`);
+    return response.data;
+  },
+
+  /**
+   * Reject a salary slip
+   */
+  async rejectSalarySlip(id, reason = '') {
+    const response = await apiClient.post(`${API_BASE}/salary-slips/${id}/reject/`, {
+      reason
+    });
+    return response.data;
+  },
+
+  /**
+   * Get employee salary information list
+   */
+  async getEmployeeSalaryInfo(params = {}) {
+    const queryParams = new URLSearchParams(params);
+    const response = await apiClient.get(`${API_BASE}/employee-salary-info/?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Get payroll runs
+   */
+  async getPayrollRuns(params = {}) {
+    const queryParams = new URLSearchParams(params);
+    const response = await apiClient.get(`${API_BASE}/payroll-runs/?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  /**
+   * Process a payroll run (generate slips for all employees)
+   */
+  async processPayrollRun(payrollRunId) {
+    const response = await apiClient.post(`${API_BASE}/payroll-runs/${payrollRunId}/process/`);
+    return response.data;
+  },
 };
 
 export default financeService;
