@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ViewColumnsIcon,
@@ -110,7 +110,7 @@ const DesignIQLists = () => {
       { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
     ],
     separator: '-',  // Separator between components
-    allowVariableSeparators: true  // Allow -, –, —, etc.
+    allowVariableSeparators: true  // Allow -, �, �, etc.
   });
 
   const currentListConfig = LIST_TYPES[selectedListType];
@@ -356,6 +356,7 @@ const DesignIQLists = () => {
       });
       setUploadingPID(false);
       setProcessing(false);
+      } catch (error) {
       console.error('[P&ID Upload]  Upload error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
@@ -382,7 +383,7 @@ const DesignIQLists = () => {
   const handleExportDocumentExcel = async (documentId, filename) => {
     // CRS MULTI-REVISION PATTERN: Backend generates Excel, frontend downloads it
     try {
-      console.log('📊 Excel export request for:', { documentId, filename });
+      console.log('?? Excel export request for:', { documentId, filename });
       
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
@@ -397,7 +398,7 @@ const DesignIQLists = () => {
       const encodedDocId = encodeURIComponent(documentId);
       const exportUrl = `${API_BASE_URL}/designiq/lists/export-document-excel/?document_id=${encodedDocId}`;
       
-      console.log('📡 Calling backend export endpoint:', exportUrl);
+      console.log('?? Calling backend export endpoint:', exportUrl);
       
       // Call backend endpoint to generate Excel
       const response = await fetch(exportUrl, {
@@ -417,7 +418,7 @@ const DesignIQLists = () => {
           errorMsg = errorText || `HTTP ${response.status}`;
         }
         
-        console.error('❌ Export failed:', { status: response.status, error: errorMsg });
+        console.error('? Export failed:', { status: response.status, error: errorMsg });
         alert(`Failed to export Excel:\n${errorMsg}\n\nStatus: ${response.status}`);
         return;
       }
@@ -448,11 +449,11 @@ const DesignIQLists = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      console.log('✅ Excel downloaded:', downloadFilename);
-      alert(`✅ Excel exported successfully!\n\n${itemCount} line items downloaded`);
+      console.log('? Excel downloaded:', downloadFilename);
+      alert(`? Excel exported successfully!\n\n${itemCount} line items downloaded`);
       
     } catch (error) {
-      console.error('❌ Error exporting document:', error);
+      console.error('? Error exporting document:', error);
       alert(`Failed to export Excel file: ${error.message}\n\nCheck console for details.`);
     } finally {
       setExportingDocId(null);
@@ -460,7 +461,7 @@ const DesignIQLists = () => {
   };
 
   const handleDeleteDocument = async (documentId, filename, lineCount) => {
-    if (!confirm(`⚠️ Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\n• The document entry\n• All ${lineCount} extracted line items\n• Cannot be undone\n\nClick OK to proceed with deletion.`)) {
+    if (!confirm(`?? Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\n� The document entry\n� All ${lineCount} extracted line items\n� Cannot be undone\n\nClick OK to proceed with deletion.`)) {
       return;
     }
 
@@ -473,7 +474,7 @@ const DesignIQLists = () => {
       // Properly encode the document_id for URL
       const encodedDocId = encodeURIComponent(documentId);
       
-      console.log('🗑️ Deleting document:', {
+      console.log('??? Deleting document:', {
         original: documentId,
         encoded: encodedDocId,
         url: `${API_BASE_URL}/designiq/lists/documents/${encodedDocId}/`
@@ -492,11 +493,11 @@ const DesignIQLists = () => {
       
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Document deleted:', result);
+        console.log('? Document deleted:', result);
         // Refresh to ensure sync with backend
         fetchDocuments();
         // Show success notification
-        alert(`✅ Successfully deleted "${filename}"\n\n${result.items_deleted} line items removed from database`);
+        alert(`? Successfully deleted "${filename}"\n\n${result.items_deleted} line items removed from database`);
       } else {
         const errorText = await response.text();
         let errorMsg;
@@ -507,7 +508,7 @@ const DesignIQLists = () => {
           errorMsg = errorText || `HTTP ${response.status}`;
         }
         
-        console.error('❌ Delete failed:', {
+        console.error('? Delete failed:', {
           status: response.status,
           statusText: response.statusText,
           error: errorMsg
@@ -515,13 +516,13 @@ const DesignIQLists = () => {
         
         // Revert optimistic update on error
         fetchDocuments();
-        alert(`❌ Failed to delete document:\n${errorMsg}\n\nStatus: ${response.status}`);
+        alert(`? Failed to delete document:\n${errorMsg}\n\nStatus: ${response.status}`);
       }
     } catch (error) {
-      console.error('❌ Error deleting document:', error);
+      console.error('? Error deleting document:', error);
       // Revert optimistic update on error
       fetchDocuments();
-      alert(`❌ Failed to delete document:\n${error.message}\n\nPlease check your connection and try again.`);
+      alert(`? Failed to delete document:\n${error.message}\n\nPlease check your connection and try again.`);
     }
   };
 
@@ -1047,8 +1048,8 @@ const DesignIQLists = () => {
                 </p>
                 {uploadResult.success && uploadResult.data?.extracted_lines && (
                   <div className="mt-3 text-xs text-green-600 font-medium">
-                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ OCR processing completed</p>
-                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {uploadResult.data.extracted_lines.length} line numbers detected</p>
+                    <p>Ã¢Å“â€œ OCR processing completed</p>
+                    <p>Ã¢Å“â€œ {uploadResult.data.extracted_lines.length} line numbers detected</p>
                   </div>
                 )}
               </div>
@@ -1097,7 +1098,7 @@ const DesignIQLists = () => {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-4 text-center">
-                ÃƒÂ¢Ã‚ÂÃ‚Â±ÃƒÂ¯Ã‚Â¸Ã‚Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
+                Ã¢ÂÂ±Ã¯Â¸Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
                 <br />
                 <span className="text-xs">Please keep this window open</span>
               </p>
@@ -1354,7 +1355,7 @@ const DesignIQLists = () => {
               
               {/* Format Template Preview */}
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">📋 Current Format Template</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">?? Current Format Template</h3>
                 <div className="bg-white px-4 py-3 rounded-lg border border-indigo-300 font-mono text-lg">
                   {lineNumberFormat.components
                     .filter(c => c.enabled)
@@ -1374,7 +1375,7 @@ const DesignIQLists = () => {
               {/* Separator Configuration */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  🔗 Component Separator
+                  ?? Component Separator
                 </label>
                 <div className="flex items-center space-x-4">
                   <input
@@ -1398,14 +1399,14 @@ const DesignIQLists = () => {
                       })}
                       className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                     />
-                    <span className="text-sm text-gray-700">Allow variable separators (-, –, —, etc.)</span>
+                    <span className="text-sm text-gray-700">Allow variable separators (-, �, �, etc.)</span>
                   </label>
                 </div>
               </div>
 
               {/* Components Configuration */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">⚙️ Line Number Components</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">?? Line Number Components</h3>
                 <div className="space-y-3">
                   {lineNumberFormat.components.map((component, idx) => (
                     <div key={component.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -1498,7 +1499,7 @@ const DesignIQLists = () => {
 
               {/* Preset Templates */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">🎯 Common Configurations</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">?? Common Configurations</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => {
@@ -1599,4 +1600,5 @@ const DesignIQLists = () => {
 };
 
 export default DesignIQLists;
+
 
