@@ -110,7 +110,7 @@ const DesignIQLists = () => {
       { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
     ],
     separator: '-',  // Separator between components
-    allowVariableSeparators: true  // Allow -, –, —, etc.
+    allowVariableSeparators: true  // Allow -, ï¿½, ï¿½, etc.
   });
 
   const currentListConfig = LIST_TYPES[selectedListType];
@@ -461,7 +461,7 @@ const DesignIQLists = () => {
   };
 
   const handleDeleteDocument = async (documentId, filename, lineCount) => {
-    if (!confirm(`?? Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\n• The document entry\n• All ${lineCount} extracted line items\n• Cannot be undone\n\nClick OK to proceed with deletion.`)) {
+    if (!confirm(`?? Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\nï¿½ The document entry\nï¿½ All ${lineCount} extracted line items\nï¿½ Cannot be undone\n\nClick OK to proceed with deletion.`)) {
       return;
     }
 
@@ -1277,6 +1277,84 @@ const DesignIQLists = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       To
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Flow Medium
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Two Phase
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Surge Flow
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Flow Max
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Density
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Normal Pressure
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Normal Temp
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Design Pressure
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Minimax Design Temp
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Design Code
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Category-M Fluid
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Schedule/Wall THK
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Stress Relief
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      PWHT
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      RT
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      MT/PT
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Hardness
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Visual
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      NACE-MR-0175
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Piping Rated Pressure at Ambient Condition
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Test Pressure
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Test Medium
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      P&ID No.
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      P&ID Rev
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                      Criticality Code
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1314,6 +1392,84 @@ const DesignIQLists = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.to_line || line.to || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.flow_medium || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.two_phase || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.surge_flow || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.flow_max || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.density || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.normal_pressure || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.normal_temp || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.design_pressure || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.minimax_design_temp || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.design_code || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.category_m_fluid || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.schedule_wall_thk || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.stress_relief || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.pwht || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.rt || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.mt_pt || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.hardness || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.visual || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.nace_mr_0175 || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.piping_rated_pressure || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.test_pressure || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.test_medium || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.pid_no || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.pid_rev || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.date || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        {line.criticality_code || '-'}
                       </td>
                     </tr>
                   ))}
@@ -1399,7 +1555,7 @@ const DesignIQLists = () => {
                       })}
                       className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                     />
-                    <span className="text-sm text-gray-700">Allow variable separators (-, –, —, etc.)</span>
+                    <span className="text-sm text-gray-700">Allow variable separators (-, ï¿½, ï¿½, etc.)</span>
                   </label>
                 </div>
               </div>
