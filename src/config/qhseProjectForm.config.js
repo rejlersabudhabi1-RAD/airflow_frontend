@@ -15,9 +15,9 @@ export const projectFormSections = [
         name: 'srNo',
         label: 'Serial Number',
         type: 'number',
-        required: true,
-        placeholder: 'Enter serial number',
-        helperText: 'Unique serial number for the project',
+        required: false,
+        placeholder: 'Auto-generated if left empty',
+        helperText: 'Leave empty to auto-generate next serial number',
         gridSize: 6
       },
       {
@@ -435,9 +435,15 @@ export const validateFormData = (formData) => {
 /**
  * Format form data for API submission
  * Converts form field names to backend camelCase format
+ * SOFT-CODED: Remove srNo if 0 or empty to let backend auto-generate
  */
 export const formatFormDataForAPI = (formData) => {
   const formatted = { ...formData };
+  
+  // Remove srNo if it's 0 or empty (let backend auto-generate)
+  if (!formatted.srNo || formatted.srNo === 0) {
+    delete formatted.srNo;
+  }
   
   // Convert empty strings to null for date fields
   Object.keys(formatted).forEach(key => {
