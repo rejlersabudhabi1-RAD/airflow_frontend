@@ -267,10 +267,10 @@ const Dashboard = () => {
     },
     {
       id: 'efficiency',
-      label: 'AI Efficiency',
-      value: '95%',
-      change: '+5%',
-      trend: 'up',
+      label: 'System Health',
+      value: metricsData.performance?.system_health ? `${metricsData.performance.system_health}%` : 'N/A',
+      change: metricsData.performance?.system_health >= 90 ? 'Excellent' : metricsData.performance?.system_health >= 70 ? 'Good' : 'Needs Attention',
+      trend: metricsData.performance?.system_health >= 90 ? 'up' : 'new',
       icon: (
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />

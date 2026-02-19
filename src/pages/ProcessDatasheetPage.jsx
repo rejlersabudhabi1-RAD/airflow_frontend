@@ -9,6 +9,7 @@ import {
   CubeIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
+import { FEATURES_CATALOG } from '../config/featuresCatalog.config';
 
 /**
  * Process Data Sheet Page
@@ -17,6 +18,12 @@ import {
  */
 const ProcessDatasheetPage = () => {
   const navigate = useNavigate();
+
+  // Get module name from centralized config
+  const moduleConfig = FEATURES_CATALOG.engineering.features.find(
+    feature => feature.id === 'eng-process-datasheet'
+  );
+  const MODULE_NAME = moduleConfig?.name || 'Process Datasheets';
 
   // Soft-coded data sheet types configuration for Process Engineering
   const dataSheetTypes = [
@@ -38,57 +45,57 @@ const ProcessDatasheetPage = () => {
       ]
     },
     {
-      id: 'heat_material_balance',
-      name: 'Heat & Material Balance',
-      description: 'Comprehensive heat and material balance calculations for process streams',
-      icon: BeakerIcon,
+      id: 'pressure_instrument',
+      name: 'Pressure Instrument',
+      description: 'Upload P&ID diagrams to detect and analyze pressure instruments automatically',
+      icon: ChartBarIcon,
       color: 'purple',
       gradient: 'from-purple-500 to-purple-600',
-      path: '/engineering/process/datasheet/hmb',
-      badge: 'Coming Soon',
-      disabled: true,
+      path: '/engineering/process/datasheet/pressure-instrument',
+      badge: 'Active',
+      disabled: false,
       features: [
-        'Stream composition tracking',
-        'Energy balance calculations',
-        'Component mass balance',
-        'Thermodynamic properties',
-        'Export to simulation tools'
+        'Pressure transmitter selection',
+        'Range & accuracy specification',
+        'Process connection sizing',
+        'Output signal configuration',
+        'Installation & calibration'
       ]
     },
     {
       id: 'equipment_datasheet',
-      name: 'Equipment Datasheets',
-      description: 'Manage and generate datasheets for process equipment and machinery',
+      name: 'MOV Datasheets',
+      description: 'Manage and generate datasheets for Motor Operated Valves (MOV)',
       icon: CubeIcon,
       color: 'emerald',
       gradient: 'from-emerald-500 to-emerald-600',
       path: '/engineering/process/datasheet/equipment',
-      badge: 'Coming Soon',
-      disabled: true,
+      badge: 'Active',
+      disabled: false,
       features: [
-        'Pumps & compressors',
-        'Heat exchangers',
-        'Vessels & tanks',
-        'Rotating equipment',
-        'Design specifications'
+        'MOV specifications',
+        'Actuator sizing',
+        'Torque calculations',
+        'Control requirements',
+        'Installation details'
       ]
     },
     {
       id: 'stream_tables',
-      name: 'Stream Tables',
-      description: 'Create and manage detailed stream tables for process flows',
+      name: 'SDV Datasheets',
+      description: 'Manage and generate datasheets for Shut Down Valves (SDV)',
       icon: TableCellsIcon,
       color: 'amber',
       gradient: 'from-amber-500 to-amber-600',
       path: '/engineering/process/datasheet/streams',
-      badge: 'Coming Soon',
-      disabled: true,
+      badge: 'Active',
+      disabled: false,
       features: [
-        'Stream properties',
-        'Composition analysis',
-        'Temperature & pressure',
-        'Flow rates',
-        'Phase information'
+        'SDV specifications',
+        'Fail-safe requirements',
+        'Closure time calculations',
+        'Safety integrity levels',
+        'Emergency shutdown logic'
       ]
     },
     {
@@ -142,7 +149,7 @@ const ProcessDatasheetPage = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Process Data Sheets
+              {MODULE_NAME}
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
               Comprehensive process engineering data management and analysis system
@@ -272,7 +279,7 @@ const ProcessDatasheetPage = () => {
             </div>
             <div className="flex-1">
               <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                About Process Data Sheets
+                About {MODULE_NAME}
               </h4>
               <p className="text-sm text-blue-800 dark:text-blue-200">
                 This centralized hub provides access to all process engineering data sheet functionality. 

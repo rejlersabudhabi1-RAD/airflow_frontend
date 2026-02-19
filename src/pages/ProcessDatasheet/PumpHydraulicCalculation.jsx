@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FEATURES_CATALOG } from '../../config/featuresCatalog.config';
 import { 
   ArrowLeftIcon,
   ArrowPathIcon,
@@ -17,6 +18,12 @@ import {
  */
 const PumpHydraulicCalculation = () => {
   const navigate = useNavigate();
+  
+  // Get module name from centralized config
+  const moduleConfig = FEATURES_CATALOG.engineering.features.find(
+    feature => feature.id === 'eng-process-datasheet'
+  );
+  const MODULE_NAME = moduleConfig?.name || 'Process Datasheets';
   
   // State management - soft-coded for easy expansion
   const [calculationMode, setCalculationMode] = useState('');
@@ -174,7 +181,7 @@ const PumpHydraulicCalculation = () => {
           className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
         >
           <ArrowLeftIcon className="w-5 h-5" />
-          <span>Back to Process Data Sheets</span>
+          <span>Back to {MODULE_NAME}</span>
         </button>
 
         <div className="flex items-center justify-between">

@@ -56,20 +56,26 @@ const Profile = () => {
     try {
       setIsFetchingProfile(true);
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
+      
       const response = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error('Failed to fetch profile');
       }
       
       const data = await response.json();
-      console.log('[Profile] Fetched data:', data); // Debug log
-      console.log('[Profile] Profile photo from data:', data.profile_photo); // Debug log
-      console.log('[Profile] User from data:', data.user); // Debug log
+      console.log('[Profile] Fetched profile data successfully');
       setProfileData(data);
       
       // Set form data
@@ -83,17 +89,19 @@ const Profile = () => {
         job_title: data.job_title || ''
       });
       
-      // Set photo preview if exists
+      // Set photo preview if exists (currently disabled in backend until S3 CORS configured)
       if (data.profile_photo) {
-        console.log('[Profile] Setting photo preview:', data.profile_photo); // Debug log
         setPhotoPreview(data.profile_photo);
-      } else {
-        console.log('[Profile] No profile photo found in response'); // Debug log
       }
       
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
-      toast.error('Failed to load profile data');
+      if (error.name === 'AbortError') {
+        console.error('[Profile] Request timeout after 20 seconds');
+        toast.error('Profile loading is taking longer than expected. Please check your connection.');
+      } else {
+        console.error('[Profile] Error fetching profile:', error);
+        toast.error('Failed to load profile. Please try again.');
+      }
     } finally {
       setIsFetchingProfile(false);
     }
@@ -288,11 +296,19 @@ const Profile = () => {
                   onDrop={handleDrop}
                 >
                   {photoPreview ? (
-                    <img
-                      src={photoPreview}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={photoPreview}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
+                        {getUserInitials()}
+                      </div>
+                    </>
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
                       {getUserInitials()}

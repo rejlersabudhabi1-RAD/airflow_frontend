@@ -81,7 +81,7 @@ export const FEATURES_CATALOG = {
       },
       {
         id: 'eng-process-datasheet',
-        name: 'Process Data Sheets',
+        name: 'Process Datasheets',
         shortName: 'Datasheets',
         description: 'Equipment data sheets generation and management',
         path: '/engineering/process/datasheet',
@@ -182,6 +182,27 @@ export const FEATURES_CATALOG = {
           monthlyUses: 423,
           totalUses: 856,
           avgRating: 4.6
+        }
+      },
+      {
+        id: 'eng-digitization-datasheet',
+        name: 'Datasheets',
+        shortName: 'Datasheets',
+        description: 'Digital transformation datasheets and documentation',
+        path: '/engineering/digitization/datasheet',
+        moduleCode: 'digitization_datasheet',
+        status: FEATURE_STATUS.NEW,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Digital documentation management',
+          'Automated datasheet generation',
+          'Template library',
+          'Standards compliance'
+        ],
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 0
         }
       }
     ]

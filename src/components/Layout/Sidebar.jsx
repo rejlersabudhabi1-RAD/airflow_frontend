@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useSelector } from 'react-redux'
+import { useSelector, useDispatch } from 'react-redux'
+import { updateUser } from '../../store/slices/authSlice'
 import { API_BASE_URL } from '../../config/api.config'
 import { getSectionTitle } from '../../config/navigationLabels.config'
 import { getEngineeringDisciplines } from '../../config/engineeringStructure.config'
@@ -35,6 +36,7 @@ import {
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const navigate = useNavigate()
   const location = useLocation()
+  const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -88,7 +90,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         
         const data = await response.json()
         console.log('🔐 Full user data:', data)
-        console.log('🖼️ Profile photo URL:', data.profile_photo)
+        
+        // Update Redux store with profile photo and other user data
+        // Note: profile_photo currently disabled in backend until S3 CORS configured
+        if (data.profile_photo) {
+          dispatch(updateUser({ profile_photo: data.profile_photo }))
+          console.log('✅ Profile photo updated in Redux store')
+        }
         
         if (data.modules && Array.isArray(data.modules)) {
           const moduleCodes = data.modules.map(m => m.code)
@@ -111,19 +119,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   // Debug logging
   React.useEffect(() => {
-    console.log('=== SIDEBAR DEBUG ===')
-    console.log('Full user object:', user)
-    console.log('Nested userData:', userData)
-    console.log('User profile_photo:', user?.profile_photo)
-    console.log('userData.is_staff:', userData?.is_staff)
-    console.log('userData.is_superuser:', userData?.is_superuser)
-    console.log('isAdmin:', isAdmin)
-    console.log('User roles:', user?.roles)
-    console.log('User Modules:', userModules)
-    console.log('==================')
-  }, [user, userData, isAdmin, userModules])
-
-  // Toggle section expansion
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== SIDEBAR DEBUG ===')
+      console.log('Full user object:', user)
+      console.log('isAdmin:', isAdmin)
+      console.log('User Modules:', userModules)
+      console.log('==================')  
+    }
+  }, [user, isAdmin, userModules])
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -750,28 +753,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         {/* Sidebar Footer - User Info */}
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-lg">
-              {user?.profile_photo ? (
-                <img 
-                  src={user.profile_photo} 
-                  alt={userData?.first_name || 'User'} 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // Fallback to initials if image fails to load
-                    e.target.style.display = 'none';
-                    e.target.nextElementSibling.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              <div 
-                className={`w-full h-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center ${user?.profile_photo ? 'hidden' : 'flex'}`}
-              >
-                <span className="text-white font-semibold text-sm">
-                  {USER_DISPLAY_CONFIG.formatting.getUserInitials(userData)}
-                </span>
-              </div>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600">
+              {/* Always show initials (profile photos disabled until S3 CORS configured) */}
+              <span className="absolute inset-0 flex items-center justify-center text-white font-semibold text-sm z-10">
+                {USER_DISPLAY_CONFIG.formatting.getUserInitials(userData)}
+              </span>
               {isAdmin && isCollapsed && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full border-2 border-white"></span>
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full border-2 border-white z-20"></span>
               )}
             </div>
             {!isCollapsed && (

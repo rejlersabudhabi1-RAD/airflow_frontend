@@ -1,167 +1,149 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  BoltIcon,
-  CpuChipIcon,
-  SignalIcon,
-  LightBulbIcon,
+  HomeModernIcon,
+  Square3Stack3DIcon,
+  BuildingOffice2Icon,
   CircleStackIcon,
-  ChartBarIcon,
-  SparklesIcon
+  BeakerIcon,
+  CubeIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 /**
- * Electrical Data Sheet Page
- * Central hub for all electrical engineering data sheet functionality
- * Follows the same design pattern as Instrument Data Sheets for consistency
+ * Civil Data Sheet Page
+ * Central hub for all civil engineering data sheet functionality
+ * Follows the same design pattern as Process, Instrument, and Electrical Data Sheets for consistency
  */
-const ElectricalDatasheetPage = () => {
+const CivilDatasheetPage = () => {
   const navigate = useNavigate();
 
-  // Soft-coded data sheet types configuration for Electrical Engineering
+  // Soft-coded data sheet types configuration for Civil Engineering
   const dataSheetTypes = [
     {
-      id: 'electrical_datasheet',
-      name: 'Electrical Datasheets',
-      description: 'AI-powered electrical diagram validation and datasheet management with ADNOC standards verification',
-      icon: BoltIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-amber-600',
-      path: '/engineering/electrical/datasheet/upload',
-      badge: 'AI Powered',
-      disabled: false,
-      features: [
-        'Upload & validate diagrams',
-        'ADNOC standards verification',
-        'AI-powered data extraction',
-        'Compliance score calculation',
-        'Excel export functionality'
-      ]
-    },
-    {
-      id: 'motor',
-      name: 'Motor Datasheets',
-      description: 'Motor selection, sizing calculations, and comprehensive specification generation',
-      icon: CpuChipIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-amber-600',
-      path: '/engineering/electrical/datasheet/motor',
+      id: 'foundation_design',
+      name: 'Foundation Design',
+      description: 'Foundation calculations, bearing capacity analysis, and structural design specifications',
+      icon: BuildingOffice2Icon,
+      color: 'gray',
+      gradient: 'from-gray-500 to-slate-600',
+      path: '/engineering/civil/datasheet/foundation',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'Motor type selection',
-        'Power & torque calculations',
-        'Starting method analysis',
-        'Efficiency & power factor',
-        'Datasheet generation'
-      ]
-    },
-    {
-      id: 'transformer',
-      name: 'Transformer Datasheets',
-      description: 'Transformer sizing, specification, and performance analysis',
-      icon: BoltIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-orange-600',
-      path: '/engineering/electrical/datasheet/transformer',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Transformer sizing',
-        'Voltage regulation',
-        'Impedance calculations',
-        'Loss calculations',
-        'Specification generation'
-      ]
-    },
-    {
-      id: 'cable_sizing',
-      name: 'Cable Sizing & Selection',
-      description: 'Cable sizing calculations based on current, voltage drop, and installation conditions',
-      icon: SignalIcon,
-      color: 'yellow',
-      gradient: 'from-amber-500 to-yellow-600',
-      path: '/engineering/electrical/datasheet/cable',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Current carrying capacity',
-        'Voltage drop calculations',
-        'Short circuit rating',
-        'Installation factors',
-        'Cable schedule generation'
-      ]
-    },
-    {
-      id: 'load_calculation',
-      name: 'Load Calculations',
-      description: 'Electrical load analysis, diversity factors, and power distribution calculations',
-      icon: ChartBarIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-600 to-amber-600',
-      path: '/engineering/electrical/datasheet/load',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Connected load calculation',
-        'Demand load estimation',
-        'Diversity factors',
+        'Bearing capacity calculations',
+        'Settlement analysis',
+        'Foundation type selection',
         'Load distribution',
-        'Load schedule generation'
+        'Reinforcement design'
       ]
     },
     {
-      id: 'switchgear',
-      name: 'Switchgear & Panels',
-      description: 'Switchgear selection, panel design, and protection coordination',
-      icon: CircleStackIcon,
-      color: 'yellow',
-      gradient: 'from-orange-500 to-yellow-600',
-      path: '/engineering/electrical/datasheet/switchgear',
+      id: 'structural_design',
+      name: 'Structural Design',
+      description: 'Structural analysis, member sizing, and reinforced concrete design calculations',
+      icon: Square3Stack3DIcon,
+      color: 'gray',
+      gradient: 'from-slate-500 to-gray-600',
+      path: '/engineering/civil/datasheet/structural',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'Switchgear rating',
-        'Panel layout design',
-        'Protection coordination',
-        'Bus bar sizing',
-        'Single line diagram'
+        'Beam & column design',
+        'Slab calculations',
+        'Load analysis (DL, LL, WL)',
+        'Moment & shear design',
+        'Deflection checks'
       ]
     },
     {
-      id: 'ups_battery',
-      name: 'UPS & Battery Systems',
-      description: 'UPS sizing, battery calculations, and backup power system design',
-      icon: SparklesIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-yellow-700',
-      path: '/engineering/electrical/datasheet/ups',
+      id: 'concrete_mix',
+      name: 'Concrete Mix Design',
+      description: 'Concrete mix proportioning, strength requirements, and material specifications',
+      icon: BeakerIcon,
+      color: 'gray',
+      gradient: 'from-gray-600 to-zinc-600',
+      path: '/engineering/civil/datasheet/concrete',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'UPS capacity sizing',
-        'Battery autonomy calculation',
-        'Battery bank design',
-        'Charging system',
-        'Specification generation'
+        'Mix design calculations',
+        'Cement content determination',
+        'Water-cement ratio',
+        'Aggregate proportioning',
+        'Strength requirements'
       ]
     },
     {
-      id: 'lighting',
-      name: 'Lighting Design',
-      description: 'Lighting calculations, luminaire selection, and illumination analysis',
-      icon: LightBulbIcon,
-      color: 'yellow',
-      gradient: 'from-amber-400 to-yellow-600',
-      path: '/engineering/electrical/datasheet/lighting',
+      id: 'soil_investigation',
+      name: 'Soil Investigation',
+      description: 'Geotechnical analysis, soil properties, and foundation recommendations',
+      icon: CubeIcon,
+      color: 'gray',
+      gradient: 'from-zinc-500 to-gray-600',
+      path: '/engineering/civil/datasheet/soil',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'Lux calculations',
-        'Luminaire selection',
-        'Energy efficiency',
-        'Emergency lighting',
-        'Lighting layout'
+        'Soil classification',
+        'Bearing capacity',
+        'Shear strength parameters',
+        'Consolidation properties',
+        'Soil test analysis'
+      ]
+    },
+    {
+      id: 'steel_structure',
+      name: 'Steel Structure Design',
+      description: 'Steel member design, connection details, and structural steel specifications',
+      icon: Square3Stack3DIcon,
+      color: 'gray',
+      gradient: 'from-gray-500 to-slate-700',
+      path: '/engineering/civil/datasheet/steel',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Steel member sizing',
+        'Connection design',
+        'Buckling analysis',
+        'Welding specifications',
+        'Material selection'
+      ]
+    },
+    {
+      id: 'pavement_design',
+      name: 'Pavement Design',
+      description: 'Road and pavement design calculations, layer thickness, and material specifications',
+      icon: HomeModernIcon,
+      color: 'gray',
+      gradient: 'from-slate-500 to-gray-700',
+      path: '/engineering/civil/datasheet/pavement',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Flexible pavement design',
+        'Rigid pavement design',
+        'Layer thickness calculations',
+        'Traffic load analysis',
+        'Material specifications'
+      ]
+    },
+    {
+      id: 'quantity_estimation',
+      name: 'Quantity Estimation',
+      description: 'Bill of quantities, material takeoff, and cost estimation calculations',
+      icon: DocumentTextIcon,
+      color: 'gray',
+      gradient: 'from-gray-600 to-slate-600',
+      path: '/engineering/civil/datasheet/quantity',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Concrete quantities',
+        'Steel reinforcement',
+        'Earthwork calculations',
+        'Material takeoff',
+        'Cost estimation'
       ]
     }
   ];
@@ -179,15 +161,15 @@ const ElectricalDatasheetPage = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Electrical Data Sheets
+              Civil Data Sheets
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Comprehensive electrical engineering data management and specification system
+              Comprehensive civil engineering design calculations and specification system
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-medium">
-              Electrical Engineering
+            <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full text-sm font-medium">
+              Civil Engineering
             </span>
           </div>
         </div>
@@ -234,7 +216,7 @@ const ElectricalDatasheetPage = () => {
                           <span className={`
                             inline-block px-2 py-1 text-xs font-medium rounded-full mt-1
                             ${type.badge === 'AI Powered' 
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                               : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}
                           `}>
                             {type.badge}
@@ -300,43 +282,44 @@ const ElectricalDatasheetPage = () => {
         </div>
 
         {/* Info Card */}
-        <div className="mt-8 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+        <div className="mt-8 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
-                About Electrical Data Sheets
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                About Civil Data Sheets
               </h4>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                This centralized hub provides access to all electrical engineering data sheet functionality. 
-                The Electrical Datasheets module is currently active with AI-powered ADNOC standards verification. 
-                Additional modules for motors, transformers, cable sizing, load calculations, switchgear, UPS systems, and lighting design 
-                are under development and will be available soon.
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                This centralized hub will provide access to all civil engineering data sheet functionality. 
+                Comprehensive modules for foundation design, structural calculations, concrete mix design, soil investigation, 
+                steel structures, pavement design, and quantity estimation are currently under development. Each module will be 
+                designed to streamline your civil engineering workflow with intelligent automation, calculation tools, and 
+                comprehensive data management following international standards.
               </p>
             </div>
           </div>
         </div>
 
         {/* Development Status Banner */}
-        <div className="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
+        <div className="mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">
-                Active Module
+              <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                Under Development
               </h4>
-              <p className="text-sm text-green-800 dark:text-green-200">
-                The Electrical Datasheets module is now active! Upload electrical diagrams for AI-powered validation against ADNOC standards. 
-                The system automatically extracts specifications, validates compliance, identifies missing parameters, and generates comprehensive Excel reports. 
-                Additional specialized modules are coming soon.
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                All civil data sheet modules are currently under development and will be available soon. 
+                We are building a comprehensive suite of tools to support your civil engineering design and calculation needs.
+                Check back regularly for updates and new module releases.
               </p>
             </div>
           </div>
@@ -346,4 +329,4 @@ const ElectricalDatasheetPage = () => {
   );
 };
 
-export default ElectricalDatasheetPage;
+export default CivilDatasheetPage;
