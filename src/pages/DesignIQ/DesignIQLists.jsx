@@ -18,7 +18,7 @@ import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { STORAGE_KEYS } from '../../config/app.config';
 import { API_BASE_URL } from '../../config/api.config';
-import apiClient, { apiClientLongTimeout } from '../../services/api.service';
+import { apiClientLongTimeout } from '../../services/api.service';
 import * as XLSX from 'xlsx';
 
 // List types configuration (matches backend)
@@ -72,7 +72,6 @@ const DesignIQLists = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedFormat, setSelectedFormat] = useState('onshore');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -82,12 +81,18 @@ const DesignIQLists = () => {
   const [processing, setProcessing] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState({ step: '', percent: 0 });
   
-  // Document management states
-  const [showDocumentsView, setShowDocumentsView] = useState(true);
-  const [documents, setDocuments] = useState([]);
-  const [loadingDocuments, setLoadingDocuments] = useState(true);
-  const [exportingDocId, setExportingDocId] = useState(null);
+  // Enrichment Documents (Optional - Do NOT block base extraction)
+  const [pidDocument, setPidDocument] = useState(null);
+  const [hmbDocument, setHmbDocument] = useState(null);
+  const [pmsDocument, setPmsDocument] = useState(null);
+  const [naceDocument, setNaceDocument] = useState(null);
+  const [selectedFormat, setSelectedFormat] = useState(null);
+  const hmbRef = useRef(null);
+  const pmsRef = useRef(null);
+  const naceRef = useRef(null);
   
   // Line Number Format Configuration
   const STRICT_LINE_PATTERNS = {
@@ -110,7 +115,7 @@ const DesignIQLists = () => {
       { id: 'insulation', name: 'Insulation', enabled: false, order: 6, pattern: '[A-Z]{1,2}', example: 'V' }
     ],
     separator: '-',  // Separator between components
-    allowVariableSeparators: true  // Allow -, �, �, etc.
+    allowVariableSeparators: true  // Allow -, –, —, etc.
   });
 
   const currentListConfig = LIST_TYPES[selectedListType];
@@ -143,47 +148,8 @@ const DesignIQLists = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedListType === 'line_list') {
-      if (showDocumentsView) {
-        fetchDocuments();
-      } else {
-        fetchData();
-      }
-    } else {
-      fetchData();
-    }
-  }, [selectedListType, statusFilter, showDocumentsView]);
-
-  const fetchDocuments = async (isAutoRefresh = false) => {
-    if (isAutoRefresh) setIsRefreshing(true);
-    else setLoadingDocuments(true);
-    
-    try {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/documents/?list_type=${selectedListType}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        setDocuments(data.documents || []);
-      } else {
-        setDocuments([]);
-      }
-    } catch (error) {
-      console.error('Error fetching documents:', error);
-      setDocuments([]);
-    } finally {
-      setLoadingDocuments(false);
-      setIsRefreshing(false);
-    }
-  };
+    fetchData();
+  }, [selectedListType, statusFilter]);
 
   const fetchData = async (isAutoRefresh = false) => {
     if (isAutoRefresh) setIsRefreshing(true);
@@ -273,6 +239,253 @@ const DesignIQLists = () => {
     }
   };
 
+  const pollTaskStatus = async (taskId) => {
+    const maxAttempts = 120; // 10 minutes (5 sec intervals)
+    let attempts = 0;
+    
+    const poll = async () => {
+      try {
+        attempts++;
+        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        const response = await fetch(`${API_BASE_URL}/designiq/lists/upload_pid_status/${taskId}/`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('Failed to check status');
+        
+        const status = await response.json();
+        console.log(`📊 Poll ${attempts}/${maxAttempts}: ${status.state} - ${status.status}`);
+        
+        // Update progress if available
+        if (status.percent) {
+          setProcessingProgress({ 
+            step: status.status || 'Processing...', 
+            percent: Math.min(status.percent, 99) 
+          });
+        }
+        
+        if (status.state === 'SUCCESS' && status.result) {
+          // Task completed successfully
+          console.log('✅ Task completed:', status.result);
+          setProcessingProgress({ step: '✅ Complete!', percent: 100 });
+          
+          if (status.result.enriched_data && status.result.enriched_data.length > 0) {
+            setExtractedData({ lines: status.result.enriched_data, isEnriched: true });
+            setShowPreviewModal(true);
+          } else if (status.result.extracted_lines && status.result.extracted_lines.length > 0) {
+            setExtractedData({ lines: status.result.extracted_lines, isEnriched: false });
+            setShowPreviewModal(true);
+          }
+          
+          setUploadResult({
+            success: true,
+            message: status.result.message || 'Processing complete',
+            total_lines: status.result.total_items || 0,
+            enriched: status.result.enriched_data ? true : false
+          });
+          
+          await fetchData();
+          return;
+        } else if (status.state === 'FAILURE') {
+          throw new Error(status.error || 'Task failed');
+        } else if (status.state === 'PENDING' || status.state === 'PROCESSING') {
+          // Continue polling
+          if (attempts < maxAttempts) {
+            setTimeout(() => poll(), 5000); // Poll every 5 seconds
+          } else {
+            throw new Error('Timeout: Processing took too long');
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+        setUploadResult({
+          success: false,
+          message: error.message || 'Failed to check processing status'
+        });
+        setShowProcessingModal(false);
+        setProcessing(false);
+        setUploadingPID(false);
+      }
+    };
+    
+    await poll();
+  };
+
+  const processAllDocuments = async () => {
+    if (!selectedFormat) {
+      setUploadResult({
+        success: false,
+        message: 'Please select project format (Onshore/Offshore/General) before uploading.'
+      });
+      return;
+    }
+    
+    if (!pidDocument || !hmbDocument || !pmsDocument || !naceDocument) {
+      setUploadResult({
+        success: false,
+        message: 'Please upload all 4 documents before processing.'
+      });
+      return;
+    }
+
+    setUploadingPID(true);
+    setProcessing(true);
+    setUploadResult(null);
+    setShowProcessingModal(true);
+    setProcessingProgress({ step: 'Initializing 4-document enrichment...', percent: 5 });
+    
+    // Progress simulation for user feedback (backend does actual processing)
+    setTimeout(() => setProcessingProgress({ step: '📤 Uploading P&ID + HMB + PMS + NACE...', percent: 10 }), 2000);
+    setTimeout(() => setProcessingProgress({ step: '📄 Running OCR on P&ID drawing...', percent: 30 }), 8000);
+    setTimeout(() => setProcessingProgress({ step: '🔍 Extracting 8 base columns...', percent: 50 }), 15000);
+    setTimeout(() => setProcessingProgress({ step: '📊 Analyzing HMB (process data)...', percent: 65 }), 25000);
+    setTimeout(() => setProcessingProgress({ step: '🔧 Analyzing PMS (materials)...', percent: 75 }), 35000);
+    setTimeout(() => setProcessingProgress({ step: '⚗️ Analyzing NACE (corrosion)...', percent: 85 }), 45000);
+    setTimeout(() => setProcessingProgress({ step: '🤖 AI enrichment (+26 columns)...', percent: 93 }), 60000);
+    setTimeout(() => setProcessingProgress({ step: '✨ Finalizing 34-column table...', percent: 97 }), 75000);
+    
+    try {
+      const formData = new FormData();
+      formData.append('pid_file', pidDocument);
+      formData.append('list_type', 'line_list');
+      
+      // CRITICAL MAPPING: Format type determines regex pattern and area handling
+      // onshore → format_type='onshore', include_area=false
+      //   Pattern: SIZE-FLUID-SEQUENCE-PIPECLASS
+      //   Example: 2-D-5777-033842-X
+      //
+      // general → format_type='general', include_area=true
+      //   Pattern: SIZE"-AREA-FLUID-SEQUENCE-PIPECLASS
+      //   Example: 1"-41-SWS-64544-A2AU16-V
+      //
+      // offshore → format_type='offshore', include_area=true
+      //   Pattern: AREA-FLUID-SIZE-PIPECLASS-SEQUENCE
+      //   Example: 604-HO-8-BC2GA0-1070-H
+      const includeArea = (selectedFormat === 'offshore' || selectedFormat === 'general');
+      formData.append('include_area', includeArea ? 'true' : 'false');
+      formData.append('format_type', selectedFormat);
+      
+      // Add line number format configuration
+      const enabledComponents = lineNumberFormat.components
+        .filter(c => c.enabled)
+        .sort((a, b) => a.order - b.order);
+      
+      formData.append('line_format_config', JSON.stringify({
+        components: enabledComponents.map(c => ({
+          id: c.id,
+          name: c.name,
+          order: c.order,
+          pattern: STRICT_LINE_PATTERNS[c.id] || c.pattern
+        })),
+        separator: lineNumberFormat.separator,
+        allowVariableSeparators: lineNumberFormat.allowVariableSeparators
+      }));
+
+      // ENRICHMENT LAYER: Add all 3 documents for 34-column extraction
+      formData.append('hmb_file', hmbDocument);
+      formData.append('pms_file', pmsDocument);
+      formData.append('nace_file', naceDocument);
+      console.log('[4-Doc Enrichment] All documents attached for 34-column extraction');
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      if (!token) {
+        setUploadResult({
+          success: false,
+          message: 'Authentication token not found. Please log in again.'
+        });
+        setUploadingPID(false);
+        setProcessing(false);
+        return;
+      }
+
+      // Create AbortController for timeout control (20 minutes for large files + AI processing)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200000); // 20 minutes
+
+      const response = await fetch(`${API_BASE_URL}/designiq/lists/upload_pid/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Upload response:', data);
+        console.log('Response keys:', Object.keys(data));
+        console.log('Has enriched_data?', !!data.enriched_data, 'Length:', data.enriched_data?.length);
+        console.log('Has extracted_lines?', !!data.extracted_lines, 'Length:', data.extracted_lines?.length);
+        
+        // If task_id returned, it's async processing - poll for results
+        if (data.task_id && !data.enriched_data && !data.extracted_lines) {
+          console.log(`🔄 Async mode: Task ${data.task_id} queued, starting polling...`);
+          setProcessingProgress({ step: '⏳ Processing in background...', percent: 50 });
+          await pollTaskStatus(data.task_id);
+          return;
+        }
+        
+        // Direct result (EAGER mode or task completed)
+        setShowProcessingModal(false);
+        setProcessing(false);
+        setUploadingPID(false);
+        
+        if (data.enriched_data && data.enriched_data.length > 0) {
+          console.log(`✓ ENRICHED: ${data.enriched_data.length} lines with 34 columns`);
+          setExtractedData({ lines: data.enriched_data, isEnriched: true });
+          setShowPreviewModal(true);
+        } else if (data.extracted_lines && data.extracted_lines.length > 0) {
+          console.log(`✓ BASE: ${data.extracted_lines.length} lines with 8 columns`);
+          setExtractedData({ lines: data.extracted_lines, isEnriched: false });
+          setShowPreviewModal(true);
+        } else {
+          console.warn('⚠️ No data in response:', data);
+        }
+        
+        setUploadResult({
+          success: true,
+          message: data.message || 'Processing complete',
+          task_id: data.task_id,
+          total_lines: data.total_lines || 0,
+          enriched: data.enriched_data ? true : false
+        });
+        
+        await fetchData();
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+        setUploadResult({
+          success: false,
+          message: errorData.error || 'Upload failed'
+        });
+      }
+    } catch (error) {
+      console.error('Error during processing:', error);
+      
+      let errorMessage = 'An error occurred during processing';
+      if (error.name === 'AbortError') {
+        errorMessage = 'Processing timeout (20 min exceeded). Files may be too large or backend overloaded.';
+      } else if (error.message.includes('fetch')) {
+        errorMessage = 'Network error: Unable to connect to server. Please check if backend is running.';
+      } else {
+        errorMessage = error.message || errorMessage;
+      }
+      
+      setUploadResult({
+        success: false,
+        message: errorMessage
+      });
+    } finally {
+      setUploadingPID(false);
+      setProcessing(false);
+      setShowProcessingModal(false);
+      setProcessingProgress({ step: '', percent: 0 });
+    }
+  };
+
   const handlePIDUpload = async (event, includeArea = false, formatType = 'onshore') => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -312,6 +525,20 @@ const DesignIQLists = () => {
         allowVariableSeparators: lineNumberFormat.allowVariableSeparators
       }));
 
+      // ENRICHMENT LAYER (Optional - Does NOT block base extraction)
+      if (hmbDocument) {
+        formData.append('hmb_file', hmbDocument);
+        console.log('[Enrichment] HMB document attached:', hmbDocument.name);
+      }
+      if (pmsDocument) {
+        formData.append('pms_file', pmsDocument);
+        console.log('[Enrichment] PMS document attached:', pmsDocument.name);
+      }
+      if (naceDocument) {
+        formData.append('nace_file', naceDocument);
+        console.log('[Enrichment] NACE document attached:', naceDocument.name);
+      }
+
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       if (!token) {
@@ -322,49 +549,63 @@ const DesignIQLists = () => {
         return;
       }
 
-      console.log('[P&ID Upload]  Starting synchronous upload (10 min timeout)...');
+      console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting upload with extended timeout (10 minutes)...');
       console.log('[P&ID Upload] File:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Use long timeout client - wait for full processing (same as Critical Stress)
+      // Use long timeout client for OCR processing (10 minutes)
       const response = await apiClientLongTimeout.post(
         '/designiq/lists/upload_pid/',
         formData,
         {
           headers: {
             'Authorization': `Bearer ${token}`
+            // Content-Type will be set automatically by axios for FormData
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('[P&ID Upload]  File upload progress:', percentCompleted + '%');
+            console.log('[P&ID Upload] ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Upload progress:', percentCompleted + '%');
           }
         }
       );
 
-      console.log('[P&ID Upload]  Processing complete!');
+      console.log('[P&ID Upload] ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Processing complete');
       
       const data = response.data;
+      
+      // Detect enriched vs base extraction
+      const isEnriched = data.enriched_data && data.enriched_data.length > 0;
+      const lines = isEnriched ? data.enriched_data : (data.extracted_lines || []);
+      const columns = isEnriched && lines.length > 0 ? Object.keys(lines[0]) : null;
+      
       setExtractedData({
-        lines: data.extracted_lines || [],
+        lines: lines,
         fileName: file.name,
-        itemsCreated: data.items_created || 0
+        itemsCreated: data.items_created || 0,
+        isEnriched: isEnriched,
+        columns: columns
       });
       setShowPreviewModal(true);
       setUploadResult({
         success: true,
-        message: `Successfully uploaded document ${data.document_id || file.name} with ${data.extracted_lines?.length || 0} line items`,
+        message: isEnriched 
+          ? `Successfully enriched ${lines.length} lines with ${columns?.length || 0} columns from ${file.name}`
+          : `Successfully extracted ${lines.length} line numbers from ${file.name}`,
         data: data
       });
       setUploadingPID(false);
-      setProcessing(false);
-      } catch (error) {
-      console.error('[P&ID Upload]  Upload error:', error);
+    } catch (error) {
+      console.error('[P&ID Upload] ÃƒÂ¢Ã‚ÂÃ…â€™ Error:', error);
       
       let errorMessage = 'Failed to upload P&ID';
       
-      if (error.response) {
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timed out. The PDF might be too large or complex. Please try a smaller file or contact support.';
+      } else if (error.response) {
+        // Server responded with error
         const errorData = error.response.data;
         errorMessage = errorData.detail || errorData.error || error.response.statusText || errorMessage;
       } else if (error.request) {
+        // Request made but no response
         errorMessage = 'No response from server. Please check your connection and try again.';
       } else {
         errorMessage = error.message || errorMessage;
@@ -374,155 +615,10 @@ const DesignIQLists = () => {
         success: false,
         message: errorMessage
       });
-      setUploadingPID(false);
+    } finally {
       setProcessing(false);
-    } finally {
+      setUploadingPID(false);
       event.target.value = '';
-    }
-  };
-  const handleExportDocumentExcel = async (documentId, filename) => {
-    // CRS MULTI-REVISION PATTERN: Backend generates Excel, frontend downloads it
-    try {
-      console.log('?? Excel export request for:', { documentId, filename });
-      
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      
-      if (!token) {
-        alert('Authentication required. Please log in again.');
-        return;
-      }
-      
-      setExportingDocId(documentId);
-      
-      // URL encode document ID for query parameter
-      const encodedDocId = encodeURIComponent(documentId);
-      const exportUrl = `${API_BASE_URL}/designiq/lists/export-document-excel/?document_id=${encodedDocId}`;
-      
-      console.log('?? Calling backend export endpoint:', exportUrl);
-      
-      // Call backend endpoint to generate Excel
-      const response = await fetch(exportUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMsg;
-        try {
-          const error = JSON.parse(errorText);
-          errorMsg = error.error || error.detail || error.message;
-        } catch {
-          errorMsg = errorText || `HTTP ${response.status}`;
-        }
-        
-        console.error('? Export failed:', { status: response.status, error: errorMsg });
-        alert(`Failed to export Excel:\n${errorMsg}\n\nStatus: ${response.status}`);
-        return;
-      }
-      
-      // Get item count from response header
-      const itemCount = response.headers.get('X-Item-Count') || '?';
-      
-      // Download the Excel file
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      
-      // Extract filename from Content-Disposition or use default
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let downloadFilename = `${filename || documentId}_line_list.xlsx`;
-      
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch) {
-          downloadFilename = filenameMatch[1];
-        }
-      }
-      
-      a.download = downloadFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      console.log('? Excel downloaded:', downloadFilename);
-      alert(`? Excel exported successfully!\n\n${itemCount} line items downloaded`);
-      
-    } catch (error) {
-      console.error('? Error exporting document:', error);
-      alert(`Failed to export Excel file: ${error.message}\n\nCheck console for details.`);
-    } finally {
-      setExportingDocId(null);
-    }
-  };
-
-  const handleDeleteDocument = async (documentId, filename, lineCount) => {
-    if (!confirm(`?? Delete Document\n\nAre you sure you want to delete "${filename}"?\n\nThis will remove:\n� The document entry\n� All ${lineCount} extracted line items\n� Cannot be undone\n\nClick OK to proceed with deletion.`)) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      
-      // Optimistically remove from UI
-      setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
-      
-      // Properly encode the document_id for URL
-      const encodedDocId = encodeURIComponent(documentId);
-      
-      console.log('??? Deleting document:', {
-        original: documentId,
-        encoded: encodedDocId,
-        url: `${API_BASE_URL}/designiq/lists/documents/${encodedDocId}/`
-      });
-      
-      const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/documents/${encodedDocId}/`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('? Document deleted:', result);
-        // Refresh to ensure sync with backend
-        fetchDocuments();
-        // Show success notification
-        alert(`? Successfully deleted "${filename}"\n\n${result.items_deleted} line items removed from database`);
-      } else {
-        const errorText = await response.text();
-        let errorMsg;
-        try {
-          const error = JSON.parse(errorText);
-          errorMsg = error.message || error.detail || error.error || 'Unknown error';
-        } catch {
-          errorMsg = errorText || `HTTP ${response.status}`;
-        }
-        
-        console.error('? Delete failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorMsg
-        });
-        
-        // Revert optimistic update on error
-        fetchDocuments();
-        alert(`? Failed to delete document:\n${errorMsg}\n\nStatus: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('? Error deleting document:', error);
-      // Revert optimistic update on error
-      fetchDocuments();
-      alert(`? Failed to delete document:\n${error.message}\n\nPlease check your connection and try again.`);
     }
   };
 
@@ -596,19 +692,6 @@ const DesignIQLists = () => {
           </nav>
         </div>
 
-        {/* Toggle Button for Documents View (Line List only) */}
-        {selectedListType === 'line_list' && (
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-            <button
-              onClick={() => setShowDocumentsView(!showDocumentsView)}
-              className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              <ViewColumnsIcon className="w-5 h-5 mr-2" />
-              {showDocumentsView ? 'View Line Items' : 'View Documents'}
-            </button>
-          </div>
-        )}
-
         {/* Stats Cards */}
         {stats && (
           <div className="grid grid-cols-5 gap-6 p-6">
@@ -674,94 +757,354 @@ const DesignIQLists = () => {
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
               Export
             </button>
-
-            {/* Stress Critical Line List Button */}
-            <button
-              onClick={() => navigate('/designiq/stress-critical-line-list')}
-              className="flex items-center px-4 py-2 border-2 border-orange-500 text-orange-600 rounded-lg hover:bg-orange-50"
-            >
-              <BellAlertIcon className="w-5 h-5 mr-2" />
-              Stress Critical Line List
-            </button>
-
+            
             {/* P&ID Upload Button - Only for Line List */}
             {selectedListType === 'line_list' && (
-              <>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".pdf"
-                  onChange={(e) => handlePIDUpload(e, false, 'general')}
-                  className="hidden"
-                />
-                <input
-                  type="file"
-                  ref={fileInputWithAreaRef}
-                  accept=".pdf"
-                  onChange={(e) => handlePIDUpload(e, true, 'onshore')}
-                  className="hidden"
-                />
-                <input
-                  type="file"
-                  ref={fileInputOffshoreRef}
-                  accept=".pdf"
-                  onChange={(e) => handlePIDUpload(e, false, 'offshore')}
-                  className="hidden"
-                />
-
-                <div className="flex items-center space-x-3">
-                  <select
-                    value={selectedFormat}
-                    onChange={(e) => setSelectedFormat(e.target.value)}
-                    disabled={uploadingPID || processing}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="onshore">ADNOC Onshore</option>
-                    <option value="general">General</option>
-                    <option value="offshore">ADNOC Offshore</option>
-                  </select>
-
-                  <button
-                    onClick={() => {
-                      if (selectedFormat === 'onshore') {
-                        fileInputRef.current?.click();
-                      } else if (selectedFormat === 'general') {
-                        fileInputWithAreaRef.current?.click();
-                      } else if (selectedFormat === 'offshore') {
-                        fileInputOffshoreRef.current?.click();
-                      }
-                    }}
-                    disabled={uploadingPID || processing}
-                    className={`flex items-center px-4 py-2 border-2 rounded-lg ${
-                      uploadingPID || processing
-                        ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : selectedFormat === 'onshore'
-                        ? 'border-blue-500 text-blue-600 hover:bg-blue-50'
-                        : selectedFormat === 'general'
-                        ? 'border-green-500 text-green-600 hover:bg-green-50'
-                        : 'border-purple-500 text-purple-600 hover:bg-purple-50'
-                    }`}
-                  >
-                    {processing ? (
-                      <>
-                        <div className={`animate-spin rounded-full h-5 w-5 border-2 ${
-                          selectedFormat === 'onshore' ? 'border-blue-600' :
-                          selectedFormat === 'general' ? 'border-green-600' :
-                          'border-purple-600'
-                        } border-t-transparent mr-2`}></div>
-                        Processing OCR...
-                      </>
-                    ) : (
-                      <>
-                        <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-                        {uploadingPID ? 'Uploading...' : 'Upload P&ID'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
+              <div className="text-sm text-gray-600 italic">
+                Use the 4-document interface below to upload and process
+              </div>
             )}
           </div>
+          
+          {/* 4-DOCUMENT ENRICHED EXTRACTION - Systematic Upload Interface */}
+          {selectedListType === 'line_list' && (
+          <div className="border-t-2 border-purple-200 pt-4 mt-4">
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-4 mb-4">
+              <div className="flex items-center space-x-3 mb-2">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <h3 className="text-lg font-bold text-purple-900">Smart Enriched Extraction (34 Columns)</h3>
+              </div>
+              <p className="text-sm text-purple-800 mb-2">
+                Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with 34 columns (8 base + 26 enriched)
+              </p>
+              <div className="flex items-center space-x-2 text-xs text-purple-700">
+                <span className="font-semibold">Output:</span>
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">8 Base Columns from P&ID</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">10 from HMB</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">8 from PMS</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">8 from NACE</span>
+                <span className="text-purple-600">=</span>
+                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-bold">34 Total Columns</span>
+              </div>
+            </div>
+
+            {/* FORMAT SELECTION - CRITICAL FOR REGEX PATTERNS */}
+            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h4 className="text-sm font-bold text-yellow-900">Step 1: Select Project Format (Required)</h4>
+              </div>
+              <p className="text-xs text-yellow-800 mb-3">Choose your project type - this determines the line number format and regex patterns used for extraction</p>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => setSelectedFormat('onshore')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'onshore'
+                      ? 'bg-blue-500 text-white border-blue-600 shadow-lg'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                  }`}
+                >
+                  <div className="text-sm font-bold">Onshore</div>
+                  <div className="text-xs mt-1">No area (2-D-5777-033842)</div>
+                </button>
+                <button
+                  onClick={() => setSelectedFormat('general')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'general'
+                      ? 'bg-green-500 text-white border-green-600 shadow-lg'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
+                  }`}
+                >
+                  <div className="text-sm font-bold">General</div>
+                  <div className="text-xs mt-1">With area (1"-41-SWS-64544)</div>
+                </button>
+                <button
+                  onClick={() => setSelectedFormat('offshore')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'offshore'
+                      ? 'bg-purple-500 text-white border-purple-600 shadow-lg'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
+                  }`}
+                >
+                  <div className="text-sm font-bold">Offshore</div>
+                  <div className="text-xs mt-1">Area first (604-HO-8-BC2GA0)</div>
+                </button>
+              </div>
+              {!selectedFormat && (
+                <div className="mt-3 flex items-center space-x-2 text-red-600 text-sm font-medium">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Please select a format before uploading documents</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              {/* Document 1: P&ID (Mandatory) */}
+              <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-blue-900">1. P&ID Drawing</label>
+                  <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">Mandatory</span>
+                </div>
+                <p className="text-xs text-blue-700 mb-3">Extracts: Line No, Size, Fluid Code, Area, From, To</p>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && file.type === 'application/pdf') {
+                      setPidDocument(file);
+                      // Format must be selected explicitly by user before upload
+                    } else {
+                      alert('Please select a valid PDF file.');
+                    }
+                  }}
+                  className="hidden"
+                  id="pidFileInput"
+                />
+                <label
+                  htmlFor="pidFileInput"
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-blue-400 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
+                >
+                  {pidDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{pidDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      Select P&ID
+                    </>
+                  )}
+                </label>
+                {pidDocument && (
+                  <button
+                    onClick={() => setPidDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 2: HMB/PFD */}
+              <div className="border-2 border-green-300 rounded-lg p-4 bg-green-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-green-900">2. HMB/PFD</label>
+                  <span className="px-2 py-1 bg-green-600 text-white text-xs rounded-full">+10 cols</span>
+                </div>
+                <p className="text-xs text-green-700 mb-3">Design/Operating Temp, Pressure, Flow Rate, Density</p>
+                <input
+                  type="file"
+                  ref={hmbRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setHmbDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => hmbRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-green-400 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  {hmbDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{hmbDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select HMB
+                    </>
+                  )}
+                </button>
+                {hmbDocument && (
+                  <button
+                    onClick={() => setHmbDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 3: PMS */}
+              <div className="border-2 border-orange-300 rounded-lg p-4 bg-orange-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-orange-900">3. PMS</label>
+                  <span className="px-2 py-1 bg-orange-600 text-white text-xs rounded-full">+8 cols</span>
+                </div>
+                <p className="text-xs text-orange-700 mb-3">Material Grade, Schedule, Flange Rating, Gaskets</p>
+                <input
+                  type="file"
+                  ref={pmsRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setPmsDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => pmsRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-orange-400 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
+                >
+                  {pmsDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{pmsDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select PMS
+                    </>
+                  )}
+                </button>
+                {pmsDocument && (
+                  <button
+                    onClick={() => setPmsDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 4: NACE */}
+              <div className="border-2 border-red-300 rounded-lg p-4 bg-red-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-red-900">4. NACE Report</label>
+                  <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full">+8 cols</span>
+                </div>
+                <p className="text-xs text-red-700 mb-3">Corrosion Allowance, NACE Class, H2S, Coating</p>
+                <input
+                  type="file"
+                  ref={naceRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setNaceDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => naceRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-red-400 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  {naceDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{naceDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select NACE
+                    </>
+                  )}
+                </button>
+                {naceDocument && (
+                  <button
+                    onClick={() => setNaceDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Status Indicator & Process Button */}
+            <div className="mt-4 p-4 bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-300 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-4 h-4 rounded-full ${
+                    pidDocument && hmbDocument && pmsDocument && naceDocument 
+                      ? 'bg-green-500 animate-pulse' 
+                      : 'bg-gray-300'
+                  }`}></div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">
+                      Documents: <strong className="text-lg">{[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4</strong> uploaded
+                    </span>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        pidDocument ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                      }`}>P&ID</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        hmbDocument ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>HMB</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        pmsDocument ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
+                      }`}>PMS</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        naceDocument ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+                      }`}>NACE</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={processAllDocuments}
+                  disabled={!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || loading}
+                  className={`px-6 py-3 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${
+                    pidDocument && hmbDocument && pmsDocument && naceDocument && !loading
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg animate-pulse'
+                      : 'bg-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  {loading ? (
+                    <div className="flex items-center space-x-2">
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Processing...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>Process All 4 Documents</span>
+                    </div>
+                  )}
+                </button>
+              </div>
+              {pidDocument && hmbDocument && pmsDocument && naceDocument && !loading && (
+                <div className="mt-3 flex items-center justify-center text-sm text-green-600 font-semibold">
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Ready! Click "Process All 4 Documents" to extract 34 columns (8 base from P&ID + 26 enriched via AI)
+                </div>
+              )}
+              {(!pidDocument || !hmbDocument || !pmsDocument || !naceDocument) && (
+                <div className="mt-3 text-center text-sm text-yellow-700 font-medium">
+                  ⚠️ Upload all 4 documents to enable processing with 34-column enrichment
+                </div>
+              )}
+            </div>
+          </div>
+          )}
         </div>
 
         {/* Filter Panel */}
@@ -788,116 +1131,10 @@ const DesignIQLists = () => {
 
       {/* Items Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {(loading || loadingDocuments) ? (
+        {loading ? (
           <div className="p-12 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">{loadingDocuments ? 'Loading documents...' : 'Loading items...'}</p>
-          </div>
-        ) : showDocumentsView && selectedListType === 'line_list' ? (
-          // Documents View
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Document ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Filename
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Upload Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Uploaded By
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Format
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Line Count
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {documents.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
-                      No documents found. Upload a P&ID to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  documents.map((doc) => (
-                    <tr key={doc.document_id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
-                        {doc.document_id}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {doc.original_filename || doc.document_id}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(doc.created_at).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {doc.created_by || 'Unknown'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {doc.format_type || 'ADNOC'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {doc.line_count} lines
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button
-                          onClick={() => handleExportDocumentExcel(doc.document_id, doc.original_filename)}
-                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          title="Download Excel with all line items"
-                          disabled={exportingDocId === doc.document_id}
-                        >
-                          {exportingDocId === doc.document_id ? (
-                            <>
-                              <svg className="animate-spin -ml-0.5 mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Exporting...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="-ml-0.5 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Download Excel
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDocument(doc.document_id, doc.original_filename, doc.line_count)}
-                          className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-                          title="Delete document and all line items"
-                        >
-                          <svg className="-ml-0.5 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <p className="mt-4 text-gray-600">Loading items...</p>
           </div>
         ) : items.length === 0 ? (
           <div className="p-12 text-center">
@@ -1048,8 +1285,8 @@ const DesignIQLists = () => {
                 </p>
                 {uploadResult.success && uploadResult.data?.extracted_lines && (
                   <div className="mt-3 text-xs text-green-600 font-medium">
-                    <p>Ã¢Å“â€œ OCR processing completed</p>
-                    <p>Ã¢Å“â€œ {uploadResult.data.extracted_lines.length} line numbers detected</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ OCR processing completed</p>
+                    <p>ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {uploadResult.data.extracted_lines.length} line numbers detected</p>
                   </div>
                 )}
               </div>
@@ -1098,9 +1335,65 @@ const DesignIQLists = () => {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-4 text-center">
-                Ã¢ÂÂ±Ã¯Â¸Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
+                ÃƒÂ¢Ã‚ÂÃ‚Â±ÃƒÂ¯Ã‚Â¸Ã‚Â <strong>Processing time:</strong> 2-10 minutes for complex PDFs
                 <br />
                 <span className="text-xs">Please keep this window open</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Processing Modal with Progress */}
+      {showProcessingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+            <div className="text-center">
+              <div className="mb-6">
+                <svg className="animate-spin h-16 w-16 mx-auto text-purple-600" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Processing 4 Documents</h2>
+              <p className="text-gray-600 mb-6">
+                P&ID + HMB + PMS + NACE → 34-column enriched table
+              </p>
+              
+              {/* Progress Bar */}
+              <div className="mb-4">
+                <div className="bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-500 ease-out"
+                    style={{ width: `${processingProgress.percent}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-gray-700 mt-2 font-semibold">{processingProgress.percent}%</p>
+              </div>
+              
+              {/* Current Step */}
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mt-4">
+                <p className="text-sm text-blue-900 font-medium">{processingProgress.step}</p>
+              </div>
+              
+              {/* Info Box */}
+              <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg text-left">
+                <h3 className="font-semibold text-purple-900 mb-2 flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  What's Happening?
+                </h3>
+                <ul className="text-sm text-purple-800 space-y-1">
+                  <li>• <strong>Step 1:</strong> Extract 8 base columns from P&ID (locked logic)</li>
+                  <li>• <strong>Step 2:</strong> AI analyzes 3 documents for +26 enrichment columns</li>
+                  <li>• <strong>Step 3:</strong> Merge into guaranteed 34-column table</li>
+                </ul>
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4">
+                This may take 1-3 minutes depending on file sizes and AI processing time
               </p>
             </div>
           </div>
@@ -1151,83 +1444,90 @@ const DesignIQLists = () => {
                       <p className="text-2xl font-bold text-gray-900">{extractedData.itemsCreated}</p>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-gray-600">Total Columns</p>
+                      <p className="text-2xl font-bold text-gray-900">35 <span className="text-sm text-gray-600">(9 base + 26 enriched)</span></p>
+                    </div>
+                  </div>
                 </div>
                 <button
                   onClick={() => {
                     const data = extractedData.lines;
                     
-                    // Create workbook
-                    const wb = XLSX.utils.book_new();
+                    // ALL 35 COLUMNS Excel Export (From and To separate)
+                    const headers = [
+                      'Line Number', 'Size', 'Fluid Code', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To',
+                      'Flow Medium', 'Two Phase', 'Surge Flow', 'Flow Max', 'Density', 
+                      'Normal Pressure', 'Normal Temp', 'Design Pressure', 'Minimax Design Temp',
+                      'Design Code', 'Category-M Fluid', 'Schedule / Wall THK', 'Stress Relief', 'PWHT',
+                      'RT', 'MT/PT', 'Hardness', 'Visual', 'NACE-MR-0175', 'Piping Rated Pressure',
+                      'Test Pressure', 'Test Medium', 'P&ID No.', 'P&ID Rev', 'Date', 'Criticality Code'
+                    ];
                     
-                    // Smart Area Detection: Only include Area column if any lines have area (numbers like 41, 604 count!)
-                    const hasArea = data.some(row => {
-                      const area = row.area;
-                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
-                    });
-                    
-                    // Prepare data with headers
-                    const headers = ['Original Detection', 'Fluid Code', 'Size'];
-                    if (hasArea) headers.push('Area');
-                    headers.push('Sequence No', 'PIPR Class', 'Insulation', 'From', 'To');
                     const wsData = [headers];
                     
-                    // Add data rows
+                    // Add all 35 columns for each row
                     data.forEach(row => {
-                      const rowData = [
+                      wsData.push([
                         row.original_detection || row.line_number || '',
+                        row.size || '',
                         row.fluid_code || '',
-                        row.size || ''
-                      ];
-                      if (hasArea) rowData.push(row.area || '');
-                      rowData.push(
+                        row.area || '',
                         row.sequence_no || '',
                         row.pipr_class || '',
                         row.insulation || '',
                         row.from_line || row.from || '',
-                        row.to_line || row.to || ''
-                      );
-                      wsData.push(rowData);
+                        row.to_line || row.to || '',
+                        row.flow_medium || '',
+                        row.two_phase || '',
+                        row.surge_flow || '',
+                        row.flow_max || '',
+                        row.density || '',
+                        row.normal_pressure || '',
+                        row.normal_temp || '',
+                        row.design_pressure || '',
+                        row.minimax_design_temp || '',
+                        row.design_code || '',
+                        row.category_m_fluid || '',
+                        row.schedule_wall_thk || '',
+                        row.stress_relief || '',
+                        row.pwht || '',
+                        row.rt || '',
+                        row.mt_pt || '',
+                        row.hardness || '',
+                        row.visual || '',
+                        row.nace_mr_0175 || '',
+                        row.piping_rated_pressure || '',
+                        row.test_pressure || '',
+                        row.test_medium || '',
+                        row.pid_no || '',
+                        row.pid_rev || '',
+                        row.date || '',
+                        row.criticality_code || ''
+                      ]);
                     });
                     
-                    // Create worksheet
+                    const wb = XLSX.utils.book_new();
                     const ws = XLSX.utils.aoa_to_sheet(wsData);
                     
-                    // Format specific columns as text to preserve leading zeros
-                    const range = XLSX.utils.decode_range(ws['!ref']);
-                    for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-                      // Column E (index 4) - Sequence No
-                      const seqCell = XLSX.utils.encode_cell({ r: R, c: 4 });
-                      if (ws[seqCell]) {
-                        ws[seqCell].t = 's'; // Set cell type to string
-                        ws[seqCell].v = String(ws[seqCell].v); // Ensure value is string
-                      }
-                      
-                      // Column F (index 5) - PIPR Class
-                      const piprCell = XLSX.utils.encode_cell({ r: R, c: 5 });
-                      if (ws[piprCell]) {
-                        ws[piprCell].t = 's'; // Set cell type to string
-                        ws[piprCell].v = String(ws[piprCell].v); // Ensure value is string
-                      }
-                    }
-                    
-                    // Set column widths
+                    // Set column widths for all 35 columns
                     ws['!cols'] = [
-                      { wch: 20 }, // Original Detection
-                      { wch: 12 }, // Fluid Code
-                      { wch: 8 },  // Size
-                      { wch: 10 }, // Area
-                      { wch: 15 }, // Sequence No
-                      { wch: 15 }, // PIPR Class
-                      { wch: 12 }, // Insulation
-                      { wch: 20 }, // From
-                      { wch: 20 }  // To
+                      { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
+                      { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+                      { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 18 },
+                      { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 },
+                      { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 },
+                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }
                     ];
                     
-                    // Add worksheet to workbook
-                    XLSX.utils.book_append_sheet(wb, ws, 'P&ID Lines');
+                    XLSX.utils.book_append_sheet(wb, ws, 'P&ID 35 Columns');
                     
-                    // Generate and download
-                    XLSX.writeFile(wb, `PID_Lines_${extractedData.fileName.replace('.pdf', '')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    const timestamp = new Date().toISOString().split('T')[0];
+                    XLSX.writeFile(wb, `PID_35Columns_${data.length}lines_${timestamp}.xlsx`);
                   }}
                   className="flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all font-semibold"
                 >
@@ -1239,145 +1539,67 @@ const DesignIQLists = () => {
               </div>
             </div>
 
-            {/* Table Preview */}
+            {/* Table Preview - ALL 34 COLUMNS */}
             <div className="flex-1 overflow-auto px-6 py-4">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 sticky top-0">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Original Detection
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Fluid Code
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Size
-                    </th>
-                    {/* Smart Area Column: Only show if any lines have area (checks numbers too like 41, 604) */}
-                    {extractedData.lines.some(line => {
-                      const area = line.area;
-                      return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
-                    }) && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                        Area
-                      </th>
-                    )}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Sequence No
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      PIPR Class
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Insulation
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      From
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      To
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Flow Medium
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Two Phase
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Surge Flow
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Flow Max
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Density
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Normal Pressure
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Normal Temp
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Design Pressure
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Minimax Design Temp
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Design Code
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Category-M Fluid
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Schedule/Wall THK
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Stress Relief
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      PWHT
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      RT
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      MT/PT
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Hardness
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Visual
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      NACE-MR-0175
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Piping Rated Pressure at Ambient Condition
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Test Pressure
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Test Medium
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      P&ID No.
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      P&ID Rev
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Criticality Code
-                    </th>
+                    {/* 8 BASE COLUMNS from P&ID (STEP 1) */}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Line Number</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Size</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Fluid Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Area</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Sequence No</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">PIPR Class</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">Insulation</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">From</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">To</th>
+                    
+                    {/* 26 ENRICHED COLUMNS from HMB/PMS/NACE (AI-extracted) */}
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Flow Medium</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Two Phase</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Surge Flow</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Flow Max</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Density</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Normal Pressure</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Normal Temp</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Design Pressure</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Minimax Design Temp</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Design Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Category-M Fluid</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Schedule / Wall THK</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Stress Relief</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">PWHT</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">RT</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">MT/PT</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Hardness</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Visual</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">NACE-MR-0175</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Piping Rated Pressure</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Test Pressure</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Test Medium</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">P&ID No.</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">P&ID Rev</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Criticality Code</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {extractedData.lines.map((line, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
+                      {/* 8 BASE COLUMNS from P&ID (white background) */}
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-indigo-600">
                         {line.original_detection || line.line_number || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {line.fluid_code || '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.size || '-'}
                       </td>
-                      {/* Smart Area Column: Only show if any lines have area (checks numbers too) */}
-                      {extractedData.lines.some(l => {
-                        const area = l.area;
-                        return area !== null && area !== undefined && area !== '' && area !== '-' && String(area).trim() !== '';
-                      }) && (
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
-                          {line.area || '-'}
-                        </td>
-                      )}
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {line.fluid_code || '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
+                        {line.area || '-'}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.sequence_no || '-'}
                       </td>
@@ -1393,84 +1615,34 @@ const DesignIQLists = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                         {line.to_line || line.to || '-'}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.flow_medium || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.two_phase || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.surge_flow || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.flow_max || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.density || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.normal_pressure || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.normal_temp || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.design_pressure || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.minimax_design_temp || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.design_code || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.category_m_fluid || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.schedule_wall_thk || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.stress_relief || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.pwht || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.rt || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.mt_pt || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.hardness || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.visual || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.nace_mr_0175 || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.piping_rated_pressure || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.test_pressure || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.test_medium || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.pid_no || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.pid_rev || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.date || '-'}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        {line.criticality_code || '-'}
-                      </td>
+                      
+                      {/* 26 ENRICHED COLUMNS from HMB/PMS/NACE (AI-extracted with OpenAI) */}
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.flow_medium || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.two_phase || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.surge_flow || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.flow_max || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.density || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.normal_pressure || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.normal_temp || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.design_pressure || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.minimax_design_temp || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.design_code || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.category_m_fluid || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.schedule_wall_thk || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.stress_relief || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.pwht || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.rt || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.mt_pt || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.hardness || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.visual || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.nace_mr_0175 || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.piping_rated_pressure || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.test_pressure || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.test_medium || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.pid_no || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.pid_rev || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.date || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.criticality_code || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1511,7 +1683,7 @@ const DesignIQLists = () => {
               
               {/* Format Template Preview */}
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">?? Current Format Template</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">📋 Current Format Template</h3>
                 <div className="bg-white px-4 py-3 rounded-lg border border-indigo-300 font-mono text-lg">
                   {lineNumberFormat.components
                     .filter(c => c.enabled)
@@ -1531,7 +1703,7 @@ const DesignIQLists = () => {
               {/* Separator Configuration */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  ?? Component Separator
+                  🔗 Component Separator
                 </label>
                 <div className="flex items-center space-x-4">
                   <input
@@ -1555,14 +1727,14 @@ const DesignIQLists = () => {
                       })}
                       className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                     />
-                    <span className="text-sm text-gray-700">Allow variable separators (-, �, �, etc.)</span>
+                    <span className="text-sm text-gray-700">Allow variable separators (-, –, —, etc.)</span>
                   </label>
                 </div>
               </div>
 
               {/* Components Configuration */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">?? Line Number Components</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">⚙️ Line Number Components</h3>
                 <div className="space-y-3">
                   {lineNumberFormat.components.map((component, idx) => (
                     <div key={component.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -1655,7 +1827,7 @@ const DesignIQLists = () => {
 
               {/* Preset Templates */}
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">?? Common Configurations</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">🎯 Common Configurations</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => {
@@ -1749,12 +1921,9 @@ const DesignIQLists = () => {
           </div>
         </div>
       )}
-
-      {/* PDF Viewer Modal removed - Excel download available directly from table */}
     </div>
   );
 };
 
 export default DesignIQLists;
-
 
