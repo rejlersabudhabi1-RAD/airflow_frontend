@@ -73,7 +73,7 @@ export const API_ENDPOINTS = {
 // Dynamic timeouts based on operation type and database location
 // Increased timeout for Railway database connections from local Docker
 export const API_TIMEOUT = 90000 // 90 seconds (increased for Railway database)
-export const API_TIMEOUT_LONG = 600000 // 10 minutes for file upload/analysis
+export const API_TIMEOUT_LONG = 1200000 // 20 minutes for file upload/analysis and 4-doc enrichment
 export const API_TIMEOUT_AI_GENERATION = 300000 // 5 minutes for AI P&ID generation (OpenAI API calls)
 
 export const HTTP_STATUS = {
