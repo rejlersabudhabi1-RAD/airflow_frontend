@@ -87,22 +87,16 @@ import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentP
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
-import ElectricalDatasheetUpload from './pages/Engineering/Electrical/ElectricalDatasheetUpload'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
-// Civil Datasheet Components
-import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
 // Mechanical Datasheet Components
 import MechanicalDatasheetPage from './pages/Engineering/Mechanical/MechanicalDatasheetPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
 import PipingMaterialSpecification from './pages/Engineering/Piping/PipingMaterialSpecification'
-// Digitization Components
-import SpecCustomization from './pages/Engineering/Digitization/SpecCustomization'
-import Datasheets from './pages/Engineering/Digitization/Datasheets'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -735,14 +729,6 @@ function App() {
           }
         />
         <Route
-          path="engineering/electrical/datasheet/upload"
-          element={
-            <ModuleProtectedRoute moduleCode="electrical_datasheet">
-              <ElectricalDatasheetUpload />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
           path="engineering/electrical/datasheet/create"
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
@@ -780,16 +766,6 @@ function App() {
           }
         />
 
-        {/* Civil Datasheet Routes */}
-        <Route
-          path="engineering/civil/datasheet"
-          element={
-            <ModuleProtectedRoute moduleCode="civil_datasheet">
-              <CivilDatasheetPage />
-            </ModuleProtectedRoute>
-          }
-        />
-
         {/* Mechanical Datasheet Routes */}
         <Route
           path="engineering/mechanical/datasheet"
@@ -797,26 +773,6 @@ function App() {
             <ModuleProtectedRoute moduleCode="mechanical_datasheet">
               <MechanicalDatasheetPage />
             </ModuleProtectedRoute>
-          }
-        />
-
-        {/* Digitization Routes */}
-        {/* Spec Customization - Coming Soon */}
-        <Route
-          path="engineering/digitization/spec-customization"
-          element={
-            <ProtectedRoute>
-              <SpecCustomization />
-            </ProtectedRoute>
-          }
-        />
-        {/* Datasheets - Coming Soon */}
-        <Route
-          path="engineering/digitization/datasheet"
-          element={
-            <ProtectedRoute>
-              <Datasheets />
-            </ProtectedRoute>
           }
         />
 
