@@ -31,9 +31,15 @@ const ElectricalDocumentsHub = () => {
     [DOCUMENT_CATEGORIES.DATASHEETS]: true,
     [DOCUMENT_CATEGORIES.CALCULATIONS]: true,
     [DOCUMENT_CATEGORIES.DIAGRAMS]: true,
-    [DOCUMENT_CATEGORIES.LAYOUTS]: true,
+    [DOCUMENT_CATEGORIES.LOAD_LISTS]: true,
+    [DOCUMENT_CATEGORIES.STUDIES]: true,
     [DOCUMENT_CATEGORIES.SCHEDULES]: true
   });
+
+  // Debug log to verify component is rendering
+  console.log('[ElectricalDocumentsHub] Component rendered');
+  console.log('[ElectricalDocumentsHub] Total documents:', ELECTRICAL_DOCUMENTS.length);
+  console.log('[ElectricalDocumentsHub] Categories:', Object.keys(DOCUMENT_CATEGORIES));
 
   const categoryStats = useMemo(() => getCategoryStats(), []);
 
@@ -108,6 +114,11 @@ const ElectricalDocumentsHub = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      {/* DEBUG BANNER - Remove after verification */}
+      <div className="bg-green-600 text-white text-center py-2 font-bold">
+        ✅ Electrical Documents Hub - UPDATED & ACTIVE - {ELECTRICAL_DOCUMENTS.length} Documents Available
+      </div>
+      
       {/* Header Section */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -227,7 +238,6 @@ const ElectricalDocumentsHub = () => {
               {expandedCategories[category] && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {docs.map((doc) => {
-                    const Icon = doc.icon;
                     const statusBadge = getStatusBadge(doc.status);
 
                     return (
@@ -236,7 +246,7 @@ const ElectricalDocumentsHub = () => {
                         onClick={() => handleDocumentClick(doc)}
                         className={`
                           relative bg-white rounded-lg shadow-sm border border-gray-200 p-6
-                          hover:shadow-lg hover:border-${doc.color}-300 transition-all duration-200
+                          hover:shadow-lg hover:border-indigo-300 transition-all duration-200
                           ${doc.status === DOCUMENT_STATUS.ACTIVE ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'}
                           group
                         `}
@@ -248,9 +258,9 @@ const ElectricalDocumentsHub = () => {
                           </span>
                         </div>
 
-                        {/* Icon */}
-                        <div className={`w-14 h-14 rounded-lg bg-gradient-to-br ${doc.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200`}>
-                          <Icon className="h-8 w-8 text-white" />
+                        {/* Icon Placeholder */}
+                        <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-200">
+                          <RocketLaunchIcon className="h-8 w-8 text-white" />
                         </div>
 
                         {/* Document Code */}
@@ -263,20 +273,15 @@ const ElectricalDocumentsHub = () => {
                           {doc.name}
                         </h3>
 
+                        {/* Full Name */}
+                        <p className="text-sm font-medium text-gray-700 mb-2">
+                          {doc.fullName}
+                        </p>
+
                         {/* Description */}
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2">
                           {doc.description}
                         </p>
-
-                        {/* Features */}
-                        <div className="space-y-1">
-                          {doc.features.slice(0, 3).map((feature, idx) => (
-                            <div key={idx} className="flex items-start gap-2">
-                              <CheckCircleIcon className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                              <span className="text-xs text-gray-600">{feature}</span>
-                            </div>
-                          ))}
-                        </div>
 
                         {/* Hover Effect */}
                         {doc.status === DOCUMENT_STATUS.ACTIVE && (
@@ -342,3 +347,4 @@ const ElectricalDocumentsHub = () => {
 };
 
 export default ElectricalDocumentsHub;
+ 
