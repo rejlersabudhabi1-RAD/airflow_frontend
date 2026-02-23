@@ -192,13 +192,22 @@ export const PROCESS_EQUIPMENT_UPLOAD_CONFIG = {
     }
   },
 
-  // API endpoints
+  // API endpoints - Soft-coded for easy backend integration
   api: {
-    upload: '/pid/equipment/upload/',
+    // Single file analysis endpoint
     analyze: '/pid/equipment/analyze/',
-    multiAnalyze: '/pid/equipment/analyze-multiple/',
+    
+    // Multiple file batch analysis endpoint
+    multiAnalyze: '/pid/equipment/analyze-batch/',
+    
+    // Download generated Excel datasheet
     downloadExcel: '/pid/equipment/download-excel/{upload_id}/',
-    getResults: '/pid/equipment/results/{upload_id}/'
+    
+    // Get analysis results by upload ID
+    getResults: '/pid/equipment/results/{upload_id}/',
+    
+    // Get analysis status (for polling)
+    getStatus: '/pid/equipment/status/{upload_id}/'
   },
 
   // Processing configuration
@@ -221,7 +230,7 @@ export const PROCESS_EQUIPMENT_UPLOAD_CONFIG = {
     maxVisibleEquipment: 20
   },
 
-  // Messages
+  // Messages - Soft-coded for easy localization
   messages: {
     errors: {
       noFile: 'Please select at least one P&ID file to upload',
@@ -231,18 +240,30 @@ export const PROCESS_EQUIPMENT_UPLOAD_CONFIG = {
       invalidFormat: 'Unsupported file format. Supported formats:',
       fileTooLarge: 'File size exceeds {size}MB limit',
       tooManyFiles: 'Maximum {max} files allowed',
-      noEquipment: 'No equipment detected in the P&ID drawing(s)'
+      noEquipment: 'No equipment detected in the P&ID drawing(s)',
+      networkError: 'Network connection error. Please check your internet connection.',
+      timeout: 'Request timed out. The file may be too large or the server is busy.',
+      serverError: 'Server error occurred. Please try again later.',
+      unauthorized: 'Authentication failed. Please log in again.',
+      forbidden: 'You do not have permission to access this resource.',
+      notFound: 'The requested resource was not found.',
+      validation: 'Validation error: {details}',
+      unknownError: 'An unexpected error occurred: {message}'
     },
     success: {
       uploadComplete: 'Upload and analysis complete!',
       equipmentDetected: '✅ Detected {count} equipment item(s)',
       filesProcessed: '✅ Processed {count} P&ID file(s)',
-      downloadReady: 'Excel datasheet is ready for download'
+      downloadReady: 'Excel datasheet is ready for download',
+      downloadStarted: 'Download started...',
+      downloadComplete: 'Excel file downloaded successfully!'
     },
     info: {
       aiPowered: 'Our AI automatically identifies equipment, extracts tag numbers, determines equipment types, and generates comprehensive datasheets from P&ID drawings.',
       multiFileSupport: 'Upload multiple P&ID files at once for batch processing',
-      oneClick: 'One-click analysis • No manual data entry required'
+      oneClick: 'One-click analysis • No manual data entry required',
+      processing: 'Processing P&ID drawing(s)... This may take a few minutes.',
+      retrying: 'Retrying... Attempt {attempt} of {max}'
     },
     warnings: {
       partialDetection: 'Some equipment may not have been detected. Please review results.',
@@ -297,6 +318,79 @@ export const validateFileFormat = (file) => {
 
 export const getColorScheme = (colorName) => {
   return PROCESS_EQUIPMENT_UPLOAD_CONFIG.colors[colorName] || PROCESS_EQUIPMENT_UPLOAD_CONFIG.colors.blue;
+};
+
+// API Helper Functions
+export const getApiEndpoint = (endpointKey, params = {}) => {
+  let endpoint = PROCESS_EQUIPMENT_UPLOAD_CONFIG.api[endpointKey];
+  
+  // Replace placeholders like {upload_id} with actual values
+  Object.keys(params).forEach(key => {
+    endpoint = endpoint.replace(`{${key}}`, params[key]);
+  });
+  
+  return endpoint;
+};
+
+// Error Handling Helper
+export const handleApiError = (error, config = PROCESS_EQUIPMENT_UPLOAD_CONFIG) => {
+  const { messages } = config;
+  
+  // Network error (no response from server)
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      return messages.errors.timeout;
+    }
+    return messages.errors.networkError;
+  }
+  
+  // HTTP error responses
+  const status = error.response.status;
+  const data = error.response.data;
+  
+  switch (status) {
+    case 400:
+      // Validation error
+      const details = data?.detail || data?.message || JSON.stringify(data);
+      return messages.errors.validation.replace('{details}', details);
+    
+    case 401:
+      return messages.errors.unauthorized;
+    
+    case 403:
+      return messages.errors.forbidden;
+    
+    case 404:
+      return messages.errors.notFound;
+    
+    case 500:
+    case 502:
+    case 503:
+      return messages.errors.serverError;
+    
+    default:
+      const errorMessage = data?.detail || data?.message || error.message || 'Unknown error';
+      return messages.errors.unknownError.replace('{message}', errorMessage);
+  }
+};
+
+// Retry Helper with Exponential Backoff
+export const retryRequest = async (requestFn, maxAttempts = 2, delay = 3000) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const waitTime = delay * Math.pow(2, attempt - 1);
+      console.log(`[Retry] Attempt ${attempt} failed. Retrying in ${waitTime}ms...`);
+      
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
 };
 
 export default PROCESS_EQUIPMENT_UPLOAD_CONFIG;

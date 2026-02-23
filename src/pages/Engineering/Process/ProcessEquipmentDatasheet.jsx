@@ -18,15 +18,20 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowLeftIcon,
+  ArrowPathIcon,
   DocumentTextIcon,
   Cog6ToothIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
+import apiClient from '../../../services/api.service';
 import PROCESS_EQUIPMENT_UPLOAD_CONFIG, {
   validateFileSize,
   validateFileFormat,
   getEquipmentTypeById,
-  getColorScheme
+  getColorScheme,
+  getApiEndpoint,
+  handleApiError,
+  retryRequest
 } from '../../../config/processEquipmentUpload.config';
 
 const ProcessEquipmentDatasheet = () => {
@@ -42,6 +47,7 @@ const ProcessEquipmentDatasheet = () => {
   const [analysisStage, setAnalysisStage] = useState('');
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState('');
+  const [warning, setWarning] = useState('');
   const [selectedOptionsState, setSelectedOptionsState] = useState({
     extract_tags: true,
     detect_types: true,
@@ -173,9 +179,17 @@ const ProcessEquipmentDatasheet = () => {
       return;
     }
 
+    // Validate at least one analysis option is selected
+    const hasSelectedOption = Object.values(selectedOptionsState).some(value => value === true);
+    if (!hasSelectedOption) {
+      setError('Please select at least one analysis option');
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
     setError('');
+    setWarning('');
     setAnalysisStage('Uploading P&ID drawings...');
 
     const uploadFormData = new FormData();
@@ -207,52 +221,174 @@ const ProcessEquipmentDatasheet = () => {
         options: selectedOptionsState
       });
 
-      setAnalysisStage(`Analyzing ${files.length} P&ID file(s)...`);
+      setAnalysisStage(`Uploading ${files.length} P&ID file(s)...`);
 
-      // Simulate upload for now (TODO: Replace with actual API call)
-      const simulateUpload = async () => {
-        for (let i = 0; i <= 100; i += 10) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          setUploadProgress(i);
-          if (i === 30) setAnalysisStage('Extracting equipment tags...');
-          if (i === 60) setAnalysisStage('Detecting equipment types...');
-          if (i === 90) setAnalysisStage('Generating datasheets...');
-        }
-      };
+      // Determine endpoint based on number of files
+      const endpoint = files.length === 1 
+        ? getApiEndpoint('analyze')
+        : getApiEndpoint('multiAnalyze');
 
-      await simulateUpload();
+      console.log(`[Process Equipment] Using endpoint: ${endpoint}`);
 
-      // Mock success response
-      const mockResult = {
-        success: true,
-        upload_id: 'PID-' + Date.now(),
-        files_processed: files.length,
-        equipment_detected: files.length * 12, // Mock: ~12 equipment per file
-        equipment_summary: {
-          mov: files.length * 3,
-          sdv: files.length * 2,
-          pump: files.length * 4,
-          control_valve: files.length * 3
+      // Make API call with retry logic
+      const response = await retryRequest(
+        async () => {
+          return await apiClient.post(endpoint, uploadFormData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            timeout: files.length > 1 
+              ? PROCESS_EQUIPMENT_UPLOAD_CONFIG.processing.multiFileTimeout 
+              : PROCESS_EQUIPMENT_UPLOAD_CONFIG.processing.timeout,
+            onUploadProgress: (progressEvent) => {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              setUploadProgress(Math.min(percentCompleted, 95)); // Reserve 5% for processing
+              
+              // Update stage based on progress
+              if (percentCompleted > 30 && percentCompleted <= 60) {
+                setAnalysisStage('Extracting equipment tags...');
+              } else if (percentCompleted > 60 && percentCompleted <= 90) {
+                setAnalysisStage('Detecting equipment types...');
+              } else if (percentCompleted > 90) {
+                setAnalysisStage('Generating datasheets...');
+              }
+            },
+          });
         },
-        processing_time: 23.5,
-        confidence_score: 0.92
-      };
+        PROCESS_EQUIPMENT_UPLOAD_CONFIG.processing.retryAttempts,
+        PROCESS_EQUIPMENT_UPLOAD_CONFIG.processing.retryDelay
+      );
 
-      setUploadResult(mockResult);
-      setAnalysisStage('Analysis complete!');
-console.log('[Process Equipment] Analysis complete:', mockResult);
+      // Handle successful response
+      if (response.data && response.data.success !== false) {
+        const resultData = response.data;
+        
+        setUploadResult({
+          success: true,
+          upload_id: resultData.upload_id || resultData.id,
+          files_processed: resultData.files_processed || files.length,
+          equipment_detected: resultData.equipment_count || resultData.total_equipment || 0,
+          equipment_summary: resultData.equipment_summary || resultData.equipment_by_type || {},
+          processing_time: resultData.processing_time || 0,
+          confidence_score: resultData.confidence_score || resultData.average_confidence || 0,
+          drawings: resultData.drawings || [],
+          equipment_list: resultData.equipment_list || resultData.equipment || []
+        });
+        
+        // Check for warning conditions
+        const confidenceScore = resultData.confidence_score || resultData.average_confidence || 0;
+        const filesProcessed = resultData.files_processed || files.length;
+        const equipmentCount = resultData.equipment_count || resultData.total_equipment || 0;
+        
+        // Low confidence warning
+        if (confidenceScore > 0 && confidenceScore < 0.7) {
+          setWarning(`Analysis completed with ${Math.round(confidenceScore * 100)}% confidence. Results may need manual verification.`);
+        }
+        
+        // Partial processing warning
+        if (filesProcessed < files.length) {
+          setWarning(`Only ${filesProcessed} of ${files.length} files were processed successfully. Some files may have errors.`);
+        }
+        
+        // No equipment detected warning
+        if (equipmentCount === 0) {
+          setWarning('No equipment was detected in the uploaded P&ID drawings. Please verify the file quality and try again.');
+        }
+        
+        // Warnings from API response
+        if (resultData.warnings && resultData.warnings.length > 0) {
+          setWarning(resultData.warnings.join('\n'));
+        }
+        
+        setUploadProgress(100);
+        setAnalysisStage('Analysis complete!');
+        
+        console.log('[Process Equipment] Analysis complete:', resultData);
+        
+      } else {
+        throw new Error(response.data.message || messages.errors.analysisFailed);
+      }
 
     } catch (err) {
       console.error('[Process Equipment] Upload error:', err);
-      setError(err.message || messages.errors.uploadFailed);
+      
+      // Use soft-coded error handling
+      const errorMessage = handleApiError(err, PROCESS_EQUIPMENT_UPLOAD_CONFIG);
+      setError(errorMessage);
+      
+      // Log detailed error for debugging
+      console.error('[Process Equipment] Detailed error:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
     } finally {
       setUploading(false);
-      setUploadProgress(100);
+      if (!error) {
+        setUploadProgress(100);
+      }
     }
   };
 
-  const handleDownloadExcel = () => {
-    alert('Excel download functionality will be implemented with backend API integration.');
+  const handleDownloadExcel = async () => {
+    if (!uploadResult || !uploadResult.upload_id) {
+      setError(messages.errors.noData);
+      return;
+    }
+
+    try {
+      console.log('[Process Equipment] Downloading Excel for upload_id:', uploadResult.upload_id);
+      
+      // Show downloading message
+      const originalStage = analysisStage;
+      setAnalysisStage(messages.info.processing);
+
+      // Get endpoint with upload_id
+      const endpoint = getApiEndpoint('downloadExcel', { 
+        upload_id: uploadResult.upload_id 
+      });
+
+      // Make API call to download Excel
+      const response = await apiClient.get(endpoint, {
+        responseType: 'blob',
+        timeout: PROCESS_EQUIPMENT_UPLOAD_CONFIG.processing.timeout,
+      });
+
+      // Create download link
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const drawingNumber = projectMetadata.drawingNumber || 'equipment';
+      link.download = `${drawingNumber}_equipment_${timestamp}.xlsx`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      // Show success message
+      setAnalysisStage(messages.success.downloadComplete);
+      setTimeout(() => setAnalysisStage(originalStage), 3000);
+      
+      console.log('[Process Equipment] Excel download complete');
+      
+    } catch (err) {
+      console.error('[Process Equipment] Download error:', err);
+      const errorMessage = handleApiError(err, PROCESS_EQUIPMENT_UPLOAD_CONFIG);
+      setError(errorMessage);
+    }
   };
 
   const handleReset = () => {
@@ -264,6 +400,7 @@ console.log('[Process Equipment] Analysis complete:', mockResult);
     setFiles([]);
     setUploadResult(null);
     setError('');
+    setWarning('');
     setUploadProgress(0);
     setAnalysisStage('');
   };
@@ -574,8 +711,65 @@ console.log('[Process Equipment] Analysis complete:', mockResult);
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-red-900 mb-1">Error</h3>
                 <p className="text-sm text-red-800 whitespace-pre-wrap">{error}</p>
+                
+                {/* Show retry option for network/timeout errors */}
+                {(error.includes('network') || error.includes('timeout') || error.includes('server')) && (
+                  <button
+                    onClick={() => {
+                      setError('');
+                      if (uploadResult) {
+                        handleDownloadExcel(); // Retry download if there was a result
+                      } else if (files.length > 0) {
+                        handleUpload(); // Retry upload
+                      }
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <ArrowPathIcon className="h-4 w-4" />
+                    Retry
+                  </button>
+                )}
+                
+                {/* Show help text for validation errors */}
+                {error.includes('required') && (
+                  <p className="mt-2 text-xs text-red-600">
+                    Please fill in all required fields before uploading.
+                  </p>
+                )}
+                
+                {/* Show help for file errors */}
+                {(error.includes('file') || error.includes('format')) && (
+                  <p className="mt-2 text-xs text-red-600">
+                    Supported formats: {validation.supportedFormats.join(', ')}. 
+                    Max size: {validation.maxFileSize / (1024 * 1024)}MB per file.
+                  </p>
+                )}
               </div>
-              <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
+              <button 
+                onClick={() => setError('')} 
+                className="text-red-600 hover:text-red-800 transition-colors"
+                aria-label="Dismiss error"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Warning Display */}
+        {warning && (
+          <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-yellow-900 mb-1">Warning</h3>
+                <p className="text-sm text-yellow-800 whitespace-pre-wrap">{warning}</p>
+              </div>
+              <button 
+                onClick={() => setWarning('')} 
+                className="text-yellow-600 hover:text-yellow-800 transition-colors"
+                aria-label="Dismiss warning"
+              >
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
