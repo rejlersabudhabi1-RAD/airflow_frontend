@@ -83,6 +83,7 @@ import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
+import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 // Electrical Datasheet Components
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
@@ -663,6 +664,16 @@ function App() {
           element={
             <ProtectedRoute>
               <PressureInstrumentPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Process Equipment Datasheet - P&ID Upload for Equipment Detection */}
+        <Route
+          path="engineering/process/datasheet/equipment"
+          element={
+            <ProtectedRoute>
+              <ProcessEquipmentDatasheet />
             </ProtectedRoute>
           }
         />
