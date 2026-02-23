@@ -55,11 +55,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'processDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Process Data Sheets',
+        name: 'Datasheets',
+        fullName: 'Process Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/process/datasheet',
-        description: 'Process equipment data sheets',
+        description: 'Process equipment datasheets',
         moduleCode: 'process_datasheet',
         badge: 'New'
       }
@@ -88,11 +88,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'pipingDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Piping Data Sheets',
+        name: 'Datasheets',
+        fullName: 'Piping Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/piping/datasheet',
-        description: 'Piping component data sheets',
+        description: 'Piping component datasheets',
         moduleCode: 'piping_datasheet',
       }
     ]
@@ -120,11 +120,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'instrumentDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Instrument Data Sheets',
+        name: 'Datasheets',
+        fullName: 'Instrument Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/instrument/datasheet',
-        description: 'Instrument specification data sheets',
+        description: 'Instrument specification datasheets',
         moduleCode: 'instrument_datasheet',
         badge: 'New'
       }
@@ -152,12 +152,12 @@ export const ENGINEERING_DISCIPLINES = {
         badge: 'New'
       },
       {
-        id: 'electricalDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Electrical Data Sheets',
+        id: 'electricalDatasheets',
+        name: 'Datasheets',
+        fullName: 'Electrical Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/electrical/datasheet',
-        description: 'Electrical equipment data sheets',
+        description: '27 electrical engineering initiatives - Datasheets, diagrams, layouts, schedules',
         moduleCode: 'electrical_datasheet',
         badge: 'New'
       }
@@ -176,11 +176,11 @@ export const ENGINEERING_DISCIPLINES = {
     subFeatures: [
       {
         id: 'civilDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Civil Data Sheets',
+        name: 'Datasheets',
+        fullName: 'Civil Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/civil/datasheet',
-        description: 'Civil and structural data sheets',
+        description: 'Civil and structural datasheets',
         moduleCode: 'civil_datasheet',
         badge: 'New'
       }
@@ -199,11 +199,11 @@ export const ENGINEERING_DISCIPLINES = {
     subFeatures: [
       {
         id: 'mechanicalDataSheet',
-        name: 'Data Sheet',
-        fullName: 'Mechanical Data Sheets',
+        name: 'Datasheets',
+        fullName: 'Mechanical Datasheets',
         icon: DocumentTextIcon,
         path: '/engineering/mechanical/datasheet',
-        description: 'Mechanical equipment data sheets',
+        description: 'Mechanical equipment datasheets',
         moduleCode: 'mechanical_datasheet',
         badge: 'New'
       }
@@ -229,6 +229,16 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'AI-powered spec generation and customization',
         moduleCode: 'spec_customization',
         badge: 'AI'
+      },
+      {
+        id: 'digitizationDatasheet',
+        name: 'Datasheets',
+        fullName: 'Digitization Datasheets',
+        icon: DocumentTextIcon,
+        path: '/engineering/digitization/datasheet',
+        description: 'Digital transformation datasheets and documentation',
+        moduleCode: 'digitization_datasheet',
+        badge: 'New'
       }
     ]
   }

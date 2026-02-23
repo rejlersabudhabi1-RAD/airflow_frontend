@@ -12,7 +12,8 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
-  FunnelIcon
+  FunnelIcon,
+  DocumentArrowUpIcon
 } from '@heroicons/react/24/outline';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -20,6 +21,7 @@ import { STORAGE_KEYS } from '../../config/app.config';
 import { API_BASE_URL } from '../../config/api.config';
 import { apiClientLongTimeout } from '../../services/api.service';
 import * as XLSX from 'xlsx';
+import { DESIGNIQ_UI_CONFIG, FORMAT_CONFIGS, DOCUMENT_CONFIGS, COLUMN_OUTPUT_INFO } from '../../config/designIQListsUI.config';
 
 // List types configuration (matches backend)
 const LIST_TYPES = {
@@ -640,18 +642,25 @@ const DesignIQLists = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 ${DESIGNIQ_UI_CONFIG.layout.containerPadding}`}>
       {/* Apply control styles for fullscreen and sidebar */}
       <style>{pageControls.styles}</style>
 
-      {/* Header with Controls */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Compact Header with Inline Controls */}
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
-          <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
+            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
+              {DESIGNIQ_UI_CONFIG.text.pageTitle}
+            </span>
+            {isRefreshing && (
+              <span className="inline-block animate-spin h-5 w-5 border-2 border-indigo-500 border-t-transparent rounded-full"></span>
+            )}
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">{DESIGNIQ_UI_CONFIG.text.pageSubtitle}</p>
         </div>
 
-        {/* Page Control Buttons */}
+        {/* Page Control Buttons - Compact */}
         <PageControlButtons
           sidebarVisible={pageControls.sidebarVisible}
           setSidebarVisible={pageControls.toggleSidebar}
@@ -664,10 +673,11 @@ const DesignIQLists = () => {
         />
       </div>
 
-      {/* List Type Tabs */}
-      <div className="bg-white rounded-lg shadow-sm mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-4 px-6" aria-label="Tabs">
+      {/* Combined Tabs and Action Bar */}
+      <div className="bg-white rounded-xl shadow-md mb-6 overflow-hidden">
+        {/* List Type Tabs */}
+        <div className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+          <nav className="flex space-x-2 px-4 py-2" aria-label="Tabs">
             {Object.entries(LIST_TYPES).map(([key, config]) => {
               const Icon = config.icon;
               const isActive = selectedListType === key;
@@ -677,62 +687,77 @@ const DesignIQLists = () => {
                   key={key}
                   onClick={() => setSelectedListType(key)}
                   className={`
-                    flex items-center px-4 py-4 text-sm font-medium border-b-2 transition-colors
+                    flex items-center px-4 py-3 text-sm font-medium rounded-t-lg border-b-2 transition-all duration-200 transform
                     ${isActive
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? `border-${config.color}-500 text-${config.color}-600 bg-white shadow-sm -mb-px scale-105`
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                     }
                   `}
                 >
                   <Icon className="w-5 h-5 mr-2" />
-                  {config.name}
+                  <span className="font-semibold">{config.name}</span>
+                  {stats && (
+                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                      isActive ? `bg-${config.color}-100 text-${config.color}-700` : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {stats.total}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        {/* Stats Cards */}
+        {/* Quick Stats Bar */}
         {stats && (
-          <div className="grid grid-cols-5 gap-6 p-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
-              <div className="text-sm text-gray-600">Total Items</div>
+          <div className="grid grid-cols-6 gap-4 p-4 bg-gradient-to-r from-blue-50 via-purple-50 to-indigo-50">
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="text-2xl font-bold text-gray-900 group-hover:text-indigo-600">{stats.total}</div>
+              <div className="text-xs text-gray-600 font-medium">Total</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">{stats.by_status.active}</div>
-              <div className="text-sm text-gray-600">Active</div>
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="flex items-center justify-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                <span className="text-2xl font-bold text-green-600 group-hover:text-green-700">{stats.by_status.active}</span>
+              </div>
+              <div className="text-xs text-gray-600 font-medium">Active</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-yellow-600">{stats.by_status.pending}</div>
-              <div className="text-sm text-gray-600">Pending</div>
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="text-2xl font-bold text-yellow-600 group-hover:text-yellow-700">{stats.by_status.pending}</div>
+              <div className="text-xs text-gray-600 font-medium">Pending</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">{stats.by_status.approved}</div>
-              <div className="text-sm text-gray-600">Approved</div>
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="text-2xl font-bold text-blue-600 group-hover:text-blue-700">{stats.by_status.approved}</div>
+              <div className="text-xs text-gray-600 font-medium">Approved</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-indigo-600">{stats.validated}</div>
-              <div className="text-sm text-gray-600">Validated</div>
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="text-2xl font-bold text-red-600 group-hover:text-red-700">{stats.by_status.rejected || 0}</div>
+              <div className="text-xs text-gray-600 font-medium">Rejected</div>
+            </div>
+            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
+              <div className="flex items-center justify-center">
+                <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-1" />
+                <span className="text-2xl font-bold text-indigo-600 group-hover:text-indigo-700">{stats.validated}</span>
+              </div>
+              <div className="text-xs text-gray-600 font-medium">Validated</div>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Toolbar */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4 flex-1">
-            {/* Search */}
-            <div className="flex-1 max-w-lg">
+        {/* Inline Action Bar */}
+        <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-100">
+          <div className="flex items-center space-x-3 flex-1">
+            {/* Search Input */}
+            <div className="flex-1 max-w-md">
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search by tag or description..."
+                  placeholder={DESIGNIQ_UI_CONFIG.text.searchPlaceholder}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow"
                 />
                 <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
@@ -741,10 +766,13 @@ const DesignIQLists = () => {
             {/* Filter Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-300 rounded-lg hover:shadow-md transition-all"
             >
-              <FunnelIcon className="w-5 h-5 mr-2" />
-              Filters
+              <FunnelIcon className="w-5 h-5 mr-2 text-gray-600" />
+              <span className="font-medium text-gray-700">{DESIGNIQ_UI_CONFIG.text.filtersButtonText}</span>
+              {statusFilter !== 'all' && (
+                <span className="ml-2 px-2 py-0.5 bg-indigo-500 text-white text-xs rounded-full">1</span>
+              )}
             </button>
           </div>
 
@@ -752,336 +780,275 @@ const DesignIQLists = () => {
           <div className="flex items-center space-x-3">
             <button
               onClick={handleExport}
-              className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 shadow-sm hover:shadow-md transition-all"
             >
               <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
-              Export
+              <span className="font-semibold">{DESIGNIQ_UI_CONFIG.text.exportButtonText}</span>
             </button>
-            
-            {/* P&ID Upload Button - Only for Line List */}
-            {selectedListType === 'line_list' && (
-              <div className="text-sm text-gray-600 italic">
-                Use the 4-document interface below to upload and process
-              </div>
-            )}
           </div>
-          
-          {/* 4-DOCUMENT ENRICHED EXTRACTION - Systematic Upload Interface */}
-          {selectedListType === 'line_list' && (
-          <div className="border-t-2 border-purple-200 pt-4 mt-4">
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-4 mb-4">
-              <div className="flex items-center space-x-3 mb-2">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <h3 className="text-lg font-bold text-purple-900">Smart Enriched Extraction (34 Columns)</h3>
-              </div>
-              <p className="text-sm text-purple-800 mb-2">
-                Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with 34 columns (8 base + 26 enriched)
-              </p>
-              <div className="flex items-center space-x-2 text-xs text-purple-700">
-                <span className="font-semibold">Output:</span>
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">8 Base Columns from P&ID</span>
-                <span className="text-purple-600">+</span>
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">10 from HMB</span>
-                <span className="text-purple-600">+</span>
-                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">8 from PMS</span>
-                <span className="text-purple-600">+</span>
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">8 from NACE</span>
-                <span className="text-purple-600">=</span>
-                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-bold">34 Total Columns</span>
-              </div>
-            </div>
+        </div>
+      </div>
 
-            {/* FORMAT SELECTION - CRITICAL FOR REGEX PATTERNS */}
-            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4">
-              <div className="flex items-center space-x-2 mb-3">
-                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <h4 className="text-sm font-bold text-yellow-900">Step 1: Select Project Format (Required)</h4>
-              </div>
-              <p className="text-xs text-yellow-800 mb-3">Choose your project type - this determines the line number format and regex patterns used for extraction</p>
-              <div className="grid grid-cols-3 gap-3">
+      {/* 4-DOCUMENT ENRICHED EXTRACTION - Only for Line List */}
+      {selectedListType === 'line_list' && (
+        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+          {/* Header Section */}
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-5 mb-6">
+            <div className="flex items-center space-x-3 mb-3">
+              <svg className="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <h3 className="text-xl font-bold text-purple-900">{DESIGNIQ_UI_CONFIG.text.uploadSectionTitle}</h3>
+            </div>
+            <p className="text-sm text-purple-800 mb-3">
+              Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with <strong className="text-purple-900">34 columns</strong> (8 base + 26 enriched)
+            </p>
+            <div className="flex items-center flex-wrap gap-2 text-xs text-purple-700">
+              <span className="font-semibold">Output Formula:</span>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">8 Base (P&ID)</span>
+              <span className="text-purple-600">+</span>
+              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full font-medium">10 HMB</span>
+              <span className="text-purple-600">+</span>
+              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full font-medium">8 PMS</span>
+              <span className="text-purple-600">+</span>
+              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full font-medium">8 NACE</span>
+              <span className="text-purple-600">=</span>
+              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-bold">34 Total Columns</span>
+            </div>
+          </div>
+
+          {/* FORMAT SELECTION - Step 1 */}
+          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-5 mb-6">
+            <div className="flex items-center space-x-2 mb-3">
+              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h4 className="text-base font-bold text-yellow-900">{DESIGNIQ_UI_CONFIG.text.formatSelectionTitle}</h4>
+            </div>
+            <p className="text-sm text-yellow-800 mb-4">{DESIGNIQ_UI_CONFIG.text.formatSelectionDescription}</p>
+            
+            <div className="grid grid-cols-3 gap-4">
+              {Object.entries(FORMAT_CONFIGS).map(([formatKey, formatConfig]) => (
                 <button
-                  onClick={() => setSelectedFormat('onshore')}
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                    selectedFormat === 'onshore'
-                      ? 'bg-blue-500 text-white border-blue-600 shadow-lg'
+                  key={formatKey}
+                  onClick={() => setSelectedFormat(formatKey)}
+                  className={`px-5 py-4 rounded-xl border-2 transition-all transform hover:scale-105 ${
+                    selectedFormat === formatKey
+                      ? `${formatConfig.selectedBg} ${formatConfig.selectedText} ${formatConfig.selectedBorder} shadow-lg`
                       : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
                   }`}
                 >
-                  <div className="text-sm font-bold">Onshore</div>
-                  <div className="text-xs mt-1">No area (2-D-5777-033842)</div>
+                  <div className="text-base font-bold">{formatConfig.name}</div>
+                  <div className="text-xs mt-2 opacity-80">{formatConfig.description}</div>
+                  <div className="text-xs mt-1 font-mono bg-black bg-opacity-10 px-2 py-1 rounded">
+                    {formatConfig.example}
+                  </div>
                 </button>
-                <button
-                  onClick={() => setSelectedFormat('general')}
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                    selectedFormat === 'general'
-                      ? 'bg-green-500 text-white border-green-600 shadow-lg'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
-                  }`}
-                >
-                  <div className="text-sm font-bold">General</div>
-                  <div className="text-xs mt-1">With area (1"-41-SWS-64544)</div>
-                </button>
-                <button
-                  onClick={() => setSelectedFormat('offshore')}
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                    selectedFormat === 'offshore'
-                      ? 'bg-purple-500 text-white border-purple-600 shadow-lg'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
-                  }`}
-                >
-                  <div className="text-sm font-bold">Offshore</div>
-                  <div className="text-xs mt-1">Area first (604-HO-8-BC2GA0)</div>
-                </button>
-              </div>
-              {!selectedFormat && (
-                <div className="mt-3 flex items-center space-x-2 text-red-600 text-sm font-medium">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Please select a format before uploading documents</span>
-                </div>
-              )}
+              ))}
             </div>
+            
+            {!selectedFormat && (
+              <div className="mt-4 flex items-center space-x-2 text-red-600 text-sm font-medium bg-red-50 p-3 rounded-lg">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>⚠️ Please select a format before uploading documents</span>
+              </div>
+            )}
+          </div>
 
+          {/* Document Upload Grid */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-base font-bold text-gray-900">{DESIGNIQ_UI_CONFIG.text.documentUploadTitle}</h4>
+              <span className="text-sm text-gray-600">
+                {[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4 uploaded
+              </span>
+            </div>
+            
             <div className="grid grid-cols-4 gap-4">
-              {/* Document 1: P&ID (Mandatory) */}
-              <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-blue-900">1. P&ID Drawing</label>
-                  <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">Mandatory</span>
-                </div>
-                <p className="text-xs text-blue-700 mb-3">Extracts: Line No, Size, Fluid Code, Area, From, To</p>
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file && file.type === 'application/pdf') {
-                      setPidDocument(file);
-                      // Format must be selected explicitly by user before upload
-                    } else {
-                      alert('Please select a valid PDF file.');
-                    }
-                  }}
-                  className="hidden"
-                  id="pidFileInput"
-                />
-                <label
-                  htmlFor="pidFileInput"
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-blue-400 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
-                >
-                  {pidDocument ? (
-                    <>
-                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="truncate text-xs">{pidDocument.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      Select P&ID
-                    </>
-                  )}
-                </label>
-                {pidDocument && (
-                  <button
-                    onClick={() => setPidDocument(null)}
-                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+              {/* Document Upload Cards - Config Driven */}
+              {Object.entries(DOCUMENT_CONFIGS).map(([docKey, docConfig]) => {
+                const documentState = {
+                  pid: { file: pidDocument, setter: setPidDocument, inputId: 'pidFileInput' },
+                  hmb: { file: hmbDocument, setter: setHmbDocument, ref: hmbRef },
+                  pms: { file: pmsDocument, setter: setPmsDocument, ref: pmsRef },
+                  nace: { file: naceDocument, setter: setNaceDocument, ref: naceRef }
+                }[docKey];
 
-              {/* Document 2: HMB/PFD */}
-              <div className="border-2 border-green-300 rounded-lg p-4 bg-green-50">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-green-900">2. HMB/PFD</label>
-                  <span className="px-2 py-1 bg-green-600 text-white text-xs rounded-full">+10 cols</span>
-                </div>
-                <p className="text-xs text-green-700 mb-3">Design/Operating Temp, Pressure, Flow Rate, Density</p>
-                <input
-                  type="file"
-                  ref={hmbRef}
-                  accept=".pdf,.xlsx,.xls"
-                  onChange={(e) => setHmbDocument(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => hmbRef.current?.click()}
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-green-400 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  {hmbDocument ? (
-                    <>
-                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="truncate text-xs">{hmbDocument.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Select HMB
-                    </>
-                  )}
-                </button>
-                {hmbDocument && (
-                  <button
-                    onClick={() => setHmbDocument(null)}
-                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                return (
+                  <div
+                    key={docKey}
+                    className={`border-2 rounded-xl p-5 transition-all duration-300 hover:shadow-lg transform hover:-translate-y-1 ${
+                      docConfig.bgColor
+                    } ${documentState.file ? 'ring-2 ring-green-400' : ''}`}
                   >
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              {/* Document 3: PMS */}
-              <div className="border-2 border-orange-300 rounded-lg p-4 bg-orange-50">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-orange-900">3. PMS</label>
-                  <span className="px-2 py-1 bg-orange-600 text-white text-xs rounded-full">+8 cols</span>
-                </div>
-                <p className="text-xs text-orange-700 mb-3">Material Grade, Schedule, Flange Rating, Gaskets</p>
-                <input
-                  type="file"
-                  ref={pmsRef}
-                  accept=".pdf,.xlsx,.xls"
-                  onChange={(e) => setPmsDocument(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => pmsRef.current?.click()}
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-orange-400 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
-                >
-                  {pmsDocument ? (
-                    <>
-                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="truncate text-xs">{pmsDocument.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Select PMS
-                    </>
-                  )}
-                </button>
-                {pmsDocument && (
-                  <button
-                    onClick={() => setPmsDocument(null)}
-                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              {/* Document 4: NACE */}
-              <div className="border-2 border-red-300 rounded-lg p-4 bg-red-50">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-bold text-red-900">4. NACE Report</label>
-                  <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full">+8 cols</span>
-                </div>
-                <p className="text-xs text-red-700 mb-3">Corrosion Allowance, NACE Class, H2S, Coating</p>
-                <input
-                  type="file"
-                  ref={naceRef}
-                  accept=".pdf,.xlsx,.xls"
-                  onChange={(e) => setNaceDocument(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => naceRef.current?.click()}
-                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-red-400 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  {naceDocument ? (
-                    <>
-                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="truncate text-xs">{naceDocument.name}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Select NACE
-                    </>
-                  )}
-                </button>
-                {naceDocument && (
-                  <button
-                    onClick={() => setNaceDocument(null)}
-                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-2xl">{docConfig.icon}</span>
+                        <div>
+                          <label className={`text-sm font-bold ${docConfig.textColor}`}>
+                            {docConfig.order}. {docConfig.name}
+                          </label>
+                          {docConfig.required && (
+                            <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full animate-pulse">
+                              Required
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {!docConfig.required && (
+                        <span className={`px-3 py-1 ${docConfig.badgeBg} ${docConfig.badgeText} text-xs font-bold rounded-full`}>
+                          +{docConfig.columns} cols
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className={`text-xs ${docConfig.descColor} mb-4 leading-relaxed`}>
+                      {docConfig.description}
+                    </p>
+                    
+                    {docKey === 'pid' ? (
+                      <>
+                        <input
+                          type="file"
+                          accept={docConfig.accepts}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file && file.type === 'application/pdf') {
+                              documentState.setter(file);
+                            } else {
+                              alert('Please select a valid PDF file.');
+                            }
+                          }}
+                          className="hidden"
+                          id={documentState.inputId}
+                        />
+                        <label
+                          htmlFor={documentState.inputId}
+                          className={`w-full flex items-center justify-center px-4 py-3 text-sm border-2 ${docConfig.borderColor} ${docConfig.textColor} rounded-lg hover:${docConfig.hoverBg} transition-all cursor-pointer font-medium shadow-sm`}
+                        >
+                          {documentState.file ? (
+                            <>
+                              <CheckCircleIcon className="w-5 h-5 mr-2 text-green-600" />
+                              <span className="truncate font-semibold">{documentState.file.name}</span>
+                            </>
+                          ) : (
+                            <>
+                              <DocumentArrowUpIcon className="w-5 h-5 mr-2" />
+                              Select {docConfig.name}
+                            </>
+                          )}
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="file"
+                          ref={documentState.ref}
+                          accept={docConfig.accepts}
+                          onChange={(e) => documentState.setter(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => documentState.ref.current?.click()}
+                          className={`w-full flex items-center justify-center px-4 py-3 text-sm border-2 ${docConfig.borderColor} ${docConfig.textColor} rounded-lg hover:${docConfig.hoverBg} transition-all font-medium shadow-sm`}
+                        >
+                          {documentState.file ? (
+                            <>
+                              <CheckCircleIcon className="w-5 h-5 mr-2 text-green-600" />
+                              <span className="truncate font-semibold">{documentState.file.name}</span>
+                            </>
+                          ) : (
+                            <>
+                              <DocumentArrowUpIcon className="w-5 h-5 mr-2" />
+                              Select {docConfig.name}
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
+                    
+                    {documentState.file && (
+                      <button
+                        onClick={() => documentState.setter(null)}
+                        className="w-full mt-3 text-sm text-red-600 hover:text-red-800 font-semibold flex items-center justify-center space-x-1 hover:bg-red-50 py-2 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>Remove File</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Status Indicator & Process Button */}
-            <div className="mt-4 p-4 bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-300 rounded-lg">
+            <div className="mt-6 p-6 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl shadow-lg">
               <div className="flex items-center justify-between">
+                {/* Upload Progress Indicator */}
                 <div className="flex items-center space-x-4">
-                  <div className={`w-4 h-4 rounded-full ${
+                  <div className={`w-5 h-5 rounded-full transition-all duration-500 ${
                     pidDocument && hmbDocument && pmsDocument && naceDocument 
-                      ? 'bg-green-500 animate-pulse' 
+                      ? 'bg-gradient-to-r from-green-400 to-green-600 animate-pulse shadow-lg' 
                       : 'bg-gray-300'
                   }`}></div>
                   <div>
-                    <span className="text-sm font-medium text-gray-700">
-                      Documents: <strong className="text-lg">{[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4</strong> uploaded
-                    </span>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        pidDocument ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                      }`}>P&ID</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        hmbDocument ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                      }`}>HMB</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        pmsDocument ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
-                      }`}>PMS</span>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        naceDocument ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
-                      }`}>NACE</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Documents Ready:</span>
+                      <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
+                        {[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-2">
+                      {Object.entries(DOCUMENT_CONFIGS).map(([key, config]) => {
+                        const isUploaded = {
+                          pid: pidDocument,
+                          hmb: hmbDocument,
+                          pms: pmsDocument,
+                          nace: naceDocument
+                        }[key];
+                        
+                        return (
+                          <span
+                            key={key}
+                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-300 ${
+                              isUploaded
+                                ? `${config.badgeBg} ${config.badgeText} shadow-sm`
+                                : 'bg-gray-100 text-gray-400'
+                            }`}
+                          >
+                            {config.icon} {config.name}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
+                
+                {/* Process Button */}
                 <button
                   onClick={processAllDocuments}
                   disabled={!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || loading}
-                  className={`px-6 py-3 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${
+                  className={`px-8 py-4 rounded-xl font-bold text-white text-lg transition-all transform hover:scale-105 shadow-xl ${
                     pidDocument && hmbDocument && pmsDocument && naceDocument && !loading
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg animate-pulse'
+                      ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 animate-pulse'
                       : 'bg-gray-300 cursor-not-allowed'
                   }`}
                 >
                   {loading ? (
-                    <div className="flex items-center space-x-2">
-                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <div className="flex items-center space-x-3">
+                      <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       <span>Processing...</span>
                     </div>
                   ) : (
-                    <div className="flex items-center space-x-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center space-x-3">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       <span>Process All 4 Documents</span>
@@ -1104,18 +1071,20 @@ const DesignIQLists = () => {
               )}
             </div>
           </div>
-          )}
         </div>
+      )}
 
-        {/* Filter Panel */}
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <label className="text-sm font-medium text-gray-700">Status:</label>
+              <FunnelIcon className="w-6 h-6 text-indigo-600" />
+              <label className="text-base font-semibold text-gray-900">Filter by Status:</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium transition-all"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -1125,71 +1094,81 @@ const DesignIQLists = () => {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+            <button
+              onClick={() => {
+                setStatusFilter('all');
+                setSearchTerm('');
+              }}
+              className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold"
+            >
+              Clear Filters
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Items Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading items...</p>
+          <div className="p-16 text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div>
+            <p className="mt-6 text-lg text-gray-600 font-medium">Loading items...</p>
           </div>
         ) : items.length === 0 ? (
-          <div className="p-12 text-center">
-            <currentListConfig.icon className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No items found</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by adding a new item.</p>
-            <div className="mt-6">
-              <button
-                className="flex items-center px-4 py-2 border border-purple-500 text-purple-600 rounded-lg hover:bg-purple-50"
-            >
-              <ArrowUpTrayIcon className="w-5 h-5 mr-2" />
-              ADNOC Offshore
-              </button>
+          <div className="p-16 text-center">
+            <div className="bg-gradient-to-br from-gray-100 to-gray-200 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
+              <currentListConfig.icon className="h-12 w-12 text-gray-400" />
             </div>
+            <h3 className="text-xl font-bold text-gray-900">No items found</h3>
+            <p className="mt-2 text-base text-gray-500">Get started by adding a new item or uploading documents.</p>
+            {selectedListType === 'line_list' && (
+              <div className="mt-6">
+                <p className="text-sm text-indigo-600 font-semibold">
+                  👆 Use the 4-document upload interface above to extract line lists
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gradient-to-r from-indigo-50 to-purple-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Tag
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Description
                   </th>
                   {selectedListType === 'line_list' && (
                     <>
                       {/* Smart Area Column Detection: Only show if any items have area */}
                       {items.some(item => item.data?.area && item.data.area !== '' && item.data.area !== '-') && (
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                           Area
                         </th>
                       )}
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                         FROM
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                         TO
                       </th>
                     </>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Validated
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Version
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Created By
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>

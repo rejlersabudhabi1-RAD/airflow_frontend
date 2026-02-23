@@ -1,167 +1,149 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  BoltIcon,
-  CpuChipIcon,
-  SignalIcon,
-  LightBulbIcon,
+  CogIcon,
   CircleStackIcon,
-  ChartBarIcon,
-  SparklesIcon
+  FireIcon,
+  BeakerIcon,
+  ArrowPathIcon,
+  WrenchScrewdriverIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline';
 
 /**
- * Electrical Data Sheet Page
- * Central hub for all electrical engineering data sheet functionality
- * Follows the same design pattern as Instrument Data Sheets for consistency
+ * Mechanical Data Sheet Page
+ * Central hub for all mechanical engineering data sheet functionality
+ * Follows the same design pattern as Process, Instrument, Electrical, and Civil Data Sheets for consistency
  */
-const ElectricalDatasheetPage = () => {
+const MechanicalDatasheetPage = () => {
   const navigate = useNavigate();
 
-  // Soft-coded data sheet types configuration for Electrical Engineering
+  // Soft-coded data sheet types configuration for Mechanical Engineering
   const dataSheetTypes = [
     {
-      id: 'electrical_datasheet',
-      name: 'Electrical Datasheets',
-      description: 'AI-powered electrical diagram validation and datasheet management with ADNOC standards verification',
-      icon: BoltIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-amber-600',
-      path: '/engineering/electrical/datasheet/upload',
-      badge: 'AI Powered',
-      disabled: false,
-      features: [
-        'Upload & validate diagrams',
-        'ADNOC standards verification',
-        'AI-powered data extraction',
-        'Compliance score calculation',
-        'Excel export functionality'
-      ]
-    },
-    {
-      id: 'motor',
-      name: 'Motor Datasheets',
-      description: 'Motor selection, sizing calculations, and comprehensive specification generation',
-      icon: CpuChipIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-amber-600',
-      path: '/engineering/electrical/datasheet/motor',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Motor type selection',
-        'Power & torque calculations',
-        'Starting method analysis',
-        'Efficiency & power factor',
-        'Datasheet generation'
-      ]
-    },
-    {
-      id: 'transformer',
-      name: 'Transformer Datasheets',
-      description: 'Transformer sizing, specification, and performance analysis',
-      icon: BoltIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-orange-600',
-      path: '/engineering/electrical/datasheet/transformer',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Transformer sizing',
-        'Voltage regulation',
-        'Impedance calculations',
-        'Loss calculations',
-        'Specification generation'
-      ]
-    },
-    {
-      id: 'cable_sizing',
-      name: 'Cable Sizing & Selection',
-      description: 'Cable sizing calculations based on current, voltage drop, and installation conditions',
-      icon: SignalIcon,
-      color: 'yellow',
-      gradient: 'from-amber-500 to-yellow-600',
-      path: '/engineering/electrical/datasheet/cable',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Current carrying capacity',
-        'Voltage drop calculations',
-        'Short circuit rating',
-        'Installation factors',
-        'Cable schedule generation'
-      ]
-    },
-    {
-      id: 'load_calculation',
-      name: 'Load Calculations',
-      description: 'Electrical load analysis, diversity factors, and power distribution calculations',
-      icon: ChartBarIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-600 to-amber-600',
-      path: '/engineering/electrical/datasheet/load',
-      badge: 'Coming Soon',
-      disabled: true,
-      features: [
-        'Connected load calculation',
-        'Demand load estimation',
-        'Diversity factors',
-        'Load distribution',
-        'Load schedule generation'
-      ]
-    },
-    {
-      id: 'switchgear',
-      name: 'Switchgear & Panels',
-      description: 'Switchgear selection, panel design, and protection coordination',
+      id: 'pressure_vessel',
+      name: 'Pressure Vessel Design',
+      description: 'ASME pressure vessel design calculations, thickness determination, and stress analysis',
       icon: CircleStackIcon,
-      color: 'yellow',
-      gradient: 'from-orange-500 to-yellow-600',
-      path: '/engineering/electrical/datasheet/switchgear',
+      color: 'indigo',
+      gradient: 'from-indigo-500 to-blue-600',
+      path: '/engineering/mechanical/datasheet/pressure-vessel',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'Switchgear rating',
-        'Panel layout design',
-        'Protection coordination',
-        'Bus bar sizing',
-        'Single line diagram'
+        'ASME Section VIII calculations',
+        'Shell & head thickness',
+        'Nozzle reinforcement',
+        'Wind & seismic loads',
+        'Stress analysis'
       ]
     },
     {
-      id: 'ups_battery',
-      name: 'UPS & Battery Systems',
-      description: 'UPS sizing, battery calculations, and backup power system design',
-      icon: SparklesIcon,
-      color: 'yellow',
-      gradient: 'from-yellow-500 to-yellow-700',
-      path: '/engineering/electrical/datasheet/ups',
+      id: 'heat_exchanger',
+      name: 'Heat Exchanger Design',
+      description: 'Thermal design, shell and tube calculations, and performance analysis',
+      icon: FireIcon,
+      color: 'indigo',
+      gradient: 'from-blue-500 to-indigo-600',
+      path: '/engineering/mechanical/datasheet/heat-exchanger',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'UPS capacity sizing',
-        'Battery autonomy calculation',
-        'Battery bank design',
-        'Charging system',
-        'Specification generation'
+        'LMTD & NTU methods',
+        'Heat duty calculations',
+        'Tube side/shell side design',
+        'Pressure drop analysis',
+        'TEMA standards'
       ]
     },
     {
-      id: 'lighting',
-      name: 'Lighting Design',
-      description: 'Lighting calculations, luminaire selection, and illumination analysis',
-      icon: LightBulbIcon,
-      color: 'yellow',
-      gradient: 'from-amber-400 to-yellow-600',
-      path: '/engineering/electrical/datasheet/lighting',
+      id: 'rotating_equipment',
+      name: 'Rotating Equipment',
+      description: 'Pump, compressor, and turbine selection, sizing, and performance specifications',
+      icon: ArrowPathIcon,
+      color: 'indigo',
+      gradient: 'from-indigo-600 to-blue-600',
+      path: '/engineering/mechanical/datasheet/rotating-equipment',
       badge: 'Coming Soon',
       disabled: true,
       features: [
-        'Lux calculations',
-        'Luminaire selection',
-        'Energy efficiency',
-        'Emergency lighting',
-        'Lighting layout'
+        'Pump sizing & selection',
+        'Compressor calculations',
+        'NPSH calculations',
+        'Power requirements',
+        'Efficiency analysis'
+      ]
+    },
+    {
+      id: 'piping_stress',
+      name: 'Piping Stress Analysis',
+      description: 'Piping flexibility analysis, stress calculations, and support design',
+      icon: BoltIcon,
+      color: 'indigo',
+      gradient: 'from-blue-600 to-indigo-700',
+      path: '/engineering/mechanical/datasheet/piping-stress',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'ASME B31.3 compliance',
+        'Thermal expansion',
+        'Stress intensification',
+        'Support spacing',
+        'Nozzle loads'
+      ]
+    },
+    {
+      id: 'valve_sizing',
+      name: 'Valve Sizing & Selection',
+      description: 'Control valve, safety relief valve sizing, and selection calculations',
+      icon: WrenchScrewdriverIcon,
+      color: 'indigo',
+      gradient: 'from-indigo-500 to-purple-600',
+      path: '/engineering/mechanical/datasheet/valve',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Cv calculations',
+        'Control valve sizing',
+        'PSV/PRV sizing (API 520)',
+        'Flashing & cavitation',
+        'Noise analysis'
+      ]
+    },
+    {
+      id: 'hvac_design',
+      name: 'HVAC Design',
+      description: 'Heating, ventilation, and air conditioning load calculations and system design',
+      icon: BeakerIcon,
+      color: 'indigo',
+      gradient: 'from-blue-500 to-cyan-600',
+      path: '/engineering/mechanical/datasheet/hvac',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Cooling load calculations',
+        'Heating load calculations',
+        'Air flow requirements',
+        'Duct sizing',
+        'Equipment selection'
+      ]
+    },
+    {
+      id: 'static_equipment',
+      name: 'Static Equipment Design',
+      description: 'Storage tanks, columns, and vessel internals design and specifications',
+      icon: CogIcon,
+      color: 'indigo',
+      gradient: 'from-indigo-600 to-blue-700',
+      path: '/engineering/mechanical/datasheet/static-equipment',
+      badge: 'Coming Soon',
+      disabled: true,
+      features: [
+        'Storage tank design (API 650)',
+        'Column internals',
+        'Tray & packing design',
+        'Liquid holdup',
+        'Separator sizing'
       ]
     }
   ];
@@ -179,15 +161,15 @@ const ElectricalDatasheetPage = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Electrical Data Sheets
+              Mechanical Data Sheets
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Comprehensive electrical engineering data management and specification system
+              Comprehensive mechanical engineering design calculations and specification system
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-medium">
-              Electrical Engineering
+            <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-sm font-medium">
+              Mechanical Engineering
             </span>
           </div>
         </div>
@@ -234,7 +216,7 @@ const ElectricalDatasheetPage = () => {
                           <span className={`
                             inline-block px-2 py-1 text-xs font-medium rounded-full mt-1
                             ${type.badge === 'AI Powered' 
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                              ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
                               : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}
                           `}>
                             {type.badge}
@@ -300,43 +282,45 @@ const ElectricalDatasheetPage = () => {
         </div>
 
         {/* Info Card */}
-        <div className="mt-8 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+        <div className="mt-8 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
-                About Electrical Data Sheets
+              <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-100 mb-1">
+                About Mechanical Data Sheets
               </h4>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                This centralized hub provides access to all electrical engineering data sheet functionality. 
-                The Electrical Datasheets module is currently active with AI-powered ADNOC standards verification. 
-                Additional modules for motors, transformers, cable sizing, load calculations, switchgear, UPS systems, and lighting design 
-                are under development and will be available soon.
+              <p className="text-sm text-indigo-800 dark:text-indigo-200">
+                This centralized hub will provide access to all mechanical engineering data sheet functionality. 
+                Comprehensive modules for pressure vessels (ASME), heat exchangers, rotating equipment, piping stress analysis, 
+                valve sizing, HVAC design, and static equipment are currently under development. Each module will be designed 
+                to streamline your mechanical engineering workflow with intelligent automation, industry-standard calculations 
+                (ASME, API, TEMA), and comprehensive data management.
               </p>
             </div>
           </div>
         </div>
 
         {/* Development Status Banner */}
-        <div className="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
+        <div className="mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
-              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">
-                Active Module
+              <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                Under Development
               </h4>
-              <p className="text-sm text-green-800 dark:text-green-200">
-                The Electrical Datasheets module is now active! Upload electrical diagrams for AI-powered validation against ADNOC standards. 
-                The system automatically extracts specifications, validates compliance, identifies missing parameters, and generates comprehensive Excel reports. 
-                Additional specialized modules are coming soon.
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                All mechanical data sheet modules are currently under development and will be available soon. 
+                We are building a comprehensive suite of tools to support your mechanical engineering design and calculation needs 
+                following international standards (ASME, API, TEMA, B31.3, API 650).
+                Check back regularly for updates and new module releases.
               </p>
             </div>
           </div>
@@ -346,4 +330,4 @@ const ElectricalDatasheetPage = () => {
   );
 };
 
-export default ElectricalDatasheetPage;
+export default MechanicalDatasheetPage;

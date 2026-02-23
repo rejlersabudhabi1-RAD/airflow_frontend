@@ -9,9 +9,9 @@ export default defineConfig(({ mode }) => {
   
   // Smart API URL detection (soft-coded for Docker and production)
   // For local development in Docker, proxy to backend service using Docker service name
-  // In Docker: use service name 'backend' (from docker-compose)
+  // In Docker: use service name 'backend_local' (from docker-compose)
   // Outside Docker: use localhost
-  let apiUrl = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
+  let apiUrl = env.VITE_API_PROXY_TARGET || 'http://backend_local:8000'
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
               proxyReq.setHeader('X-Forwarded-Host', 'localhost:5173')
               proxyReq.setHeader('X-Forwarded-Proto', 'http')
               proxyReq.setHeader('X-Forwarded-For', req.socket.remoteAddress)
+              // Override Host header to use localhost instead of service name
+              proxyReq.setHeader('Host', 'localhost:8000')
               console.log('📤 Proxy request:', req.method, req.url, '→', apiUrl + req.url)
             })
           }

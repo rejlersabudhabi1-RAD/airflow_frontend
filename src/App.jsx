@@ -82,12 +82,22 @@ import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
+import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
+import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 // Electrical Datasheet Components
+import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
+import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
+// Instrument Datasheet Components
+import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
+import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
+// Mechanical Datasheet Components
+import MechanicalDatasheetPage from './pages/Engineering/Mechanical/MechanicalDatasheetPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
+import PipingMaterialSpecification from './pages/Engineering/Piping/PipingMaterialSpecification'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -648,7 +658,37 @@ function App() {
           }
         />
 
+        {/* Process Data Sheet - Pressure Instrument P&ID Upload */}
+        <Route
+          path="engineering/process/datasheet/pressure-instrument"
+          element={
+            <ProtectedRoute>
+              <PressureInstrumentPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Process Equipment Datasheet - P&ID Upload for Equipment Detection */}
+        <Route
+          path="engineering/process/datasheet/equipment"
+          element={
+            <ProtectedRoute>
+              <ProcessEquipmentDatasheet />
+            </ProtectedRoute>
+          }
+        />
+
           {/* Piping Routes */}
+          {/* Piping Material Specification - Coming Soon */}
+          <Route
+            path="engineering/piping/pms"
+            element={
+              <ProtectedRoute>
+                <PipingMaterialSpecification />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Piping Data Sheet - Main Page */}
           <Route
             path="engineering/piping/datasheet"
@@ -669,12 +709,33 @@ function App() {
           }
         />
 
-        {/* Electrical Datasheet Routes */}
+        {/* Electrical Routes */}
+        {/* Single Line Diagram - Coming Soon */}
+        <Route
+          path="engineering/electrical/sld"
+          element={
+            <ProtectedRoute>
+              <SingleLineDiagram />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Electrical Documents Hub - Main Landing for All 27 Initiatives */}
         <Route
           path="engineering/electrical/datasheet"
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
-              <ElectricalDatasheetPage />
+              <ElectricalDocumentsHub />
+            </ModuleProtectedRoute>
+          }
+        />
+        
+        {/* Legacy route - redirect to main hub */}
+        <Route
+          path="engineering/electrical"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <ElectricalDocumentsHub />
             </ModuleProtectedRoute>
           }
         />
@@ -691,6 +752,37 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
               <ElectricalDatasheetFormPage />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* Instrument Routes */}
+        {/* Instrument Index - Coming Soon */}
+        <Route
+          path="engineering/instrument/index"
+          element={
+            <ProtectedRoute>
+              <InstrumentIndex />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Instrument Datasheet Routes */}
+        <Route
+          path="engineering/instrument/datasheet"
+          element={
+            <ModuleProtectedRoute moduleCode="instrument_datasheet">
+              <InstrumentDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* Mechanical Datasheet Routes */}
+        <Route
+          path="engineering/mechanical/datasheet"
+          element={
+            <ModuleProtectedRoute moduleCode="mechanical_datasheet">
+              <MechanicalDatasheetPage />
             </ModuleProtectedRoute>
           }
         />
