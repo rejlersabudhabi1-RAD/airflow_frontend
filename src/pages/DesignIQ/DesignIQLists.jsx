@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ViewColumnsIcon,
@@ -12,8 +12,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
-  FunnelIcon,
-  DocumentArrowUpIcon
+  FunnelIcon
 } from '@heroicons/react/24/outline';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -21,7 +20,6 @@ import { STORAGE_KEYS } from '../../config/app.config';
 import { API_BASE_URL } from '../../config/api.config';
 import { apiClientLongTimeout } from '../../services/api.service';
 import * as XLSX from 'xlsx';
-import { DESIGNIQ_UI_CONFIG, FORMAT_CONFIGS, DOCUMENT_CONFIGS, COLUMN_OUTPUT_INFO } from '../../config/designIQListsUI.config';
 
 // List types configuration (matches backend)
 const LIST_TYPES = {
@@ -86,6 +84,10 @@ const DesignIQLists = () => {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [processingProgress, setProcessingProgress] = useState({ step: '', percent: 0 });
   
+  // Previous Outputs (Historical Download Feature)
+  const [previousOutputs, setPreviousOutputs] = useState([]);
+  const [loadingOutputs, setLoadingOutputs] = useState(false);
+  
   // Enrichment Documents (Optional - Do NOT block base extraction)
   const [pidDocument, setPidDocument] = useState(null);
   const [hmbDocument, setHmbDocument] = useState(null);
@@ -149,11 +151,34 @@ const DesignIQLists = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [selectedListType, statusFilter]);
+  // Fetch previous outputs for download
+  const fetchPreviousOutputs = useCallback(async () => {
+    if (selectedListType !== 'line_list') return; // Only for line_list
+    
+    setLoadingOutputs(true);
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const response = await fetch(
+        `${API_BASE_URL}/designiq/lists/previous_outputs/?list_type=${selectedListType}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPreviousOutputs(data.outputs || []);
+      }
+    } catch (error) {
+      console.error('Error fetching previous outputs:', error);
+    } finally {
+      setLoadingOutputs(false);
+    }
+  }, [selectedListType]);
 
-  const fetchData = async (isAutoRefresh = false) => {
+  const fetchData = useCallback(async (isAutoRefresh = false) => {
     if (isAutoRefresh) setIsRefreshing(true);
     else setLoading(true);
     try {
@@ -206,38 +231,42 @@ const DesignIQLists = () => {
       setLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [selectedListType, statusFilter, searchTerm]);
+
+  useEffect(() => {
+    fetchData();
+    fetchPreviousOutputs();
+  }, [fetchData, fetchPreviousOutputs]);
 
   const handleSearch = () => {
     fetchData();
   };
-
-  const handleExport = async () => {
+  
+  // Download historical Excel output
+  const handleDownloadOutput = async (outputId, filename) => {
     try {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/export/?list_type=${selectedListType}`,
+        `${API_BASE_URL}/designiq/lists/download_output/${outputId}/`,
         {
-          method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${token}`
           }
         }
       );
       
       if (response.ok) {
-        const data = await response.json();
-        // Download as JSON
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${selectedListType}_export_${new Date().toISOString().split('T')[0]}.json`;
+        a.download = filename;
         a.click();
+        window.URL.revokeObjectURL(url);
       }
     } catch (error) {
-      console.error('Error exporting data:', error);
+      console.error('Error downloading output:', error);
+      alert('Failed to download file');
     }
   };
 
@@ -642,25 +671,18 @@ const DesignIQLists = () => {
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 ${DESIGNIQ_UI_CONFIG.layout.containerPadding}`}>
+    <div className="min-h-screen bg-gray-50 p-6">
       {/* Apply control styles for fullscreen and sidebar */}
       <style>{pageControls.styles}</style>
 
-      {/* Compact Header with Inline Controls */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Header with Controls */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-3">
-            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
-              {DESIGNIQ_UI_CONFIG.text.pageTitle}
-            </span>
-            {isRefreshing && (
-              <span className="inline-block animate-spin h-5 w-5 border-2 border-indigo-500 border-t-transparent rounded-full"></span>
-            )}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">{DESIGNIQ_UI_CONFIG.text.pageSubtitle}</p>
+          <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
+          <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
         </div>
 
-        {/* Page Control Buttons - Compact */}
+        {/* Page Control Buttons */}
         <PageControlButtons
           sidebarVisible={pageControls.sidebarVisible}
           setSidebarVisible={pageControls.toggleSidebar}
@@ -673,11 +695,10 @@ const DesignIQLists = () => {
         />
       </div>
 
-      {/* Combined Tabs and Action Bar */}
-      <div className="bg-white rounded-xl shadow-md mb-6 overflow-hidden">
-        {/* List Type Tabs */}
-        <div className="border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-          <nav className="flex space-x-2 px-4 py-2" aria-label="Tabs">
+      {/* List Type Tabs */}
+      <div className="bg-white rounded-lg shadow-sm mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-4 px-6" aria-label="Tabs">
             {Object.entries(LIST_TYPES).map(([key, config]) => {
               const Icon = config.icon;
               const isActive = selectedListType === key;
@@ -687,77 +708,62 @@ const DesignIQLists = () => {
                   key={key}
                   onClick={() => setSelectedListType(key)}
                   className={`
-                    flex items-center px-4 py-3 text-sm font-medium rounded-t-lg border-b-2 transition-all duration-200 transform
+                    flex items-center px-4 py-4 text-sm font-medium border-b-2 transition-colors
                     ${isActive
-                      ? `border-${config.color}-500 text-${config.color}-600 bg-white shadow-sm -mb-px scale-105`
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }
                   `}
                 >
                   <Icon className="w-5 h-5 mr-2" />
-                  <span className="font-semibold">{config.name}</span>
-                  {stats && (
-                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
-                      isActive ? `bg-${config.color}-100 text-${config.color}-700` : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {stats.total}
-                    </span>
-                  )}
+                  {config.name}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        {/* Quick Stats Bar */}
+        {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-6 gap-4 p-4 bg-gradient-to-r from-blue-50 via-purple-50 to-indigo-50">
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-gray-900 group-hover:text-indigo-600">{stats.total}</div>
-              <div className="text-xs text-gray-600 font-medium">Total</div>
+          <div className="grid grid-cols-5 gap-6 p-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
+              <div className="text-sm text-gray-600">Total Items</div>
             </div>
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="flex items-center justify-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                <span className="text-2xl font-bold text-green-600 group-hover:text-green-700">{stats.by_status.active}</span>
-              </div>
-              <div className="text-xs text-gray-600 font-medium">Active</div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600">{stats.by_status.active}</div>
+              <div className="text-sm text-gray-600">Active</div>
             </div>
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-yellow-600 group-hover:text-yellow-700">{stats.by_status.pending}</div>
-              <div className="text-xs text-gray-600 font-medium">Pending</div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-yellow-600">{stats.by_status.pending}</div>
+              <div className="text-sm text-gray-600">Pending</div>
             </div>
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-blue-600 group-hover:text-blue-700">{stats.by_status.approved}</div>
-              <div className="text-xs text-gray-600 font-medium">Approved</div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-600">{stats.by_status.approved}</div>
+              <div className="text-sm text-gray-600">Approved</div>
             </div>
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="text-2xl font-bold text-red-600 group-hover:text-red-700">{stats.by_status.rejected || 0}</div>
-              <div className="text-xs text-gray-600 font-medium">Rejected</div>
-            </div>
-            <div className="text-center group hover:scale-105 transition-transform cursor-pointer">
-              <div className="flex items-center justify-center">
-                <CheckCircleIcon className="w-5 h-5 text-indigo-500 mr-1" />
-                <span className="text-2xl font-bold text-indigo-600 group-hover:text-indigo-700">{stats.validated}</span>
-              </div>
-              <div className="text-xs text-gray-600 font-medium">Validated</div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-indigo-600">{stats.validated}</div>
+              <div className="text-sm text-gray-600">Validated</div>
             </div>
           </div>
         )}
+      </div>
 
-        {/* Inline Action Bar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-100">
-          <div className="flex items-center space-x-3 flex-1">
-            {/* Search Input */}
-            <div className="flex-1 max-w-md">
+      {/* Toolbar */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-4 flex-1">
+            {/* Search */}
+            <div className="flex-1 max-w-lg">
               <div className="relative">
                 <input
                   type="text"
-                  placeholder={DESIGNIQ_UI_CONFIG.text.searchPlaceholder}
+                  placeholder="Search by tag or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
                 <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
@@ -766,289 +772,353 @@ const DesignIQLists = () => {
             {/* Filter Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-300 rounded-lg hover:shadow-md transition-all"
+              className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
-              <FunnelIcon className="w-5 h-5 mr-2 text-gray-600" />
-              <span className="font-medium text-gray-700">{DESIGNIQ_UI_CONFIG.text.filtersButtonText}</span>
-              {statusFilter !== 'all' && (
-                <span className="ml-2 px-2 py-0.5 bg-indigo-500 text-white text-xs rounded-full">1</span>
-              )}
-            </button>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleExport}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 shadow-sm hover:shadow-md transition-all"
-            >
-              <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
-              <span className="font-semibold">{DESIGNIQ_UI_CONFIG.text.exportButtonText}</span>
+              <FunnelIcon className="w-5 h-5 mr-2" />
+              Filters
             </button>
           </div>
         </div>
-      </div>
-
-      {/* 4-DOCUMENT ENRICHED EXTRACTION - Only for Line List */}
-      {selectedListType === 'line_list' && (
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          {/* Header Section */}
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-5 mb-6">
-            <div className="flex items-center space-x-3 mb-3">
-              <svg className="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        
+        {/* P&ID Upload Notice - Full Width Banner */}
+        {selectedListType === 'line_list' && (
+          <div className="w-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-300 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <svg className="w-8 h-8 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              <h3 className="text-xl font-bold text-purple-900">{DESIGNIQ_UI_CONFIG.text.uploadSectionTitle}</h3>
-            </div>
-            <p className="text-sm text-purple-800 mb-3">
-              Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with <strong className="text-purple-900">34 columns</strong> (8 base + 26 enriched)
-            </p>
-            <div className="flex items-center flex-wrap gap-2 text-xs text-purple-700">
-              <span className="font-semibold">Output Formula:</span>
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">8 Base (P&ID)</span>
-              <span className="text-purple-600">+</span>
-              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full font-medium">10 HMB</span>
-              <span className="text-purple-600">+</span>
-              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full font-medium">8 PMS</span>
-              <span className="text-purple-600">+</span>
-              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full font-medium">8 NACE</span>
-              <span className="text-purple-600">=</span>
-              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full font-bold">34 Total Columns</span>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-indigo-900 mb-1">📄 P&ID Processing Interface</h3>
+                <p className="text-sm text-indigo-700">
+                  Use the <strong>4-document enriched extraction interface below</strong> to upload and process P&ID files with full 34-column enrichment (P&ID + HMB + PMS + NACE)
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <span className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">
+                  Scroll Down ↓
+                </span>
+              </div>
             </div>
           </div>
-
-          {/* FORMAT SELECTION - Step 1 */}
-          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-5 mb-6">
-            <div className="flex items-center space-x-2 mb-3">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h4 className="text-base font-bold text-yellow-900">{DESIGNIQ_UI_CONFIG.text.formatSelectionTitle}</h4>
+        )}
+      </div>
+      
+      {/* 4-DOCUMENT ENRICHED EXTRACTION - Systematic Upload Interface */}
+      {selectedListType === 'line_list' && (
+      <div className="border-t-2 border-purple-200 pt-4 mt-4">
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-4 mb-4">
+              <div className="flex items-center space-x-3 mb-2">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <h3 className="text-lg font-bold text-purple-900">Smart Enriched Extraction (34 Columns)</h3>
+              </div>
+              <p className="text-sm text-purple-800 mb-2">
+                Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with 34 columns (8 base + 26 enriched)
+              </p>
+              <div className="flex items-center space-x-2 text-xs text-purple-700">
+                <span className="font-semibold">Output:</span>
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">8 Base Columns from P&ID</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">10 from HMB</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">8 from PMS</span>
+                <span className="text-purple-600">+</span>
+                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">8 from NACE</span>
+                <span className="text-purple-600">=</span>
+                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-bold">34 Total Columns</span>
+              </div>
             </div>
-            <p className="text-sm text-yellow-800 mb-4">{DESIGNIQ_UI_CONFIG.text.formatSelectionDescription}</p>
-            
-            <div className="grid grid-cols-3 gap-4">
-              {Object.entries(FORMAT_CONFIGS).map(([formatKey, formatConfig]) => (
+
+            {/* FORMAT SELECTION - CRITICAL FOR REGEX PATTERNS */}
+            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h4 className="text-sm font-bold text-yellow-900">Step 1: Select Project Format (Required)</h4>
+              </div>
+              <p className="text-xs text-yellow-800 mb-3">Choose your project type - this determines the line number format and regex patterns used for extraction</p>
+              <div className="grid grid-cols-3 gap-3">
                 <button
-                  key={formatKey}
-                  onClick={() => setSelectedFormat(formatKey)}
-                  className={`px-5 py-4 rounded-xl border-2 transition-all transform hover:scale-105 ${
-                    selectedFormat === formatKey
-                      ? `${formatConfig.selectedBg} ${formatConfig.selectedText} ${formatConfig.selectedBorder} shadow-lg`
+                  onClick={() => setSelectedFormat('onshore')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'onshore'
+                      ? 'bg-blue-500 text-white border-blue-600 shadow-lg'
                       : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
                   }`}
                 >
-                  <div className="text-base font-bold">{formatConfig.name}</div>
-                  <div className="text-xs mt-2 opacity-80">{formatConfig.description}</div>
-                  <div className="text-xs mt-1 font-mono bg-black bg-opacity-10 px-2 py-1 rounded">
-                    {formatConfig.example}
-                  </div>
+                  <div className="text-sm font-bold">Onshore</div>
+                  <div className="text-xs mt-1">No area (2-D-5777-033842)</div>
                 </button>
-              ))}
-            </div>
-            
-            {!selectedFormat && (
-              <div className="mt-4 flex items-center space-x-2 text-red-600 text-sm font-medium bg-red-50 p-3 rounded-lg">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>⚠️ Please select a format before uploading documents</span>
+                <button
+                  onClick={() => setSelectedFormat('general')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'general'
+                      ? 'bg-green-500 text-white border-green-600 shadow-lg'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
+                  }`}
+                >
+                  <div className="text-sm font-bold">General</div>
+                  <div className="text-xs mt-1">With area (1"-41-SWS-64544)</div>
+                </button>
+                <button
+                  onClick={() => setSelectedFormat('offshore')}
+                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedFormat === 'offshore'
+                      ? 'bg-purple-500 text-white border-purple-600 shadow-lg'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
+                  }`}
+                >
+                  <div className="text-sm font-bold">Offshore</div>
+                  <div className="text-xs mt-1">Area first (604-HO-8-BC2GA0)</div>
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* Document Upload Grid */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-base font-bold text-gray-900">{DESIGNIQ_UI_CONFIG.text.documentUploadTitle}</h4>
-              <span className="text-sm text-gray-600">
-                {[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4 uploaded
-              </span>
+              {!selectedFormat && (
+                <div className="mt-3 flex items-center space-x-2 text-red-600 text-sm font-medium">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Please select a format before uploading documents</span>
+                </div>
+              )}
             </div>
-            
-            <div className="grid grid-cols-4 gap-4">
-              {/* Document Upload Cards - Config Driven */}
-              {Object.entries(DOCUMENT_CONFIGS).map(([docKey, docConfig]) => {
-                const documentState = {
-                  pid: { file: pidDocument, setter: setPidDocument, inputId: 'pidFileInput' },
-                  hmb: { file: hmbDocument, setter: setHmbDocument, ref: hmbRef },
-                  pms: { file: pmsDocument, setter: setPmsDocument, ref: pmsRef },
-                  nace: { file: naceDocument, setter: setNaceDocument, ref: naceRef }
-                }[docKey];
 
-                return (
-                  <div
-                    key={docKey}
-                    className={`border-2 rounded-xl p-5 transition-all duration-300 hover:shadow-lg transform hover:-translate-y-1 ${
-                      docConfig.bgColor
-                    } ${documentState.file ? 'ring-2 ring-green-400' : ''}`}
+            <div className="grid grid-cols-4 gap-4">
+              {/* Document 1: P&ID (Mandatory) */}
+              <div className="border-2 border-blue-300 rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-blue-900">1. P&ID Drawing</label>
+                  <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">Mandatory</span>
+                </div>
+                <p className="text-xs text-blue-700 mb-3">Extracts: Line No, Size, Fluid Code, Area, From, To</p>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && file.type === 'application/pdf') {
+                      setPidDocument(file);
+                      // Format must be selected explicitly by user before upload
+                    } else {
+                      alert('Please select a valid PDF file.');
+                    }
+                  }}
+                  className="hidden"
+                  id="pidFileInput"
+                />
+                <label
+                  htmlFor="pidFileInput"
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-blue-400 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer"
+                >
+                  {pidDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{pidDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      Select P&ID
+                    </>
+                  )}
+                </label>
+                {pidDocument && (
+                  <button
+                    onClick={() => setPidDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-2xl">{docConfig.icon}</span>
-                        <div>
-                          <label className={`text-sm font-bold ${docConfig.textColor}`}>
-                            {docConfig.order}. {docConfig.name}
-                          </label>
-                          {docConfig.required && (
-                            <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full animate-pulse">
-                              Required
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {!docConfig.required && (
-                        <span className={`px-3 py-1 ${docConfig.badgeBg} ${docConfig.badgeText} text-xs font-bold rounded-full`}>
-                          +{docConfig.columns} cols
-                        </span>
-                      )}
-                    </div>
-                    
-                    <p className={`text-xs ${docConfig.descColor} mb-4 leading-relaxed`}>
-                      {docConfig.description}
-                    </p>
-                    
-                    {docKey === 'pid' ? (
-                      <>
-                        <input
-                          type="file"
-                          accept={docConfig.accepts}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file && file.type === 'application/pdf') {
-                              documentState.setter(file);
-                            } else {
-                              alert('Please select a valid PDF file.');
-                            }
-                          }}
-                          className="hidden"
-                          id={documentState.inputId}
-                        />
-                        <label
-                          htmlFor={documentState.inputId}
-                          className={`w-full flex items-center justify-center px-4 py-3 text-sm border-2 ${docConfig.borderColor} ${docConfig.textColor} rounded-lg hover:${docConfig.hoverBg} transition-all cursor-pointer font-medium shadow-sm`}
-                        >
-                          {documentState.file ? (
-                            <>
-                              <CheckCircleIcon className="w-5 h-5 mr-2 text-green-600" />
-                              <span className="truncate font-semibold">{documentState.file.name}</span>
-                            </>
-                          ) : (
-                            <>
-                              <DocumentArrowUpIcon className="w-5 h-5 mr-2" />
-                              Select {docConfig.name}
-                            </>
-                          )}
-                        </label>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          type="file"
-                          ref={documentState.ref}
-                          accept={docConfig.accepts}
-                          onChange={(e) => documentState.setter(e.target.files?.[0] || null)}
-                          className="hidden"
-                        />
-                        <button
-                          onClick={() => documentState.ref.current?.click()}
-                          className={`w-full flex items-center justify-center px-4 py-3 text-sm border-2 ${docConfig.borderColor} ${docConfig.textColor} rounded-lg hover:${docConfig.hoverBg} transition-all font-medium shadow-sm`}
-                        >
-                          {documentState.file ? (
-                            <>
-                              <CheckCircleIcon className="w-5 h-5 mr-2 text-green-600" />
-                              <span className="truncate font-semibold">{documentState.file.name}</span>
-                            </>
-                          ) : (
-                            <>
-                              <DocumentArrowUpIcon className="w-5 h-5 mr-2" />
-                              Select {docConfig.name}
-                            </>
-                          )}
-                        </button>
-                      </>
-                    )}
-                    
-                    {documentState.file && (
-                      <button
-                        onClick={() => documentState.setter(null)}
-                        className="w-full mt-3 text-sm text-red-600 hover:text-red-800 font-semibold flex items-center justify-center space-x-1 hover:bg-red-50 py-2 rounded-lg transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span>Remove File</span>
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 2: HMB/PFD */}
+              <div className="border-2 border-green-300 rounded-lg p-4 bg-green-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-green-900">2. HMB/PFD</label>
+                  <span className="px-2 py-1 bg-green-600 text-white text-xs rounded-full">+10 cols</span>
+                </div>
+                <p className="text-xs text-green-700 mb-3">Design/Operating Temp, Pressure, Flow Rate, Density</p>
+                <input
+                  type="file"
+                  ref={hmbRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setHmbDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => hmbRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-green-400 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  {hmbDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{hmbDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select HMB
+                    </>
+                  )}
+                </button>
+                {hmbDocument && (
+                  <button
+                    onClick={() => setHmbDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 3: PMS */}
+              <div className="border-2 border-orange-300 rounded-lg p-4 bg-orange-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-orange-900">3. PMS</label>
+                  <span className="px-2 py-1 bg-orange-600 text-white text-xs rounded-full">+8 cols</span>
+                </div>
+                <p className="text-xs text-orange-700 mb-3">Material Grade, Schedule, Flange Rating, Gaskets</p>
+                <input
+                  type="file"
+                  ref={pmsRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setPmsDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => pmsRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-orange-400 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
+                >
+                  {pmsDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{pmsDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select PMS
+                    </>
+                  )}
+                </button>
+                {pmsDocument && (
+                  <button
+                    onClick={() => setPmsDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              {/* Document 4: NACE */}
+              <div className="border-2 border-red-300 rounded-lg p-4 bg-red-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-red-900">4. NACE Report</label>
+                  <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full">+8 cols</span>
+                </div>
+                <p className="text-xs text-red-700 mb-3">Corrosion Allowance, NACE Class, H2S, Coating</p>
+                <input
+                  type="file"
+                  ref={naceRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setNaceDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => naceRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-red-400 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  {naceDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{naceDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select NACE
+                    </>
+                  )}
+                </button>
+                {naceDocument && (
+                  <button
+                    onClick={() => setNaceDocument(null)}
+                    className="w-full mt-2 text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Status Indicator & Process Button */}
-            <div className="mt-6 p-6 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl shadow-lg">
+            <div className="mt-4 p-4 bg-gradient-to-r from-gray-50 to-blue-50 border-2 border-gray-300 rounded-lg">
               <div className="flex items-center justify-between">
-                {/* Upload Progress Indicator */}
                 <div className="flex items-center space-x-4">
-                  <div className={`w-5 h-5 rounded-full transition-all duration-500 ${
+                  <div className={`w-4 h-4 rounded-full ${
                     pidDocument && hmbDocument && pmsDocument && naceDocument 
-                      ? 'bg-gradient-to-r from-green-400 to-green-600 animate-pulse shadow-lg' 
+                      ? 'bg-green-500 animate-pulse' 
                       : 'bg-gray-300'
                   }`}></div>
                   <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium text-gray-700">Documents Ready:</span>
-                      <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text">
-                        {[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2 mt-2">
-                      {Object.entries(DOCUMENT_CONFIGS).map(([key, config]) => {
-                        const isUploaded = {
-                          pid: pidDocument,
-                          hmb: hmbDocument,
-                          pms: pmsDocument,
-                          nace: naceDocument
-                        }[key];
-                        
-                        return (
-                          <span
-                            key={key}
-                            className={`text-xs px-3 py-1 rounded-full font-semibold transition-all duration-300 ${
-                              isUploaded
-                                ? `${config.badgeBg} ${config.badgeText} shadow-sm`
-                                : 'bg-gray-100 text-gray-400'
-                            }`}
-                          >
-                            {config.icon} {config.name}
-                          </span>
-                        );
-                      })}
+                    <span className="text-sm font-medium text-gray-700">
+                      Documents: <strong className="text-lg">{[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4</strong> uploaded
+                    </span>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        pidDocument ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                      }`}>P&ID</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        hmbDocument ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>HMB</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        pmsDocument ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
+                      }`}>PMS</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        naceDocument ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+                      }`}>NACE</span>
                     </div>
                   </div>
                 </div>
-                
-                {/* Process Button */}
                 <button
                   onClick={processAllDocuments}
                   disabled={!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || loading}
-                  className={`px-8 py-4 rounded-xl font-bold text-white text-lg transition-all transform hover:scale-105 shadow-xl ${
+                  className={`px-6 py-3 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${
                     pidDocument && hmbDocument && pmsDocument && naceDocument && !loading
-                      ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 animate-pulse'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg animate-pulse'
                       : 'bg-gray-300 cursor-not-allowed'
                   }`}
                 >
                   {loading ? (
-                    <div className="flex items-center space-x-3">
-                      <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
+                    <div className="flex items-center space-x-2">
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       <span>Processing...</span>
                     </div>
                   ) : (
-                    <div className="flex items-center space-x-3">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       <span>Process All 4 Documents</span>
@@ -1071,20 +1141,17 @@ const DesignIQLists = () => {
               )}
             </div>
           </div>
-        </div>
-      )}
+          )}
 
-      {/* Filter Panel */}
-      {showFilters && (
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between">
+        {/* Filter Panel */}
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="flex items-center space-x-4">
-              <FunnelIcon className="w-6 h-6 text-indigo-600" />
-              <label className="text-base font-semibold text-gray-900">Filter by Status:</label>
+              <label className="text-sm font-medium text-gray-700">Status:</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium transition-all"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -1094,144 +1161,8 @@ const DesignIQLists = () => {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
-            <button
-              onClick={() => {
-                setStatusFilter('all');
-                setSearchTerm('');
-              }}
-              className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Items Table */}
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        {loading ? (
-          <div className="p-16 text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div>
-            <p className="mt-6 text-lg text-gray-600 font-medium">Loading items...</p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="bg-gradient-to-br from-gray-100 to-gray-200 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
-              <currentListConfig.icon className="h-12 w-12 text-gray-400" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900">No items found</h3>
-            <p className="mt-2 text-base text-gray-500">Get started by adding a new item or uploading documents.</p>
-            {selectedListType === 'line_list' && (
-              <div className="mt-6">
-                <p className="text-sm text-indigo-600 font-semibold">
-                  👆 Use the 4-document upload interface above to extract line lists
-                </p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-indigo-50 to-purple-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Tag
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Description
-                  </th>
-                  {selectedListType === 'line_list' && (
-                    <>
-                      {/* Smart Area Column Detection: Only show if any items have area */}
-                      {items.some(item => item.data?.area && item.data.area !== '' && item.data.area !== '-') && (
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                          Area
-                        </th>
-                      )}
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        FROM
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        TO
-                      </th>
-                    </>
-                  )}
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Validated
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Version
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Created By
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {items.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {item.item_tag}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {item.description || '-'}
-                    </td>
-                    {selectedListType === 'line_list' && (
-                      <>
-                        {/* Smart Area Column: Only show if any items have area */}
-                        {items.some(i => i.data?.area && i.data.area !== '' && i.data.area !== '-') && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-semibold text-blue-600">
-                            {item.data?.area || '-'}
-                          </td>
-                        )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {item.data?.from_line || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {item.data?.to_line || '-'}
-                        </td>
-                      </>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(item.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {item.is_validated ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <ClockIcon className="h-5 w-5 text-gray-400" />
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      v{item.version}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.created_by_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => navigate(`/designiq/lists/${item.id}`)}
-                        className="text-indigo-600 hover:text-indigo-900 mr-4"
-                      >
-                        View
-                      </button>
-                      <button className="text-red-600 hover:text-red-900">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
-      </div>
 
       {/* Upload Result Notification */}
       {uploadResult && (
@@ -1641,6 +1572,117 @@ const DesignIQLists = () => {
                 Close & Refresh
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Previous Outputs Section - Historical Downloads */}
+      {selectedListType === 'line_list' && (
+        <div className="mt-8 bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
+          {/* Section Header */}
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div>
+                  <h3 className="text-lg font-bold text-indigo-900">📂 Previous Outputs</h3>
+                  <p className="text-sm text-indigo-700">Download previously processed P&ID Excel files</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchPreviousOutputs}
+                disabled={loadingOutputs}
+                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Table Content */}
+          <div className="overflow-x-auto">
+            {loadingOutputs ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <span className="ml-3 text-gray-600">Loading previous outputs...</span>
+              </div>
+            ) : previousOutputs.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-gray-600 font-medium">No previous outputs found</p>
+                <p className="text-gray-500 text-sm mt-1">Upload and process a P&ID to see outputs here</p>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">P&ID No</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rev</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lines</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Columns</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enriched</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {previousOutputs.map((output) => (
+                    <tr key={output.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {output.pid_number}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {output.pid_revision || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {output.processing_date}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                          {output.total_lines} lines
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                          {output.total_columns} cols
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {output.file_size_mb} MB
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {output.enrichment_enabled ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                            ✓ Yes
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
+                            Base Only
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => handleDownloadOutput(output.id, output.excel_filename)}
+                          className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
+                        >
+                          <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
+                          Download
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
