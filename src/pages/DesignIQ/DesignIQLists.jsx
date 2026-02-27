@@ -93,10 +93,12 @@ const DesignIQLists = () => {
   const [hmbDocument, setHmbDocument] = useState(null);
   const [pmsDocument, setPmsDocument] = useState(null);
   const [naceDocument, setNaceDocument] = useState(null);
+  const [stressCriticalityDocument, setStressCriticalityDocument] = useState(null);
   const [selectedFormat, setSelectedFormat] = useState(null);
   const hmbRef = useRef(null);
   const pmsRef = useRef(null);
   const naceRef = useRef(null);
+  const stressRef = useRef(null);
   
   // Line Number Format Configuration
   const STRICT_LINE_PATTERNS = {
@@ -351,10 +353,10 @@ const DesignIQLists = () => {
       return;
     }
     
-    if (!pidDocument || !hmbDocument || !pmsDocument || !naceDocument) {
+    if (!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || !stressCriticalityDocument) {
       setUploadResult({
         success: false,
-        message: 'Please upload all 4 documents before processing.'
+        message: 'Please upload all 5 documents before processing.'
       });
       return;
     }
@@ -363,7 +365,7 @@ const DesignIQLists = () => {
     setProcessing(true);
     setUploadResult(null);
     setShowProcessingModal(true);
-    setProcessingProgress({ step: 'Initializing 4-document enrichment...', percent: 5 });
+    setProcessingProgress({ step: 'Initializing 5-document enrichment...', percent: 5 });
     
     // Progress simulation for user feedback (backend does actual processing)
     setTimeout(() => setProcessingProgress({ step: '📤 Uploading P&ID + HMB + PMS + NACE...', percent: 10 }), 2000);
@@ -412,11 +414,12 @@ const DesignIQLists = () => {
         allowVariableSeparators: lineNumberFormat.allowVariableSeparators
       }));
 
-      // ENRICHMENT LAYER: Add all 3 documents for 34-column extraction
+      // ENRICHMENT LAYER: Add all 5 documents for 35-column extraction
       formData.append('hmb_file', hmbDocument);
       formData.append('pms_file', pmsDocument);
       formData.append('nace_file', naceDocument);
-      console.log('[4-Doc Enrichment] All documents attached for 34-column extraction');
+      formData.append('stress_criticality_file', stressCriticalityDocument);
+      console.log('[5-Doc Enrichment] All documents attached for 35-column extraction');
 
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
@@ -568,6 +571,10 @@ const DesignIQLists = () => {
       if (naceDocument) {
         formData.append('nace_file', naceDocument);
         console.log('[Enrichment] NACE document attached:', naceDocument.name);
+      }
+      if (stressCriticalityDocument) {
+        formData.append('stress_criticality_file', stressCriticalityDocument);
+        console.log('[Enrichment] Stress Criticality document attached:', stressCriticalityDocument.name);
       }
 
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -1068,6 +1075,50 @@ const DesignIQLists = () => {
                   </button>
                 )}
               </div>
+
+              {/* Document 5: Stress Criticality */}
+              <div className="border-2 border-yellow-300 rounded-lg p-4 bg-yellow-50">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold text-yellow-900">5. Stress Criticality</label>
+                  <span className="px-2 py-1 bg-yellow-600 text-white text-xs rounded-full">+1 col</span>
+                </div>
+                <p className="text-xs text-yellow-700 mb-3">Section 7 + Temperature Analysis</p>
+                <input
+                  type="file"
+                  ref={stressRef}
+                  accept=".pdf,.xlsx,.xls"
+                  onChange={(e) => setStressCriticalityDocument(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => stressRef.current?.click()}
+                  className="w-full flex items-center justify-center px-3 py-2 text-sm border-2 border-yellow-400 text-yellow-700 rounded-lg hover:bg-yellow-100 transition-colors"
+                >
+                  {stressCriticalityDocument ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="truncate text-xs">{stressCriticalityDocument.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Select Stress Document
+                    </>
+                  )}
+                </button>
+                {stressCriticalityDocument && (
+                  <button
+                    onClick={() => setStressCriticalityDocument(null)}
+                    className="w-full mt-2 text-xs text-yellow-600 hover:text-yellow-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Status Indicator & Process Button */}
@@ -1075,13 +1126,13 @@ const DesignIQLists = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className={`w-4 h-4 rounded-full ${
-                    pidDocument && hmbDocument && pmsDocument && naceDocument 
+                    pidDocument && hmbDocument && pmsDocument && naceDocument && stressCriticalityDocument
                       ? 'bg-green-500 animate-pulse' 
                       : 'bg-gray-300'
                   }`}></div>
                   <div>
                     <span className="text-sm font-medium text-gray-700">
-                      Documents: <strong className="text-lg">{[pidDocument, hmbDocument, pmsDocument, naceDocument].filter(Boolean).length}/4</strong> uploaded
+                      Documents: <strong className="text-lg">{[pidDocument, hmbDocument, pmsDocument, naceDocument, stressCriticalityDocument].filter(Boolean).length}/5</strong> uploaded
                     </span>
                     <div className="flex items-center space-x-2 mt-1">
                       <span className={`text-xs px-2 py-0.5 rounded ${
@@ -1096,14 +1147,17 @@ const DesignIQLists = () => {
                       <span className={`text-xs px-2 py-0.5 rounded ${
                         naceDocument ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
                       }`}>NACE</span>
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        stressCriticalityDocument ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                      }`}>STRESS</span>
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={processAllDocuments}
-                  disabled={!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || loading}
+                  disabled={!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || !stressCriticalityDocument || loading}
                   className={`px-6 py-3 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${
-                    pidDocument && hmbDocument && pmsDocument && naceDocument && !loading
+                    pidDocument && hmbDocument && pmsDocument && naceDocument && stressCriticalityDocument && !loading
                       ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg animate-pulse'
                       : 'bg-gray-300 cursor-not-allowed'
                   }`}
@@ -1121,22 +1175,22 @@ const DesignIQLists = () => {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      <span>Process All 4 Documents</span>
+                      <span>Process All 5 Documents</span>
                     </div>
                   )}
                 </button>
               </div>
-              {pidDocument && hmbDocument && pmsDocument && naceDocument && !loading && (
+              {pidDocument && hmbDocument && pmsDocument && naceDocument && stressCriticalityDocument && !loading && (
                 <div className="mt-3 flex items-center justify-center text-sm text-green-600 font-semibold">
                   <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  Ready! Click "Process All 4 Documents" to extract 34 columns (8 base from P&ID + 26 enriched via AI)
+                  Ready! Click "Process All 5 Documents" to extract 35 columns (8 base from P&ID + 27 enriched via AI)
                 </div>
               )}
-              {(!pidDocument || !hmbDocument || !pmsDocument || !naceDocument) && (
+              {(!pidDocument || !hmbDocument || !pmsDocument || !naceDocument || !stressCriticalityDocument) && (
                 <div className="mt-3 text-center text-sm text-yellow-700 font-medium">
-                  ⚠️ Upload all 4 documents to enable processing with 34-column enrichment
+                  ⚠️ Upload all 5 documents to enable processing with 35-column enrichment
                 </div>
               )}
             </div>
@@ -1449,7 +1503,7 @@ const DesignIQLists = () => {
               </div>
             </div>
 
-            {/* Table Preview - ALL 34 COLUMNS */}
+            {/* Table Preview - ALL 35 COLUMNS */}
             <div className="flex-1 overflow-auto px-6 py-4">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 sticky top-0">
@@ -1465,7 +1519,7 @@ const DesignIQLists = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">From</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider whitespace-nowrap">To</th>
                     
-                    {/* 26 ENRICHED COLUMNS from HMB/PMS/NACE (AI-extracted) */}
+                    {/* 27 ENRICHED COLUMNS from HMB/PMS/NACE + Stress (AI-extracted) */}
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Flow Medium</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Two Phase</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Surge Flow</th>
@@ -1492,6 +1546,7 @@ const DesignIQLists = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">P&ID Rev</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Criticality Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Criticality Stress</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1526,7 +1581,7 @@ const DesignIQLists = () => {
                         {line.to_line || line.to || '-'}
                       </td>
                       
-                      {/* 26 ENRICHED COLUMNS from HMB/PMS/NACE (AI-extracted with OpenAI) */}
+                      {/* 27 ENRICHED COLUMNS from HMB/PMS/NACE + Stress (AI-extracted with OpenAI) */}
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.flow_medium || '-'}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.two_phase || '-'}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.surge_flow || '-'}</td>
@@ -1553,6 +1608,7 @@ const DesignIQLists = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.pid_rev || '-'}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.date || '-'}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.criticality_code || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.criticality_stress || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
