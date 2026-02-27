@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
+import * as XLSX from 'xlsx';
 
 const PIDReport = () => {
   const { id } = useParams();
@@ -20,15 +21,7 @@ const PIDReport = () => {
     fetchReport();
   }, [id]);
 
-  // Debug logging for filter changes
-  useEffect(() => {
-    if (report?.issues) {
-      console.log('[Filter Debug] Current filters:', { filterSeverity, filterStatus });
-      console.log('[Filter Debug] Total issues:', report.issues.length);
-      console.log('[Filter Debug] Sample issue severities:', report.issues.slice(0, 3).map(i => i.severity));
-      console.log('[Filter Debug] Sample issue statuses:', report.issues.slice(0, 3).map(i => i.status));
-    }
-  }, [filterSeverity, filterStatus, report]);
+
 
   const extractAIInsights = (reportData) => {
     if (!reportData) return null;
@@ -354,76 +347,83 @@ const PIDReport = () => {
     }
   };
 
-  const handleExport = async (format) => {
+    const handleExport = (format) => {
+    if (!report || !report.issues) {
+      alert('No report data available to export');
+      return;
+    }
+
     try {
-      // Using simple-test-pk endpoint (the only working pattern)
-      const response = await apiClient.get(
-        `/pid/simple-test-pk/${id}/?format=${format}`,
-        {
-          responseType: 'blob',
-          // Don't transform blob responses
-          transformResponse: [(data) => data]
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Summary Sheet
+      const summaryData = [
+        ['P&ID Analysis Report'],
+        [''],
+        ['Drawing Number', report.pid_drawing_number || 'N/A'],
+        ['Total Issues', report.total_issues || 0],
+        ['Approved', report.approved_count || 0],
+        ['Ignored', report.ignored_count || 0],
+        ['Pending', report.pending_count || 0],
+        [''],
+        ['Issues by Severity'],
+        ['Critical', report.issues.filter(i => i.severity === 'critical').length],
+        ['Major', report.issues.filter(i => i.severity === 'major').length],
+        ['Minor', report.issues.filter(i => i.severity === 'minor').length],
+      ];
+
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+      // Issues Sheet with exact column headers requested
+      const issuesData = [
+        ['#', 'P&ID Reference', 'Issue Observed', 'Action Required', 'Direction', 'Severity', 'Status', 'Actions']
+      ];
+
+      report.issues.forEach((issue, index) => {
+        
+        // Get direction from location_on_drawing
+        let direction = 'N/A';
+        if (issue.location_on_drawing) {
+          if (typeof issue.location_on_drawing === 'string') {
+            try {
+              const loc = JSON.parse(issue.location_on_drawing);
+              direction = loc.zone || loc.drawing_section || 'N/A';
+            } catch {
+              direction = 'N/A';
+            }
+          } else if (typeof issue.location_on_drawing === 'object') {
+            direction = issue.location_on_drawing.zone || issue.location_on_drawing.drawing_section || 'N/A';
+          }
         }
-      );
-      
-      // Check if response is actually a blob
-      if (!(response.data instanceof Blob)) {
-        console.error('Response is not a blob:', response.data);
-        alert(`Failed to export report as ${format}. Invalid response format.`);
-        return;
-      }
-      
-      // Get filename from Content-Disposition header or use default
-      let filename = `PID_Analysis_${drawing.drawing_number || 'Report'}_${new Date().toISOString().split('T')[0]}`;
-      
-      const contentDisposition = response.headers['content-disposition'];
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1];
-        }
-      } else {
-        // Add extension if not from header
-        if (format === 'pdf') {
-          filename = `${filename}.pdf`;
-        } else if (format === 'excel') {
-          filename = `${filename}.xlsx`;
-        } else if (format === 'csv') {
-          filename = `${filename}.csv`;
-        }
-      }
-      
-      // Create download link
-      const url = window.URL.createObjectURL(response.data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      
-      // Trigger download
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      
-    } catch (err) {
-      console.error(`Failed to export as ${format}:`, err);
-      
-      // Check if error response is JSON (error message from backend)
-      if (err.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const errorData = JSON.parse(text);
-          alert(`Failed to export: ${errorData.error || errorData.detail || 'Unknown error'}`);
-        } catch {
-          alert(`Failed to export report as ${format}. Please try again.`);
-        }
-      } else {
-        alert(`Failed to export report as ${format}. Please try again.`);
-      }
+
+        const rowData = [
+          issue.serial_number || (index + 1),
+          (issue.pid_reference || 'N/A') + (issue.category ? ` - ${issue.category}` : ''),
+          issue.issue_observed || 'N/A',
+          issue.action_required || 'N/A',
+          direction,
+          issue.severity || 'N/A',
+          issue.status || 'pending',
+          issue.remark || issue.actions || 'N/A'
+        ];
+
+        issuesData.push(rowData);
+      });
+
+      const issuesSheet = XLSX.utils.aoa_to_sheet(issuesData);
+      XLSX.utils.book_append_sheet(wb, issuesSheet, 'Issues');
+
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `PID_Report_${report.pid_drawing}_${timestamp}.xlsx`;
+
+      // Download
+      XLSX.writeFile(wb, filename);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Error generating Excel file: ' + error.message);
     }
   };
 
@@ -527,48 +527,18 @@ const PIDReport = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">P&ID Design Verification Report</h1>
           
-          {/* Export Buttons */}
+                    {/* Export Button */}
           {report && (
-            <div className="flex space-x-2">
-              <button
-                onClick={handleReAnalyze}
-                className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 shadow-md transition-colors"
-                title="Re-analyze drawing with latest AI model to get Direction column and updated analysis"
-              >
-                <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Re-Analyze
-              </button>
-              <button
-                onClick={() => handleExport('pdf')}
-                className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-md transition-colors"
-              >
-                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-                </svg>
-                Export PDF
-              </button>
-              <button
-                onClick={() => handleExport('excel')}
-                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-md transition-colors"
-              >
-                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-                Export Excel
-              </button>
-              <button
-                onClick={() => handleExport('csv')}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-md transition-colors"
-              >
-                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
-                  <path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-                </svg>
-                Export CSV
-              </button>
-            </div>
+            <button
+              onClick={() => handleExport('excel')}
+              className="flex items-center px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 shadow-md transition-colors"
+              title="Download report as Excel spreadsheet"
+            >
+              <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+              Download Excel
+            </button>
           )}
         </div>
       </div>
@@ -1302,3 +1272,4 @@ const PIDReport = () => {
 };
 
 export default PIDReport;
+
