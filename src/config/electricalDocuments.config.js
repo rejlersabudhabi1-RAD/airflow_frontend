@@ -54,6 +54,16 @@ export const ELECTRICAL_DOCUMENTS = [
     status: DOCUMENT_STATUS.ACTIVE,
     route: '/engineering/electrical/datasheet'
   },
+  {
+    id: 'excel_quality_checker',
+    code: 'EE-DS-002',
+    name: 'Excel Quality Checker',
+    fullName: 'AI-Powered Excel Quality Checker',
+    description: 'Intelligent validation and quality checking for electrical Excel datasheets with AI-powered analysis',
+    category: DOCUMENT_CATEGORIES.DATASHEETS,
+    status: DOCUMENT_STATUS.ACTIVE,
+    route: '/engineering/electrical/datasheet/quality-checker'
+  },
   
   // DIAGRAMS
   {

@@ -81,9 +81,9 @@ const ElectricalDocumentsHub = () => {
 
   const handleDocumentClick = (doc) => {
     if (doc.status === DOCUMENT_STATUS.ACTIVE) {
-      // Navigate to upload page for now (can be customized per document type later)
-      // Most logical default route until individual document pages are built
-      navigate('/engineering/electrical/datasheet/upload');
+      // SOFT-CODED: Use route from config if available, fallback to upload page
+      const targetRoute = doc.route || '/engineering/electrical/datasheet/upload';
+      navigate(targetRoute);
     } else {
       // Show coming soon message
       alert(`${doc.name} is ${doc.status === DOCUMENT_STATUS.COMING_SOON ? 'coming soon' : 'in development'}!`);
