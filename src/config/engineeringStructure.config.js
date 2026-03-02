@@ -82,6 +82,7 @@ export const ENGINEERING_DISCIPLINES = {
     description: 'Critical line management and piping specifications',
     color: 'orange',
     gradient: 'from-orange-500 to-orange-600',
+    order: 2,
     subFeatures: [
       {
         id: 'criticalLineList',
@@ -92,19 +93,7 @@ export const ENGINEERING_DISCIPLINES = {
         description: '5-document upload (P&ID+PFD+HMB+PMS+NACE) for full 35-column extraction with enrichment',
         moduleCode: 'designiq',
         badge: 'FULL'
-      }
-    ]
-  },
-  piping: {
-    id: 'piping',
-    name: 'Piping',
-    fullName: 'Piping Engineering',
-    icon: WrenchIcon,
-    description: 'Piping design and material specifications',
-    color: 'orange',
-    gradient: 'from-orange-500 to-orange-600',
-    order: 2,
-    subFeatures: [
+      },
       {
         id: 'pms',
         name: 'PMS',
