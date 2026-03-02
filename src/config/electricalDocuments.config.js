@@ -45,6 +45,18 @@ export const CATEGORY_DESCRIPTIONS = {
 export const ELECTRICAL_DOCUMENTS = [
   // DATASHEETS
   {
+    id: 'unified_quality_checker',
+    code: 'EE-UNIVERSAL',
+    name: 'Universal Quality Checker',
+    fullName: 'AI-Powered Universal Quality Checker',
+    description: 'GPT-4 powered universal quality checker for ALL electrical equipment types with ADNOC standards compliance',
+    category: DOCUMENT_CATEGORIES.DATASHEETS,
+    status: DOCUMENT_STATUS.ACTIVE,
+    route: '/engineering/electrical/datasheet/unified-checker',
+    featured: true,
+    badge: 'AI Universal Tool'
+  },
+  {
     id: 'electrical_datasheet',
     code: 'EE-DS-001',
     name: 'Electrical Datasheet',
@@ -53,6 +65,16 @@ export const ELECTRICAL_DOCUMENTS = [
     category: DOCUMENT_CATEGORIES.DATASHEETS,
     status: DOCUMENT_STATUS.ACTIVE,
     route: '/engineering/electrical/datasheet'
+  },
+  {
+    id: 'excel_quality_checker',
+    code: 'EE-DS-002',
+    name: 'Excel Quality Checker',
+    fullName: 'AI-Powered Excel Quality Checker',
+    description: 'Intelligent validation and quality checking for electrical Excel datasheets with AI-powered analysis',
+    category: DOCUMENT_CATEGORIES.DATASHEETS,
+    status: DOCUMENT_STATUS.ACTIVE,
+    route: '/engineering/electrical/datasheet/quality-checker'
   },
   
   // DIAGRAMS

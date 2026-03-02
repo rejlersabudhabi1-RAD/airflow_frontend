@@ -81,9 +81,9 @@ const ElectricalDocumentsHub = () => {
 
   const handleDocumentClick = (doc) => {
     if (doc.status === DOCUMENT_STATUS.ACTIVE) {
-      // Navigate to upload page for now (can be customized per document type later)
-      // Most logical default route until individual document pages are built
-      navigate('/engineering/electrical/datasheet/upload');
+      // SOFT-CODED: Use route from config if available, fallback to upload page
+      const targetRoute = doc.route || '/engineering/electrical/datasheet/upload';
+      navigate(targetRoute);
     } else {
       // Show coming soon message
       alert(`${doc.name} is ${doc.status === DOCUMENT_STATUS.COMING_SOON ? 'coming soon' : 'in development'}!`);
@@ -195,6 +195,47 @@ const ElectricalDocumentsHub = () => {
           </div>
         </div>
       </div>
+      
+      {/* SOFT-CODED: Featured Tools Section - Universal Tools shown prominently */}
+      {ELECTRICAL_DOCUMENTS.some(doc => doc.featured && doc.status === DOCUMENT_STATUS.ACTIVE) && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl shadow-2xl p-8 text-white mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <CheckCircleIcon className="h-8 w-8" />
+              <h2 className="text-2xl font-bold">Universal AI-Powered Tools</h2>
+            </div>
+            <p className="text-purple-100 mb-6">
+              Smart tools that work with ALL equipment types - Upload any electrical datasheet and get instant AI-powered quality analysis
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {ELECTRICAL_DOCUMENTS.filter(doc => doc.featured && doc.status === DOCUMENT_STATUS.ACTIVE).map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => handleDocumentClick(doc)}
+                  className="bg-white/10 backdrop-blur-lg hover:bg-white/20 rounded-xl p-6 text-left transition-all border-2 border-white/20 hover:border-white/40 hover:scale-105"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="text-xs font-mono text-purple-200 mb-1">{doc.code}</div>
+                      <h3 className="text-xl font-bold text-white">{doc.name}</h3>
+                    </div>
+                    {doc.badge && (
+                      <span className="px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full text-xs font-bold">
+                        {doc.badge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-purple-100 mb-4">{doc.description}</p>
+                  <div className="flex items-center gap-2 text-white font-semibold">
+                    Launch Tool
+                    <RocketLaunchIcon className="h-5 w-5" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Documents Grid - Organized by Category */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
