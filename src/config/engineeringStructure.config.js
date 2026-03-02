@@ -54,6 +54,16 @@ export const ENGINEERING_DISCIPLINES = {
         badge: 'NEW'
       },
       {
+        id: 'lineList',
+        name: 'Line List',
+        fullName: 'P&ID Line List Extraction',
+        icon: TableCellsIcon,
+        path: '/designiq/stress-critical-line-list',
+        description: 'Extract line list data from P&ID documents',
+        moduleCode: 'line_list_extraction',
+        badge: 'NEW'
+      },
+      {
         id: 'processDataSheet',
         name: 'Datasheets',
         fullName: 'Process Datasheets',
@@ -85,6 +95,16 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'Piping material specification management',
         moduleCode: 'piping_pms',
         badge: 'New'
+      },
+      {
+        id: 'criticalLineList',
+        name: 'Critical Line List',
+        fullName: 'Stress Critical Line List',
+        icon: TableCellsIcon,
+        path: '/engineering/piping/datasheet/critical-stress-lines',
+        description: 'Critical piping line analysis with stress criteria',
+        moduleCode: 'critical_line_list',
+        badge: 'FULL'
       },
       {
         id: 'pipingDataSheet',
