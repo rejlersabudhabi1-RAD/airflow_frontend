@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ViewColumnsIcon,
-  CubeIcon,
-  LinkIcon,
-  BellAlertIcon,
   PlusIcon,
   MagnifyingGlassIcon,
   ArrowDownTrayIcon,
@@ -14,44 +10,14 @@ import {
   ClockIcon,
   FunnelIcon
 } from '@heroicons/react/24/outline';
-import { usePageControls } from '../../hooks/usePageControls';
-import { PageControlButtons } from '../../components/Common/PageControlButtons';
-import { STORAGE_KEYS } from '../../config/app.config';
-import { API_BASE_URL } from '../../config/api.config';
-import { apiClientLongTimeout } from '../../services/api.service';
+import { usePageControls } from '../../../hooks/usePageControls';
+import { PageControlButtons } from '../../../components/Common/PageControlButtons';
+import { STORAGE_KEYS } from '../../../config/app.config';
+import { API_BASE_URL } from '../../../config/api.config';
+import { apiClientLongTimeout } from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 
-// List types configuration (matches backend)
-const LIST_TYPES = {
-  line_list: {
-    name: 'Line List',
-    icon: ViewColumnsIcon,
-    description: 'Piping line specifications and attributes',
-    color: 'blue',
-    fields: ['line_number', 'service', 'size', 'rating', 'material']
-  },
-  equipment_list: {
-    name: 'Equipment List',
-    icon: CubeIcon,
-    description: 'Equipment specifications and details',
-    color: 'green',
-    fields: ['tag_number', 'description', 'type', 'capacity', 'duty']
-  },
-  tie_in_list: {
-    name: 'Tie-In List',
-    icon: LinkIcon,
-    description: 'Connection points and tie-in specifications',
-    color: 'purple',
-    fields: ['tie_in_number', 'location', 'size', 'type', 'connection_details']
-  },
-  alarm_trip_list: {
-    name: 'Alarm/Trip List',
-    icon: BellAlertIcon,
-    description: 'Safety alarms and trip setpoints',
-    color: 'red',
-    fields: ['tag', 'description', 'alarm_type', 'setpoint', 'action']
-  }
-};
+// Simplified for Critical Line List only (single-purpose page)
 
 const STATUS_COLORS = {
   active: 'green',
@@ -67,7 +33,7 @@ const CriticalLineList = () => {
   const fileInputRef = useRef(null);
   const fileInputWithAreaRef = useRef(null);
   const fileInputOffshoreRef = useRef(null);
-  const [selectedListType, setSelectedListType] = useState(searchParams.get('type') || 'line_list');
+  // Removed selectedListType state - single-purpose page for critical line list
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -124,13 +90,11 @@ const CriticalLineList = () => {
     allowVariableSeparators: true  // Allow -, –, —, etc.
   });
 
-  const currentListConfig = LIST_TYPES[selectedListType];
-
   // Page controls (Fullscreen, Sidebar, Auto-refresh)
   const pageControls = usePageControls({
     refreshCallback: () => fetchData(true),
     autoRefreshInterval: 30000, // 30 seconds
-    storageKey: `designiq_lists_${selectedListType}`,
+    storageKey: 'designiq_lists_line_list',
   });
 
   // Load saved line format configuration from localStorage
@@ -155,13 +119,11 @@ const CriticalLineList = () => {
 
   // Fetch previous outputs for download
   const fetchPreviousOutputs = useCallback(async () => {
-    if (selectedListType !== 'line_list') return; // Only for line_list
-    
     setLoadingOutputs(true);
     try {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       const response = await fetch(
-        `${API_BASE_URL}/designiq/lists/previous_outputs/?list_type=${selectedListType}`,
+        `${API_BASE_URL}/designiq/lists/previous_outputs/?list_type=line_list`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -178,7 +140,7 @@ const CriticalLineList = () => {
     } finally {
       setLoadingOutputs(false);
     }
-  }, [selectedListType]);
+  }, []);
 
   const fetchData = useCallback(async (isAutoRefresh = false) => {
     if (isAutoRefresh) setIsRefreshing(true);
@@ -187,7 +149,7 @@ const CriticalLineList = () => {
       const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       // Fetch items
-      let itemsUrl = `${API_BASE_URL}/designiq/lists/?list_type=${selectedListType}`;
+      let itemsUrl = `${API_BASE_URL}/designiq/lists/?list_type=line_list`;
       if (statusFilter !== 'all') {
         itemsUrl += `&status=${statusFilter}`;
       }
@@ -212,7 +174,7 @@ const CriticalLineList = () => {
 
       // Fetch stats
       const statsResponse = await fetch(
-        `${API_BASE_URL}/designiq/lists/stats/?list_type=${selectedListType}`,
+        `${API_BASE_URL}/designiq/lists/stats/?list_type=line_list`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -233,7 +195,7 @@ const CriticalLineList = () => {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedListType, statusFilter, searchTerm]);
+  }, [statusFilter, searchTerm]);
 
   useEffect(() => {
     fetchData();
@@ -685,8 +647,7 @@ const CriticalLineList = () => {
       {/* Header with Controls */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Engineering Lists</h1>
-          <p className="mt-2 text-gray-600">Manage line lists, equipment, tie-ins, and alarms</p>
+          <h1 className="text-3xl font-bold text-gray-900">Stress Critical Line List</h1>
         </div>
 
         {/* Page Control Buttons */}
@@ -702,33 +663,8 @@ const CriticalLineList = () => {
         />
       </div>
 
-      {/* List Type Tabs */}
+      {/* Simplified - No list type selection needed */}
       <div className="bg-white rounded-lg shadow-sm mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-4 px-6" aria-label="Tabs">
-            {Object.entries(LIST_TYPES).map(([key, config]) => {
-              const Icon = config.icon;
-              const isActive = selectedListType === key;
-              
-              return (
-                <button
-                  key={key}
-                  onClick={() => setSelectedListType(key)}
-                  className={`
-                    flex items-center px-4 py-4 text-sm font-medium border-b-2 transition-colors
-                    ${isActive
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  <Icon className="w-5 h-5 mr-2" />
-                  {config.name}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
 
         {/* Stats Cards */}
         {stats && (
@@ -788,8 +724,7 @@ const CriticalLineList = () => {
         </div>
         
         {/* P&ID Upload Notice - Full Width Banner */}
-        {selectedListType === 'line_list' && (
-          <div className="w-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-300 rounded-xl p-4">
+        <div className="w-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-300 rounded-xl p-4">
             <div className="flex items-center space-x-3">
               <svg className="w-8 h-8 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -807,11 +742,9 @@ const CriticalLineList = () => {
               </div>
             </div>
           </div>
-        )}
       </div>
       
       {/* 4-DOCUMENT ENRICHED EXTRACTION - Systematic Upload Interface */}
-      {selectedListType === 'line_list' && (
       <div className="border-t-2 border-purple-200 pt-4 mt-4">
             <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-4 mb-4">
               <div className="flex items-center space-x-3 mb-2">
@@ -1633,7 +1566,6 @@ const CriticalLineList = () => {
       )}
 
       {/* Previous Outputs Section - Historical Downloads */}
-      {selectedListType === 'line_list' && (
         <div className="mt-8 bg-white rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden">
           {/* Section Header */}
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b-2 border-indigo-200">
@@ -1741,7 +1673,6 @@ const CriticalLineList = () => {
             )}
           </div>
         </div>
-      )}
 
       {/* Line Number Format Configuration Modal */}
       {showFormatConfigModal && (

@@ -17,23 +17,6 @@ const PipingDataSheet = () => {
   // Soft-coded data sheet types configuration
   const dataSheetTypes = [
     {
-      id: 'critical_stress',
-      name: 'Critical Stress Line List',
-      description: 'Generate critical stress analysis for piping systems with AI-powered document processing',
-      icon: TableCellsIcon,
-      color: 'orange',
-      gradient: 'from-orange-500 to-orange-600',
-      path: '/engineering/piping/datasheet/critical-stress-lines',
-      badge: 'AI Powered',
-      features: [
-        'Project type selection (Offshore/Onshore/General)',
-        'Mandatory document uploads (PFD, P&ID, Scope)',
-        'Optional supporting documents',
-        'Automated line list generation',
-        'Stress analysis reporting'
-      ]
-    },
-    {
       id: 'piping_specs',
       name: 'Piping Specifications',
       description: 'Manage piping material specifications and standards',
@@ -233,9 +216,8 @@ const PipingDataSheet = () => {
               </h4>
               <p className="text-sm text-blue-800 dark:text-blue-200">
                 This centralized hub provides access to all piping engineering data sheet functionality. 
-                Start with <strong>Critical Stress Line List</strong> for AI-powered stress analysis, 
-                or explore other modules as they become available. Each module is designed to streamline 
-                your piping engineering workflow with intelligent automation and comprehensive data management.
+                Explore the available modules to streamline your piping engineering workflow with 
+                intelligent automation and comprehensive data management.
               </p>
             </div>
           </div>
