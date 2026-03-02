@@ -84,6 +84,7 @@ import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpFor
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
+import LineList from './pages/Engineering/Process/LineList'
 // Electrical Datasheet Components
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
@@ -678,6 +679,25 @@ function App() {
           }
         />
 
+
+        {/* Line List - Base Extraction (P&ID Only) */}
+        <Route
+          path="engineering/process/line-list"
+          element={
+            <ProtectedRoute>
+              <LineList />
+            </ProtectedRoute>
+          }
+        />
+        {/* Critical Line List - Full Enrichment (5 Documents) */}
+        <Route
+          path="engineering/piping/critical-line-list"
+          element={
+            <ProtectedRoute>
+              <CriticalLineList />
+            </ProtectedRoute>
+          }
+        />
           {/* Piping Routes */}
           {/* Piping Material Specification - Coming Soon */}
           <Route

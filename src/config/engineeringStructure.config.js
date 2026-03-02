@@ -63,9 +63,38 @@ export const ENGINEERING_DISCIPLINES = {
         moduleCode: 'process_datasheet',
         badge: 'New'
       }
+    ,      {        id: 'lineList',
+        name: 'Line List',
+        fullName: 'Line List - Base Extraction',
+        icon: TableCellsIcon,
+        path: '/engineering/process/line-list',
+        description: 'Extract 8 base columns from P&ID (P&ID-only, no enrichment)',
+        moduleCode: 'pid_analysis'
+      }
     ]
   },
 
+  piping: {
+    id: 'piping',
+    name: 'Piping',
+    fullName: 'Piping Engineering',
+    icon: WrenchIcon,
+    description: 'Critical line management and piping specifications',
+    color: 'orange',
+    gradient: 'from-orange-500 to-orange-600',
+    subFeatures: [
+      {
+        id: 'criticalLineList',
+        name: 'Critical Line List',
+        fullName: 'Critical Line List - Full Enrichment',
+        icon: TableCellsIcon,
+        path: '/engineering/piping/critical-line-list',
+        description: '5-document upload (P&ID+PFD+HMB+PMS+NACE) for full 35-column extraction with enrichment',
+        moduleCode: 'designiq',
+        badge: 'FULL'
+      }
+    ]
+  },
   piping: {
     id: 'piping',
     name: 'Piping',
@@ -373,4 +402,9 @@ export const hasAccess = (moduleCode, userModules, isAdmin) => {
 }
 
 export default ENGINEERING_DISCIPLINES
+
+
+
+
+
 
