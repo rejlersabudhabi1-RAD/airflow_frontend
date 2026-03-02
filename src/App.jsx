@@ -90,6 +90,7 @@ import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDa
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
+import UnifiedElectricalQualityChecker from './pages/Engineering/Electrical/UnifiedElectricalQualityChecker'
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
@@ -727,6 +728,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
               <ElectricalDocumentsHub />
+            </ModuleProtectedRoute>
+          }
+        />
+        
+        {/* Unified Quality Checker - Universal AI-Powered Tool for ALL Equipment Types */}
+        <Route
+          path="engineering/electrical/datasheet/unified-checker"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <UnifiedElectricalQualityChecker />
             </ModuleProtectedRoute>
           }
         />
