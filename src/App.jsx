@@ -83,6 +83,7 @@ import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
+import SDVStreamsPage from './pages/ProcessDatasheet/SDVStreamsPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 import LineList from './pages/Engineering/Process/LineList'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
@@ -662,7 +663,17 @@ function App() {
           }
         />
 
-        {/* Process Data Sheet - Pressure Instrument P&ID Upload */}
+                {/* Process Data Sheet - SDV Streams P&ID Upload */}
+        <Route
+          path="engineering/process/datasheet/streams"
+          element={
+            <ProtectedRoute>
+              <SDVStreamsPage />
+            </ProtectedRoute>
+          }
+        />
+
+{/* Process Data Sheet - Pressure Instrument P&ID Upload */}
         <Route
           path="engineering/process/datasheet/pressure-instrument"
           element={
@@ -956,6 +967,7 @@ function App() {
 }
 
 export default App
+
 
 
 
