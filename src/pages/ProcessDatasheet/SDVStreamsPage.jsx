@@ -20,9 +20,7 @@ import {
   Shield,
   Workflow,
   FileCheck,
-  Download,
-  Thermometer,
-  Database
+  Download
 } from 'lucide-react';
 import apiClient from '../../services/api.service';
 
@@ -56,7 +54,7 @@ const SDVStreamsPage = () => {
       closureTime: true,
       failPosition: true
     },
-    supportedFormats: ['PDF'],
+    supportedFormats: ['PDF', 'PNG', 'JPG', 'JPEG', 'DWG'],
     maxFileSize: 50 // MB
   };
 
@@ -68,8 +66,6 @@ const SDVStreamsPage = () => {
   const [analysisStage, setAnalysisStage] = useState('');
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState('');
-  const [hmbFile, setHmbFile] = useState(null);
-  const hmbFileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     drawing_number: 'AUTO',
@@ -157,31 +153,6 @@ const SDVStreamsPage = () => {
     setSelectedOptions(prev => ({ ...prev, [option]: !prev[option] }));
   };
 
-
-  // HMB File handling
-  const handleHmbFileChange = (e) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
-      const hmbFormats = ['PDF'];
-      
-      if (!hmbFormats.includes(fileExtension)) {
-        setError(`Unsupported HMB format. Please upload: ${hmbFormats.join(', ')}`);
-        return;
-      }
-
-      const fileSizeMB = selectedFile.size / (1024 * 1024);
-      if (fileSizeMB > 50) {
-        setError('HMB file size exceeds 50MB limit');
-        return;
-      }
-
-      setHmbFile(selectedFile);
-      setError('');
-    }
-  };
-
-
   // Upload and analyze P&ID
   const handleUpload = async () => {
     if (!file) {
@@ -206,9 +177,6 @@ const SDVStreamsPage = () => {
       formDataToSend.append('auto_analyze', selectedOptions.generateDatasheets);
       formDataToSend.append('analysis_options', JSON.stringify(selectedOptions));
       formDataToSend.append('equipment_type', 'sdv_streams');
-      if (hmbFile) {
-        formDataToSend.append('hmb_file', hmbFile);
-      }
 
       setUploadProgress(30);
       setAnalysisStage('Analyzing SDV streams...');
@@ -264,10 +232,6 @@ const SDVStreamsPage = () => {
     setAnalysisStage('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
-    }
-    setHmbFile(null);
-    if (hmbFileInputRef.current) {
-      hmbFileInputRef.current.value = '';
     }
   };
 
@@ -565,90 +529,6 @@ const SDVStreamsPage = () => {
               </div>
             )}
 
-
-            {/* HMB Upload Section */}
-            <div className="mt-6 border-t-2 border-dashed border-orange-200 pt-6">
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 border border-orange-200">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-3 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg">
-                    <Thermometer className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Heat & Material Balance (HMB) Upload
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Enrich your SDV streams with process conditions and material properties
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white rounded-lg p-4 border border-orange-100">
-                    <Database className="w-5 h-5 text-orange-600 mb-2" />
-                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Process Conditions</h4>
-                    <p className="text-xs text-gray-600">Temperature, pressure, flow rates</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-orange-100">
-                    <Workflow className="w-5 h-5 text-amber-600 mb-2" />
-                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Material Properties</h4>
-                    <p className="text-xs text-gray-600">Composition, density, phase</p>
-                  </div>
-                  <div className="bg-white rounded-lg p-4 border border-orange-100">
-                    <Shield className="w-5 h-5 text-red-600 mb-2" />
-                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Safety Data</h4>
-                    <p className="text-xs text-gray-600">Hazard classification</p>
-                  </div>
-                </div>
-
-                <div
-                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
-                    hmbFile
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-orange-300 bg-white hover:border-orange-400'
-                  }`}
-                  onClick={() => hmbFileInputRef.current?.click()}
-                >
-                  <input
-                    ref={hmbFileInputRef}
-                    type="file"
-                    onChange={handleHmbFileChange}
-                    accept=".pdf"
-                    className="hidden"
-                  />
-
-                  {!hmbFile ? (
-                    <>
-                      <Thermometer className="w-12 h-12 text-orange-400 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-gray-700 mb-1">
-                        Drop your HMB file here or click to browse
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Supported: PDF only (Max 50MB)
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-gray-900 mb-1">
-                        {hmbFile.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(hmbFile.size / (1024 * 1024)).toFixed(2)} MB
-                      </p>
-                    </>
-                  )}
-                </div>
-
-                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-xs text-gray-700">
-                    <strong>Data extracted:</strong> Temperature, Pressure, Flow Rate, Composition, Density, Phase, Molecular Weight, Stream ID
-                  </p>
-                </div>
-              </div>
-            </div>
-
-
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
@@ -737,4 +617,3 @@ const SDVStreamsPage = () => {
 };
 
 export default SDVStreamsPage;
-
