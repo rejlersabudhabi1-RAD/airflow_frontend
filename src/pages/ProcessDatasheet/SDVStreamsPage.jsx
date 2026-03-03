@@ -182,7 +182,7 @@ const SDVStreamsPage = () => {
   };
 
 
-  // Upload and analyze P&ID
+  // Upload and analyze P&ID + HMB with AI orchestration
   const handleUpload = async () => {
     if (!file) {
       setError('Please select a P&ID file');
@@ -192,63 +192,79 @@ const SDVStreamsPage = () => {
     setUploading(true);
     setError('');
     setUploadProgress(0);
-    setAnalysisStage('Uploading P&ID...');
+    setAnalysisStage('Uploading files...');
 
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('pid_file', file);
-      formDataToSend.append('drawing_number', formData.drawing_number);
-      formDataToSend.append('drawing_title', formData.drawing_title);
-      formDataToSend.append('revision', formData.revision);
-      formDataToSend.append('project_name', formData.project_name);
-      formDataToSend.append('area', formData.area);
-      formDataToSend.append('system', formData.system);
-      formDataToSend.append('auto_analyze', selectedOptions.generateDatasheets);
-      formDataToSend.append('analysis_options', JSON.stringify(selectedOptions));
       formDataToSend.append('equipment_type', 'sdv_streams');
+      
       if (hmbFile) {
         formDataToSend.append('hmb_file', hmbFile);
       }
 
-      setUploadProgress(30);
-      setAnalysisStage('Analyzing SDV streams...');
+      setUploadProgress(20);
+      setAnalysisStage('Extracting P&ID data...');
 
-      // Call SDV streams analysis endpoint
+      // Call AI-orchestrated SDV streams endpoint
       const response = await apiClient.post(
-        '/process-datasheet/datasheets/extract/',
+        '/process-datasheet/datasheets/extract-sdv-streams/',
         formDataToSend,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          responseType: 'blob', // Important: expect Excel file back
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(Math.min(percentCompleted, 90));
+            setUploadProgress(Math.min(20 + percentCompleted * 0.6, 80));
           },
         }
       );
 
-      setUploadProgress(100);
-      setAnalysisStage('Analysis complete!');
+      setUploadProgress(90);
+      setAnalysisStage('Generating datasheet...');
 
-      // Handle response
-      if (response.data.success) {
-        setUploadResult({
-          success: true,
-          jobId: response.data.job_id,
-          status: response.data.status,
-          message: response.data.message,
-          detectedValves: response.data.detected_valves || [],
-          streamCount: response.data.stream_count || 0,
-          datasheetGenerated: response.data.datasheet_generated || false
-        });
-      } else {
-        throw new Error(response.data.error || 'Analysis failed');
-      }
+      // Response is an Excel file - trigger download
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `SDV_Datasheet_${Date.now()}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      setUploadProgress(100);
+      setAnalysisStage('Datasheet downloaded!');
+
+      // Show success message
+      setUploadResult({
+        success: true,
+        message: 'SDV datasheet generated and downloaded successfully!',
+        datasheetGenerated: true
+      });
 
     } catch (err) {
       console.error('SDV streams upload error:', err);
-      setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.');
+      
+      // If error response is JSON, try to parse it
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const errorData = JSON.parse(text);
+          setError(errorData.error || 'Upload failed. Please try again.');
+        } catch {
+          setError('Upload failed. Please try again.');
+        }
+      } else {
+        setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.');
+      }
+      
       setUploadResult({ success: false });
     } finally {
       setUploading(false);
