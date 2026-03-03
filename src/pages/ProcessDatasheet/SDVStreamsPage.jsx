@@ -56,7 +56,7 @@ const SDVStreamsPage = () => {
       closureTime: true,
       failPosition: true
     },
-    supportedFormats: ['PDF', 'PNG', 'JPG', 'JPEG', 'DWG'],
+    supportedFormats: ['PDF'],
     maxFileSize: 50 // MB
   };
 
@@ -163,7 +163,7 @@ const SDVStreamsPage = () => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
-      const hmbFormats = ['PDF', 'XLSX', 'XLS', 'CSV'];
+      const hmbFormats = ['PDF'];
       
       if (!hmbFormats.includes(fileExtension)) {
         setError(`Unsupported HMB format. Please upload: ${hmbFormats.join(', ')}`);
@@ -609,7 +609,7 @@ const SDVStreamsPage = () => {
                     ref={hmbFileInputRef}
                     type="file"
                     onChange={handleHmbFileChange}
-                    accept=".pdf,.xlsx,.xls,.csv"
+                    accept=".pdf"
                     className="hidden"
                   />
 
@@ -620,7 +620,7 @@ const SDVStreamsPage = () => {
                         Drop your HMB file here or click to browse
                       </p>
                       <p className="text-xs text-gray-500">
-                        Supported: PDF, XLSX, XLS, CSV (Max 50MB)
+                        Supported: PDF only (Max 50MB)
                       </p>
                     </>
                   ) : (
