@@ -69,17 +69,7 @@ const SDVStreamsPage = () => {
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState('');
   const [hmbFile, setHmbFile] = useState(null);
-  const [hmbDragActive, setHmbDragActive] = useState(false);
-  const [hmbUploadResult, setHmbUploadResult] = useState(null);
-  const [showHmbUpload, setShowHmbUpload] = useState(false);
   const hmbFileInputRef = useRef(null);
-
-  const [hmbFile, setHmbFile] = useState(null);
-  const [hmbDragActive, setHmbDragActive] = useState(false);
-  const [hmbUploadResult, setHmbUploadResult] = useState(null);
-  const [showHmbUpload, setShowHmbUpload] = useState(false);
-  const hmbFileInputRef = useRef(null);
-
 
   const [formData, setFormData] = useState({
     drawing_number: 'AUTO',
@@ -172,106 +162,22 @@ const SDVStreamsPage = () => {
   const handleHmbFileChange = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      validateAndSetHmbFile(selectedFile);
-    }
-  };
-
-  const validateAndSetHmbFile = (selectedFile) => {
-    const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
-    const hmbFormats = ['PDF', 'XLSX', 'XLS', 'CSV'];
-    
-    if (!hmbFormats.includes(fileExtension)) {
-      setError(`Unsupported HMB format. Please upload: ${hmbFormats.join(', ')}`);
-      return;
-    }
-
-    const fileSizeMB = selectedFile.size / (1024 * 1024);
-    if (fileSizeMB > 50) {
-      setError('HMB file size exceeds 50MB limit');
-      return;
-    }
-
-    setHmbFile(selectedFile);
-    setError('');
-  };
-
-  const handleHmbDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setHmbDragActive(true);
-    } else if (e.type === "dragleave") {
-      setHmbDragActive(false);
-    }
-  };
-
-  const handleHmbDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setHmbDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetHmbFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleHmbUpload = async () => {
-    if (!hmbFile) {
-      setError('Please select an HMB file');
-      return;
-    }
-
-    if (!uploadResult?.jobId) {
-      setError('Please upload P&ID first');
-      return;
-    }
-
-    setUploading(true);
-    setError('');
-    setAnalysisStage('Processing HMB data...');
-
-    try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('hmb_file', hmbFile);
-      formDataToSend.append('job_id', uploadResult.jobId);
-      formDataToSend.append('equipment_type', 'sdv_streams');
-
-      const response = await apiClient.post(
-        '/process-datasheet/datasheets/enrich-with-hmb/',
-        formDataToSend,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          }
-        }
-      );
-
-      setAnalysisStage('HMB enrichment complete!');
-
-      if (response.data.success) {
-        setHmbUploadResult({
-          success: true,
-          enrichedStreams: response.data.enriched_streams || 0,
-          extractedData: response.data.extracted_data || {},
-          message: response.data.message
-        });
-        
-        setUploadResult(prev => ({
-          ...prev,
-          hmbEnriched: true,
-          enrichedStreams: response.data.enriched_streams
-        }));
-      } else {
-        throw new Error(response.data.error || 'HMB enrichment failed');
+      const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
+      const hmbFormats = ['PDF', 'XLSX', 'XLS', 'CSV'];
+      
+      if (!hmbFormats.includes(fileExtension)) {
+        setError(`Unsupported HMB format. Please upload: ${hmbFormats.join(', ')}`);
+        return;
       }
 
-    } catch (err) {
-      console.error('HMB upload error:', err);
-      setError(err.response?.data?.error || err.message || 'HMB upload failed');
-      setHmbUploadResult({ success: false });
-    } finally {
-      setUploading(false);
-      setAnalysisStage('');
+      const fileSizeMB = selectedFile.size / (1024 * 1024);
+      if (fileSizeMB > 50) {
+        setError('HMB file size exceeds 50MB limit');
+        return;
+      }
+
+      setHmbFile(selectedFile);
+      setError('');
     }
   };
 
@@ -332,9 +238,6 @@ const SDVStreamsPage = () => {
           streamCount: response.data.stream_count || 0,
           datasheetGenerated: response.data.datasheet_generated || false
         });
-        
-        // Show HMB upload option after successful P&ID analysis
-        setShowHmbUpload(true);
       } else {
         throw new Error(response.data.error || 'Analysis failed');
       }
@@ -351,16 +254,14 @@ const SDVStreamsPage = () => {
 
   const handleReset = () => {
     setFile(null);
-    setHmbFile(null);
     setUploadResult(null);
-    setHmbUploadResult(null);
     setError('');
     setUploadProgress(0);
     setAnalysisStage('');
-    setShowHmbUpload(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    setHmbFile(null);
     if (hmbFileInputRef.current) {
       hmbFileInputRef.current.value = '';
     }
@@ -659,6 +560,89 @@ const SDVStreamsPage = () => {
                 </div>
               </div>
             )}
+
+
+            {/* HMB Upload Section */}
+            <div className="mt-6 border-t-2 border-dashed border-orange-200 pt-6">
+              <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-6 border border-orange-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg">
+                    <Thermometer className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Heat & Material Balance (HMB) Upload
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Enrich your SDV streams with process conditions and material properties
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white rounded-lg p-4 border border-orange-100">
+                    <Database className="w-5 h-5 text-orange-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Process Conditions</h4>
+                    <p className="text-xs text-gray-600">Temperature, pressure, flow rates</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-orange-100">
+                    <Workflow className="w-5 h-5 text-amber-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Material Properties</h4>
+                    <p className="text-xs text-gray-600">Composition, density, phase</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-orange-100">
+                    <Shield className="w-5 h-5 text-red-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Safety Data</h4>
+                    <p className="text-xs text-gray-600">Hazard classification</p>
+                  </div>
+                </div>
+
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
+                    hmbFile
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-orange-300 bg-white hover:border-orange-400'
+                  }`}
+                  onClick={() => hmbFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={hmbFileInputRef}
+                    type="file"
+                    onChange={handleHmbFileChange}
+                    accept=".pdf,.xlsx,.xls,.csv"
+                    className="hidden"
+                  />
+
+                  {!hmbFile ? (
+                    <>
+                      <Thermometer className="w-12 h-12 text-orange-400 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-700 mb-1">
+                        Drop your HMB file here or click to browse
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Supported: PDF, XLSX, XLS, CSV (Max 50MB)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-900 mb-1">
+                        {hmbFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(hmbFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-700">
+                    <strong>Data extracted:</strong> Temperature, Pressure, Flow Rate, Composition, Density, Phase, Molecular Weight, Stream ID
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
