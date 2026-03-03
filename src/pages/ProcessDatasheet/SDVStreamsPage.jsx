@@ -22,7 +22,8 @@ import {
   FileCheck,
   Download,
   Thermometer,
-  Database
+  Database,
+  FileSpreadsheet
 } from 'lucide-react';
 import apiClient from '../../services/api.service';
 
@@ -69,6 +70,8 @@ const SDVStreamsPage = () => {
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState('');
   const [hmbFile, setHmbFile] = useState(null);
+  const [templateFile, setTemplateFile] = useState(null);
+  const templateFileInputRef = useRef(null);
   const hmbFileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
@@ -181,6 +184,30 @@ const SDVStreamsPage = () => {
     }
   };
 
+
+  // Template File handling
+  const handleTemplateFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
+      const templateFormats = ['XLSX', 'XLS', 'PDF'];
+      
+      if (!templateFormats.includes(fileExtension)) {
+        setError(`Unsupported template format. Please upload: ${templateFormats.join(', ')}`);
+        return;
+      }
+
+      const fileSizeMB = selectedFile.size / (1024 * 1024);
+      if (fileSizeMB > 50) {
+        setError('Template file size exceeds 50MB limit');
+        return;
+      }
+
+      setTemplateFile(selectedFile);
+      setError('');
+    }
+  };
+
   // Upload and analyze P&ID
   const handleUpload = async () => {
     if (!file) {
@@ -205,6 +232,12 @@ const SDVStreamsPage = () => {
       formDataToSend.append('auto_analyze', selectedOptions.generateDatasheets);
       formDataToSend.append('analysis_options', JSON.stringify(selectedOptions));
       formDataToSend.append('equipment_type', 'sdv_streams');
+      if (hmbFile) {
+        formDataToSend.append('hmb_file', hmbFile);
+      }
+      if (templateFile) {
+        formDataToSend.append('template_file', templateFile);
+      }
 
       setUploadProgress(30);
       setAnalysisStage('Analyzing SDV streams...');
@@ -262,8 +295,12 @@ const SDVStreamsPage = () => {
       fileInputRef.current.value = '';
     }
     setHmbFile(null);
+    setTemplateFile(null);
     if (hmbFileInputRef.current) {
       hmbFileInputRef.current.value = '';
+    }
+    if (templateFileInputRef.current) {
+      templateFileInputRef.current.value = '';
     }
   };
 
@@ -644,6 +681,89 @@ const SDVStreamsPage = () => {
               </div>
             </div>
 
+
+            {/* Template Upload Section */}
+            <div className="mt-6 border-t-2 border-dashed border-blue-200 pt-6">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                    <FileSpreadsheet className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Datasheet Template Upload
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Upload your template to auto-fill with extracted data
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white rounded-lg p-4 border border-blue-100">
+                    <FileSpreadsheet className="w-5 h-5 text-blue-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Excel Template</h4>
+                    <p className="text-xs text-gray-600">Pre-formatted datasheet structure</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-blue-100">
+                    <Database className="w-5 h-5 text-indigo-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Auto-Fill Data</h4>
+                    <p className="text-xs text-gray-600">Populate fields with extracted values</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-blue-100">
+                    <CheckCircle className="w-5 h-5 text-green-600 mb-2" />
+                    <h4 className="font-semibold text-sm text-gray-900 mb-1">Ready Export</h4>
+                    <p className="text-xs text-gray-600">Download completed datasheet</p>
+                  </div>
+                </div>
+
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
+                    templateFile
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-blue-300 bg-white hover:border-blue-400'
+                  }`}
+                  onClick={() => templateFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={templateFileInputRef}
+                    type="file"
+                    onChange={handleTemplateFileChange}
+                    accept=".xlsx,.xls,.pdf"
+                    className="hidden"
+                  />
+
+                  {!templateFile ? (
+                    <>
+                      <FileSpreadsheet className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-700 mb-1">
+                        Drop your template here or click to browse
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Supported: XLSX, XLS, PDF (Max 50MB)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-900 mb-1">
+                        {templateFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(templateFile.size / (1024 * 1024)).toFixed(2)} MB - Ready to use
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-gray-700">
+                    <strong>How it works:</strong> Upload your template with predefined fields. After P&ID and HMB analysis, extracted data will automatically populate matching fields in your template.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
@@ -732,3 +852,4 @@ const SDVStreamsPage = () => {
 };
 
 export default SDVStreamsPage;
+
