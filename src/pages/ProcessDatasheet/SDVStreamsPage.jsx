@@ -59,13 +59,17 @@ const SDVStreamsPage = () => {
   };
 
   // State management
-  const [file, setFile] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
+  const [pidFile, setPidFile] = useState(null);
+  const [hmbFile, setHmbFile] = useState(null);
+  const [pidDragActive, setPidDragActive] = useState(false);
+  const [hmbDragActive, setHmbDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisStage, setAnalysisStage] = useState('');
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState('');
+  const [htmlPreview, setHtmlPreview] = useState('');
+  const [excelData, setExcelData] = useState(null);
 
   const [formData, setFormData] = useState({
     drawing_number: 'AUTO',
@@ -90,58 +94,99 @@ const SDVStreamsPage = () => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (file) {
-        URL.revokeObjectURL(URL.createObjectURL(file));
+      if (pidFile) {
+        URL.revokeObjectURL(URL.createObjectURL(pidFile));
+      }
+      if (hmbFile) {
+        URL.revokeObjectURL(URL.createObjectURL(hmbFile));
       }
     };
-  }, [file]);
+  }, [pidFile, hmbFile]);
 
-  // File handling
-  const handleFileChange = (e) => {
+  // File handling for P&ID
+  const handlePidFileChange = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      validateAndSetFile(selectedFile);
+      validateAndSetPidFile(selectedFile);
     }
   };
 
-  const validateAndSetFile = (selectedFile) => {
-    // Validate file type
+  const validateAndSetPidFile = (selectedFile) => {
     const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
-    if (!sdvStreamConfig.supportedFormats.includes(fileExtension)) {
-      setError(`Unsupported file format. Please upload: ${sdvStreamConfig.supportedFormats.join(', ')}`);
+    if (!['PDF'].includes(fileExtension)) {
+      setError('P&ID must be PDF format');
       return;
     }
-
-    // Validate file size
     const fileSizeMB = selectedFile.size / (1024 * 1024);
-    if (fileSizeMB > sdvStreamConfig.maxFileSize) {
-      setError(`File size exceeds ${sdvStreamConfig.maxFileSize}MB limit`);
+    if (fileSizeMB > 50) {
+      setError('P&ID file exceeds 50MB limit');
       return;
     }
-
-    setFile(selectedFile);
+    setPidFile(selectedFile);
     setError('');
     setUploadResult(null);
   };
 
-  // Drag and drop handlers
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
+  // File handling for HMB
+  const handleHmbFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      validateAndSetHmbFile(selectedFile);
     }
   };
 
-  const handleDrop = (e) => {
+  const validateAndSetHmbFile = (selectedFile) => {
+    const fileExtension = selectedFile.name.split('.').pop().toUpperCase();
+    if (!['PDF'].includes(fileExtension)) {
+      setError('HMB must be PDF format');
+      return;
+    }
+    const fileSizeMB = selectedFile.size / (1024 * 1024);
+    if (fileSizeMB > 50) {
+      setError('HMB file exceeds 50MB limit');
+      return;
+    }
+    setHmbFile(selectedFile);
+    setError('');
+  };
+
+  // Drag and drop handlers for P&ID
+  const handlePidDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setPidDragActive(true);
+    } else if (e.type === "dragleave") {
+      setPidDragActive(false);
+    }
+  };
 
+  const handlePidDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPidDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      validateAndSetFile(e.dataTransfer.files[0]);
+      validateAndSetPidFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Drag and drop handlers for HMB
+  const handleHmbDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setHmbDragActive(true);
+    } else if (e.type === "dragleave") {
+      setHmbDragActive(false);
+    }
+  };
+
+  const handleHmbDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHmbDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      validateAndSetHmbFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -153,80 +198,170 @@ const SDVStreamsPage = () => {
     setSelectedOptions(prev => ({ ...prev, [option]: !prev[option] }));
   };
 
-  // Upload and analyze P&ID
+  // Upload and analyze P&ID + HMB
   const handleUpload = async () => {
-    if (!file) {
+    if (!pidFile) {
       setError('Please select a P&ID file');
+      return;
+    }
+
+    if (!hmbFile) {
+      setError('Please select an HMB file');
       return;
     }
 
     setUploading(true);
     setError('');
     setUploadProgress(0);
-    setAnalysisStage('Uploading P&ID...');
+    setHtmlPreview('');
+    setExcelData(null);
+    setAnalysisStage('Uploading files...');
 
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('pid_file', file);
-      formDataToSend.append('drawing_number', formData.drawing_number);
-      formDataToSend.append('drawing_title', formData.drawing_title);
-      formDataToSend.append('revision', formData.revision);
-      formDataToSend.append('project_name', formData.project_name);
-      formDataToSend.append('area', formData.area);
-      formDataToSend.append('system', formData.system);
-      formDataToSend.append('auto_analyze', selectedOptions.generateDatasheets);
-      formDataToSend.append('analysis_options', JSON.stringify(selectedOptions));
+      formDataToSend.append('pid_file', pidFile);
+      formDataToSend.append('hmb_file', hmbFile);
       formDataToSend.append('equipment_type', 'sdv_streams');
 
-      setUploadProgress(30);
-      setAnalysisStage('Analyzing SDV streams...');
+      setUploadProgress(10);
+      setAnalysisStage('Uploading files...');
 
-      // Call SDV streams analysis endpoint
+      // Call SDV streams analysis endpoint (now async)
       const response = await apiClient.post(
-        '/process-datasheet/datasheets/extract/',
+        '/process-datasheet/datasheets/extract-sdv-streams/',
         formDataToSend,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json',
           },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(Math.min(percentCompleted, 90));
-          },
+          responseType: 'json',
         }
       );
 
-      setUploadProgress(100);
-      setAnalysisStage('Analysis complete!');
+      const responseData = response.data;
 
-      // Handle response
-      if (response.data.success) {
-        setUploadResult({
-          success: true,
-          jobId: response.data.job_id,
-          status: response.data.status,
-          message: response.data.message,
-          detectedValves: response.data.detected_valves || [],
-          streamCount: response.data.stream_count || 0,
-          datasheetGenerated: response.data.datasheet_generated || false
+      // Check if async processing (has job_id)
+      if (responseData.job_id) {
+        // Start polling for results
+        pollJobStatus(responseData.job_id);
+      } else if (responseData.success) {
+        // Immediate response (fallback/mock mode)
+        setHtmlPreview(responseData.html_preview);
+        setExcelData({
+          base64: responseData.excel_file,
+          filename: responseData.filename
         });
+        setUploadResult({ success: true });
+        setUploadProgress(100);
+        setAnalysisStage('Complete!');
+        setUploading(false);
       } else {
-        throw new Error(response.data.error || 'Analysis failed');
+        throw new Error(responseData.error || 'Analysis failed');
       }
 
     } catch (err) {
       console.error('SDV streams upload error:', err);
       setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.');
       setUploadResult({ success: false });
-    } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 2000);
     }
   };
 
+  // Poll job status for async processing
+  const pollJobStatus = async (jobId) => {
+    const maxAttempts = 120; // 120 attempts * 3 seconds = 6 minutes max
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        attempts++;
+        
+        const statusResponse = await apiClient.get(
+          `/process-datasheet/sdv-job-status/${jobId}/`
+        );
+
+        const { status, progress, stage, result, error: jobError } = statusResponse.data;
+
+        // Update UI
+        setUploadProgress(progress || 0);
+        setAnalysisStage(stage || 'Processing...');
+
+        if (status === 'completed' && result) {
+          // Success - display results
+          if (result.success) {
+            setHtmlPreview(result.html_preview);
+            setExcelData({
+              base64: result.excel_file,
+              filename: result.filename
+            });
+            setUploadResult({ success: true });
+            setUploadProgress(100);
+            setAnalysisStage('Complete!');
+          } else {
+            throw new Error(result.error || 'Processing failed');
+          }
+          setUploading(false);
+        } else if (status === 'failed') {
+          throw new Error(jobError || 'Processing failed');
+        } else if (status === 'processing') {
+          // Continue polling
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 3000); // Poll every 3 seconds
+          } else {
+            throw new Error('Processing timeout - please try again');
+          }
+        }
+
+      } catch (err) {
+        console.error('Job status polling error:', err);
+        setError(err.message || 'Failed to retrieve results');
+        setUploadResult({ success: false });
+        setUploading(false);
+        setTimeout(() => setUploadProgress(0), 2000);
+      }
+    };
+
+    // Start polling
+    poll();
+  };
+
+  const handleDownloadExcel = () => {
+    if (!excelData) return;
+
+    try {
+      // Decode base64 to binary
+      const binaryString = window.atob(excelData.base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Create blob and download
+      const blob = new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = excelData.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download error:', err);
+      setError('Failed to download Excel file');
+    }
+  };
+
   const handleReset = () => {
-    setFile(null);
+    setPidFile(null);
+    setHmbFile(null);
     setUploadResult(null);
+    setHtmlPreview('');
+    setExcelData(null);
     setError('');
     setUploadProgress(0);
     setAnalysisStage('');
@@ -402,75 +537,150 @@ const SDVStreamsPage = () => {
               </div>
             </div>
 
-            {/* File Upload Area */}
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-200 ${
-                dragActive
-                  ? 'border-red-500 bg-red-50'
-                  : file
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileChange}
-                accept=".pdf,.png,.jpg,.jpeg,.dwg"
-                className="hidden"
-                id="file-upload"
-              />
-
-              <label
-                htmlFor="file-upload"
-                className="flex flex-col items-center justify-center cursor-pointer"
+            {/* P&ID File Upload */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">P&ID Upload (Required)</h3>
+              <div
+                onDragEnter={handlePidDrag}
+                onDragLeave={handlePidDrag}
+                onDragOver={handlePidDrag}
+                onDrop={handlePidDrop}
+                className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-200 ${
+                  pidDragActive
+                    ? 'border-red-500 bg-red-50'
+                    : pidFile
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50'
+                }`}
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                  file ? 'bg-green-100' : 'bg-red-100'
-                }`}>
-                  {file ? (
-                    <CheckCircle className="w-8 h-8 text-green-600" />
-                  ) : (
-                    <Upload className="w-8 h-8 text-red-600" />
-                  )}
-                </div>
+                <input
+                  type="file"
+                  onChange={handlePidFileChange}
+                  accept=".pdf"
+                  className="hidden"
+                  id="pid-file-upload"
+                />
 
-                <div className="text-center">
-                  {file ? (
-                    <>
-                      <p className="text-lg font-semibold text-green-900 mb-1">
-                        {file.name}
-                      </p>
-                      <p className="text-sm text-green-700">
-                        {(file.size / (1024 * 1024)).toFixed(2)} MB
-                      </p>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleReset();
-                        }}
-                        className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium"
-                      >
-                        Choose Different File
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-lg font-semibold text-gray-900 mb-1">
-                        Drop your P&ID here or click to browse
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Supports: {sdvStreamConfig.supportedFormats.join(', ')} (Max {sdvStreamConfig.maxFileSize}MB)
-                      </p>
-                    </>
-                  )}
-                </div>
-              </label>
+                <label
+                  htmlFor="pid-file-upload"
+                  className="flex flex-col items-center justify-center cursor-pointer"
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${
+                    pidFile ? 'bg-green-100' : 'bg-red-100'
+                  }`}>
+                    {pidFile ? (
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    ) : (
+                      <Upload className="w-6 h-6 text-red-600" />
+                    )}
+                  </div>
+
+                  <div className="text-center">
+                    {pidFile ? (
+                      <>
+                        <p className="text-sm font-semibold text-green-900 mb-1">
+                          {pidFile.name}
+                        </p>
+                        <p className="text-xs text-green-700">
+                          {(pidFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setPidFile(null);
+                          }}
+                          className="mt-2 text-xs text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Remove File
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900 mb-1">
+                          Drop P&ID PDF here or click to browse
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          PDF only, Max 50MB
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* HMB File Upload */}
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">HMB Upload (Required)</h3>
+              <div
+                onDragEnter={handleHmbDrag}
+                onDragLeave={handleHmbDrag}
+                onDragOver={handleHmbDrag}
+                onDrop={handleHmbDrop}
+                className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-200 ${
+                  hmbDragActive
+                    ? 'border-blue-500 bg-blue-50'
+                    : hmbFile
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50'
+                }`}
+              >
+                <input
+                  type="file"
+                  onChange={handleHmbFileChange}
+                  accept=".pdf"
+                  className="hidden"
+                  id="hmb-file-upload"
+                />
+
+                <label
+                  htmlFor="hmb-file-upload"
+                  className="flex flex-col items-center justify-center cursor-pointer"
+                >
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${
+                    hmbFile ? 'bg-green-100' : 'bg-blue-100'
+                  }`}>
+                    {hmbFile ? (
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    ) : (
+                      <Upload className="w-6 h-6 text-blue-600" />
+                    )}
+                  </div>
+
+                  <div className="text-center">
+                    {hmbFile ? (
+                      <>
+                        <p className="text-sm font-semibold text-green-900 mb-1">
+                          {hmbFile.name}
+                        </p>
+                        <p className="text-xs text-green-700">
+                          {(hmbFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setHmbFile(null);
+                          }}
+                          className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          Remove File
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900 mb-1">
+                          Drop HMB PDF here or click to browse
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          PDF only, Max 50MB
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </label>
+              </div>
             </div>
 
             {/* Error Message */}
@@ -500,42 +710,13 @@ const SDVStreamsPage = () => {
               </div>
             )}
 
-            {/* Success Result */}
-            {uploadResult?.success && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-green-900 mb-2">Analysis Complete!</p>
-                    <div className="space-y-2 text-sm text-green-800">
-                      <p><strong>Job ID:</strong> {uploadResult.jobId}</p>
-                      {uploadResult.streamCount > 0 && (
-                        <p><strong>Detected Streams:</strong> {uploadResult.streamCount}</p>
-                      )}
-                      {uploadResult.detectedValves?.length > 0 && (
-                        <p><strong>Detected SDVs:</strong> {uploadResult.detectedValves.length}</p>
-                      )}
-                      {uploadResult.datasheetGenerated && (
-                        <div className="mt-3 flex gap-2">
-                          <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            <Download className="w-4 h-4" />
-                            Download Datasheet
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
+            {/* Action Buttons - Analyze Button */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 onClick={handleUpload}
-                disabled={!file || uploading}
+                disabled={!pidFile || !hmbFile || uploading}
                 className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
-                  !file || uploading
+                  !pidFile || !hmbFile || uploading
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-700 hover:to-orange-700 shadow-lg hover:shadow-xl transform hover:scale-105'
                 }`}
@@ -553,7 +734,7 @@ const SDVStreamsPage = () => {
                 )}
               </button>
 
-              {(file || uploadResult) && !uploading && (
+              {(pidFile || hmbFile || uploadResult) && !uploading && (
                 <button
                   onClick={handleReset}
                   className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
@@ -562,6 +743,31 @@ const SDVStreamsPage = () => {
                 </button>
               )}
             </div>
+
+            {/* HTML Preview - Shown After Processing */}
+            {htmlPreview && (
+              <div className="bg-white border-2 border-green-500 rounded-lg p-6 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <CheckCircle className="w-6 h-6 text-green-600" />
+                    Datasheet Preview
+                  </h3>
+                  {excelData && (
+                    <button
+                      onClick={handleDownloadExcel}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download Excel
+                    </button>
+                  )}
+                </div>
+                <div 
+                  className="overflow-x-auto border border-gray-200 rounded-lg"
+                  dangerouslySetInnerHTML={{ __html: htmlPreview }}
+                />
+              </div>
+            )}
 
             {/* Detected Valve Types Info */}
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
