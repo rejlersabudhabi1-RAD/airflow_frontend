@@ -90,9 +90,10 @@ const MOVEquipmentPage = () => {
     setActive(e.type === "dragenter" || e.type === "dragover");
   };
 
-  const handleDrop = (e, setter, label) => {
+  const handleDrop = (e, setter, label, setActive) => {
     e.preventDefault();
     e.stopPropagation();
+    setActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       validateAndSetFile(e.dataTransfer.files[0], setter, label);
     }
@@ -177,7 +178,7 @@ const MOVEquipmentPage = () => {
     const poll = async () => {
       try {
         attempts++;
-        
+
         const statusResponse = await apiClient.get(`/process-datasheet/mov-job-status/${jobId}/`);
         const { status, progress, stage, result, error: jobError } = statusResponse.data;
 
@@ -260,303 +261,405 @@ const MOVEquipmentPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-8">
           <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+            onClick={() => navigate('/engineering/process/datasheet')}
+            className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back</span>
+            Back to Process Datasheets
           </button>
 
-          <div className="text-sm text-gray-500">
-            <Settings2 className="w-4 h-4 inline mr-1" />
-            Equipment Process Data
+          <div className="flex items-center gap-3 mb-2">
+            <Settings2 className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              MOV Equipment Datasheet Generator
+            </h1>
           </div>
+          <p className="text-gray-600 dark:text-gray-400">
+            Upload P&ID + HMB → AI detects MOV valves → Download "MOV Equipment Data Sheet.xlsx"
+          </p>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-          {/* Title Section */}
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 text-white relative overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/10 before:to-transparent">
-            <div className="flex items-center gap-3 mb-2 relative z-10">
-              <Settings2 className="w-8 h-8 drop-shadow-md" />
-              <h1 className="text-2xl sm:text-3xl font-bold">MOV Equipment Datasheet</h1>
-            </div>
-            <p className="text-blue-50 text-sm sm:text-base relative z-10 font-medium">
-              Upload P&ID and HMB to generate Motor Operated Valve (MOV) process datasheets
-            </p>
-          </div>
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Panel - Upload & Form */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* File Upload Areas */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <Upload className="w-5 h-5" />
+                Upload Files
+              </h2>
 
-          {/* Upload Section */}
-          <div className="p-6 space-y-6 bg-gradient-to-b from-gray-50/50 to-white">
-            {/* P&ID Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  P&ID Document (Required)
-                </span>
-              </label>
-              <div
-                onDragEnter={(e) => handleDrag(e, setPidDragActive)}
-                onDragLeave={(e) => handleDrag(e, setPidDragActive)}
-                onDragOver={(e) => handleDrag(e, setPidDragActive)}
-                onDrop={(e) => { setPidDragActive(false); handleDrop(e, setPidFile, 'P&ID'); }}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  pidDragActive ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
-                } ${pidFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-400 shadow-sm' : ''}`}
-              >
-                <input
-                  ref={pidInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handlePidFileChange}
-                  className="hidden"
-                />
-                {!pidFile ? (
-                  <div className="space-y-2">
-                    <Upload className="w-12 h-12 mx-auto text-blue-400" />
-                    <p className="text-gray-600">Drop P&ID PDF here or click to browse</p>
-                    <button
-                      onClick={() => pidInputRef.current?.click()}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                    >
-                      Select P&ID
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                      <span className="text-gray-900 font-medium">{pidFile.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setPidFile(null)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* HMB Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-indigo-700 mb-2 flex items-center gap-2">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
-                  HMB Document (Required)
-                </span>
-              </label>
-              <div
-                onDragEnter={(e) => handleDrag(e, setHmbDragActive)}
-                onDragLeave={(e) => handleDrag(e, setHmbDragActive)}
-                onDragOver={(e) => handleDrag(e, setHmbDragActive)}
-                onDrop={(e) => { setHmbDragActive(false); handleDrop(e, setHmbFile, 'HMB'); }}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  hmbDragActive ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-indigo-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
-                } ${hmbFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-indigo-400 shadow-sm' : ''}`}
-              >
-                <input
-                  ref={hmbInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleHmbFileChange}
-                  className="hidden"
-                />
-                {!hmbFile ? (
-                  <div className="space-y-2">
-                    <Upload className="w-12 h-12 mx-auto text-blue-400" />
-                    <p className="text-gray-600">Drop HMB PDF here or click to browse</p>
-                    <button
-                      onClick={() => hmbInputRef.current?.click()}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
-                    >
-                      Select HMB
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                      <span className="text-gray-900 font-medium">{hmbFile.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setHmbFile(null)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Other Document Upload (Optional) */}
-            <div>
-              <label className="block text-sm font-semibold text-purple-700 mb-2 flex items-center gap-2"><span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-purple-500 rounded-full"></span>Other Document (Optional)
-                <span className="text-xs text-gray-500 font-normal">— Additional reference document</span>
-              </label>
-              <div
-                onDragEnter={(e) => handleDrag(e, setOtherDragActive)}
-                onDragLeave={(e) => handleDrag(e, setOtherDragActive)}
-                onDragOver={(e) => handleDrag(e, setOtherDragActive)}
-                onDrop={(e) => { setOtherDragActive(false); handleDrop(e, setOtherFile, 'Other document'); }}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  otherDragActive ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-purple-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
-                } ${otherFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-purple-400 shadow-sm' : ''}`}
-              >
-                <input
-                  ref={otherInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleOtherFileChange}
-                  className="hidden"
-                />
-                {!otherFile ? (
-                  <div className="space-y-2">
-                    <Plus className="w-10 h-10 mx-auto text-purple-400" />
-                    <p className="text-gray-500 text-sm">Optional additional document</p>
-                    <button
-                      onClick={() => otherInputRef.current?.click()}
-                      className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 border border-gray-300"
-                    >
-                      Add Document
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                      <span className="text-gray-900 font-medium">{otherFile.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setOtherFile(null)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Error Display */}
-            {error && (
-              <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300 rounded-xl shadow-md">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-red-800 font-medium">Upload Error</p>
-                  <p className="text-red-700 text-sm">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Upload Progress */}
-            {uploading && (
-              <div className="space-y-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl shadow-inner">
-                <div className="flex items-center justify-between">
-                  <span className="text-blue-900 font-medium">{analysisStage}</span>
-                  <span className="text-blue-700 text-sm">{uploadProgress}%</span>
-                </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-                <div className="flex items-center gap-2 text-sm text-blue-700">
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <span>Processing may take 2-5 minutes...</span>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleUpload}
-                disabled={!pidFile || !hmbFile || uploading}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold"
-              >
-                {uploading ? (
-                  <>
-                    <Loader className="w-5 h-5 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <FileCheck className="w-5 h-5" />
-                    Generate Datasheet
-                  </>
-                )}
-              </button>
-
-              {(pidFile || hmbFile || otherFile) && !uploading && (
-                <button
-                  onClick={handleReset}
-                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all duration-200 border-2 border-gray-300 hover:border-gray-400 shadow-md hover:shadow-lg"
+              {/* P&ID Upload */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  P&ID Drawing (Required)
+                </label>
+                <div
+                  onDragEnter={(e) => handleDrag(e, setPidDragActive)}
+                  onDragLeave={(e) => handleDrag(e, setPidDragActive)}
+                  onDragOver={(e) => handleDrag(e, setPidDragActive)}
+                  onDrop={(e) => handleDrop(e, setPidFile, 'P&ID', setPidDragActive)}
+                  onClick={() => pidInputRef.current?.click()}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+                    transition-all duration-200
+                    ${pidDragActive
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
+                    }
+                    ${pidFile ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : ''}
+                  `}
                 >
-                  Reset
-                </button>
+                  <input
+                    ref={pidInputRef}
+                    type="file"
+                    onChange={handlePidFileChange}
+                    accept=".pdf"
+                    className="hidden"
+                  />
+
+                  {!pidFile ? (
+                    <>
+                      <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                        Drop P&ID file here or click to browse
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        PDF format (max 50MB)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {pidFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {(pidFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* HMB Upload */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  HMB Document (Required)
+                </label>
+                <div
+                  onDragEnter={(e) => handleDrag(e, setHmbDragActive)}
+                  onDragLeave={(e) => handleDrag(e, setHmbDragActive)}
+                  onDragOver={(e) => handleDrag(e, setHmbDragActive)}
+                  onDrop={(e) => handleDrop(e, setHmbFile, 'HMB', setHmbDragActive)}
+                  onClick={() => hmbInputRef.current?.click()}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+                    transition-all duration-200
+                    ${hmbDragActive
+                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500'
+                    }
+                    ${hmbFile ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : ''}
+                  `}
+                >
+                  <input
+                    ref={hmbInputRef}
+                    type="file"
+                    onChange={handleHmbFileChange}
+                    accept=".pdf"
+                    className="hidden"
+                  />
+
+                  {!hmbFile ? (
+                    <>
+                      <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                        Drop HMB file here or click to browse
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        PDF format (max 50MB)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {hmbFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {(hmbFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Optional Document Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Additional Document (Optional)
+                </label>
+                <div
+                  onDragEnter={(e) => handleDrag(e, setOtherDragActive)}
+                  onDragLeave={(e) => handleDrag(e, setOtherDragActive)}
+                  onDragOver={(e) => handleDrag(e, setOtherDragActive)}
+                  onDrop={(e) => handleDrop(e, setOtherFile, 'Other document', setOtherDragActive)}
+                  onClick={() => otherInputRef.current?.click()}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+                    transition-all duration-200
+                    ${otherDragActive
+                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-purple-400 dark:hover:border-purple-500'
+                    }
+                    ${otherFile ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : ''}
+                  `}
+                >
+                  <input
+                    ref={otherInputRef}
+                    type="file"
+                    onChange={handleOtherFileChange}
+                    accept=".pdf"
+                    className="hidden"
+                  />
+
+                  {!otherFile ? (
+                    <>
+                      <Plus className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                        Drop additional file here (optional)
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        PDF format (max 50MB)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {otherFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {(otherFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {error && (
+                <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                </div>
               )}
             </div>
 
-            {/* Results Section */}
-            {htmlPreview && (
-              <div className="mt-8 space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <CheckCircle className="w-6 h-6 text-green-600" />
-                    Datasheet Preview
-                  </h3>
-                  {excelData && (
-                    <button
-                      onClick={handleDownloadExcel}
-                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold"
-                    >
-                      <Download className="w-5 h-5" />
-                      Download Excel
-                    </button>
-                  )}
+            {/* Quick Info Card */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl shadow-lg p-6 border-2 border-blue-200 dark:border-blue-700">
+              <h2 className="text-xl font-semibold text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
+                <FileCheck className="w-5 h-5" />
+                Auto-Analysis Enabled
+              </h2>
+              <p className="text-blue-800 dark:text-blue-200 text-sm leading-relaxed">
+                Upload your P&ID and HMB files, and our AI will automatically detect all Motor Operated Valves (MOV).
+                The results will be downloaded as <strong>"MOV Equipment Data Sheet.xlsx"</strong> with Section 1 (General Data) and Section 2 (Operating Conditions) populated.
+              </p>
+              <div className="mt-4 flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-blue-700 dark:text-blue-300">Sections 1 & 2 auto-filled • Sections 3 & 4 for manual input</span>
+              </div>
+            </div>
+
+            {/* Upload Button */}
+            <button
+              onClick={handleUpload}
+              disabled={!pidFile || !hmbFile || uploading}
+              className={`
+                w-full py-4 px-6 rounded-xl font-semibold text-white
+                transition-all duration-200 flex items-center justify-center gap-3
+                ${uploading
+                  ? 'bg-blue-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl'
+                }
+                disabled:opacity-50 disabled:cursor-not-allowed
+              `}
+            >
+              {uploading ? (
+                <>
+                  <Loader className="w-5 h-5 animate-spin" />
+                  {analysisStage || 'Processing...'}
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5" />
+                  Generate MOV Equipment Datasheets
+                </>
+              )}
+            </button>
+
+            {/* Upload Progress */}
+            {uploading && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                <div className="mb-2 flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Processing Progress</span>
+                  <span className="font-semibold text-blue-600">{uploadProgress}%</span>
                 </div>
-                <div 
-                  className="overflow-x-auto border-2 border-indigo-200 rounded-xl shadow-lg"
+                <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Success Result */}
+            {uploadResult && uploadResult.success && !uploading && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-green-500">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      MOV Datasheets Generated Successfully!
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">
+                      Your MOV equipment datasheets are ready for download.
+                    </p>
+
+                    {/* Download Button */}
+                    {excelData && (
+                      <button
+                        onClick={handleDownloadExcel}
+                        className="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700
+                                 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200
+                                 flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-5 h-5" />
+                        Download Excel Datasheet
+                      </button>
+                    )}
+
+                    {/* Reset Button */}
+                    <button
+                      onClick={handleReset}
+                      className="w-full mt-3 py-2 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600
+                               text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-all duration-200"
+                    >
+                      Upload New Files
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* HTML Preview */}
+            {htmlPreview && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Preview</h3>
+                <div
+                  className="overflow-x-auto"
                   dangerouslySetInnerHTML={{ __html: htmlPreview }}
                 />
               </div>
             )}
+          </div>
 
-            {/* Info Section */}
-            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-4 border-2 border-indigo-200 shadow-md">
-              <h3 className="font-semibold text-gray-900 mb-3">What This Tool Does</h3>
-              <ul className="space-y-2 text-sm text-gray-700">
-                <li className="flex items-start gap-2">
+          {/* Right Panel - Info */}
+          <div className="space-y-6">
+            {/* What This Tool Does */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                What This Tool Does
+              </h2>
+
+              <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                <div className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
                   <span>Automatically detects all Motor Operated Valves (MOV) in P&ID</span>
-                </li>
-                <li className="flex items-start gap-2">
+                </div>
+                <div className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
                   <span>Extracts HMB process conditions: temperature, pressure, fluid properties</span>
-                </li>
-                <li className="flex items-start gap-2">
+                </div>
+                <div className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
                   <span>Populates Section 1 (General Data) from P&ID and Section 2 (Operating Conditions) from HMB</span>
-                </li>
-                <li className="flex items-start gap-2">
+                </div>
+                <div className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
                   <span>Leaves Section 3 (Valve Details) and Section 4 (Actuator Details) blank for manual input</span>
-                </li>
-                <li className="flex items-start gap-2">
+                </div>
+                <div className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
                   <span>Generates professional Excel datasheets ready for engineering review</span>
-                </li>
-              </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Datasheet Sections */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Datasheet Sections
+              </h2>
+
+              <div className="space-y-3">
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-semibold text-green-900 dark:text-green-100">Section 1: General Data</span>
+                  </div>
+                  <p className="text-xs text-green-700 dark:text-green-300">
+                    Auto-populated from P&ID (Tag, Service, Line No, etc.)
+                  </p>
+                </div>
+
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-semibold text-green-900 dark:text-green-100">Section 2: Operating Conditions</span>
+                  </div>
+                  <p className="text-xs text-green-700 dark:text-green-300">
+                    Auto-populated from HMB (Pressure, Temperature)
+                  </p>
+                </div>
+
+                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertCircle className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Section 3: Valve Details</span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Left blank for manual engineering input
+                  </p>
+                </div>
+
+                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertCircle className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Section 4: Actuator Details</span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Left blank for manual engineering input
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+              <h3 className="font-semibold mb-2">💡 AI-Powered Detection</h3>
+              <p className="text-sm text-blue-100">
+                Our system automatically identifies MOV valves, extracts technical specifications,
+                and generates professional datasheets ready for engineering review.
+              </p>
             </div>
           </div>
         </div>
@@ -566,13 +669,3 @@ const MOVEquipmentPage = () => {
 };
 
 export default MOVEquipmentPage;
-
-
-
-
-
-
-
-
-
-
