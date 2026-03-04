@@ -1,0 +1,704 @@
+/**
+ * Smart Datasheet Generator - User Selection Based
+ * Allows users to select datasheet type first, then upload appropriate files
+ */
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Upload,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Loader,
+  ArrowLeft,
+  Sparkles,
+  FileCheck,
+  Zap,
+  FileUp,
+  Download
+} from 'lucide-react';
+import apiClient from '../../services/api.service';
+
+const SmartDatasheetPage = () => {
+  const navigate = useNavigate();
+
+  // Datasheet type definitions
+  const DATASHEET_TYPES = [
+    {
+      id: 'mov_equipment',
+      name: 'MOV Equipment',
+      fullName: 'Motor Operated Valves',
+      description: 'Generate datasheets for Motor Operated Valves from P&ID and HMB drawings',
+      icon: '⚙️',
+      color: 'blue',
+      requiredFiles: [
+        { key: 'pid', label: 'P&ID Drawing', required: true, description: 'Piping & Instrumentation Diagram' },
+        { key: 'hmb', label: 'HMB Drawing', required: true, description: 'Heat & Material Balance' },
+        { key: 'other', label: 'Additional Document', required: false, description: 'Optional supporting document' }
+      ]
+    },
+    {
+      id: 'sdv_streams',
+      name: 'SDV Streams',
+      fullName: 'Shut Down Valve Streams',
+      description: 'Generate stream datasheets for Shut Down Valves from P&ID and HMB',
+      icon: '🔴',
+      color: 'red',
+      requiredFiles: [
+        { key: 'pid', label: 'P&ID Drawing', required: true, description: 'Piping & Instrumentation Diagram' },
+        { key: 'hmb', label: 'HMB Drawing', required: true, description: 'Heat & Material Balance' }
+      ]
+    },
+    {
+      id: 'pressure_instrument',
+      name: 'Pressure Instrument',
+      fullName: 'Pressure Instrumentation',
+      description: 'Identify and extract pressure instruments from P&ID drawings',
+      icon: '📊',
+      color: 'purple',
+      requiredFiles: [
+        { key: 'pid', label: 'P&ID Drawing', required: true, description: 'Supports PDF, PNG, JPG, DWG formats' }
+      ]
+    },
+    {
+      id: 'pump_hydraulic',
+      name: 'Pump Hydraulic',
+      fullName: 'Pump Hydraulic Calculation',
+      description: 'Calculate pump specifications and hydraulic parameters',
+      icon: '💧',
+      color: 'cyan',
+      requiredFiles: [
+        { key: 'other', label: 'Pump Data Document', required: true, description: 'Pump specifications or data sheet' }
+      ]
+    }
+  ];
+
+  // State
+  const [selectedType, setSelectedType] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState({});
+  const [dragActive, setDragActive] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [analysisStage, setAnalysisStage] = useState('');
+  const [uploadResult, setUploadResult] = useState(null);
+  const [error, setError] = useState('');
+  const [jobId, setJobId] = useState(null);
+  const [htmlPreview, setHtmlPreview] = useState('');
+  const [excelData, setExcelData] = useState(null);
+
+  // File handling
+  const handleFileSelect = (fileKey, file) => {
+    if (!file) return;
+
+    // Validate PDF
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Please upload PDF files only');
+      return;
+    }
+
+    // Validate size (50MB)
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 50) {
+      setError('File size must be less than 50MB');
+      return;
+    }
+
+    setUploadedFiles(prev => ({
+      ...prev,
+      [fileKey]: file
+    }));
+    setError('');
+  };
+
+  const removeFile = (fileKey) => {
+    setUploadedFiles(prev => {
+      const newFiles = { ...prev };
+      delete newFiles[fileKey];
+      return newFiles;
+    });
+  };
+
+  // Drag and drop
+  const handleDrag = (e, fileKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(fileKey);
+    } else if (e.type === 'dragleave') {
+      setDragActive('');
+    }
+  };
+
+  const handleDrop = (e, fileKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive('');
+
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleFileSelect(fileKey, droppedFile);
+    }
+  };
+
+  // Validate all required files are uploaded
+  const validateFiles = () => {
+    if (!selectedType) return { valid: false, message: 'Please select a datasheet type' };
+
+    const typeConfig = DATASHEET_TYPES.find(t => t.id === selectedType);
+    const requiredFiles = typeConfig.requiredFiles.filter(f => f.required);
+
+    for (const reqFile of requiredFiles) {
+      if (!uploadedFiles[reqFile.key]) {
+        return { valid: false, message: `Please upload ${reqFile.label}` };
+      }
+    }
+
+    return { valid: true };
+  };
+
+  // Upload handler
+  const handleUpload = async () => {
+    const validation = validateFiles();
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setError('');
+    setAnalysisStage('Uploading files...');
+
+    const formData = new FormData();
+    formData.append('datasheet_type', selectedType);
+
+    // Add files based on keys
+    Object.entries(uploadedFiles).forEach(([key, file]) => {
+      formData.append(`${key}_file`, file);
+    });
+
+    try {
+      setAnalysisStage('Processing datasheet generation...');
+      const response = await apiClient.post(
+        '/process-datasheet/datasheets/smart-upload/',
+        formData
+      );
+
+      if (response.data.success) {
+        const newJobId = response.data.job_id;
+        setJobId(newJobId);
+        setAnalysisStage('Generation in progress...');
+        
+        // Start polling
+        pollJobStatus(newJobId);
+      } else {
+        throw new Error(response.data.error || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(err.response?.data?.error || err.message || 'Upload failed');
+      setUploading(false);
+    }
+  };
+
+  // Poll job status
+  const pollJobStatus = async (jobId) => {
+    let attempts = 0;
+    const maxAttempts = 120; // 6 minutes
+    const pollInterval = 3000; // 3 seconds
+
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        setError('Processing timeout - please try again');
+        setUploading(false);
+        return;
+      }
+
+      try {
+        const response = await apiClient.get(`/process-datasheet/smart-job-status/${jobId}/`);
+
+        if (response.data.success) {
+          const { status, progress, stage, result, error: jobError } = response.data;
+
+          setUploadProgress(progress || 0);
+          setAnalysisStage(stage || '');
+
+          if (status === 'completed') {
+            console.log('[Smart Datasheet] Job completed, full result:', result);
+            console.log('[Smart Datasheet] Selected type:', selectedType);
+            
+            // Extract result data
+            if (result && result.results) {
+              console.log('[Smart Datasheet] Results object:', result.results);
+              const datasheetResult = result.results[selectedType];
+              console.log('[Smart Datasheet] Datasheet result for', selectedType, ':', datasheetResult);
+              
+              if (datasheetResult) {
+                if (datasheetResult.html_preview) {
+                  console.log('[Smart Datasheet] Setting HTML preview, length:', datasheetResult.html_preview.length);
+                  setHtmlPreview(datasheetResult.html_preview);
+                }
+                if (datasheetResult.excel_file) {
+                  console.log('[Smart Datasheet] Setting Excel data, filename:', datasheetResult.filename);
+                  setExcelData({
+                    base64: datasheetResult.excel_file,
+                    filename: datasheetResult.filename || 'datasheet.xlsx'
+                  });
+                }
+              } else {
+                console.warn('[Smart Datasheet] No result found for selected type:', selectedType);
+              }
+            } else {
+              console.warn('[Smart Datasheet] No results object in result');
+            }
+            setUploadResult(result);
+            setUploading(false);
+            return;
+          } else if (status === 'failed' || status === 'error') {
+            setError(jobError || 'Processing failed');
+            setUploading(false);
+            return;
+          }
+        }
+
+        attempts++;
+        setTimeout(poll, pollInterval);
+      } catch (err) {
+        console.error('Status poll error:', err);
+        attempts++;
+        setTimeout(poll, pollInterval);
+      }
+    };
+
+    poll();
+  };
+
+  // Reset form
+  const handleReset = () => {
+    setSelectedType(null);
+    setUploadedFiles({});
+    setUploading(false);
+    setUploadProgress(0);
+    setAnalysisStage('');
+    setUploadResult(null);
+    setError('');
+    setJobId(null);
+    setHtmlPreview('');
+    setExcelData(null);
+  };
+
+  // Download Excel file
+  const handleDownloadExcel = () => {
+    if (!excelData) return;
+
+    try {
+      const binaryString = window.atob(excelData.base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = excelData.filename;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Download error:', err);
+      setError('Failed to download Excel file');
+    }
+  };
+
+  // Render file upload zone
+  const renderFileUpload = (fileConfig) => {
+    const file = uploadedFiles[fileConfig.key];
+    const isDragging = dragActive === fileConfig.key;
+
+    return (
+      <div key={fileConfig.key} className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          {fileConfig.label}
+          {fileConfig.required && <span className="text-red-500 ml-1">*</span>}
+          {!fileConfig.required && <span className="text-gray-400 ml-1">(Optional)</span>}
+        </label>
+        <p className="text-xs text-gray-500 mb-2">{fileConfig.description}</p>
+
+        {!file ? (
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              isDragging
+                ? 'border-purple-500 bg-purple-50'
+                : 'border-gray-300 hover:border-purple-400'
+            }`}
+            onDragEnter={(e) => handleDrag(e, fileConfig.key)}
+            onDragLeave={(e) => handleDrag(e, fileConfig.key)}
+            onDragOver={(e) => handleDrag(e, fileConfig.key)}
+            onDrop={(e) => handleDrop(e, fileConfig.key)}
+          >
+            <FileUp className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+            <p className="text-sm text-gray-600 mb-2">
+              Drag and drop or{' '}
+              <label className="text-purple-600 hover:text-purple-700 cursor-pointer font-medium">
+                browse
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf"
+                  onChange={(e) => handleFileSelect(fileConfig.key, e.target.files?.[0])}
+                />
+              </label>
+            </p>
+            <p className="text-xs text-gray-500">PDF files only, max 50MB</p>
+          </div>
+        ) : (
+          <div className="border border-green-200 bg-green-50 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <FileCheck className="h-5 w-5 text-green-600 mr-3" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                <p className="text-xs text-gray-500">
+                  {(file.size / (1024 * 1024)).toFixed(2)} MB
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => removeFile(fileConfig.key)}
+              className="text-red-600 hover:text-red-700 text-sm font-medium"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const selectedTypeConfig = DATASHEET_TYPES.find(t => t.id === selectedType);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate('/engineering/process/datasheet')}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="h-6 w-6" />
+                  <h1 className="text-2xl font-bold">Smart Datasheet Generator</h1>
+                </div>
+                <p className="text-purple-100 text-sm mt-1">
+                  Select datasheet type and upload required documents
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!uploadResult ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column - Selection and Upload */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Step 1: Select Datasheet Type */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="bg-purple-100 p-2 rounded-lg">
+                    <span className="text-2xl">1️⃣</span>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Select Datasheet Type
+                  </h2>
+                </div>
+
+                <select
+                  value={selectedType || ''}
+                  onChange={(e) => {
+                    setSelectedType(e.target.value);
+                    setUploadedFiles({});
+                    setError('');
+                  }}
+                  className="w-full px-4 py-3 bg-white border-2 border-gray-300 rounded-lg text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all appearance-none cursor-pointer text-base font-medium shadow-sm hover:border-gray-400"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.5em 1.5em', paddingRight: '2.5rem' }}
+                >
+                  <option value="" disabled>
+                     Select a datasheet type to generate...
+                  </option>
+                  {DATASHEET_TYPES.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.name} - {type.fullName}
+                    </option>
+                  ))}
+                </select>
+                
+                {/* Selected Type Info Card */}
+                {selectedType && (
+                  <div className={`mt-4 p-4 rounded-lg border-2 border-${DATASHEET_TYPES.find(t => t.id === selectedType)?.color || 'blue'}-300 bg-${DATASHEET_TYPES.find(t => t.id === selectedType)?.color || 'blue'}-50`}>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-3xl">{DATASHEET_TYPES.find(t => t.id === selectedType)?.icon}</span>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {DATASHEET_TYPES.find(t => t.id === selectedType)?.fullName}
+                        </h3>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {DATASHEET_TYPES.find(t => t.id === selectedType)?.description}
+                        </p>
+                        <div className="mt-3 flex items-center space-x-2">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">Selected</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Upload Files */}
+              {selectedType && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="bg-purple-100 p-2 rounded-lg">
+                      <span className="text-2xl">2️⃣</span>
+                    </div>
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      Upload Required Files
+                    </h2>
+                  </div>
+
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>{selectedTypeConfig.name}:</strong> {selectedTypeConfig.description}
+                    </p>
+                  </div>
+
+                  {selectedTypeConfig.requiredFiles.map(fileConfig => renderFileUpload(fileConfig))}
+
+                  {/* Error Message */}
+                  {error && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-800">{error}</p>
+                    </div>
+                  )}
+
+                  {/* Generate Button */}
+                  <div className="mt-6 flex space-x-3">
+                    <button
+                      onClick={handleUpload}
+                      disabled={uploading}
+                      className={`flex-1 py-3 px-6 rounded-lg font-medium text-white transition-colors ${
+                        uploading
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                      }`}
+                    >
+                      {uploading ? (
+                        <span className="flex items-center justify-center space-x-2">
+                          <Loader className="h-5 w-5 animate-spin" />
+                          <span>Processing...</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center space-x-2">
+                          <Zap className="h-5 w-5" />
+                          <span>Generate Datasheet</span>
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Reset
+                    </button>
+                  </div>
+
+                  {/* Progress */}
+                  {uploading && (
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-700">{analysisStage}</span>
+                        <span className="text-sm text-gray-500">{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column - Info */}
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-sm border border-purple-200 p-6">
+                <div className="flex items-center space-x-2 mb-4">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <h3 className="font-semibold text-gray-900">How It Works</h3>
+                </div>
+                <ol className="space-y-3 text-sm text-gray-700">
+                  <li className="flex items-start space-x-2">
+                    <span className="font-bold text-purple-600">1.</span>
+                    <span>Select the type of datasheet you want to generate</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="font-bold text-purple-600">2.</span>
+                    <span>Upload the required documents for that type</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="font-bold text-purple-600">3.</span>
+                    <span>AI processes your documents automatically</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="font-bold text-purple-600">4.</span>
+                    <span>Download your completed datasheet</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">File Requirements</h3>
+                <ul className="space-y-2 text-sm text-gray-700">
+                  <li className="flex items-center space-x-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>PDF format only</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>Maximum size: 50MB per file</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>Clear, readable drawings</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span>Standard engineering formats</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Success Result */
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Success Header */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Datasheet Generated Successfully!
+                </h2>
+                <p className="text-gray-600">
+                  Your {selectedTypeConfig.name} datasheet is ready
+                </p>
+              </div>
+
+              {/* Result Summary */}
+              <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Generation Summary</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Datasheet Type</p>
+                    <p className="font-medium text-gray-900">{selectedTypeConfig.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Status</p>
+                    <p className="font-medium text-green-600">Completed</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Files Processed</p>
+                    <p className="font-medium text-gray-900">{Object.keys(uploadedFiles).length}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Success Rate</p>
+                    <p className="font-medium text-gray-900">
+                      {uploadResult?.summary?.successful || 0}/{uploadResult?.summary?.total_attempted || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {uploadResult?.generated_types && uploadResult.generated_types.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-500 mb-2">Generated Datasheets:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {uploadResult.generated_types.map((type, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium"
+                        >
+                          {type}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Download Button */}
+              {excelData && (
+                <div className="flex justify-center mb-6">
+                  <button
+                    onClick={handleDownloadExcel}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-colors shadow-lg"
+                  >
+                    <Download className="h-5 w-5" />
+                    <span>Download {selectedTypeConfig.name} Datasheet</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleReset}
+                  className="flex-1 py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-pink-700 transition-colors"
+                >
+                  Generate Another
+                </button>
+                <button
+                  onClick={() => navigate('/engineering/process/datasheet')}
+                  className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+
+            {/* HTML Preview Table */}
+            {htmlPreview && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                  <FileText className="h-5 w-5 text-purple-600" />
+                  <span>Datasheet Preview</span>
+                </h3>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <div dangerouslySetInnerHTML={{ __html: htmlPreview }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SmartDatasheetPage;
+

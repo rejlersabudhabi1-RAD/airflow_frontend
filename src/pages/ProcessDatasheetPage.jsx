@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BeakerIcon,
@@ -8,7 +8,7 @@ import {
   DocumentChartBarIcon,
   CubeIcon,
   ArrowPathIcon,
-  ChevronDownIcon
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { FEATURES_CATALOG } from '../config/featuresCatalog.config';
 
@@ -19,20 +19,10 @@ import { FEATURES_CATALOG } from '../config/featuresCatalog.config';
  */
 const ProcessDatasheetPage = () => {
   const navigate = useNavigate();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  
+  
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  
 
   // Get module name from centralized config
   const moduleConfig = FEATURES_CATALOG.engineering.features.find(
@@ -157,46 +147,7 @@ const ProcessDatasheetPage = () => {
     }
   };
 
-  // Quick navigation options for dropdown
-  const quickNavOptions = [
-    {
-      id: 'pfd',
-      name: 'Pump Hydraulic Calculation',
-      path: '/engineering/process/datasheet/pfd',
-      icon: ArrowPathIcon,
-      color: 'blue',
-      description: 'Advanced pump selection & hydraulic calculations'
-    },
-    {
-      id: 'pressure-instrument',
-      name: 'Pressure Instrument',
-      path: '/engineering/process/datasheet/pressure-instrument',
-      icon: ChartBarIcon,
-      color: 'purple',
-      description: 'P&ID pressure instrument detection & analysis'
-    },
-    {
-      id: 'equipment',
-      name: 'MOV Equipment Datasheets',
-      path: '/engineering/process/datasheet/equipment',
-      icon: CubeIcon,
-      color: 'emerald',
-      description: 'Motor Operated Valve datasheets'
-    },
-    {
-      id: 'streams',
-      name: 'SDV Stream Datasheets',
-      path: '/engineering/process/datasheet/streams',
-      icon: TableCellsIcon,
-      color: 'amber',
-      description: 'Shut Down Valve datasheets'
-    }
-  ];
-
-  const handleQuickNav = (path) => {
-    setIsDropdownOpen(false);
-    navigate(path);
-  };
+  
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -216,51 +167,14 @@ const ProcessDatasheetPage = () => {
               Process Engineering
             </span>
 
-            {/* Quick Navigation Dropdown */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                <span>Quick Access</span>
-                <ChevronDownIcon className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Dropdown Menu */}
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50">
-                  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3">
-                    <h3 className="text-white font-semibold text-sm">Navigate to Datasheet</h3>
-                  </div>
-                  <div className="p-2">
-                    {quickNavOptions.map((option) => {
-                      const IconComponent = option.icon;
-                      return (
-                        <button
-                          key={option.id}
-                          onClick={() => handleQuickNav(option.path)}
-                          className={`w-full text-left px-4 py-3 rounded-lg hover:bg-${option.color}-50 dark:hover:bg-${option.color}-900/20 transition-colors duration-150 group`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-lg bg-gradient-to-r from-${option.color}-500 to-${option.color}-600 group-hover:scale-110 transition-transform duration-150`}>
-                              <IconComponent className="w-5 h-5 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-gray-900 dark:text-white text-sm mb-0.5">
-                                {option.name}
-                              </div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">
-                                {option.description}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Direct Navigation Button */}
+            <button
+              onClick={() => navigate('/engineering/process/datasheet/smart')}
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <SparklesIcon className="w-5 h-5" />
+              <span>Process Datasheet</span>
+            </button>
           </div>
         </div>
       </div>
@@ -398,3 +312,4 @@ const ProcessDatasheetPage = () => {
 };
 
 export default ProcessDatasheetPage;
+

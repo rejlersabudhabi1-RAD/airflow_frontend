@@ -85,6 +85,7 @@ import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import SDVStreamsPage from './pages/ProcessDatasheet/SDVStreamsPage'
 import MOVEquipmentPage from './pages/ProcessDatasheet/MOVEquipmentPage'
+import SmartDatasheetPage from './pages/ProcessDatasheet/SmartDatasheetPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 import LineList from './pages/Engineering/Process/LineList'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
@@ -672,7 +673,16 @@ function App() {
               <SDVStreamsPage />
             </ProtectedRoute>
           }
-        />        {/* Process Data Sheet - MOV Equipment P&ID Upload */}
+        />          {/* Smart Datasheet - Unified AI Tool for All 4 Datasheet Types */}
+          <Route
+            path="engineering/process/datasheet/smart"
+            element={
+              <ProtectedRoute>
+                <SmartDatasheetPage />
+              </ProtectedRoute>
+            }
+          />
+        {/* Process Data Sheet - MOV Equipment P&ID Upload */}
         <Route
           path="engineering/process/datasheet/equipment"
           element={
@@ -977,6 +987,8 @@ function App() {
 }
 
 export default App
+
+
 
 
 
