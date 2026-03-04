@@ -279,24 +279,27 @@ const MOVEquipmentPage = () => {
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
           {/* Title Section */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
-            <div className="flex items-center gap-3 mb-2">
-              <Settings2 className="w-8 h-8" />
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 text-white relative overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/10 before:to-transparent">
+            <div className="flex items-center gap-3 mb-2 relative z-10">
+              <Settings2 className="w-8 h-8 drop-shadow-md" />
               <h1 className="text-2xl sm:text-3xl font-bold">MOV Equipment Datasheet</h1>
             </div>
-            <p className="text-blue-100 text-sm sm:text-base">
+            <p className="text-blue-50 text-sm sm:text-base relative z-10 font-medium">
               Upload P&ID and HMB to generate Motor Operated Valve (MOV) process datasheets
             </p>
           </div>
 
           {/* Upload Section */}
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6 bg-gradient-to-b from-gray-50/50 to-white">
             {/* P&ID Upload */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                P&ID Document (Required)
+              <label className="block text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  P&ID Document (Required)
+                </span>
               </label>
               <div
                 onDragEnter={(e) => handleDrag(e, setPidDragActive)}
@@ -304,8 +307,8 @@ const MOVEquipmentPage = () => {
                 onDragOver={(e) => handleDrag(e, setPidDragActive)}
                 onDrop={(e) => { setPidDragActive(false); handleDrop(e, setPidFile, 'P&ID'); }}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  pidDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-                } ${pidFile ? 'bg-green-50 border-green-400' : ''}`}
+                  pidDragActive ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
+                } ${pidFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-400 shadow-sm' : ''}`}
               >
                 <input
                   ref={pidInputRef}
@@ -316,11 +319,11 @@ const MOVEquipmentPage = () => {
                 />
                 {!pidFile ? (
                   <div className="space-y-2">
-                    <Upload className="w-12 h-12 mx-auto text-gray-400" />
+                    <Upload className="w-12 h-12 mx-auto text-blue-400" />
                     <p className="text-gray-600">Drop P&ID PDF here or click to browse</p>
                     <button
                       onClick={() => pidInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
                     >
                       Select P&ID
                     </button>
@@ -344,8 +347,11 @@ const MOVEquipmentPage = () => {
 
             {/* HMB Upload */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                HMB Document (Required)
+              <label className="block text-sm font-semibold text-indigo-700 mb-2 flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                  HMB Document (Required)
+                </span>
               </label>
               <div
                 onDragEnter={(e) => handleDrag(e, setHmbDragActive)}
@@ -353,8 +359,8 @@ const MOVEquipmentPage = () => {
                 onDragOver={(e) => handleDrag(e, setHmbDragActive)}
                 onDrop={(e) => { setHmbDragActive(false); handleDrop(e, setHmbFile, 'HMB'); }}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  hmbDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-                } ${hmbFile ? 'bg-green-50 border-green-400' : ''}`}
+                  hmbDragActive ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-indigo-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
+                } ${hmbFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-indigo-400 shadow-sm' : ''}`}
               >
                 <input
                   ref={hmbInputRef}
@@ -365,11 +371,11 @@ const MOVEquipmentPage = () => {
                 />
                 {!hmbFile ? (
                   <div className="space-y-2">
-                    <Upload className="w-12 h-12 mx-auto text-gray-400" />
+                    <Upload className="w-12 h-12 mx-auto text-blue-400" />
                     <p className="text-gray-600">Drop HMB PDF here or click to browse</p>
                     <button
                       onClick={() => hmbInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
                     >
                       Select HMB
                     </button>
@@ -393,8 +399,7 @@ const MOVEquipmentPage = () => {
 
             {/* Other Document Upload (Optional) */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                Other Document (Optional)
+              <label className="block text-sm font-semibold text-purple-700 mb-2 flex items-center gap-2"><span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-purple-500 rounded-full"></span>Other Document (Optional)
                 <span className="text-xs text-gray-500 font-normal">— Additional reference document</span>
               </label>
               <div
@@ -403,8 +408,8 @@ const MOVEquipmentPage = () => {
                 onDragOver={(e) => handleDrag(e, setOtherDragActive)}
                 onDrop={(e) => { setOtherDragActive(false); handleDrop(e, setOtherFile, 'Other document'); }}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  otherDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-                } ${otherFile ? 'bg-green-50 border-green-400' : ''}`}
+                  otherDragActive ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-purple-100 transform scale-[1.02]' : 'border-gray-300 hover:border-blue-400'
+                } ${otherFile ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-purple-400 shadow-sm' : ''}`}
               >
                 <input
                   ref={otherInputRef}
@@ -415,11 +420,11 @@ const MOVEquipmentPage = () => {
                 />
                 {!otherFile ? (
                   <div className="space-y-2">
-                    <Plus className="w-10 h-10 mx-auto text-gray-400" />
+                    <Plus className="w-10 h-10 mx-auto text-purple-400" />
                     <p className="text-gray-500 text-sm">Optional additional document</p>
                     <button
                       onClick={() => otherInputRef.current?.click()}
-                      className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                      className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 border border-gray-300"
                     >
                       Add Document
                     </button>
@@ -443,7 +448,7 @@ const MOVEquipmentPage = () => {
 
             {/* Error Display */}
             {error && (
-              <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300 rounded-xl shadow-md">
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-red-800 font-medium">Upload Error</p>
@@ -454,7 +459,7 @@ const MOVEquipmentPage = () => {
 
             {/* Upload Progress */}
             {uploading && (
-              <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="space-y-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl shadow-inner">
                 <div className="flex items-center justify-between">
                   <span className="text-blue-900 font-medium">{analysisStage}</span>
                   <span className="text-blue-700 text-sm">{uploadProgress}%</span>
@@ -477,7 +482,7 @@ const MOVEquipmentPage = () => {
               <button
                 onClick={handleUpload}
                 disabled={!pidFile || !hmbFile || uploading}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-md"
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold"
               >
                 {uploading ? (
                   <>
@@ -495,7 +500,7 @@ const MOVEquipmentPage = () => {
               {(pidFile || hmbFile || otherFile) && !uploading && (
                 <button
                   onClick={handleReset}
-                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all duration-200 border-2 border-gray-300 hover:border-gray-400 shadow-md hover:shadow-lg"
                 >
                   Reset
                 </button>
@@ -513,7 +518,7 @@ const MOVEquipmentPage = () => {
                   {excelData && (
                     <button
                       onClick={handleDownloadExcel}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold"
                     >
                       <Download className="w-5 h-5" />
                       Download Excel
@@ -521,14 +526,14 @@ const MOVEquipmentPage = () => {
                   )}
                 </div>
                 <div 
-                  className="overflow-x-auto border border-gray-200 rounded-lg"
+                  className="overflow-x-auto border-2 border-indigo-200 rounded-xl shadow-lg"
                   dangerouslySetInnerHTML={{ __html: htmlPreview }}
                 />
               </div>
             )}
 
             {/* Info Section */}
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-4 border-2 border-indigo-200 shadow-md">
               <h3 className="font-semibold text-gray-900 mb-3">What This Tool Does</h3>
               <ul className="space-y-2 text-sm text-gray-700">
                 <li className="flex items-start gap-2">
@@ -561,3 +566,13 @@ const MOVEquipmentPage = () => {
 };
 
 export default MOVEquipmentPage;
+
+
+
+
+
+
+
+
+
+
