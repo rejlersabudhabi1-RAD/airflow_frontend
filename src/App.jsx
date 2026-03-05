@@ -84,7 +84,7 @@ import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpFor
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
-// Electrical Datasheet Components
+// SOFT-CODED: Electrical Datasheet Components - RE-ENABLED
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
@@ -722,6 +722,7 @@ function App() {
           }
         />
 
+        {/* SOFT-CODED: Electrical Datasheet Module - RE-ENABLED */}
         {/* Electrical Documents Hub - Main Landing for All 27 Initiatives */}
         <Route
           path="engineering/electrical/datasheet"

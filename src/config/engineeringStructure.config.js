@@ -151,6 +151,7 @@ export const ENGINEERING_DISCIPLINES = {
         moduleCode: 'electrical_sld',
         badge: 'New'
       },
+      // SOFT-CODED: Electrical Datasheet - RE-ENABLED
       {
         id: 'electricalDatasheets',
         name: 'Datasheets',
