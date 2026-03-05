@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MagnifyingGlassIcon,
@@ -6,8 +6,12 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   RocketLaunchIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  SparklesIcon,
+  ChartBarIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline';
+import apiClient from '../../../services/api.service';
 import {
   ELECTRICAL_DOCUMENTS,
   DOCUMENT_CATEGORIES,
@@ -15,8 +19,7 @@ import {
   CATEGORY_DESCRIPTIONS,
   getDocumentsByCategory,
   getCategoryStats,
-  DOCUMENT_STATUS,
-  ELECTRICAL_DOCUMENTS_FEATURE_ENABLED // SOFT-CODED: Feature flag for content visibility
+  DOCUMENT_STATUS
 } from '../../../config/electricalDocuments.config';
 
 /**
@@ -36,79 +39,43 @@ const ElectricalDocumentsHub = () => {
     [DOCUMENT_CATEGORIES.STUDIES]: true,
     [DOCUMENT_CATEGORIES.SCHEDULES]: true
   });
+  
+  // AI Quality Checker State
+  const [recentDatasheets, setRecentDatasheets] = useState([]);
+  const [qualityStats, setQualityStats] = useState(null);
+  const [loadingQuality, setLoadingQuality] = useState(false);
 
-  // SOFT-CODED: Return "Coming Soon" page when feature is disabled
-  if (!ELECTRICAL_DOCUMENTS_FEATURE_ENABLED) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-orange-50 to-amber-50 flex items-center justify-center p-4">
-        <div className="max-w-2xl w-full">
-          {/* Coming Soon Card */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 border-4 border-yellow-400">
-            {/* Icon */}
-            <div className="flex justify-center mb-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                <RocketLaunchIcon className="h-14 w-14 text-white" />
-              </div>
-            </div>
+  // Load recent datasheets with quality data
+  useEffect(() => {
+    loadRecentDatasheets();
+  }, []);
 
-            {/* Coming Soon Badge */}
-            <div className="flex justify-center mb-4">
-              <span className="inline-flex items-center px-6 py-2 rounded-full text-sm font-bold bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg">
-                🚀 COMING SOON
-              </span>
-            </div>
-
-            {/* Title */}
-            <h1 className="text-4xl md:text-5xl font-bold text-center text-gray-900 mb-4">
-              Electrical Engineering Documents
-            </h1>
-
-            {/* Subtitle */}
-            <p className="text-xl text-center text-gray-600 mb-8">
-              Comprehensive suite of electrical engineering initiatives
-            </p>
-
-            {/* Description */}
-            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-6 mb-8 border border-yellow-200">
-              <p className="text-center text-gray-700 leading-relaxed">
-                We're working on something amazing! This module will include <span className="font-semibold text-yellow-700">27 electrical engineering initiatives</span> covering technical datasheets, calculations, diagrams, layouts, and schedules - everything you need in one unified platform.
-              </p>
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-              <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <div className="text-2xl font-bold text-yellow-600">11+</div>
-                <div className="text-sm text-gray-600">Datasheets</div>
-              </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <div className="text-2xl font-bold text-orange-600">7+</div>
-                <div className="text-sm text-gray-600">Diagrams</div>
-              </div>
-              <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <div className="text-2xl font-bold text-amber-600">9+</div>
-                <div className="text-sm text-gray-600">Tools</div>
-              </div>
-            </div>
-
-            {/* Footer Message */}
-            <div className="text-center">
-              <p className="text-gray-500 text-sm">
-                Stay tuned for updates! This feature is under active development.
-              </p>
-            </div>
-          </div>
-
-          {/* Bottom Note */}
-          <div className="text-center mt-6">
-            <p className="text-gray-600 text-sm">
-              Questions? Contact your system administrator for more information.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const loadRecentDatasheets = async () => {
+    try {
+      const response = await apiClient.get('/electrical-datasheet/datasheets/?ordering=-last_quality_check&limit=5');
+      setRecentDatasheets(response.data?.results || response.data || []);
+      
+      // Calculate quality stats
+      const allDatasheets = response.data?.results || response.data || [];
+      if (allDatasheets.length > 0) {
+        const withScores = allDatasheets.filter(d => d.compliance_score !== null && d.compliance_score !== undefined);
+        const avgScore = withScores.length > 0 
+          ? withScores.reduce((sum, d) => sum + parseFloat(d.compliance_score || 0), 0) / withScores.length 
+          : 0;
+        
+        setQualityStats({
+          total: allDatasheets.length,
+          checked: withScores.length,
+          averageScore: avgScore.toFixed(1),
+          excellent: withScores.filter(d => d.compliance_score >= 90).length,
+          good: withScores.filter(d => d.compliance_score >= 70 && d.compliance_score < 90).length,
+          needsWork: withScores.filter(d => d.compliance_score < 70).length
+        });
+      }
+    } catch (error) {
+      console.error('Error loading datasheets:', error);
+    }
+  };
 
   // Debug log to verify component is rendering
   console.log('[ElectricalDocumentsHub] Component rendered');
@@ -155,9 +122,9 @@ const ElectricalDocumentsHub = () => {
 
   const handleDocumentClick = (doc) => {
     if (doc.status === DOCUMENT_STATUS.ACTIVE) {
-      // SOFT-CODED: Use route from config if available, fallback to upload page
-      const targetRoute = doc.route || '/engineering/electrical/datasheet/upload';
-      navigate(targetRoute);
+      // Navigate to upload page for now (can be customized per document type later)
+      // Most logical default route until individual document pages are built
+      navigate('/engineering/electrical/datasheet/upload');
     } else {
       // Show coming soon message
       alert(`${doc.name} is ${doc.status === DOCUMENT_STATUS.COMING_SOON ? 'coming soon' : 'in development'}!`);
@@ -191,6 +158,119 @@ const ElectricalDocumentsHub = () => {
       {/* DEBUG BANNER - Remove after verification */}
       <div className="bg-green-600 text-white text-center py-2 font-bold">
         ✅ Electrical Documents Hub - UPDATED & ACTIVE - {ELECTRICAL_DOCUMENTS.length} Documents Available
+      </div>
+      
+      {/* AI QUALITY CHECKER FEATURED BANNER */}
+      <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 shadow-2xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between gap-6">
+            {/* Left: Title & Description */}
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <SparklesIcon className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    Unified AI Quality Checker
+                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">NEW</span>
+                  </h2>
+                  <p className="text-purple-100 text-sm">
+                    GPT-4 powered validation for all equipment types • ADNOC standards • Instant compliance reports
+                  </p>
+                </div>
+              </div>
+              
+              {/* Quick Stats */}
+              {qualityStats && (
+                <div className="flex items-center gap-6 mt-4">
+                  <div className="text-white">
+                    <div className="text-3xl font-bold">{qualityStats.averageScore}%</div>
+                    <div className="text-xs text-purple-200">Avg Score</div>
+                  </div>
+                  <div className="text-white">
+                    <div className="text-2xl font-bold">{qualityStats.checked}/{qualityStats.total}</div>
+                    <div className="text-xs text-purple-200">Checked</div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-green-300">{qualityStats.excellent}</div>
+                      <div className="text-xs text-purple-200">Excellent</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-blue-300">{qualityStats.good}</div>
+                      <div className="text-xs text-purple-200">Good</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xl font-bold text-yellow-300">{qualityStats.needsWork}</div>
+                      <div className="text-xs text-purple-200">Needs Work</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Right: Action Buttons */}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => navigate('/engineering/electrical/datasheet/upload')}
+                className="px-6 py-3 bg-white text-purple-700 rounded-xl font-semibold hover:bg-purple-50 transition-all shadow-lg hover:shadow-xl flex items-center gap-2 group"
+              >
+                <BoltIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                Upload & Validate
+              </button>
+              <button
+                onClick={() => {
+                  // Navigate to first datasheet with form
+                  if (recentDatasheets[0]) {
+                    navigate(`/engineering/electrical/datasheet/${recentDatasheets[0].id}`);
+                  } else {
+                    alert('No datasheets available. Upload one first!');
+                  }
+                }}
+                className="px-6 py-3 bg-white/10 backdrop-blur-sm text-white border-2 border-white/30 rounded-xl font-semibold hover:bg-white/20 transition-all flex items-center gap-2"
+              >
+                <ChartBarIcon className="w-5 h-5" />
+                View Quality Reports
+              </button>
+            </div>
+          </div>
+          
+          {/* Recent Datasheets Preview */}
+          {recentDatasheets.length > 0 && (
+            <div className="mt-6 grid grid-cols-5 gap-3">
+              {recentDatasheets.slice(0, 5).map((sheet) => (
+                <button
+                  key={sheet.id}
+                  onClick={() => navigate(`/engineering/electrical/datasheet/${sheet.id}`)}
+                  className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg p-3 hover:bg-white/20 transition-all text-left group"
+                >
+                  <div className="text-white font-medium text-sm truncate group-hover:text-purple-100">
+                    {sheet.tag_number || sheet.equipment_type_name || 'Datasheet'}
+                  </div>
+                  {sheet.compliance_score !== null && sheet.compliance_score !== undefined && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full ${
+                            sheet.compliance_score >= 90 ? 'bg-green-400' :
+                            sheet.compliance_score >= 70 ? 'bg-blue-400' :
+                            sheet.compliance_score >= 50 ? 'bg-yellow-400' : 'bg-red-400'
+                          }`}
+                          style={{ width: `${sheet.compliance_score}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-white font-bold">{sheet.compliance_score}%</span>
+                    </div>
+                  )}
+                  {(!sheet.compliance_score && sheet.compliance_score !== 0) && (
+                    <div className="mt-2 text-xs text-purple-200">Not checked yet</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       
       {/* Header Section */}
@@ -269,47 +349,6 @@ const ElectricalDocumentsHub = () => {
           </div>
         </div>
       </div>
-      
-      {/* SOFT-CODED: Featured Tools Section - Universal Tools shown prominently */}
-      {ELECTRICAL_DOCUMENTS.some(doc => doc.featured && doc.status === DOCUMENT_STATUS.ACTIVE) && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl shadow-2xl p-8 text-white mb-8">
-            <div className="flex items-center gap-3 mb-4">
-              <CheckCircleIcon className="h-8 w-8" />
-              <h2 className="text-2xl font-bold">Universal AI-Powered Tools</h2>
-            </div>
-            <p className="text-purple-100 mb-6">
-              Smart tools that work with ALL equipment types - Upload any electrical datasheet and get instant AI-powered quality analysis
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {ELECTRICAL_DOCUMENTS.filter(doc => doc.featured && doc.status === DOCUMENT_STATUS.ACTIVE).map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => handleDocumentClick(doc)}
-                  className="bg-white/10 backdrop-blur-lg hover:bg-white/20 rounded-xl p-6 text-left transition-all border-2 border-white/20 hover:border-white/40 hover:scale-105"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="text-xs font-mono text-purple-200 mb-1">{doc.code}</div>
-                      <h3 className="text-xl font-bold text-white">{doc.name}</h3>
-                    </div>
-                    {doc.badge && (
-                      <span className="px-3 py-1 bg-yellow-400 text-yellow-900 rounded-full text-xs font-bold">
-                        {doc.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-purple-100 mb-4">{doc.description}</p>
-                  <div className="flex items-center gap-2 text-white font-semibold">
-                    Launch Tool
-                    <RocketLaunchIcon className="h-5 w-5" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Documents Grid - Organized by Category */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

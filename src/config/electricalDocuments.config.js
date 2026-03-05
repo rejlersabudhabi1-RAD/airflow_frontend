@@ -4,6 +4,9 @@
  * Version: 1.0.0 - Recreated after remote merge
  */
 
+// SOFT-CODED: Feature Flag - Control entire page visibility
+export const ELECTRICAL_DOCUMENTS_FEATURE_ENABLED = false; // Set to true to restore all content
+
 // Document Status Constants
 export const DOCUMENT_STATUS = {
   ACTIVE: 'active',
@@ -42,7 +45,10 @@ export const CATEGORY_DESCRIPTIONS = {
 };
 
 // Electrical Documents - Main Configuration Array
+// SOFT-CODED: All electrical document options DISABLED
 export const ELECTRICAL_DOCUMENTS = [
+  // ALL DOCUMENTS DISABLED - To re-enable, uncomment the items below
+  /* 
   // DATASHEETS
   {
     id: 'unified_quality_checker',
@@ -195,6 +201,7 @@ export const ELECTRICAL_DOCUMENTS = [
     category: DOCUMENT_CATEGORIES.SCHEDULES,
     status: DOCUMENT_STATUS.COMING_SOON
   }
+  */
 ];
 
 /**
