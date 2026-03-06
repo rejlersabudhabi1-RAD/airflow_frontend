@@ -2173,7 +2173,7 @@ const SmartDatasheetPage = () => {
                       >
                         <span className="flex items-center justify-center space-x-2">
                           <Zap className="h-6 w-6" />
-                          <span>ðŸš Process Documents</span>
+                          <span> Process Documents</span>
                         </span>
                       </button>
                     </div>
