@@ -12,6 +12,15 @@
  * - Permission-based access control
  */
 
+// SOFT-CODED: P&ID Feature Naming Configuration (centralized)
+// Easy to modify P&ID related naming across the application
+const PID_NAMING_CONFIG = {
+  displayName: 'P&ID Quality Checker',
+  shortName: 'Quality Checker',
+  fullDescription: 'AI-powered Piping & Instrumentation Diagram quality verification',
+  detailedDescription: 'Advanced P&ID quality analysis with AI-powered error detection, standards compliance checking (ADNOC DEP, API, ISA-5.1), symbol recognition, and automated quality recommendations.'
+}
+
 /**
  * Feature Status Types
  */
@@ -20,7 +29,9 @@ export const FEATURE_STATUS = {
   BETA: { id: 'beta', label: 'Beta', color: 'yellow' },
   NEW: { id: 'new', label: 'New', color: 'blue' },
   PREVIEW: { id: 'preview', label: 'Preview', color: 'purple' },
-  COMING_SOON: { id: 'coming_soon', label: 'Coming Soon', color: 'gray' }
+  COMING_SOON: { id: 'coming_soon', label: 'Coming Soon', color: 'gray' },
+  // SOFT-CODED: Status for features moved to different sections to avoid duplication
+  MOVED_TO_PROCESS_ENGINEERING: { id: 'moved', label: 'Moved to Process', color: 'orange' }
 }
 
 /**
@@ -51,10 +62,10 @@ export const FEATURES_CATALOG = {
     features: [
       {
         id: 'eng-pid-design',
-        name: 'P&ID Design',
-        shortName: 'P&ID',
-        description: 'AI-powered Piping & Instrumentation Diagram design and verification',
-        longDescription: 'Advanced P&ID analysis with AI-powered error detection, standards compliance checking (ADNOC DEP, API, ISA-5.1), symbol recognition, and automated recommendations.',
+        name: PID_NAMING_CONFIG.displayName,
+        shortName: PID_NAMING_CONFIG.shortName,
+        description: PID_NAMING_CONFIG.fullDescription,
+        longDescription: PID_NAMING_CONFIG.detailedDescription,
         path: '/pid/upload',
         moduleCode: 'pid_analysis',
         status: FEATURE_STATUS.ACTIVE,
@@ -267,26 +278,15 @@ export const FEATURES_CATALOG = {
           avgRating: 4.8
         }
       },
+      // SOFT-CODED REMOVAL: P&ID Checker moved to Process Engineering discipline
+      // Use Process -> P&ID instead of common-pid-checker to avoid duplication
+      // Path: /pid/upload is accessed via Process Engineering section only
       {
-        id: 'common-pid-checker',
-        name: 'P&ID Checker',
-        shortName: 'Checker',
-        description: 'AI-powered P&ID verification and validation',
-        path: '/pid/upload',
-        moduleCode: 'pid_analysis',
-        status: FEATURE_STATUS.ACTIVE,
-        badges: [FEATURE_BADGES.AI_POWERED, FEATURE_BADGES.POPULAR],
-        capabilities: [
-          'Standards compliance',
-          'Error detection',
-          'Automated reports',
-          'Batch processing'
-        ],
-        usageStats: {
-          monthlyUses: 1890,
-          totalUses: 12456,
-          avgRating: 4.9
-        }
+        id: 'common-pid-checker-removed',
+        name: '(Moved) P&ID Checker',
+        status: FEATURE_STATUS.MOVED_TO_PROCESS_ENGINEERING,
+        redirectPath: '/pid/upload',
+        note: 'Feature moved to Process Engineering -> P&ID for better organization'
       },
       {
         id: 'common-designiq',
