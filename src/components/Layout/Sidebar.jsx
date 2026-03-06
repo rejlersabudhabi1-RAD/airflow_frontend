@@ -198,18 +198,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           description: 'AI-powered revision tracking',
           moduleCode: 'crs_documents'
         },
-        {
-          id: 'pid',
-          title: '2.3 P&ID Checker',
-          icon: DocumentTextIcon,
-          path: '/pid/upload',
-          description: 'AI-powered P&ID verification',
-          moduleCode: 'pid_analysis',
-          badge: 'AI'
-        },
+        // SOFT-CODED REMOVAL: P&ID Checker duplicate removed from COMMON section
+        // P&ID functionality is available in Process Engineering section (1.1 Process -> P&ID)
+        // This avoids menu confusion and maintains single source of truth
         {
           id: 'designiq',
-          title: '2.4 DesignIQ',
+          title: '2.3 DesignIQ',
           icon: BeakerIcon,
           path: '/designiq',
           description: 'AI-powered design optimization',
@@ -218,7 +212,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'pfd',
-          title: '2.5 PFD to P&ID',
+          title: '2.4 PFD to P&ID',
           icon: DocumentTextIcon,
           path: '/pfd/upload',
           description: 'Intelligent PFD conversion',
