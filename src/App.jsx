@@ -779,7 +779,7 @@ function App() {
           path="engineering/electrical/datasheet"
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
-              <ElectricalDocumentsHub />
+              <ElectricalDatasheetPage />
             </ModuleProtectedRoute>
           }
         />
