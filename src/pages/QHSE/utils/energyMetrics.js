@@ -4,6 +4,43 @@
  * All thresholds and factors are soft-coded for easy configuration
  */
 
+// FEATURE FLAGS - Control visibility and data calculation mode
+export const ENERGY_FEATURES = {
+  showEstimatedData: false, // Set to false to hide estimated/calculated energy data
+  showOnlyRealData: true,   // Show only data from actual project fields
+  showDataUnavailableMessage: true, // Show message when energy data not in projects
+  enableConsumptionTracking: false, // DISABLED: No energy data in uploaded projects
+  enableSourceTracking: false,      // DISABLED: No energy source data available
+  enableEfficiencyTracking: false,  // DISABLED: No efficiency data available
+  enableCostTracking: false         // DISABLED: No cost data available
+};
+
+// DATA SOURCE MAPPING - Documents what data is available
+export const ENERGY_DATA_SOURCES = {
+  realDataAvailable: {
+    projectInfo: ['projectNo', 'projectTitle', 'client', 'projectManager'],
+    qualityMetrics: ['projectKPIsAchievedPercent', 'projectCompletionPercent'],
+    complianceMetrics: ['carsOpen', 'obsOpen', 'delayInAuditsNoDays'],
+    description: 'Only quality and compliance data available from uploaded projects'
+  },
+  estimatedData: {
+    consumption: { formula: 'manhours * 15 kWh', note: 'Industry average estimation only' },
+    sources: { note: 'Energy source distribution is fictional/estimated' },
+    efficiency: { note: 'Efficiency scores are calculated estimates' },
+    renewable: { formula: 'Based on KPI performance assumptions', note: 'Not real renewable energy data' },
+    warning: 'Estimated values DO NOT reflect actual project energy data'
+  },
+  dataNotInProjects: [
+    'Actual energy consumption measurements',
+    'Energy source breakdown',
+    'Renewable energy usage',
+    'Energy efficiency metrics',
+    'Cost per kWh data',
+    'Peak demand data',
+    'Smart meter readings'
+  ]
+};
+
 // Energy Performance Configuration
 const ENERGY_PERFORMANCE = {
   consumption: {
@@ -205,54 +242,84 @@ const CONSUMPTION_CATEGORIES = {
 
 /**
  * Calculate comprehensive energy metrics for projects
+ * NOTE: Returns estimated data based on industry averages, NOT actual energy measurements
  */
 export const calculateEnergyMetrics = (projects = []) => {
+  const emptyMetrics = {
+    // Counts
+    totalProjects: 0,
+    activeProjects: 0,
+    highConsumers: 0,
+    efficientProjects: 0,
+    
+    // Overall Scores
+    overallEnergyScore: 0,
+    efficiencyScore: 0,
+    
+    // Energy Consumption
+    totalEnergyConsumption: 0,
+    energyPerProject: 0,
+    peakDemand: 0,
+    consumptionTrend: 0,
+    
+    // Renewable Energy
+    totalRenewableEnergy: 0,
+    renewablePercentage: 0,
+    carbonAvoided: 0,
+    
+    // Cost Metrics
+    totalEnergyCost: 0,
+    costPerProject: 0,
+    avgCostPerKwh: ENERGY_PERFORMANCE.cost.baseline,
+    potentialSavings: 0,
+    
+    // Efficiency Metrics
+    avgEfficiencyScore: 0,
+    initiativesImplemented: 0,
+    totalSavingsAchieved: 0,
+    
+    // Smart Building
+    smartTechAdoption: 0,
+    automationLevel: 0,
+    dataPointsCollected: 0,
+    
+    // Carbon Impact
+    totalCarbonEmissions: 0,
+    carbonIntensity: { value: 0, label: 'No Data' },
+    carbonReduction: 0
+  };
+
   if (!Array.isArray(projects) || projects.length === 0) {
     return {
-      // Counts
-      totalProjects: 0,
-      activeProjects: 0,
-      highConsumers: 0,
-      efficientProjects: 0,
-      
-      // Overall Scores
-      overallEnergyScore: 0,
-      efficiencyScore: 0,
-      
-      // Energy Consumption
-      totalEnergyConsumption: 0,
-      energyPerProject: 0,
-      peakDemand: 0,
-      consumptionTrend: 0,
-      
-      // Renewable Energy
-      totalRenewableEnergy: 0,
-      renewablePercentage: 0,
-      carbonAvoided: 0,
-      
-      // Cost Metrics
-      totalEnergyCost: 0,
-      costPerProject: 0,
-      avgCostPerKwh: ENERGY_PERFORMANCE.cost.baseline,
-      potentialSavings: 0,
-      
-      // Efficiency Metrics
-      avgEfficiencyScore: 0,
-      initiativesImplemented: 0,
-      totalSavingsAchieved: 0,
-      
-      // Smart Building
-      smartTechAdoption: 0,
-      automationLevel: 0,
-      dataPointsCollected: 0,
-      
-      // Carbon Impact
-      totalCarbonEmissions: 0,
-      carbonIntensity: { value: 0, label: 'Very Low' },
-      carbonReduction: 0
+      ...emptyMetrics,
+      dataAvailable: false,
+      message: 'No projects available for energy analysis'
     };
   }
 
+  // Check if estimated data should be shown
+  if (!ENERGY_FEATURES.showEstimatedData && ENERGY_FEATURES.showOnlyRealData) {
+    return {
+      ...emptyMetrics,
+      dataAvailable: false,
+      showEstimatedData: false,
+      message: 'Energy tracking data not available in uploaded projects',
+      detailedMessage: 'The uploaded projects contain quality and compliance data only. Energy consumption, source distribution, and efficiency data are not tracked. Enable estimated data mode to see industry-average calculations.',
+      realDataAvailable: {
+        projects: projects.length,
+        qualityMetrics: true,
+        complianceMetrics: true,
+        energyMetrics: false
+      },
+      // Return only basic project count
+      totalProjects: projects.length,
+      activeProjects: projects.filter(p => 
+        p.status === 'active' || p.status === 'in_progress' || p.status === 'ongoing'
+      ).length
+    };
+  }
+
+  // Continue with estimated calculations if enabled
   const activeProjects = projects.filter(p => 
     p.status === 'active' || p.status === 'in_progress' || p.status === 'ongoing'
   );

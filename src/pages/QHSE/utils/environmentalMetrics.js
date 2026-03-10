@@ -6,6 +6,42 @@
  * Soft-coded to allow easy modifications without changing core logic
  */
 
+// FEATURE FLAGS - Control visibility and data calculation mode
+export const ENVIRONMENTAL_FEATURES = {
+  showEstimatedData: false, // Set to false to hide estimated/calculated environmental data
+  showOnlyRealData: true,   // Show only data from actual project fields
+  showDataUnavailableMessage: true, // Show message when environmental data not in projects
+  enableCarbonTracking: false, // DISABLED: No carbon data in uploaded projects
+  enableWasteManagement: false, // DISABLED: No waste data in uploaded projects
+  enableWaterTracking: false,  // DISABLED: No water data in uploaded projects
+  enableEnergyTracking: false  // DISABLED: No energy data in uploaded projects (see Energy page)
+};
+
+// DATA SOURCE MAPPING - Documents what data is available
+export const ENVIRONMENTAL_DATA_SOURCES = {
+  realDataAvailable: {
+    projectInfo: ['projectNo', 'projectTitle', 'client', 'projectManager'],
+    qualityMetrics: ['projectKPIsAchievedPercent', 'projectCompletionPercent'],
+    complianceMetrics: ['carsOpen', 'obsOpen', 'delayInAuditsNoDays'],
+    description: 'Only quality and compliance data available from uploaded projects'
+  },
+  estimatedData: {
+    carbon: { formula: 'manhours * 50 kg CO2e', note: 'Industry average estimation only' },
+    waste: { formula: 'manhours * 5 kg', note: 'Industry average estimation only' },
+    water: { formula: 'manhours * 100 L', note: 'Industry average estimation only' },
+    energy: { formula: 'manhours * 15 kWh', note: 'Industry average estimation only' },
+    warning: 'Estimated values DO NOT reflect actual project environmental data'
+  },
+  dataNotInProjects: [
+    'Actual carbon emissions measurements',
+    'Actual waste generation records',
+    'Actual water consumption data',
+    'Actual energy usage data',
+    'Environmental certifications',
+    'Sustainability initiatives'
+  ]
+};
+
 // Environmental Performance Levels
 export const ENVIRONMENTAL_PERFORMANCE = {
   EXCELLENT: { min: 90, max: 100, label: 'Excellent', color: '#10b981', icon: '🌟', description: 'Outstanding environmental stewardship' },
@@ -76,11 +112,31 @@ const parsePercentage = (value) => {
 };
 
 /**
+ * Calculate compliance rate from real project data
+ */
+const calculateComplianceRate = (projects) => {
+  if (!projects || projects.length === 0) return 0;
+  
+  let complianceSum = 0;
+  projects.forEach(project => {
+    const kpi = parsePercentage(project.projectKPIsAchievedPercent);
+    const delayDays = Number(project.delayInAuditsNoDays) || 0;
+    const complianceScore = kpi - (delayDays * 0.5);
+    complianceSum += Math.max(0, Math.min(100, complianceScore));
+  });
+  
+  return Math.round((complianceSum / projects.length) * 10) / 10;
+};
+
+/**
  * Calculate comprehensive environmental metrics from project data
+ * NOTE: Returns estimated data based on industry averages, NOT actual environmental measurements
  */
 export const calculateEnvironmentalMetrics = (projects) => {
   if (!projects || projects.length === 0) {
     return {
+      dataAvailable: false,
+      message: 'No projects available for environmental analysis',
       activeProjects: 0,
       totalProjects: 0,
       highImpactProjects: 0,
@@ -92,7 +148,7 @@ export const calculateEnvironmentalMetrics = (projects) => {
       totalCarbonEmissions: 0,
       carbonFootprint: 0,
       carbonPerProject: 0,
-      carbonIntensity: { value: 0, label: 'Very Low' },
+      carbonIntensity: { value: 0, label: 'No Data' },
       totalWaste: 0,
       wasteGenerated: 0,
       recycledWaste: 0,
@@ -108,8 +164,56 @@ export const calculateEnvironmentalMetrics = (projects) => {
       renewableEnergyRate: 0,
       complianceRate: 0
     };
-  };
+  }
 
+  // Check if estimated data should be shown
+  if (!ENVIRONMENTAL_FEATURES.showEstimatedData && ENVIRONMENTAL_FEATURES.showOnlyRealData) {
+    return {
+      dataAvailable: false,
+      showEstimatedData: false,
+      message: 'Environmental tracking data not available in uploaded projects',
+      detailedMessage: 'The uploaded projects contain quality and compliance data only. Carbon emissions, waste, water, and energy data are not tracked. Enable estimated data mode to see industry-average calculations.',
+      realDataAvailable: {
+        projects: projects.length,
+        qualityMetrics: true,
+        complianceMetrics: true,
+        environmentalMetrics: false
+      },
+      // Return only real compliance data
+      activeProjects: projects.length,
+      totalProjects: projects.length,
+      compliantProjects: projects.filter(p => {
+        const kpi = typeof p.projectKPIsAchievedPercent === 'string' 
+          ? Number(p.projectKPIsAchievedPercent.replace('%', '')) 
+          : Number(p.projectKPIsAchievedPercent) || 0;
+        return kpi >= 80;
+      }).length,
+      complianceRate: calculateComplianceRate(projects),
+      overallScore: 0,
+      environmentalScore: 0,
+      sustainabilityScore: 0,
+      avgProjectEnvironmentalScore: 0,
+      totalCarbonEmissions: 0,
+      carbonFootprint: 0,
+      carbonPerProject: 0,
+      carbonIntensity: { value: 0, label: 'Data Not Available' },
+      totalWaste: 0,
+      wasteGenerated: 0,
+      recycledWaste: 0,
+      wasteRecycled: 0,
+      recyclingRate: 0,
+      totalWaterUsage: 0,
+      waterConsumption: 0,
+      waterPerProject: 0,
+      totalEnergyUsage: 0,
+      energyConsumption: 0,
+      renewableEnergy: 0,
+      renewablePercentage: 0,
+      renewableEnergyRate: 0
+    };
+  }
+
+  // If estimated data is enabled, continue with calculations
   let carbonSum = 0;
   let wasteSum = 0;
   let recycledWasteSum = 0;

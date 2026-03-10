@@ -13,7 +13,8 @@ import {
   getHighImpactProjects,
   generateSustainabilityProgress,
   generateComplianceMatrix,
-  ENVIRONMENTAL_PERFORMANCE
+  ENVIRONMENTAL_PERFORMANCE,
+  ENVIRONMENTAL_DATA_SOURCES
 } from './utils/environmentalMetrics';
 import {
   EnvironmentalMetricCard,
@@ -106,6 +107,108 @@ const Environmental = ({ pageControls }) => {
           subtitle="Carbon emissions monitoring, waste management, and sustainability initiatives"
         />
         <EnvironmentalEmptyState message="Unable to load environmental data. Please try again later." />
+      </PageLayout>
+    );
+  }
+
+  // Check if environmental data is unavailable (not in uploaded projects)
+  if (environmentalData.dataAvailable === false) {
+    return (
+      <PageLayout>
+        <MainHeader 
+          title="Environmental Management"
+          subtitle="Carbon emissions monitoring, waste management, and sustainability initiatives"
+        >
+          <PageControlButtons {...pageControls} />
+        </MainHeader>
+
+        <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-xl border-2 border-blue-200 p-8 shadow-sm">
+          <div className="flex items-start gap-6">
+            <div className="flex-shrink-0 p-4 bg-blue-100 rounded-full">
+              <Leaf className="text-blue-600" size={32} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                Environmental Data Not Available
+              </h3>
+              <p className="text-gray-700 text-lg mb-4">
+                {environmentalData.detailedMessage || environmentalData.message}
+             </p>
+              
+              <div className="bg-white rounded-lg p-5 border border-gray-200 mb-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Target className="text-green-600" size={20} />
+                  Available Project Data
+                </h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">
+                      <strong>{environmentalData.activeProjects}</strong> Total Projects
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">
+                      <strong>{environmentalData.compliantProjects}</strong> Compliant Projects
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">Quality & KPI Metrics</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">Audit & Compliance Data</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 rounded-lg p-5 border border-amber-200">
+                <h4 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="text-amber-600" size={20} />
+                  Missing Environmental Data
+                </h4>
+                <ul className="space-y-2 text-sm text-amber-900">
+                  {environmentalData.dataNotInProjects ? (
+                    ENVIRONMENTAL_DATA_SOURCES.dataNotInProjects.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-amber-500 mt-0.5">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-500">•</span>
+                        <span>Carbon emissions measurements</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-500">•</span>
+                        <span>Waste generation records</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-500">•</span>
+                        <span>Water consumption data</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-amber-500">•</span>
+                        <span>Energy usage tracking</span>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+
+              <div className="mt-5 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-900">
+                  <strong>Note:</strong> To track environmental metrics, please add carbon emissions, waste, water, 
+                  and energy data fields to your QHSE project records, or use a dedicated environmental management module.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </PageLayout>
     );
   }

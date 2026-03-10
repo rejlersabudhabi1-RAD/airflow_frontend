@@ -18,7 +18,8 @@ import {
   Sun,
   BarChart3,
   Target,
-  Award
+  Award,
+  AlertTriangle
 } from 'lucide-react';
 import {
   AreaChart,
@@ -141,6 +142,105 @@ const Energy = ({ pageControls }) => {
       <PageLayout>
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <p className="text-red-800">Error loading energy data: {error}</p>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Check if energy data is unavailable (not in uploaded projects)
+  if (energyData && energyData.dataAvailable === false) {
+    return (
+      <PageLayout>
+        <MainHeader 
+          title="Energy Management"
+          subtitle="Comprehensive energy monitoring, optimization, and sustainability"
+        >
+          <PageControlButtons {...pageControls} />
+        </MainHeader>
+
+        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border-2 border-amber-200 p-8 shadow-sm">
+          <div className="flex items-start gap-6">
+            <div className="flex-shrink-0 p-4 bg-amber-100 rounded-full">
+              <Zap className="text-amber-600" size={32} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                Energy Data Not Available
+              </h3>
+              <p className="text-gray-700 text-lg mb-4">
+                {energyData.detailedMessage || energyData.message}
+              </p>
+              
+              <div className="bg-white rounded-lg p-5 border border-gray-200 mb-4">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Target className="text-green-600" size={20} />
+                  Available Project Data
+                </h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">
+                      <strong>{energyData.totalProjects}</strong> Total Projects
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">
+                      <strong>{energyData.activeProjects}</strong> Active Projects
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">Quality & KPI Metrics</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-gray-700">Audit & Compliance Data</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 rounded-lg p-5 border border-amber-200">
+                <h4 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="text-amber-600" size={20} />
+                  Missing Energy Data
+                </h4>
+                <ul className="space-y-2 text-sm text-amber-900">
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Energy consumption measurements</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Energy source breakdown</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Renewable energy usage data</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Energy efficiency metrics</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Cost per kWh tracking</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500">•</span>
+                    <span>Smart meter readings</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="mt-5 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-900">
+                  <strong>Note:</strong> To track energy metrics, please add energy consumption, source distribution, 
+                  and cost data fields to your QHSE project records, or use a dedicated energy management module.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </PageLayout>
     );

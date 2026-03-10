@@ -7,11 +7,48 @@
  */
 
 // FEATURE FLAGS - Control visibility of Health & Safety sections
+// IMPORTANT: Only sections with real project data should be enabled
 export const HEALTH_SAFETY_FEATURES = {
-  enablePPECompliance: false,  // Set to false to hide PPE Compliance section
-  enableSafetyTraining: true,
-  enableRiskAssessment: true,
-  enableIncidentTracking: true
+  enablePPECompliance: false,  // DISABLED: No PPE data in uploaded projects
+  enableSafetyTraining: false, // DISABLED: No training data in uploaded projects
+  enableRiskAssessment: true,  // ENABLED: Uses CARs + Observations + Delays
+  enableIncidentTracking: true // ENABLED: Uses CARs (incidents) + Observations (near-miss)
+};
+
+// DATA SOURCE MAPPING - Documents what real project fields are used
+export const HEALTH_SAFETY_DATA_SOURCES = {
+  // Real data available from uploaded projects
+  incidents: {
+    field: 'carsOpen',
+    description: 'Corrective Action Requests (CARs) used as safety incidents',
+    available: true
+  },
+  nearMiss: {
+    field: 'obsOpen',
+    description: 'Observations used as near-miss reports',
+    available: true
+  },
+  safetyScore: {
+    fields: ['projectKPIsAchievedPercent', 'projectCompletionPercent', 'carsOpen', 'obsOpen'],
+    description: 'Calculated from KPIs, completion, and issues',
+    available: true
+  },
+  riskAssessment: {
+    fields: ['carsOpen', 'obsOpen', 'delayInAuditsNoDays'],
+    description: 'Risk calculated from open issues and audit delays',
+    available: true
+  },
+  // Data NOT available in uploaded projects
+  ppeCompliance: {
+    field: null,
+    description: 'PPE compliance data not available in uploaded projects',
+    available: false
+  },
+  safetyTraining: {
+    field: null,
+    description: 'Training records not available in uploaded projects',
+    available: false
+  }
 };
 
 // Safety Performance Levels
