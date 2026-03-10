@@ -6,6 +6,14 @@
  * Soft-coded to allow easy modifications without changing core logic
  */
 
+// FEATURE FLAGS - Control visibility of Health & Safety sections
+export const HEALTH_SAFETY_FEATURES = {
+  enablePPECompliance: false,  // Set to false to hide PPE Compliance section
+  enableSafetyTraining: true,
+  enableRiskAssessment: true,
+  enableIncidentTracking: true
+};
+
 // Safety Performance Levels
 export const SAFETY_PERFORMANCE = {
   EXCELLENT: { min: 95, max: 100, label: 'Excellent', color: '#10b981', icon: '⭐', description: 'Outstanding safety record' },
