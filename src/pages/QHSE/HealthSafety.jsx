@@ -7,7 +7,6 @@ import {
   TrendingUp,
   Calendar,
   AlertTriangle,
-  HardHat,
   FileText,
   BarChart3,
   RefreshCw,
@@ -30,7 +29,6 @@ import {
   generateSafetyByManager,
   generateSafetyChecklist,
   generateMonthlySafetyTrend,
-  PPE_CATEGORIES,
   HEALTH_SAFETY_FEATURES
 } from './utils/healthSafetyMetrics';
 import {
@@ -40,7 +38,6 @@ import {
   HighRiskProjectCard,
   SafetyChecklistItem,
   ManagerSafetyCard,
-  PPEStatusCard,
   SafetyEmptyState
 } from './components/HealthSafety/SafetyComponents';
 
@@ -270,25 +267,6 @@ const OverviewView = ({ safetyMetrics, highRiskProjects, incidentTrend, safetyCh
             <SafetyEmptyState message="No high-risk projects identified" icon={Shield} />
           )}
         </div>
-
-        {/* PPE Compliance - Controlled by feature flag */}
-        {HEALTH_SAFETY_FEATURES.enablePPECompliance && (
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <HardHat className="text-blue-500" size={20} />
-              PPE Compliance
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(PPE_CATEGORIES).map(([key, ppe]) => (
-                <PPEStatusCard 
-                  key={key} 
-                  ppe={ppe} 
-                  status={Math.floor(Math.random() * 20) + 80} 
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Middle & Right Columns */}
