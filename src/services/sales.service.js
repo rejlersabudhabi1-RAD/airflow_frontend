@@ -5,7 +5,7 @@
 
 import apiClient from './api.service';
 
-const BASE_URL = '/api/v1/sales';
+const BASE_URL = '/sales';
 
 class SalesService {
   // ============================================================================

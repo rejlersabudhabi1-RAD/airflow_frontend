@@ -18,6 +18,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import NotificationPanel from './pages/NotificationPanel'
+import UsageDashboard from './pages/UsageDashboard'
 import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
@@ -92,6 +93,7 @@ import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
+import ElectricalEquipmentDatasheet from './pages/Engineering/Electrical/ElectricalEquipmentDatasheet'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
@@ -369,6 +371,14 @@ function App() {
           element={
             <ProtectedRoute>
               <NotificationPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="usage-analytics"
+          element={
+            <ProtectedRoute>
+              <UsageDashboard />
             </ProtectedRoute>
           }
         />
@@ -780,6 +790,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
               <ElectricalDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        
+        {/* Electrical Equipment Smart Datasheet Generator - SLD Upload & AI Detection */}
+        <Route
+          path="engineering/electrical/datasheet/smart"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <ElectricalEquipmentDatasheet />
             </ModuleProtectedRoute>
           }
         />

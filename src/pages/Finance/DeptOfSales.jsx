@@ -13,6 +13,13 @@ import salesService from '../../services/sales.service';
 import SALES_CONFIG, { formatValue } from '../../config/salesModule.config';
 import SubFeatureGrid from '../../components/Sales/SubFeatureGrid';
 
+// Usage Tracking Components
+import UsageOverviewCards from '../../components/UsageTracking/UsageOverviewCards';
+import DepartmentUsageChart from '../../components/UsageTracking/DepartmentUsageChart';
+import FeatureUsageChart from '../../components/UsageTracking/FeatureUsageChart';
+import TopUsersTable from '../../components/UsageTracking/TopUsersTable';
+import UsageTrendsChart from '../../components/UsageTracking/UsageTrendsChart';
+
 const DeptOfSales = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -184,21 +191,21 @@ const DeptOfSales = () => {
           {/* Modern Tab Navigation */}
           <div className="mb-8">
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-2">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}
-                    className={`group relative px-6 py-4 rounded-xl font-semibold transition-all duration-300 ${
+                    className={`group relative px-4 py-4 rounded-xl font-semibold transition-all duration-300 ${
                       activeTab === tab.id
                         ? `bg-gradient-to-r ${theme.primary.gradient} text-white shadow-lg scale-105`
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <span className="text-3xl">{tab.icon}</span>
-                      <span className="text-sm font-bold">{tab.label}</span>
-                      <span className={`text-xs ${activeTab === tab.id ? 'text-white/80' : 'text-gray-500'}`}>
+                      <span className="text-2xl lg:text-3xl">{tab.icon}</span>
+                      <span className="text-xs lg:text-sm font-bold">{tab.label}</span>
+                      <span className={`text-xs hidden lg:block ${activeTab === tab.id ? 'text-white/80' : 'text-gray-500'}`}>
                         {tab.description}
                       </span>
                     </div>
@@ -545,6 +552,58 @@ const DeptOfSales = () => {
               
               {/* Original AI Insights Component */}
               <AIInsights />
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-6">
+              {/* Sub-Features Section */}
+              {activeTabConfig?.subFeatures && (
+                <div className="bg-gradient-to-br from-emerald-50 via-green-50 to-blue-50 rounded-2xl shadow-xl border-2 border-emerald-200 p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white text-2xl shadow-lg`}>
+                        {activeTabConfig.icon}
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                          {activeTabConfig.label}
+                        </h2>
+                        <p className="text-sm text-gray-600">
+                          User metering and system usage insights
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-bold">
+                      Real-Time Tracking
+                    </span>
+                  </div>
+                  
+                  <SubFeatureGrid 
+                    subFeatures={activeTabConfig.subFeatures}
+                    onFeatureClick={handleSubFeatureClick}
+                    columns={3}
+                  />
+                </div>
+              )}
+              
+              {/* Usage Analytics Dashboard Content */}
+              <div className="space-y-6">
+                {/* Overview Cards */}
+                <UsageOverviewCards />
+                
+                {/* Charts Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <DepartmentUsageChart />
+                  <FeatureUsageChart />
+                </div>
+                
+                {/* Usage Trends */}
+                <UsageTrendsChart />
+                
+                {/* Top Users Table */}
+                <TopUsersTable />
+              </div>
             </div>
           )}
         </div>

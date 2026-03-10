@@ -308,6 +308,66 @@ export const SALES_CONFIG = {
           enabled: true
         }
       ]
+    },
+    {
+      id: 'analytics',
+      label: 'Usage Analytics',
+      icon: '📊',
+      description: 'User metering & system usage insights',
+      color: 'emerald',
+      order: 5,
+      subFeatures: [
+        {
+          id: 'usage_overview',
+          title: 'Usage Overview',
+          description: 'Real-time usage metrics & KPIs',
+          icon: '📈',
+          color: 'emerald',
+          gradient: 'from-emerald-500 to-green-600',
+          action: 'view',
+          enabled: true
+        },
+        {
+          id: 'department_analytics',
+          title: 'Department Analytics',
+          description: 'Usage breakdown by department',
+          icon: '🏢',
+          color: 'blue',
+          gradient: 'from-blue-500 to-indigo-600',
+          action: 'analyze',
+          enabled: true
+        },
+        {
+          id: 'feature_analytics',
+          title: 'Feature Analytics',
+          description: 'Most used features & modules',
+          icon: '🎯',
+          color: 'purple',
+          gradient: 'from-purple-500 to-pink-600',
+          action: 'analyze',
+          enabled: true
+        },
+        {
+          id: 'top_users',
+          title: 'Top Users',
+          description: 'User activity leaderboard',
+          icon: '👥',
+          color: 'amber',
+          gradient: 'from-amber-500 to-orange-600',
+          action: 'view',
+          enabled: true
+        },
+        {
+          id: 'usage_trends',
+          title: 'Usage Trends',
+          description: 'Historical usage patterns & trends',
+          icon: '📊',
+          color: 'cyan',
+          gradient: 'from-cyan-500 to-blue-600',
+          action: 'analyze',
+          enabled: true
+        }
+      ]
     }
   ],
 
