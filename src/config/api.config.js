@@ -1,58 +1,31 @@
 /**
  * API Configuration
  * Smart configuration for API endpoints and settings
+ * 
+ * SOFT-CODED: Now uses centralized environment configuration
+ * Based on commit: c6c3a7e (9-3-26 : First Commit)
+ * Aligned with backend configuration for proper frontend-backend synchronization
  */
 
-// Production backend URL (Railway)
-const PRODUCTION_API_URL = 'https://aiflowbackend-production.up.railway.app/api/v1'
+import envConfig, { getApiBaseUrl, getApiTimeouts } from './environment.config'
 
-// Determine API base URL (soft-coded for all environments)
-const getApiBaseUrl = () => {
-  // 1. CRITICAL: For localhost development, ALWAYS use relative path for Vite proxy
-  if (typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname
-    console.log('[API Config] 🌐 Detected hostname:', hostname)
-    
-    // 2. For localhost/127.0.0.1, use relative path for Vite proxy (NEVER Docker service names)
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      const localUrl = '/api/v1'
-      console.log('[API Config] 🏠 Localhost detected, using Vite proxy:', localUrl)
-      return localUrl
-    }
-    
-    // 3. For radai.ae custom domain, use Railway backend
-    if (hostname === 'radai.ae' || hostname === 'www.radai.ae') {
-      console.log('[API Config] 🌐 RADAI custom domain detected, using Railway backend:', PRODUCTION_API_URL)
-      return PRODUCTION_API_URL
-    }
-    
-    // 4. For ANY Vercel deployment (production/preview), ALWAYS use Railway backend
-    if (hostname.includes('vercel.app') || hostname.includes('vercel')) {
-      console.log('[API Config] ☁️ Vercel deployment detected, using Railway backend:', PRODUCTION_API_URL)
-      return PRODUCTION_API_URL
-    }
-    
-    // 5. For any other hostname, use production Railway backend as default
-    console.log('[API Config] 🌍 Unknown hostname, defaulting to Railway backend:', PRODUCTION_API_URL)
-    return PRODUCTION_API_URL
-  }
-  
-  // 6. SSR or build-time fallback: ALWAYS use production for Vercel
-  // Vercel builds are for production, so we always want Railway backend
-  console.log('[API Config] 📦 Build-time detected, using Railway backend:', PRODUCTION_API_URL)
-  return PRODUCTION_API_URL
-}
-
+// Get API base URL from centralized configuration
 export const API_BASE_URL = getApiBaseUrl()
 
-// Log the final API URL
-console.log('[API Config] Final API_BASE_URL:', API_BASE_URL)
+// Get timeout settings from centralized configuration
+const { timeout, timeoutLong } = getApiTimeouts()
 
-// Log API URL for debugging
+// Log configuration for debugging
+console.log('[API Config] ✅ Using centralized environment configuration')
+console.log('[API Config] Environment:', envConfig.getEnvironment())
 console.log('[API Config] API Base URL:', API_BASE_URL)
-console.log('[API Config] Environment:', import.meta.env.MODE)
-console.log('[API Config] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL)
-console.log('[API Config] VITE_API_URL:', import.meta.env.VITE_API_URL)
+console.log('[API Config] Backend URL:', envConfig.getBackendUrl())
+console.log('[API Config] Environment Config:', {
+  VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'not set',
+  VITE_BACKEND_URL: import.meta.env.VITE_BACKEND_URL || 'not set',
+  VITE_AIFLOW_ENVIRONMENT: import.meta.env.VITE_AIFLOW_ENVIRONMENT || 'not set',
+  hostname: typeof window !== 'undefined' ? window.location.hostname : 'SSR'
+})
 
 export const API_ENDPOINTS = {
   // Auth endpoints
@@ -70,10 +43,10 @@ export const API_ENDPOINTS = {
   HEALTH: '/health/',
 }
 
-// Dynamic timeouts based on operation type and database location
-// Increased timeout for Railway database connections from local Docker
-export const API_TIMEOUT = 90000 // 90 seconds (increased for Railway database)
-export const API_TIMEOUT_LONG = 1200000 // 20 minutes for file upload/analysis and 4-doc enrichment
+// SOFT-CODED: Timeout values from centralized configuration
+// These values are now managed in config/environments.json
+export const API_TIMEOUT = timeout // From centralized config
+export const API_TIMEOUT_LONG = timeoutLong // From centralized config
 export const API_TIMEOUT_AI_GENERATION = 300000 // 5 minutes for AI P&ID generation (OpenAI API calls)
 
 export const HTTP_STATUS = {
