@@ -7,7 +7,8 @@ import {
   ChartBarIcon,
   DocumentChartBarIcon,
   CubeIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { FEATURES_CATALOG } from '../config/featuresCatalog.config';
 
@@ -18,6 +19,10 @@ import { FEATURES_CATALOG } from '../config/featuresCatalog.config';
  */
 const ProcessDatasheetPage = () => {
   const navigate = useNavigate();
+  
+  
+
+  
 
   // Get module name from centralized config
   const moduleConfig = FEATURES_CATALOG.engineering.features.find(
@@ -142,6 +147,8 @@ const ProcessDatasheetPage = () => {
     }
   };
 
+  
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
       {/* Header Section */}
@@ -155,10 +162,19 @@ const ProcessDatasheetPage = () => {
               Comprehensive process engineering data management and analysis system
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium">
               Process Engineering
             </span>
+
+            {/* Direct Navigation Button */}
+            <button
+              onClick={() => navigate('/engineering/process/datasheet/smart')}
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <SparklesIcon className="w-5 h-5" />
+              <span>Process Datasheet</span>
+            </button>
           </div>
         </div>
       </div>
@@ -296,3 +312,4 @@ const ProcessDatasheetPage = () => {
 };
 
 export default ProcessDatasheetPage;
+

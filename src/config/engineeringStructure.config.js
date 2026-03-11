@@ -18,6 +18,15 @@ import {
   CircleStackIcon
 } from '@heroicons/react/24/outline'
 
+// SOFT-CODED: P&ID Feature Naming Configuration
+// Easy to modify P&ID related naming across the application
+const PID_NAMING_CONFIG = {
+  displayName: 'P&ID Quality Checker',
+  fullName: 'Piping & Instrumentation Diagram Quality Checker',
+  shortDescription: 'AI-powered P&ID quality verification and standards compliance',
+  longDescription: 'Advanced P&ID quality analysis with AI-powered error detection, standards compliance checking, and automated recommendations'
+}
+
 /**
  * Engineering Disciplines Configuration
  * Each discipline can have multiple sub-features
@@ -35,11 +44,11 @@ export const ENGINEERING_DISCIPLINES = {
     subFeatures: [
       {
         id: 'pid',
-        name: 'P&ID',
-        fullName: 'Piping & Instrumentation Diagram',
+        name: PID_NAMING_CONFIG.displayName,
+        fullName: PID_NAMING_CONFIG.fullName,
         icon: DocumentChartBarIcon,
         path: '/pid/upload',
-        description: 'AI-powered P&ID design verification',
+        description: PID_NAMING_CONFIG.shortDescription,
         moduleCode: 'pid_analysis',
         badge: 'AI'
       },
@@ -169,6 +178,7 @@ export const ENGINEERING_DISCIPLINES = {
         moduleCode: 'electrical_sld',
         badge: 'New'
       },
+      // SOFT-CODED: Electrical Datasheet - RE-ENABLED
       {
         id: 'electricalDatasheets',
         name: 'Datasheets',
