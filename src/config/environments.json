@@ -3,6 +3,8 @@
   "_purpose": "This file aligns frontend, backend, and database configurations using soft-coding technique",
   "_date_created": "2026-03-11",
   "_based_on_commit": "c6c3a7e (9-3-26 : First Commit)",
+  "_build_version": "2.1.0",
+  "_last_fix": "AbortController upload timeout (13-03-26)",
   
   "environments": {
     "local": {
@@ -164,6 +166,7 @@
     "timeout": 30000,
     "timeout_long": 300000,
     "timeout_upload": 60000,
+    "_timeout_upload_note": "AbortController enforced — cannot be bypassed by Axios",
     "timeout_poll": 10000,
     "broker_connect_timeout": 5,
     "retry_attempts": 3,

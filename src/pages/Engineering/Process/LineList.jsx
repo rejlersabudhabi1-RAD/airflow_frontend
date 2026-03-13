@@ -1,9 +1,9 @@
 /**
  * 🎯 LINE LIST - BASE EXTRACTION LAYER ONLY
- * 
+ *
  * Purpose: Extract base 8 columns from P&ID (no enrichment)
  * Route: /engineering/process/line-list
- * 
+ *
  * Features:
  * - P&ID upload only (PDF)
  * - Async processing with polling (fixes Railway production timeout)
@@ -13,8 +13,17 @@
  *
  * Why async?
  * Railway's reverse proxy drops HTTP connections after ~60 s.
- * OCR takes several minutes, so we submit a background job and poll
- * for the result — the same pattern used by upload_pid_status.
+ * OCR takes several minutes, so we submit the file as a background job and
+ * poll for progress — the same pattern used by upload_pid_status.
+ *
+ * Why fetch + AbortController for the upload?
+ * Axios' per-request timeout can be silently bypassed by the shared
+ * api.service.js interceptor (which remaps errors) and by Axios instance
+ * defaults set to API_TIMEOUT_LONG (300 s).  A native AbortController
+ * fires at exactly UPLOAD_TIMEOUT_MS regardless of any Axios config,
+ * guaranteeing the user is never frozen for 5 minutes.
+ *
+ * Build: v2.1.0 — AbortController upload timeout
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -22,34 +31,47 @@ import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/
 import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 import envConfig from '../../../config/environment.config';
+import { getApiBaseUrl } from '../../../config/environment.config';
+import { STORAGE_KEYS } from '../../../config/app.config';
 
 // ---------------------------------------------------------------------------
 // Soft-coded config — all timing values flow from environments.json.
-// Hardcoded fallbacks ensure correct behaviour even if the Json entry is
+// Hardcoded fallbacks ensure correct behaviour even if the JSON entry is
 // missing or the Vercel build uses an old cached bundle.
 // ---------------------------------------------------------------------------
 const API_CONFIG = envConfig.getApiConfig();
 
 // How often to poll for OCR progress (ms)
-const POLL_INTERVAL_MS  = API_CONFIG.retry_delay   || 3000;
+// SOFT-CODED: environments.json → api.retry_delay
+const POLL_INTERVAL_MS   = Number(API_CONFIG.retry_delay)       || 3000;
 
 // Maximum total polling window — give up after this (ms)
-const POLL_MAX_WAIT_MS  = API_CONFIG.timeout_long  || 1200000;  // 20 min
+// SOFT-CODED: environments.json → api.timeout_long
+const POLL_MAX_WAIT_MS   = Number(API_CONFIG.timeout_long)      || 1200000;  // 20 min
 
-// Timeout for the initial POST (file upload + task dispatch only, NOT OCR).
-// Must be short so the browser doesn't wait forever when the backend blocks.
-// SOFT-CODED: override via environments.json → api.timeout_upload
-const UPLOAD_TIMEOUT_MS = Number(API_CONFIG.timeout_upload) || 60000;  // 60 s hard ceiling
+// Timeout for the initial filing POST (upload + broker dispatch, NOT OCR time).
+// Uses AbortController so it cannot be bypassed by Axios instance settings.
+// SOFT-CODED: environments.json → api.timeout_upload
+const UPLOAD_TIMEOUT_MS  = Number(API_CONFIG.timeout_upload)    || 60000;   // 60 s
 
 // Timeout for each individual status-poll GET
-const POLL_REQ_TIMEOUT  = API_CONFIG.timeout_poll  || 10000;  // 10 s
+// SOFT-CODED: environments.json → api.timeout_poll
+const POLL_REQ_TIMEOUT   = Number(API_CONFIG.timeout_poll)      || 10000;   // 10 s
 
 // How many times to retry the initial POST before giving up
-// SOFT-CODED: override via environments.json → api.max_upload_retries
-const MAX_POST_RETRIES  = API_CONFIG.max_upload_retries || 3;
+// SOFT-CODED: environments.json → api.max_upload_retries
+const MAX_POST_RETRIES   = Number(API_CONFIG.max_upload_retries) || 3;
 
-// Base delay between POST retries (doubles each attempt)
-const POST_RETRY_BASE_MS = API_CONFIG.upload_retry_delay || 4000;
+// Base delay between POST retries (doubles each attempt: 4 s, 8 s)
+// SOFT-CODED: environments.json → api.upload_retry_delay
+const POST_RETRY_BASE_MS = Number(API_CONFIG.upload_retry_delay) || 4000;
+
+// Resolved API base-URL (e.g. https://aiflowbackend-production.up.railway.app/api/v1)
+const API_BASE = getApiBaseUrl();
+
+console.log('[LineList] Config loaded:', {
+  UPLOAD_TIMEOUT_MS, POLL_INTERVAL_MS, MAX_POST_RETRIES, POST_RETRY_BASE_MS, API_BASE,
+});
 
 const LineList = () => {
   // State management
@@ -123,7 +145,9 @@ const LineList = () => {
   }, []);
 
   // -------------------------------------------------------------------------
-  // Submit extraction job
+  // Submit extraction job — uses native fetch + AbortController so the
+  // UPLOAD_TIMEOUT_MS deadline is enforced regardless of Axios instance
+  // settings or api.service.js interceptor behaviour.
   // -------------------------------------------------------------------------
   const handleExtract = async () => {
     if (!pidDocument) {
@@ -137,80 +161,118 @@ const LineList = () => {
     setProgress(0);
     setStatusMessage('Uploading P&ID…');
 
+    // Build FormData (same fields used by the backend)
     const formData = new FormData();
     formData.append('pid_file', pidDocument);
     formData.append('format_type', formatType);
     formData.append('include_area', includeArea);
 
+    // JWT token for Authorization header
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    // Determine the full upload URL (relative for local, absolute for prod)
+    // SOFT-CODED: API_BASE comes from environments.json → backend.api_url
+    const uploadUrl = `${API_BASE}/designiq/lists/base_extraction/`;
+    console.log(`[LineList] upload URL: ${uploadUrl}  timeout: ${UPLOAD_TIMEOUT_MS}ms`);
+
     // ------------------------------------------------------------------
-    // Smart retry loop: POST up to MAX_POST_RETRIES times with
-    // exponential back-off.  Each attempt uses a hard per-request
-    // timeout (UPLOAD_TIMEOUT_MS) so a hanging backend never freezes
-    // the browser for minutes.
+    // Smart retry loop — up to MAX_POST_RETRIES attempts with exponential
+    // back-off.  Each attempt is independently aborted after UPLOAD_TIMEOUT_MS
+    // using the AbortController API (browser-native, cannot be overridden).
+    // SOFT-CODED: MAX_POST_RETRIES, POST_RETRY_BASE_MS from environments.json
     // ------------------------------------------------------------------
     let lastErr = null;
+
     for (let attempt = 1; attempt <= MAX_POST_RETRIES; attempt++) {
       if (attempt > 1) {
-        const delay = POST_RETRY_BASE_MS * Math.pow(2, attempt - 2); // 4s, 8s …
-        setStatusMessage(`Retrying upload (attempt ${attempt}/${MAX_POST_RETRIES})… waiting ${Math.round(delay / 1000)}s`);
+        // Exponential back-off: 4 s, 8 s, …
+        const delay = POST_RETRY_BASE_MS * Math.pow(2, attempt - 2);
+        setStatusMessage(
+          `Retrying upload (attempt ${attempt}/${MAX_POST_RETRIES})… waiting ${Math.round(delay / 1000)}s`
+        );
         await new Promise((r) => setTimeout(r, delay));
       }
 
+      setStatusMessage(
+        attempt === 1
+          ? 'Uploading P&ID…'
+          : `Sending request (attempt ${attempt}/${MAX_POST_RETRIES})…`
+      );
+
+      // AbortController gives us a true hard deadline — no Axios involved
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
       try {
-        setStatusMessage(attempt === 1 ? 'Uploading P&ID…' : `Sending request (attempt ${attempt}/${MAX_POST_RETRIES})…`);
+        const fetchResp = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+          signal: controller.signal,
+        });
+        clearTimeout(abortTimer);
 
-        // POST with explicit per-request timeout — this overrides the
-        // apiClient instance default and guards against a blocking backend.
-        const response = await apiClient.post(
-          '/designiq/lists/base_extraction/',
-          formData,
-          {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: UPLOAD_TIMEOUT_MS, // SOFT-CODED from environments.json
-          }
-        );
+        if (!fetchResp.ok) {
+          // HTTP error — read body for detail
+          let errDetail = `HTTP ${fetchResp.status}`;
+          try {
+            const errJson = await fetchResp.json();
+            errDetail = errJson.error || errJson.detail || errDetail;
+          } catch (_) { /* ignore parse error */ }
+          throw Object.assign(new Error(errDetail), { isHttpError: true, status: fetchResp.status });
+        }
 
-        // EAGER mode (local dev): synchronous result returned immediately
-        if (response.status === 200 && response.data.success) {
-          setExtractedData(response.data);
+        const data = await fetchResp.json();
+
+        // EAGER mode (local dev): synchronous result returned with HTTP 200
+        if (fetchResp.status === 200 && data.success) {
+          setExtractedData(data);
           setProgress(100);
           setStatusMessage('Extraction complete!');
           setIsProcessing(false);
           return;
         }
 
-        // Async mode (production): received 202 — start polling
-        const { task_id } = response.data;
+        // Async mode (production): HTTP 202 with task_id — start polling
+        const { task_id } = data;
         if (!task_id) {
           throw new Error('Server did not return a task_id. Please try again.');
         }
 
+        console.log(`[LineList] task dispatched: ${task_id} (mode: ${data.dispatch_mode || 'unknown'})`);
         setStatusMessage('Processing in background — checking progress…');
         pollStartRef.current = Date.now();
         pollStatus(task_id);
-        return; // success — exit retry loop
+        return; // SUCCESS — exit retry loop
 
       } catch (err) {
+        clearTimeout(abortTimer);
         lastErr = err;
-        const isTimeout    = err.isTimeout   || err.code === 'ECONNABORTED';
-        const isNetworkErr = err.isNetworkError || !err.response;
-        const isRetryable  = isTimeout || isNetworkErr;
 
-        console.warn(`[LineList] POST attempt ${attempt} failed:`, err.message || err);
+        const isAborted   = err.name === 'AbortError';
+        const isNetworkErr = err instanceof TypeError && err.message.includes('fetch');
+        const isRetryable  = isAborted || isNetworkErr;
 
-        if (!isRetryable || attempt === MAX_POST_RETRIES) {
-          // Non-retryable error or last attempt — propagate
-          break;
+        if (isAborted) {
+          console.warn(
+            `[LineList] attempt ${attempt}: upload aborted after ${UPLOAD_TIMEOUT_MS}ms`
+          );
+        } else {
+          console.warn(`[LineList] attempt ${attempt} failed:`, err.message || err);
         }
-        // Otherwise loop and retry
+
+        if (!isRetryable || attempt === MAX_POST_RETRIES) break;
+        // Otherwise loop for the next attempt
       }
     }
 
-    // All retries exhausted
-    console.error('Extraction error after all retries:', lastErr);
+    // All retries exhausted — show a user-friendly message
+    console.error('[LineList] upload failed after all retries:', lastErr);
+    const isTimeout = lastErr?.name === 'AbortError';
     const friendlyMsg =
-      lastErr?.response?.data?.error ||
-      (lastErr?.isTimeout ? `Upload timed out after ${Math.round(UPLOAD_TIMEOUT_MS / 1000)}s — the server is busy. Please try again.` : null) ||
+      (isTimeout
+        ? `Upload timed out after ${Math.round(UPLOAD_TIMEOUT_MS / 1000)}s — the server is busy. Please try again.`
+        : null) ||
       lastErr?.message ||
       'Extraction failed — please try again.';
     setError(friendlyMsg);
