@@ -315,6 +315,19 @@ const LineList = () => {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Line List');
+    // SOFT-CODED: filename from environments.json api.version if needed
+    XLSX.writeFile(wb, 'line_list_base_extraction.xlsx');
+  };
+
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto">
+
+        {/* Page Header */}
+        <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <DocumentTextIcon className="h-8 w-8 text-blue-600" />
             Line List - Base Extraction
