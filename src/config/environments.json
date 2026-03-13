@@ -163,8 +163,11 @@
     "version": "v1",
     "timeout": 30000,
     "timeout_long": 300000,
+    "timeout_upload": 90000,
+    "timeout_poll": 10000,
+    "broker_connect_timeout": 5,
     "retry_attempts": 3,
-    "retry_delay": 1000
+    "retry_delay": 3000
   },
   
   "deployment": {

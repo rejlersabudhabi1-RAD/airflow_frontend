@@ -27,8 +27,10 @@ import envConfig from '../../../config/environment.config';
 // Soft-coded config: read polling interval from centralized environments.json
 // ---------------------------------------------------------------------------
 const API_CONFIG = envConfig.getApiConfig();
-const POLL_INTERVAL_MS = API_CONFIG.retry_delay || 3000;   // default 3 s
-const POLL_MAX_WAIT_MS = (API_CONFIG.timeout_long || 1200000);  // default 20 min
+const POLL_INTERVAL_MS  = API_CONFIG.retry_delay   || 3000;   // poll frequency (default 3 s)
+const POLL_MAX_WAIT_MS  = API_CONFIG.timeout_long  || 1200000; // max polling window (default 20 min)
+const UPLOAD_TIMEOUT_MS = API_CONFIG.timeout_upload || 90000;  // POST timeout incl. file upload (default 90 s)
+const POLL_REQ_TIMEOUT  = API_CONFIG.timeout_poll  || 10000;   // individual poll GET timeout (default 10 s)
 
 const LineList = () => {
   // State management
@@ -71,7 +73,7 @@ const LineList = () => {
     }
 
     apiClient
-      .get(`/designiq/lists/base_extraction_status/${taskId}/`)
+      .get(`/designiq/lists/base_extraction_status/${taskId}/`, { timeout: POLL_REQ_TIMEOUT })
       .then(({ data }) => {
         const state = data.state || data.status;
 
@@ -126,7 +128,10 @@ const LineList = () => {
       const response = await apiClient.post(
         '/designiq/lists/base_extraction/',
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: UPLOAD_TIMEOUT_MS,  // SOFT-CODED: upload + broker dispatch (not OCR time)
+        }
       );
 
       // EAGER mode (local dev): synchronous result returned immediately
