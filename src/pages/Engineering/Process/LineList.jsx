@@ -24,13 +24,32 @@ import * as XLSX from 'xlsx';
 import envConfig from '../../../config/environment.config';
 
 // ---------------------------------------------------------------------------
-// Soft-coded config: read polling interval from centralized environments.json
+// Soft-coded config — all timing values flow from environments.json.
+// Hardcoded fallbacks ensure correct behaviour even if the Json entry is
+// missing or the Vercel build uses an old cached bundle.
 // ---------------------------------------------------------------------------
 const API_CONFIG = envConfig.getApiConfig();
-const POLL_INTERVAL_MS  = API_CONFIG.retry_delay   || 3000;   // poll frequency (default 3 s)
-const POLL_MAX_WAIT_MS  = API_CONFIG.timeout_long  || 1200000; // max polling window (default 20 min)
-const UPLOAD_TIMEOUT_MS = API_CONFIG.timeout_upload || 90000;  // POST timeout incl. file upload (default 90 s)
-const POLL_REQ_TIMEOUT  = API_CONFIG.timeout_poll  || 10000;   // individual poll GET timeout (default 10 s)
+
+// How often to poll for OCR progress (ms)
+const POLL_INTERVAL_MS  = API_CONFIG.retry_delay   || 3000;
+
+// Maximum total polling window — give up after this (ms)
+const POLL_MAX_WAIT_MS  = API_CONFIG.timeout_long  || 1200000;  // 20 min
+
+// Timeout for the initial POST (file upload + task dispatch only, NOT OCR).
+// Must be short so the browser doesn't wait forever when the backend blocks.
+// SOFT-CODED: override via environments.json → api.timeout_upload
+const UPLOAD_TIMEOUT_MS = Number(API_CONFIG.timeout_upload) || 60000;  // 60 s hard ceiling
+
+// Timeout for each individual status-poll GET
+const POLL_REQ_TIMEOUT  = API_CONFIG.timeout_poll  || 10000;  // 10 s
+
+// How many times to retry the initial POST before giving up
+// SOFT-CODED: override via environments.json → api.max_upload_retries
+const MAX_POST_RETRIES  = API_CONFIG.max_upload_retries || 3;
+
+// Base delay between POST retries (doubles each attempt)
+const POST_RETRY_BASE_MS = API_CONFIG.upload_retry_delay || 4000;
 
 const LineList = () => {
   // State management
@@ -123,41 +142,79 @@ const LineList = () => {
     formData.append('format_type', formatType);
     formData.append('include_area', includeArea);
 
-    try {
-      // POST returns 202 with task_id (async) or 200 with data (EAGER/local dev)
-      const response = await apiClient.post(
-        '/designiq/lists/base_extraction/',
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: UPLOAD_TIMEOUT_MS,  // SOFT-CODED: upload + broker dispatch (not OCR time)
+    // ------------------------------------------------------------------
+    // Smart retry loop: POST up to MAX_POST_RETRIES times with
+    // exponential back-off.  Each attempt uses a hard per-request
+    // timeout (UPLOAD_TIMEOUT_MS) so a hanging backend never freezes
+    // the browser for minutes.
+    // ------------------------------------------------------------------
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MAX_POST_RETRIES; attempt++) {
+      if (attempt > 1) {
+        const delay = POST_RETRY_BASE_MS * Math.pow(2, attempt - 2); // 4s, 8s …
+        setStatusMessage(`Retrying upload (attempt ${attempt}/${MAX_POST_RETRIES})… waiting ${Math.round(delay / 1000)}s`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      try {
+        setStatusMessage(attempt === 1 ? 'Uploading P&ID…' : `Sending request (attempt ${attempt}/${MAX_POST_RETRIES})…`);
+
+        // POST with explicit per-request timeout — this overrides the
+        // apiClient instance default and guards against a blocking backend.
+        const response = await apiClient.post(
+          '/designiq/lists/base_extraction/',
+          formData,
+          {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: UPLOAD_TIMEOUT_MS, // SOFT-CODED from environments.json
+          }
+        );
+
+        // EAGER mode (local dev): synchronous result returned immediately
+        if (response.status === 200 && response.data.success) {
+          setExtractedData(response.data);
+          setProgress(100);
+          setStatusMessage('Extraction complete!');
+          setIsProcessing(false);
+          return;
         }
-      );
 
-      // EAGER mode (local dev): synchronous result returned immediately
-      if (response.status === 200 && response.data.success) {
-        setExtractedData(response.data);
-        setProgress(100);
-        setStatusMessage('Extraction complete!');
-        setIsProcessing(false);
-        return;
+        // Async mode (production): received 202 — start polling
+        const { task_id } = response.data;
+        if (!task_id) {
+          throw new Error('Server did not return a task_id. Please try again.');
+        }
+
+        setStatusMessage('Processing in background — checking progress…');
+        pollStartRef.current = Date.now();
+        pollStatus(task_id);
+        return; // success — exit retry loop
+
+      } catch (err) {
+        lastErr = err;
+        const isTimeout    = err.isTimeout   || err.code === 'ECONNABORTED';
+        const isNetworkErr = err.isNetworkError || !err.response;
+        const isRetryable  = isTimeout || isNetworkErr;
+
+        console.warn(`[LineList] POST attempt ${attempt} failed:`, err.message || err);
+
+        if (!isRetryable || attempt === MAX_POST_RETRIES) {
+          // Non-retryable error or last attempt — propagate
+          break;
+        }
+        // Otherwise loop and retry
       }
-
-      // Async mode (production): start polling
-      const { task_id } = response.data;
-      if (!task_id) {
-        throw new Error('Server did not return a task_id. Please try again.');
-      }
-
-      setStatusMessage('Processing in background…');
-      pollStartRef.current = Date.now();
-      pollStatus(task_id);
-
-    } catch (err) {
-      console.error('Extraction error:', err);
-      setError(err.response?.data?.error || err.message || 'Extraction failed');
-      setIsProcessing(false);
     }
+
+    // All retries exhausted
+    console.error('Extraction error after all retries:', lastErr);
+    const friendlyMsg =
+      lastErr?.response?.data?.error ||
+      (lastErr?.isTimeout ? `Upload timed out after ${Math.round(UPLOAD_TIMEOUT_MS / 1000)}s — the server is busy. Please try again.` : null) ||
+      lastErr?.message ||
+      'Extraction failed — please try again.';
+    setError(friendlyMsg);
+    setIsProcessing(false);
   };
 
   // -------------------------------------------------------------------------
