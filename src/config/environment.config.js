@@ -277,7 +277,8 @@ export const getApiTimeouts = () => {
   const config = envConfig.getApiConfig()
   return {
     timeout: config.timeout || 30000,
-    timeoutLong: config.timeout_long || 300000
+    timeoutLong: config.timeout_long || 300000,
+    timeoutAuth: config.timeout_auth || 90000,
   }
 }
 

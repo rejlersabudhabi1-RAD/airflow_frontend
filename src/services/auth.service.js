@@ -2,6 +2,10 @@ import apiClient from './api.service'
 import { API_ENDPOINTS } from '../config/api.config'
 import { STORAGE_KEYS } from '../config/app.config'
 import passwordExpiryService from './passwordExpiry.service'
+import { getApiTimeouts } from '../config/environment.config'
+
+// SOFT-CODED: Auth timeout from centralized config (90s to handle Railway cold-start DB reconnect)
+const { timeoutAuth: AUTH_TIMEOUT_MS } = getApiTimeouts()
 
 /**
  * Authentication Service
@@ -16,13 +20,28 @@ export const authService = {
     console.log('[AuthService] 🔐 Starting login process...')
     console.log('[AuthService] Email:', credentials.email)
     console.log('[AuthService] API Endpoint:', API_ENDPOINTS.LOGIN)
+    console.log('[AuthService] Auth timeout:', AUTH_TIMEOUT_MS, 'ms')
     
     try {
       const loginStartTime = Date.now()
+
+      // Warmup ping: wake the Railway backend before the login POST.
+      // Railway Postgres connection pool can take 10-60s to reconnect after idle,
+      // causing the first login to time out. A cheap GET /health/ forces the
+      // backend to open its DB connection so the subsequent POST is fast.
+      console.log('[AuthService] 🌡️ Warming up backend connection...')
+      try {
+        await apiClient.get(API_ENDPOINTS.HEALTH, { timeout: 15000 })
+        console.log('[AuthService] ✅ Backend warmed up in', Date.now() - loginStartTime, 'ms')
+      } catch (warmupErr) {
+        // Non-fatal — backend may still respond to POST even if health check fails
+        console.warn('[AuthService] ⚠️ Warmup ping failed (non-fatal):', warmupErr.message)
+      }
+      
       console.log('[AuthService] 📡 Sending login request to backend...')
       
       const response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials, {
-        timeout: 30000, // 30 second timeout specifically for login
+        timeout: AUTH_TIMEOUT_MS, // SOFT-CODED from environments.json (default 90s for Railway cold-start)
       })
       
       const loginEndTime = Date.now()

@@ -104,8 +104,8 @@ export const VALIDATION_CONFIG = {
 // Error Messages
 export const ERROR_MESSAGES = {
   timeout: {
-    message: '⏱️ Request timeout - Backend server is not responding. Please check your connection.',
-    console: '[Login] 🔥 TIMEOUT: Backend did not respond within 60 seconds',
+    message: '⏱️ Server is starting up — please wait a moment and try again. (Railway cold start)',
+    console: '[Login] 🔥 TIMEOUT: Backend did not respond within timeout window',
   },
   network: {
     message: '🌐 Cannot connect to server. Please check your internet connection and try again.',
