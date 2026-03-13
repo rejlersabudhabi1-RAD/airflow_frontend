@@ -51,8 +51,8 @@ const POLL_MAX_WAIT_MS   = Number(API_CONFIG.timeout_long)      || 1200000;  // 
 
 // Timeout for the initial filing POST (upload + broker dispatch, NOT OCR time).
 // Uses AbortController so it cannot be bypassed by Axios instance settings.
-// SOFT-CODED: environments.json → api.timeout_upload
-const UPLOAD_TIMEOUT_MS  = Number(API_CONFIG.timeout_upload)    || 60000;   // 60 s
+  // HARD-CODED: 10 minutes for Line List extraction (overrides environments.json)
+const UPLOAD_TIMEOUT_MS  = 600000;   // 600 s (10 minutes for Line List extraction - complex document processing)
 
 // Timeout for each individual status-poll GET
 // SOFT-CODED: environments.json → api.timeout_poll
