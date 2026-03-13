@@ -37,6 +37,7 @@ const SmartDatasheetPage = () => {
       requiredFiles: [
         { key: 'pid', label: 'P&ID Drawing', required: true, description: 'Piping & Instrumentation Diagram' },
         { key: 'hmb', label: 'HMB Drawing', required: true, description: 'Heat & Material Balance' },
+        { key: 'linelist', label: 'Line List', required: false, description: 'Line specifications & design data' },
         { key: 'other', label: 'Additional Document', required: false, description: 'Optional supporting document' }
       ]
     },
@@ -49,13 +50,14 @@ const SmartDatasheetPage = () => {
       color: 'red',
       requiredFiles: [
         { key: 'pid', label: 'P&ID Drawing', required: true, description: 'Piping & Instrumentation Diagram' },
-        { key: 'hmb', label: 'HMB Drawing', required: true, description: 'Heat & Material Balance' }
+        { key: 'hmb', label: 'HMB Drawing', required: true, description: 'Heat & Material Balance' },
+        { key: 'linelist', label: 'Line List', required: false, description: 'Line specifications & design data' }
       ]
     },
     {
       id: 'pressure_instrument',
-      name: 'Pressure Instrument',
       fullName: 'Pressure Instrumentation',
+      name: 'Pressure Instrument',
       description: 'Identify and extract pressure instruments from P&ID drawings',
       icon: '📊',
       color: 'purple',
@@ -2554,4 +2556,6 @@ const SmartDatasheetPage = () => {
 };
 
 export default SmartDatasheetPage;
+
+
 
