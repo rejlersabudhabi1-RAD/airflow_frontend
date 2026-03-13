@@ -6,29 +6,48 @@
  * 
  * Features:
  * - P&ID upload only (PDF)
- * - Synchronous processing
+ * - Async processing with polling (fixes Railway production timeout)
  * - 8 locked columns output
  * - No HMB/PMS/NACE/Stress documents
- * - Stable, lightweight, production-ready
+ * - Stable, production-ready
+ *
+ * Why async?
+ * Railway's reverse proxy drops HTTP connections after ~60 s.
+ * OCR takes several minutes, so we submit a background job and poll
+ * for the result — the same pattern used by upload_pid_status.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import { apiClientLongTimeout } from '../../../services/api.service';
+import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
+import envConfig from '../../../config/environment.config';
+
+// ---------------------------------------------------------------------------
+// Soft-coded config: read polling interval from centralized environments.json
+// ---------------------------------------------------------------------------
+const API_CONFIG = envConfig.getApiConfig();
+const POLL_INTERVAL_MS = API_CONFIG.retry_delay || 3000;   // default 3 s
+const POLL_MAX_WAIT_MS = (API_CONFIG.timeout_long || 1200000);  // default 20 min
 
 const LineList = () => {
   // State management
   const [pidDocument, setPidDocument] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState(null);
   const [formatType, setFormatType] = useState('onshore');
   const [includeArea, setIncludeArea] = useState(false);
-  
-  const pidRef = useRef(null);
 
-  // Handle P&ID file selection
+  const pidRef = useRef(null);
+  const pollTimerRef = useRef(null);
+  const pollStartRef = useRef(null);
+
+  // -------------------------------------------------------------------------
+  // File selection
+  // -------------------------------------------------------------------------
   const handlePIDSelect = (e) => {
     const file = e.target.files[0];
     if (file && file.type === 'application/pdf') {
@@ -40,7 +59,51 @@ const LineList = () => {
     }
   };
 
-  // Handle base extraction
+  // -------------------------------------------------------------------------
+  // Polling helper
+  // -------------------------------------------------------------------------
+  const pollStatus = useCallback((taskId) => {
+    if (Date.now() - pollStartRef.current > POLL_MAX_WAIT_MS) {
+      clearTimeout(pollTimerRef.current);
+      setError('Extraction timed out. The file may be too large — please try again.');
+      setIsProcessing(false);
+      return;
+    }
+
+    apiClient
+      .get(`/designiq/lists/base_extraction_status/${taskId}/`)
+      .then(({ data }) => {
+        const state = data.state || data.status;
+
+        if (state === 'SUCCESS') {
+          clearTimeout(pollTimerRef.current);
+          setProgress(100);
+          setStatusMessage('Extraction complete!');
+          setExtractedData(data.result);
+          setIsProcessing(false);
+
+        } else if (state === 'FAILURE') {
+          clearTimeout(pollTimerRef.current);
+          setError(data.error || 'Extraction failed on the server.');
+          setIsProcessing(false);
+
+        } else {
+          // PENDING or PROGRESS — keep polling
+          setProgress(data.percent || 0);
+          setStatusMessage(data.status || 'Processing…');
+          pollTimerRef.current = setTimeout(() => pollStatus(taskId), POLL_INTERVAL_MS);
+        }
+      })
+      .catch((err) => {
+        console.error('Poll error:', err);
+        // Network blip — retry rather than fail immediately
+        pollTimerRef.current = setTimeout(() => pollStatus(taskId), POLL_INTERVAL_MS * 2);
+      });
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Submit extraction job
+  // -------------------------------------------------------------------------
   const handleExtract = async () => {
     if (!pidDocument) {
       setError('Please upload a P&ID document first');
@@ -50,6 +113,8 @@ const LineList = () => {
     setIsProcessing(true);
     setError(null);
     setExtractedData(null);
+    setProgress(0);
+    setStatusMessage('Uploading P&ID…');
 
     const formData = new FormData();
     formData.append('pid_file', pidDocument);
@@ -57,37 +122,47 @@ const LineList = () => {
     formData.append('include_area', includeArea);
 
     try {
-      // Use long timeout client (20 minutes) for OCR initialization + extraction
-      const response = await apiClientLongTimeout.post(
+      // POST returns 202 with task_id (async) or 200 with data (EAGER/local dev)
+      const response = await apiClient.post(
         '/designiq/lists/base_extraction/',
         formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' }
-          // No timeout override - uses default 20 minutes from apiClientLongTimeout
-        }
+        { headers: { 'Content-Type': 'multipart/form-data' } }
       );
 
-      if (response.data.success) {
+      // EAGER mode (local dev): synchronous result returned immediately
+      if (response.status === 200 && response.data.success) {
         setExtractedData(response.data);
-      } else {
-        setError(response.data.message || 'Extraction failed');
+        setProgress(100);
+        setStatusMessage('Extraction complete!');
+        setIsProcessing(false);
+        return;
       }
+
+      // Async mode (production): start polling
+      const { task_id } = response.data;
+      if (!task_id) {
+        throw new Error('Server did not return a task_id. Please try again.');
+      }
+
+      setStatusMessage('Processing in background…');
+      pollStartRef.current = Date.now();
+      pollStatus(task_id);
+
     } catch (err) {
       console.error('Extraction error:', err);
       setError(err.response?.data?.error || err.message || 'Extraction failed');
-    } finally {
       setIsProcessing(false);
     }
   };
 
+  // -------------------------------------------------------------------------
   // Export to Excel
+  // -------------------------------------------------------------------------
   const handleExport = () => {
     if (!extractedData?.data) return;
 
-    // Define headers (8 columns only)
     const headers = ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
 
-    // Build worksheet data with explicit field mapping
     const wsData = [
       headers,
       ...extractedData.data.map(item => [
@@ -98,39 +173,24 @@ const LineList = () => {
         item.pipr_class || '',
         item.insulation || '',
         item.from || '',
-        item.to || ''
-      ])
+        item.to || '',
+      ]),
     ];
 
-    // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    // Auto-size columns
     const colWidths = headers.map((header, colIndex) => {
       let maxWidth = header.length;
       for (let rowIndex = 1; rowIndex < wsData.length; rowIndex++) {
         const cellValue = wsData[rowIndex][colIndex];
-        if (cellValue) {
-          maxWidth = Math.max(maxWidth, String(cellValue).length);
-        }
+        if (cellValue) maxWidth = Math.max(maxWidth, String(cellValue).length);
       }
       return { wch: Math.min(Math.max(maxWidth + 2, 12), 50) };
     });
     ws['!cols'] = colWidths;
 
-    // Create workbook and append worksheet
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Line List');
-
-    // Download as Excel file
-    XLSX.writeFile(wb, `line-list-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <DocumentTextIcon className="h-8 w-8 text-blue-600" />
             Line List - Base Extraction
@@ -228,7 +288,7 @@ const LineList = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Processing...
+                Processing…
               </span>
             ) : (
               'Extract Base Columns'
@@ -244,6 +304,25 @@ const LineList = () => {
             </button>
           )}
         </div>
+
+        {/* Progress Bar (shown while processing) */}
+        {isProcessing && (
+          <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">{statusMessage || 'Processing…'}</span>
+              <span className="text-sm font-medium text-blue-600">{progress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div
+                className="bg-blue-600 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(5, progress)}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              OCR extraction runs in the background. This usually takes 2–5 minutes depending on drawing complexity.
+            </p>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -345,7 +424,7 @@ const LineList = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="font-bold">•</span>
-                <span><strong>Synchronous Processing:</strong> Results returned immediately (no background tasks)</span>
+                <span><strong>Background Processing:</strong> Job runs asynchronously — no browser timeout. Progress updates every few seconds.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="font-bold">•</span>
