@@ -272,7 +272,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         path: '/sales',
         moduleCode: 'sales',
         badge: 'AI',
-        description: 'AI-Powered Sales Intelligence & CRM'
+        description: 'AI-Powered Sales Intelligence & CRM',
+        // SOFT-CODED: set enabled:true (or VITE_ENABLE_SALES_MODULE=true) to restore
+        enabled: false
       },
       {
         id: 'projectControl',
@@ -411,6 +413,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   // Helper function to check if user has access to a menu item
   const hasModuleAccess = (item) => {
+    // Soft-coded: items with enabled:false are always hidden
+    if (item.enabled === false) return false
+
     // Dashboard and admin sections are handled separately
     if (item.requiresModule === false) return true
     if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
