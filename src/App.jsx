@@ -2,7 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
-import { API_BASE_URL } from './config/api.config'
+import { API_BASE_URL, API_ENDPOINTS } from './config/api.config'
 import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
@@ -132,7 +132,13 @@ function App() {
         setModulesLoaded(true)
         return
       }
-      
+
+      // Warmup ping: fire GET /health/ to wake Railway backend before page-level data fetches.
+      // Non-fatal — runs in background, does not block module loading or page render.
+      fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, { method: 'GET' })
+        .then(() => console.log('[App] 🔥 Backend warmup ping succeeded'))
+        .catch((e) => console.warn('[App] ⚠️ Backend warmup ping failed (non-fatal):', e.message))
+
       try {
         const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
         const apiUrl = `${API_BASE_URL}/rbac/users/me/`

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 import apiClient from '../../services/api.service';
+import { API_TIMEOUT_UPLOAD } from '../../config/api.config';
 import * as XLSX from 'xlsx';
 
 const SmartDatasheetPage = () => {
@@ -1039,7 +1040,8 @@ const SmartDatasheetPage = () => {
       console.log('[Smart Datasheet] Uploading to /process-datasheet/datasheets/smart-upload/');
       const response = await apiClient.post(
         '/process-datasheet/datasheets/smart-upload/',
-        formData
+        formData,
+        { timeout: API_TIMEOUT_UPLOAD } // SOFT-CODED: extended for Railway cold-start + file processing
       );
 
       console.log('[Smart Datasheet] Upload response:', response.data);

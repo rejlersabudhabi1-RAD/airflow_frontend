@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, API_TIMEOUT, API_TIMEOUT_LONG } from '../config/api.config'
+import { API_BASE_URL, API_TIMEOUT, API_TIMEOUT_LONG, API_TIMEOUT_REFRESH } from '../config/api.config'
 import { STORAGE_KEYS } from '../config/app.config'
 import { toast } from 'react-toastify'
 
@@ -202,7 +202,7 @@ apiClient.interceptors.response.use(
         const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
           refresh: refreshToken,
         }, {
-          timeout: 30000, // 30 second timeout for token refresh
+          timeout: API_TIMEOUT_REFRESH, // SOFT-CODED: from environments.json (default 90s for Railway cold-start)
         })
 
         const { access } = response.data

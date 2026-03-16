@@ -163,12 +163,15 @@
   
   "api": {
     "version": "v1",
-    "timeout": 60000,
+    "timeout": 120000,
+    "_timeout_note": "Extended to 120s to handle Railway cold-start (DB pool warmup 30-90s after idle)",
     "timeout_long": 300000,
-    "timeout_upload": 60000,
-    "_timeout_upload_note": "AbortController enforced — cannot be bypassed by Axios",
+    "timeout_upload": 120000,
+    "_timeout_upload_note": "Extended to 120s for file upload + Railway cold-start; AbortController enforced separately",
     "timeout_auth": 90000,
     "_timeout_auth_note": "Extended for Railway cold-start: DB connection pool warmup can take 30-60s on first request after idle",
+    "timeout_refresh": 90000,
+    "_timeout_refresh_note": "Token refresh timeout — must survive Railway cold-start to avoid premature logout",
     "timeout_poll": 10000,
     "broker_connect_timeout": 5,
     "retry_attempts": 3,
