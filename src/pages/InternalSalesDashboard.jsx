@@ -10,7 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, Legend,
 } from 'recharts';
-import internalSalesService from '../../services/internalSales.service';
+import internalSalesService from '../services/internalSales.service';
 
 // ─── Soft-coded configuration ───────────────────────────────────────────────
 const CONFIG = {
@@ -73,6 +73,138 @@ function SectionHeader({ icon, title, subtitle }) {
   );
 }
 
+// Status badge colours (mirrors rbac UserProfile STATUS_CHOICES)
+const STATUS_STYLE = {
+  active:    'bg-green-100 text-green-700',
+  inactive:  'bg-gray-100 text-gray-500',
+  suspended: 'bg-red-100 text-red-700',
+  pending:   'bg-yellow-100 text-yellow-700',
+};
+
+// All-users roster panel component
+function AllUsersPanel({ allUsers, userSearch, setUserSearch, range }) {
+  const query = userSearch.trim().toLowerCase();
+  const filtered = query
+    ? allUsers.filter(u =>
+        u.full_name.toLowerCase().includes(query) ||
+        u.email.toLowerCase().includes(query) ||
+        u.department.toLowerCase().includes(query) ||
+        u.job_title.toLowerCase().includes(query)
+      )
+    : allUsers;
+
+  const activeCount  = allUsers.filter(u => u.total_requests > 0).length;
+  const dormantCount = allUsers.length - activeCount;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div>
+          <SectionHeader
+            icon="👥"
+            title="All Registered Users"
+            subtitle={`${activeCount} engaged · ${dormantCount} not yet active in period · ${allUsers.length} total`}
+          />
+        </div>
+        <input
+          type="text"
+          placeholder="Search by name, email, department…"
+          value={userSearch}
+          onChange={e => setUserSearch(e.target.value)}
+          className="w-full sm:w-72 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-gray-400 text-sm py-8 text-center">
+          {userSearch ? 'No users match your search.' : 'No user profiles in the system.'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                <th className="pb-3 pr-4">User</th>
+                <th className="pb-3 pr-4">Department / Title</th>
+                <th className="pb-3 pr-4">Role</th>
+                <th className="pb-3 pr-4 text-center">Status</th>
+                <th className="pb-3 pr-4 text-right">Requests</th>
+                <th className="pb-3 pr-4 text-right">Disciplines</th>
+                <th className="pb-3 text-right">Last Seen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map(u => {
+                const initials = u.full_name
+                  ? u.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+                  : u.email[0].toUpperCase();
+                const isEngaged = u.total_requests > 0;
+                return (
+                  <tr
+                    key={u.email}
+                    className={`transition-colors ${isEngaged ? 'hover:bg-indigo-50' : 'opacity-60 hover:bg-gray-50'}`}
+                  >
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          isEngaged ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{u.full_name || '—'}</p>
+                          <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <p className="text-gray-700 truncate">{u.department || '—'}</p>
+                      <p className="text-xs text-gray-400 truncate">{u.job_title || ''}</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex flex-wrap gap-1">
+                        {u.roles.length > 0
+                          ? u.roles.slice(0, 2).map(r => (
+                              <span key={r} className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">
+                                {r}
+                              </span>
+                            ))
+                          : <span className="text-gray-400 text-xs">—</span>
+                        }
+                        {u.roles.length > 2 && (
+                          <span className="text-xs text-gray-400">+{u.roles.length - 2}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[u.status] ?? STATUS_STYLE.inactive}`}>
+                        {u.status}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right">
+                      <span className={`font-semibold ${isEngaged ? 'text-indigo-700' : 'text-gray-300'}`}>
+                        {fmt(u.total_requests)}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-right text-gray-500">
+                      {u.disciplines_used || '—'}
+                    </td>
+                    <td className="py-3 text-right text-gray-400 text-xs">
+                      {u.last_seen
+                        ? new Date(u.last_seen).toLocaleDateString()
+                        : 'Never'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InternalSalesDashboard() {
   const [range, setRange]             = useState('7d');
   const [overview, setOverview]       = useState(null);
@@ -80,6 +212,8 @@ export default function InternalSalesDashboard() {
   const [topUsers, setTopUsers]       = useState([]);
   const [trends, setTrends]           = useState([]);
   const [activeNow, setActiveNow]     = useState([]);
+  const [allUsers, setAllUsers]       = useState([]);
+  const [userSearch, setUserSearch]   = useState('');
   const [loading, setLoading]         = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [error, setError]             = useState(null);
@@ -92,16 +226,18 @@ export default function InternalSalesDashboard() {
     try {
       setError(null);
       const trendRange = range === '1d' ? '7d' : range; // trends need at least a week for a meaningful chart
-      const [ov, disc, users, tr] = await Promise.all([
+      const [ov, disc, users, tr, allU] = await Promise.all([
         internalSalesService.getOverview(range),
         internalSalesService.getDisciplines(range),
         internalSalesService.getTopUsers(range, CONFIG.topUsersLimit),
         internalSalesService.getTrends(trendRange),
+        internalSalesService.getAllUsers(range),
       ]);
       setOverview(ov);
       setDisciplines(disc);
       setTopUsers(users);
       setTrends(tr);
+      setAllUsers(allU);
       setLastRefresh(new Date());
     } catch (e) {
       console.error('Usage dashboard fetch error:', e);
@@ -413,6 +549,14 @@ export default function InternalSalesDashboard() {
                 )}
               </div>
             </div>
+
+            {/* ── All Users roster ── */}
+            <AllUsersPanel
+              allUsers={allUsers}
+              userSearch={userSearch}
+              setUserSearch={setUserSearch}
+              range={range}
+            />
 
           </>
         )}

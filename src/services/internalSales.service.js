@@ -27,6 +27,10 @@ const internalSalesService = {
   /** Users active in last 15 minutes */
   getActiveNow: () =>
     apiClient.get(`${BASE}/active-now/`).then(r => r.data),
+
+  /** Full user roster from DB, joined with UsageLog stats */
+  getAllUsers: (range = '7d') =>
+    apiClient.get(`${BASE}/all-users/`, { params: { range } }).then(r => r.data),
 };
 
 export default internalSalesService;
