@@ -96,15 +96,7 @@ const STATUS_STYLE = {
   pending:   'bg-yellow-100 text-yellow-700',
 };
 
-// Status badge colours (mirrors rbac UserProfile STATUS_CHOICES)
-const STATUS_STYLE = {
-  active:    'bg-green-100 text-green-700',
-  inactive:  'bg-gray-100 text-gray-500',
-  suspended: 'bg-red-100 text-red-700',
-  pending:   'bg-yellow-100 text-yellow-700',
-};
-
-// ─── Sessions Panel ──────────────────────────────────────────────────────────
+// ─── Sessions Panel ───────────────────────────────────────────────────────────
 function SessionsPanel({ sessions }) {
   const { active_sessions = [], recent_sessions = [], active_count = 0 } = sessions;
   const [tab, setTab] = useState('active');
