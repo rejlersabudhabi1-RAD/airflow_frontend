@@ -31,6 +31,14 @@ const internalSalesService = {
   /** Full user roster from DB, joined with UsageLog stats */
   getAllUsers: (range = '7d') =>
     apiClient.get(`${BASE}/all-users/`, { params: { range } }).then(r => r.data),
+
+  /** All SystemActivity DB events — logins, uploads, AI calls, errors, etc. */
+  getDbEvents: (range = '7d', { category = '', severity = '', limit = 50 } = {}) =>
+    apiClient.get(`${BASE}/db-events/`, { params: { range, category, severity, limit } }).then(r => r.data),
+
+  /** Live + recent user sessions (browser, OS, device, current page) */
+  getSessions: () =>
+    apiClient.get(`${BASE}/sessions/`).then(r => r.data),
 };
 
 export default internalSalesService;

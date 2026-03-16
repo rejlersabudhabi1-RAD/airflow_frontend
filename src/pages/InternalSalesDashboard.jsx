@@ -13,9 +13,24 @@ import {
 import internalSalesService from '../services/internalSales.service';
 
 // ─── Soft-coded configuration ───────────────────────────────────────────────
+// ─── Soft-coded event category → icon/colour map ────────────────────────────
+// Add new categories here without touching any component logic.
+const CATEGORY_UI = {
+  authentication:   { icon: '🔐', color: 'bg-blue-50 text-blue-700 border-blue-100' },
+  authorization:    { icon: '🛡️', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+  data_management:  { icon: '🗂️', color: 'bg-teal-50 text-teal-700 border-teal-100' },
+  system_operation: { icon: '⚙️', color: 'bg-gray-50 text-gray-700 border-gray-200' },
+  security:         { icon: '🚨', color: 'bg-red-50 text-red-700 border-red-100' },
+  api:              { icon: '🔌', color: 'bg-purple-50 text-purple-700 border-purple-100' },
+  ml_ai:            { icon: '🤖', color: 'bg-pink-50 text-pink-700 border-pink-100' },
+  communication:    { icon: '📨', color: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
+  maintenance:      { icon: '🔧', color: 'bg-orange-50 text-orange-700 border-orange-100' },
+};
+
 const CONFIG = {
   refreshIntervalMs: 60_000,        // auto-refresh every 60 s
   activeNowRefreshMs: 15_000,       // active-now updates every 15 s
+  sessionsRefreshMs:  30_000,       // sessions panel refresh every 30 s
   timeRanges: [
     { key: '1d',  label: 'Today' },
     { key: '7d',  label: '7 Days' },
@@ -80,6 +95,209 @@ const STATUS_STYLE = {
   suspended: 'bg-red-100 text-red-700',
   pending:   'bg-yellow-100 text-yellow-700',
 };
+
+// Status badge colours (mirrors rbac UserProfile STATUS_CHOICES)
+const STATUS_STYLE = {
+  active:    'bg-green-100 text-green-700',
+  inactive:  'bg-gray-100 text-gray-500',
+  suspended: 'bg-red-100 text-red-700',
+  pending:   'bg-yellow-100 text-yellow-700',
+};
+
+// ─── Sessions Panel ──────────────────────────────────────────────────────────
+function SessionsPanel({ sessions }) {
+  const { active_sessions = [], recent_sessions = [], active_count = 0 } = sessions;
+  const [tab, setTab] = useState('active');
+  const rows = tab === 'active' ? active_sessions : recent_sessions;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <SectionHeader
+          icon="🖥️"
+          title="User Sessions"
+          subtitle={`${active_count} active now · browser, OS, device &amp; current page`}
+        />
+        <div className="flex rounded-xl border border-gray-200 overflow-hidden text-sm">
+          {[['active', `Active (${active_count})`], ['recent', 'Last 7 Days']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-4 py-1.5 font-semibold transition-colors ${tab === key ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-gray-400 text-sm py-8 text-center">
+          {tab === 'active' ? 'No users active right now.' : 'No session data for the last 7 days.'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                <th className="pb-3 pr-4">User</th>
+                <th className="pb-3 pr-4">Browser / OS</th>
+                <th className="pb-3 pr-4">Device</th>
+                <th className="pb-3 pr-4">IP Address</th>
+                <th className="pb-3 pr-4">Current Page</th>
+                <th className="pb-3 pr-4 text-right">Duration</th>
+                <th className="pb-3 text-right">Last Activity</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map(s => (
+                <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${s.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{s.user_name || '—'}</p>
+                        <p className="text-xs text-gray-400 truncate">{s.user_email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 pr-4 text-gray-600">
+                    <p>{s.browser}</p>
+                    <p className="text-xs text-gray-400">{s.os}</p>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+                      {s.device_type}
+                    </span>
+                  </td>
+                  <td className="py-3 pr-4 text-gray-500 text-xs font-mono">{s.ip_address || '—'}</td>
+                  <td className="py-3 pr-4 text-gray-500 text-xs truncate max-w-[160px]">{s.current_page || '—'}</td>
+                  <td className="py-3 pr-4 text-right text-gray-500 text-xs">{s.duration_label}</td>
+                  <td className="py-3 text-right text-gray-400 text-xs">
+                    {new Date(s.last_activity).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Database Events Panel ───────────────────────────────────────────────────
+function DbEventsPanel({ dbEvents, evtCategory, setEvtCategory }) {
+  const { events = [], total_in_period = 0, category_summary = [] } = dbEvents;
+
+  // Client-side filter by selected category
+  const filtered = evtCategory
+    ? events.filter(e => e.category === evtCategory)
+    : events;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+        <SectionHeader
+          icon="🗄️"
+          title="Database Events"
+          subtitle={`${fmt(total_in_period)} total events in period — logins, uploads, AI calls, errors & more`}
+        />
+        {/* Soft-coded category filter pills — driven by backend summary */}
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <button
+            onClick={() => setEvtCategory('')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+              !evtCategory ? 'bg-indigo-600 text-white border-indigo-600' : 'text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            All
+          </button>
+          {category_summary.map(c => {
+            const ui = CATEGORY_UI[c.category] ?? { icon: '📋', color: 'bg-gray-50 text-gray-700 border-gray-200' };
+            return (
+              <button
+                key={c.category}
+                onClick={() => setEvtCategory(prev => prev === c.category ? '' : c.category)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                  evtCategory === c.category
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : `${ui.color} hover:opacity-80`
+                }`}
+              >
+                <span>{ui.icon}</span>
+                <span>{c.label}</span>
+                <span className="opacity-70">({fmt(c.count)})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-gray-400 text-sm py-8 text-center">No events for this filter.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                <th className="pb-3 pr-4">Time</th>
+                <th className="pb-3 pr-4">Category</th>
+                <th className="pb-3 pr-4">Event</th>
+                <th className="pb-3 pr-4">User</th>
+                <th className="pb-3 pr-4">Description</th>
+                <th className="pb-3 pr-4 text-center">Status</th>
+                <th className="pb-3 text-right">Duration</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map(ev => {
+                const ui = CATEGORY_UI[ev.category] ?? { icon: '📋', color: 'bg-gray-50 text-gray-700 border-gray-200' };
+                return (
+                  <tr key={ev.id} className={`hover:bg-gray-50 transition-colors ${!ev.success ? 'bg-red-50/40' : ''}`}>
+                    <td className="py-2.5 pr-4 text-xs text-gray-400 whitespace-nowrap">
+                      {new Date(ev.timestamp).toLocaleString()}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border w-fit ${ui.color}`}>
+                        <span>{ui.icon}</span>
+                        <span>{ev.category_label}</span>
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <span className="text-xs font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                        {ev.activity_type}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <p className="font-medium text-gray-800 truncate max-w-[130px]">
+                        {ev.user_full_name || ev.user_email || 'System'}
+                      </p>
+                      {ev.ip_address && (
+                        <p className="text-xs font-mono text-gray-400">{ev.ip_address}</p>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4 text-gray-600 max-w-[240px] truncate">{ev.description}</td>
+                    <td className="py-2.5 pr-4 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        ev.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {ev.success ? 'OK' : 'Fail'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right text-xs text-gray-400">
+                      {ev.duration_ms != null ? `${ev.duration_ms} ms` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // All-users roster panel component
 function AllUsersPanel({ allUsers, userSearch, setUserSearch, range }) {
@@ -214,30 +432,36 @@ export default function InternalSalesDashboard() {
   const [activeNow, setActiveNow]     = useState([]);
   const [allUsers, setAllUsers]       = useState([]);
   const [userSearch, setUserSearch]   = useState('');
+  const [dbEvents, setDbEvents]       = useState({ events: [], total_in_period: 0, category_summary: [] });
+  const [evtCategory, setEvtCategory] = useState('');
+  const [sessions, setSessions]       = useState({ active_sessions: [], recent_sessions: [], active_count: 0 });
   const [loading, setLoading]         = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [error, setError]             = useState(null);
 
-  const activeNowTimer = useRef(null);
-  const mainTimer      = useRef(null);
+  const activeNowTimer  = useRef(null);
+  const mainTimer       = useRef(null);
+  const sessionsTimer   = useRef(null);
 
   // Fetch all dashboard data
   const fetchAll = useCallback(async () => {
     try {
       setError(null);
       const trendRange = range === '1d' ? '7d' : range; // trends need at least a week for a meaningful chart
-      const [ov, disc, users, tr, allU] = await Promise.all([
+      const [ov, disc, users, tr, allU, evts] = await Promise.all([
         internalSalesService.getOverview(range),
         internalSalesService.getDisciplines(range),
         internalSalesService.getTopUsers(range, CONFIG.topUsersLimit),
         internalSalesService.getTrends(trendRange),
         internalSalesService.getAllUsers(range),
+        internalSalesService.getDbEvents(range, { limit: 100 }),
       ]);
       setOverview(ov);
       setDisciplines(disc);
       setTopUsers(users);
       setTrends(tr);
       setAllUsers(allU);
+      setDbEvents(evts);
       setLastRefresh(new Date());
     } catch (e) {
       console.error('Usage dashboard fetch error:', e);
@@ -255,23 +479,35 @@ export default function InternalSalesDashboard() {
     } catch (_) {}
   }, []);
 
+  // Fetch sessions separately (medium refresh)
+  const fetchSessions = useCallback(async () => {
+    try {
+      const data = await internalSalesService.getSessions();
+      setSessions(data);
+    } catch (_) {}
+  }, []);
+
   // On range change or mount
   useEffect(() => {
     setLoading(true);
     fetchAll();
     fetchActive();
+    fetchSessions();
 
     clearInterval(mainTimer.current);
     clearInterval(activeNowTimer.current);
+    clearInterval(sessionsTimer.current);
 
-    mainTimer.current      = setInterval(fetchAll,   CONFIG.refreshIntervalMs);
-    activeNowTimer.current = setInterval(fetchActive, CONFIG.activeNowRefreshMs);
+    mainTimer.current      = setInterval(fetchAll,      CONFIG.refreshIntervalMs);
+    activeNowTimer.current = setInterval(fetchActive,   CONFIG.activeNowRefreshMs);
+    sessionsTimer.current  = setInterval(fetchSessions, CONFIG.sessionsRefreshMs);
 
     return () => {
       clearInterval(mainTimer.current);
       clearInterval(activeNowTimer.current);
+      clearInterval(sessionsTimer.current);
     };
-  }, [fetchAll, fetchActive]);
+  }, [fetchAll, fetchActive, fetchSessions]);
 
   const topDiscipline = disciplines[0]?.discipline_label ?? '—';
 
@@ -556,6 +792,16 @@ export default function InternalSalesDashboard() {
               userSearch={userSearch}
               setUserSearch={setUserSearch}
               range={range}
+            />
+
+            {/* ── Live Sessions panel ── */}
+            <SessionsPanel sessions={sessions} />
+
+            {/* ── Database Events feed ── */}
+            <DbEventsPanel
+              dbEvents={dbEvents}
+              evtCategory={evtCategory}
+              setEvtCategory={setEvtCategory}
             />
 
           </>
