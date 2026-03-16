@@ -552,6 +552,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+*/}
 
         {/* DesignIQ Routes */}
         <Route
