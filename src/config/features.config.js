@@ -91,8 +91,8 @@ export const FEATURE_FLAGS = {
   enableFeatureMetrics: true,
   
   // Module Visibility — set to false to hide a module without deleting its code
-  // Re-enable by setting VITE_ENABLE_SALES_MODULE=true or changing the default below
-  enableSalesModule: import.meta.env.VITE_ENABLE_SALES_MODULE === 'true' || false,
+  // Internal Sales analytics dashboard — re-uses /sales route with new InternalSalesDashboard
+  enableSalesModule: import.meta.env.VITE_ENABLE_SALES_MODULE !== 'false',
 
   // Debug & Development
   enableDebugMode: import.meta.env.VITE_ENABLE_DEBUG === 'true' || (import.meta.env.VITE_ENABLE_DEBUG === undefined && isDevelopment),

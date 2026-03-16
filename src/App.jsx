@@ -48,8 +48,7 @@ import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
-// SOFT-CODED: Sales module disabled — set VITE_ENABLE_SALES_MODULE=true to re-enable
-// import DeptOfSales from './pages/Finance/DeptOfSales'
+import InternalSalesDashboard from './pages/InternalSalesDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
@@ -542,12 +541,12 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
-        {/* SOFT-CODED: Sales routes disabled — set VITE_ENABLE_SALES_MODULE=true to re-enable
+        {/* Internal Sales Analytics Dashboard */}
         <Route
           path="finance/sales"
           element={
             <ProtectedRoute>
-              <DeptOfSales />
+              <InternalSalesDashboard />
             </ProtectedRoute>
           }
         />
@@ -555,11 +554,10 @@ function App() {
           path="sales"
           element={
             <ProtectedRoute>
-              <DeptOfSales />
+              <InternalSalesDashboard />
             </ProtectedRoute>
           }
         />
-        */
 
         {/* DesignIQ Routes */}
         <Route

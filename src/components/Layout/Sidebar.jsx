@@ -272,9 +272,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         path: '/sales',
         moduleCode: 'sales',
         badge: 'AI',
-        description: 'AI-Powered Sales Intelligence & CRM',
-        // SOFT-CODED: set enabled:true (or VITE_ENABLE_SALES_MODULE=true) to restore
-        enabled: false
+        description: 'Internal Platform Usage Analytics',
+        enabled: true,
       },
       {
         id: 'projectControl',
