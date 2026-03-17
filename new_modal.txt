@@ -1,0 +1,122 @@
+﻿      {/* Unified Upload & Process Modal */}
+      {showDocUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold">Upload & Process P&ID</h2>
+                <p className="text-sm text-indigo-100 mt-1">Upload P&ID (mandatory) and optional supporting documents</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDocUploadModal(false);
+                  setPidFile(null);
+                  setShowOptionalDocs(false);
+                  setDocUploadResults({});
+                }}
+                className="text-white hover:text-indigo-100 p-2"
+              >
+                <XCircleIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Hidden File Inputs */}
+              <input type="file" ref={pidFileRef} accept=".pdf" onChange={(e) => setPidFile(e.target.files?.[0])} className="hidden" />
+              <input type="file" ref={hmbFileRef} accept=".xlsx,.xls,.pdf" onChange={(e) => handleDocumentUpload(e, 'hmb')} className="hidden" />
+              <input type="file" ref={pfdFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'pfd')} className="hidden" />
+              <input type="file" ref={pmsFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'pms')} className="hidden" />
+              <input type="file" ref={designBasisFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'design_basis')} className="hidden" />
+              <input type="file" ref={naceFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'nace')} className="hidden" />
+              <input type="file" ref={weldingFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'welding')} className="hidden" />
+              <input type="file" ref={pressureTestFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'pressure_test')} className="hidden" />
+              <input type="file" ref={insulationFileRef} accept=".pdf" onChange={(e) => handleDocumentUpload(e, 'insulation')} className="hidden" />
+
+              {/* Step 1: Project Type & P&ID Upload (Mandatory) */}
+              <div className="border-2 border-indigo-300 rounded-lg p-6 bg-gradient-to-br from-indigo-50 to-purple-50">
+                <div className="flex items-center mb-4">
+                  <span className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg font-bold mr-3">1</span>
+                  <h3 className="text-xl font-bold text-indigo-900">Project Type & P&ID Upload</h3>
+                  <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full font-semibold">MANDATORY</span>
+                </div>
+
+                {/* Project Type Selector */}
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Select Project Type:</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button onClick={() => setSelectedFormat('onshore')} className={`p-4 rounded-lg border-2 transition-all ${ selectedFormat === 'onshore' ? 'border-blue-500 bg-blue-50 text-blue-900 font-semibold' : 'border-gray-300 hover:border-blue-300 hover:bg-blue-50' }`}>
+                      <div className="text-center"><div className="text-2xl mb-1"></div><div className="font-medium">ADNOC Onshore</div></div>
+                    </button>
+                    <button onClick={() => setSelectedFormat('general')} className={`p-4 rounded-lg border-2 transition-all ${ selectedFormat === 'general' ? 'border-green-500 bg-green-50 text-green-900 font-semibold' : 'border-gray-300 hover:border-green-300 hover:bg-green-50' }`}>
+                      <div className="text-center"><div className="text-2xl mb-1"></div><div className="font-medium">General</div></div>
+                    </button>
+                    <button onClick={() => setSelectedFormat('offshore')} className={`p-4 rounded-lg border-2 transition-all ${ selectedFormat === 'offshore' ? 'border-purple-500 bg-purple-50 text-purple-900 font-semibold' : 'border-gray-300 hover:border-purple-300 hover:bg-purple-50' }`}>
+                      <div className="text-center"><div className="text-2xl mb-1"></div><div className="font-medium">ADNOC Offshore</div></div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* P&ID File Upload */}
+                <div><label className="block text-sm font-semibold text-gray-700 mb-2">Upload P&ID PDF:</label>
+                  <button onClick={() => pidFileRef.current?.click()} className="w-full p-6 border-2 border-dashed border-indigo-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                    {pidFile ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center"><CheckCircleIcon className="w-6 h-6 text-green-600 mr-2" /><div className="text-left"><div className="font-semibold text-gray-900">{pidFile.name}</div><div className="text-sm text-gray-500">{(pidFile.size / 1024 / 1024).toFixed(2)} MB</div></div></div>
+                        <button onClick={(e) => { e.stopPropagation(); setPidFile(null); }} className="text-red-600 hover:text-red-800"><XCircleIcon className="w-6 h-6" /></button>
+                      </div>
+                    ) : (
+                      <div className="text-center"><ArrowUpTrayIcon className="w-12 h-12 text-indigo-400 mx-auto mb-2" /><div className="text-lg font-semibold text-gray-700">Click to select P&ID PDF</div><div className="text-sm text-gray-500 mt-1">Required for processing</div></div>
+                    )}
+                  </button>
+                </div>
+
+                {/* Process Button */}
+                <button onClick={handleUnifiedUpload} disabled={!pidFile || uploadingPID || processing} className="mt-4 w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-bold text-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                  {processing ? (<><div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent mr-3"></div>Processing P&ID with OCR...</>) : uploadingPID ? (<><div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent mr-3"></div>Uploading P&ID...</>) : (<><CheckCircleIcon className="w-6 h-6 mr-2" />Process P&ID & Extract Lines</>)}
+                </button>
+              </div>
+
+              {/* Step 2: Optional Supporting Documents */}
+              <div className={`border-2 rounded-lg transition-all ${ showOptionalDocs ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-gray-50' }`}>
+                <button onClick={() => setShowOptionalDocs(!showOptionalDocs)} className="w-full p-4 flex items-center justify-between hover:bg-gray-100 rounded-lg">
+                  <div className="flex items-center"><span className="bg-emerald-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg font-bold mr-3">2</span><div className="text-left"><h3 className="text-lg font-bold text-gray-900">Additional Supporting Documents</h3><p className="text-sm text-gray-600">Optional - Upload HMB, PMS, and other specs</p></div></div>
+                  <div className={`transform transition-transform ${ showOptionalDocs ? 'rotate-180' : '' }`}><svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></div>
+                </button>
+
+                {showOptionalDocs && (
+                  <div className="p-6 space-y-4 border-t border-gray-200">
+                    <div><h4 className="text-md font-semibold text-blue-900 mb-2 flex items-center"> Process Documents</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button onClick={() => hmbFileRef.current?.click()} disabled={uploadingDocs.hmb} className="flex items-center justify-between p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-all disabled:opacity-50"><div className="flex items-center">{uploadingDocs.hmb ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent mr-2" /> : <ArrowUpTrayIcon className="w-4 h-4 text-blue-600 mr-2" />}<div className="text-left"><div className="text-sm font-medium">HMB</div><div className="text-xs text-gray-500">Excel/PDF</div></div></div>{docUploadResults.hmb?.success && <CheckCircleIcon className="w-4 h-4 text-green-600" />}</button>
+                        <button onClick={() => pfdFileRef.current?.click()} disabled={uploadingDocs.pfd} className="flex items-center justify-between p-3 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-all disabled:opacity-50"><div className="flex items-center">{uploadingDocs.pfd ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent mr-2" /> : <ArrowUpTrayIcon className="w-4 h-4 text-blue-600 mr-2" />}<div className="text-left"><div className="text-sm font-medium">PFD Stream Tables</div><div className="text-xs text-gray-500">PDF</div></div></div>{docUploadResults.pfd?.success && <CheckCircleIcon className="w-4 h-4 text-green-600" />}</button>
+                      </div>
+                    </div>
+                    <div><h4 className="text-md font-semibold text-purple-900 mb-2 flex items-center"> Piping Specifications</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => pmsFileRef.current?.click()} disabled={uploadingDocs.pms} className="flex flex-col items-center p-2 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 transition-all disabled:opacity-50">{uploadingDocs.pms ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-purple-600 mb-1" />}<div className="text-xs font-medium text-center">PMS</div>{docUploadResults.pms?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                        <button onClick={() => designBasisFileRef.current?.click()} disabled={uploadingDocs.design_basis} className="flex flex-col items-center p-2 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 transition-all disabled:opacity-50">{uploadingDocs.design_basis ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-purple-600 mb-1" />}<div className="text-xs font-medium text-center">Design Basis</div>{docUploadResults.design_basis?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                        <button onClick={() => naceFileRef.current?.click()} disabled={uploadingDocs.nace} className="flex flex-col items-center p-2 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 transition-all disabled:opacity-50">{uploadingDocs.nace ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-purple-600 mb-1" />}<div className="text-xs font-medium text-center">NACE</div>{docUploadResults.nace?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                      </div>
+                    </div>
+                    <div><h4 className="text-md font-semibold text-orange-900 mb-2 flex items-center"> Fabrication & Test Specs</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button onClick={() => weldingFileRef.current?.click()} disabled={uploadingDocs.welding} className="flex flex-col items-center p-2 bg-white border border-orange-200 rounded-lg hover:bg-orange-50 transition-all disabled:opacity-50">{uploadingDocs.welding ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-orange-600 mb-1" />}<div className="text-xs font-medium text-center">Welding/PWHT</div>{docUploadResults.welding?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                        <button onClick={() => pressureTestFileRef.current?.click()} disabled={uploadingDocs.pressure_test} className="flex flex-col items-center p-2 bg-white border border-orange-200 rounded-lg hover:bg-orange-50 transition-all disabled:opacity-50">{uploadingDocs.pressure_test ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-orange-600 mb-1" />}<div className="text-xs font-medium text-center">Pressure Test</div>{docUploadResults.pressure_test?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                        <button onClick={() => insulationFileRef.current?.click()} disabled={uploadingDocs.insulation} className="flex flex-col items-center p-2 bg-white border border-orange-200 rounded-lg hover:bg-orange-50 transition-all disabled:opacity-50">{uploadingDocs.insulation ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-600 border-t-transparent mb-1" /> : <ArrowUpTrayIcon className="w-4 h-4 text-orange-600 mb-1" />}<div className="text-xs font-medium text-center">Insulation</div>{docUploadResults.insulation?.success && <CheckCircleIcon className="w-3 h-3 text-green-600 mt-1" />}</button>
+                      </div>
+                    </div>
+                    {Object.keys(docUploadResults).length > 0 && (<div className="mt-4 space-y-2">{Object.entries(docUploadResults).map(([docType, result]) => result && (<div key={docType} className={`p-2 rounded-lg flex items-start text-sm ${ result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200' }`}>{result.success ? <CheckCircleIcon className="w-4 h-4 text-green-600 mr-2 mt-0.5 flex-shrink-0" /> : <XCircleIcon className="w-4 h-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" />}<p className={result.success ? 'text-green-900' : 'text-red-900'}>{result.message}</p></div>))}</div>)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end space-x-3">
+              <button onClick={() => { setShowDocUploadModal(false); setPidFile(null); setShowOptionalDocs(false); setDocUploadResults({}); }} className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
