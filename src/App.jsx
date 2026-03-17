@@ -94,7 +94,6 @@ import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalEquipmentDatasheet from './pages/Engineering/Electrical/ElectricalEquipmentDatasheet'
-import TransformerVerification from './pages/Engineering/Electrical/TransformerVerification'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
@@ -812,12 +811,12 @@ function App() {
           }
         />
         
-        {/* Transformer Datasheet Verification */}
+        {/* Transformer Datasheet Verification — served by ElectricalEquipmentDatasheet */}
         <Route
           path="engineering/electrical/transformer-verification"
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
-              <TransformerVerification />
+              <ElectricalEquipmentDatasheet />
             </ModuleProtectedRoute>
           }
         />
