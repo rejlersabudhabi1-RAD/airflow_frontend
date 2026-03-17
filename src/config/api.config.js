@@ -13,7 +13,7 @@ import envConfig, { getApiBaseUrl, getApiTimeouts } from './environment.config'
 export const API_BASE_URL = getApiBaseUrl()
 
 // Get timeout settings from centralized configuration
-const { timeout, timeoutLong } = getApiTimeouts()
+const { timeout, timeoutLong, timeoutUpload, timeoutRefresh } = getApiTimeouts()
 
 // Log configuration for debugging
 console.log('[API Config] ✅ Using centralized environment configuration')
@@ -45,8 +45,10 @@ export const API_ENDPOINTS = {
 
 // SOFT-CODED: Timeout values from centralized configuration
 // These values are now managed in config/environments.json
-export const API_TIMEOUT = timeout // From centralized config
+export const API_TIMEOUT = timeout // From centralized config (default 120s, Railway cold-start)
 export const API_TIMEOUT_LONG = timeoutLong // From centralized config
+export const API_TIMEOUT_UPLOAD = timeoutUpload // From centralized config (default 120s, file upload + cold-start)
+export const API_TIMEOUT_REFRESH = timeoutRefresh // From centralized config (default 90s, token refresh cold-start)
 export const API_TIMEOUT_AI_GENERATION = 300000 // 5 minutes for AI P&ID generation (OpenAI API calls)
 
 export const HTTP_STATUS = {

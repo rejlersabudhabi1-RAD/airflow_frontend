@@ -37,7 +37,7 @@ class EnvironmentConfig {
   detectEnvironment() {
     // Check for explicit environment variable
     const explicitEnv = import.meta.env.VITE_AIFLOW_ENVIRONMENT?.toLowerCase()
-    if (['local', 'dev', 'preprod', 'production'].includes(explicitEnv)) {
+    if (['local', 'dev', 'preprod', 'production', 'testing'].includes(explicitEnv)) {
       return explicitEnv
     }
 
@@ -276,9 +276,12 @@ export const getApiBaseUrl = () => envConfig.getApiBaseUrl()
 export const getApiTimeouts = () => {
   const config = envConfig.getApiConfig()
   return {
-    timeout: config.timeout || 30000,
+    timeout: config.timeout || 120000,
     timeoutLong: config.timeout_long || 300000,
     timeoutAuth: config.timeout_auth || 90000,
+    // SOFT-CODED: Upload and refresh timeouts for Railway cold-start resilience
+    timeoutUpload: config.timeout_upload || 120000,
+    timeoutRefresh: config.timeout_refresh || 90000,
   }
 }
 

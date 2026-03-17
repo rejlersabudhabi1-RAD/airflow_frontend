@@ -8,10 +8,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   
   // Smart API URL detection (soft-coded for Docker and production)
-  // For local development in Docker, proxy to backend service using Docker service name
-  // In Docker: use service name 'backend_local' (from docker-compose)
-  // Outside Docker: use localhost
+  // Priority: VITE_API_PROXY_TARGET env var → fallback to localhost:8000
+  // Set VITE_API_PROXY_TARGET=https://aiflowbackend-production-9bdc.up.railway.app to use Railway testing backend
   let apiUrl = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
+  const apiUrlObj = new URL(apiUrl)
+  const targetHost = apiUrlObj.host // dynamic: 'localhost:8000' OR 'aiflowbackend-production-9bdc.up.railway.app'
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
@@ -34,15 +35,26 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path,
           configure: (proxy, options) => {
             proxy.on('error', (err, req, res) => {
-              console.log('❌ Proxy error:', err.message)
+              // SOFT-CODED: send a proper JSON 503 instead of a silent empty 500
+              // so the frontend shows a meaningful error (backend unreachable)
+              const msg = JSON.stringify({
+                error: 'backend_unavailable',
+                message: `Proxy cannot reach backend at ${apiUrl}. Is it running?`,
+                detail: err.message,
+              })
+              console.log(`❌ Proxy error → ${apiUrl}:`, err.message)
+              if (!res.headersSent) {
+                res.writeHead(503, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(msg) })
+                res.end(msg)
+              }
             })
             proxy.on('proxyReq', (proxyReq, req, res) => {
               // Forward the original host header for proper URL generation
               proxyReq.setHeader('X-Forwarded-Host', 'localhost:5173')
               proxyReq.setHeader('X-Forwarded-Proto', 'http')
               proxyReq.setHeader('X-Forwarded-For', req.socket.remoteAddress)
-              // Override Host header to use localhost instead of service name
-              proxyReq.setHeader('Host', 'localhost:8000')
+              // SOFT-CODED: Host derives from target URL — works for both localhost and Railway
+              proxyReq.setHeader('Host', targetHost)
               console.log('📤 Proxy request:', req.method, req.url, '→', apiUrl + req.url)
             })
           }

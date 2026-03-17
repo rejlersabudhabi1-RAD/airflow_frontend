@@ -2,7 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useState, useEffect } from 'react'
-import { API_BASE_URL } from './config/api.config'
+import { API_BASE_URL, API_ENDPOINTS } from './config/api.config'
 import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
@@ -48,7 +48,7 @@ import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
-import DeptOfSales from './pages/Finance/DeptOfSales'
+import InternalSalesDashboard from './pages/InternalSalesDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
@@ -94,6 +94,7 @@ import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
 import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDatasheetPage'
 import ElectricalEquipmentDatasheet from './pages/Engineering/Electrical/ElectricalEquipmentDatasheet'
+import TransformerVerification from './pages/Engineering/Electrical/TransformerVerification'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
@@ -132,7 +133,13 @@ function App() {
         setModulesLoaded(true)
         return
       }
-      
+
+      // Warmup ping: fire GET /health/ to wake Railway backend before page-level data fetches.
+      // Non-fatal — runs in background, does not block module loading or page render.
+      fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, { method: 'GET' })
+        .then(() => console.log('[App] 🔥 Backend warmup ping succeeded'))
+        .catch((e) => console.warn('[App] ⚠️ Backend warmup ping failed (non-fatal):', e.message))
+
       try {
         const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
         const apiUrl = `${API_BASE_URL}/rbac/users/me/`
@@ -535,11 +542,12 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        {/* Internal Sales Analytics Dashboard */}
         <Route
           path="finance/sales"
           element={
             <ProtectedRoute>
-              <DeptOfSales />
+              <InternalSalesDashboard />
             </ProtectedRoute>
           }
         />
@@ -547,7 +555,7 @@ function App() {
           path="sales"
           element={
             <ProtectedRoute>
-              <DeptOfSales />
+              <InternalSalesDashboard />
             </ProtectedRoute>
           }
         />
@@ -804,6 +812,16 @@ function App() {
           }
         />
         
+        {/* Transformer Datasheet Verification */}
+        <Route
+          path="engineering/electrical/transformer-verification"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <TransformerVerification />
+            </ModuleProtectedRoute>
+          }
+        />
+        
         {/* Unified Quality Checker - Universal AI-Powered Tool for ALL Equipment Types */}
         <Route
           path="engineering/electrical/datasheet/unified-checker"
@@ -1007,6 +1025,8 @@ function App() {
 }
 
 export default App
+
+
 
 
 
