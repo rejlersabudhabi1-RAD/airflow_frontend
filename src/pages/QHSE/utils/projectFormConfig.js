@@ -596,32 +596,113 @@ export const calculateComputedFields = (formData) => {
   return computed;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED FIELD MAPPING — Form field names ↔ Django REST API field names
+// To add a new field: add it to FORM_TO_API_MAP (and API_TO_FORM_MAP mirror)
+// ─────────────────────────────────────────────────────────────────────────────
+export const FORM_TO_API_MAP = {
+  // Identification
+  project_number:          'projectNo',
+  project_name:            'projectTitle',
+  project_title:           'projectTitleKey',
+
+  // Stakeholders
+  client_name:             'client',
+  project_manager:         'projectManager',
+  qhse_engineer:           'projectQualityEng',
+
+  // Timeline
+  start_date:              'projectStartingDate',
+  planned_end_date:        'projectClosingDate',
+  actual_end_date:         'projectExtension',
+
+  // Manhours
+  estimated_manhours:      'manHourForQuality',
+  manhours_spent:          'manhoursUsed',
+
+  // Performance (sent as "N%" strings)
+  completion_percentage:   'projectCompletionPercent',
+  overall_kpi:             'projectKPIsAchievedPercent',
+
+  // CARs / Observations
+  open_issues:             'carsOpen',
+  resolved_issues:         'carsClosed',
+  total_issues:            'carsDelayedClosingNoDays',   // closest available field
+  near_misses:             'obsOpen',
+  non_conformances:        'obsClosed',
+  audits_completed:        'delayInAuditsNoDays',        // closest available field
+
+  // Cost
+  budget:                  'costOfPoorQualityAed',
+
+  // Notes
+  notes:                   'remarks',
+};
+
+// Reverse map — API response field → form field (for edit pre-population)
+export const API_TO_FORM_MAP = Object.fromEntries(
+  Object.entries(FORM_TO_API_MAP).map(([formKey, apiKey]) => [apiKey, formKey])
+);
+
 /**
- * Transform form data for API submission
+ * Transform form data for API submission.
+ * Maps frontend form field names → Django serializer field names
+ * and coerces types to what the backend expects.
  */
 export const transformFormDataForAPI = (formData) => {
-  // Convert percentage values
-  const transformed = { ...formData };
-  
-  // Ensure numeric fields are numbers
-  const numericFields = [
-    'budget', 'spent_amount', 'estimated_manhours', 'manhours_spent',
-    'team_size', 'completion_percentage', 'overall_kpi', 'kpi_performance',
-    'quality_score', 'safety_score', 'environmental_score',
-    'total_issues', 'open_issues', 'resolved_issues', 'incidents',
-    'near_misses', 'audits_completed', 'non_conformances', 'duration_days'
-  ];
+  const transformed = {};
 
-  numericFields.forEach(field => {
-    if (transformed[field] !== undefined && transformed[field] !== null && transformed[field] !== '') {
-      transformed[field] = parseFloat(transformed[field]) || 0;
+  for (const [formKey, value] of Object.entries(formData)) {
+    const apiKey = FORM_TO_API_MAP[formKey] ?? formKey;  // fall back to same name
+    transformed[apiKey] = value;
+  }
+
+  // Coerce percentage fields: number (42) → string ("42%")
+  const pctFields = ['projectCompletionPercent', 'projectKPIsAchievedPercent',
+                     'qualityBillabilityPercent', 'rejectionOfDeliverablesPercent'];
+  pctFields.forEach(f => {
+    if (transformed[f] !== undefined && transformed[f] !== null && transformed[f] !== '') {
+      const raw = String(transformed[f]).replace('%', '');
+      transformed[f] = `${raw}%`;
     }
   });
 
-  // Convert checkbox to boolean
-  if (transformed.is_billable !== undefined) {
-    transformed.is_billable = Boolean(transformed.is_billable);
-  }
+  // Coerce numeric fields to numbers
+  const numericFields = [
+    'manHourForQuality', 'manhoursUsed', 'costOfPoorQualityAed',
+    'carsOpen', 'carsDelayedClosingNoDays', 'carsClosed',
+    'obsOpen', 'obsDelayedClosingNoDays', 'obsClosed',
+    'delayInAuditsNoDays', 'srNo',
+  ];
+  numericFields.forEach(f => {
+    if (transformed[f] !== undefined && transformed[f] !== null && transformed[f] !== '') {
+      transformed[f] = parseFloat(transformed[f]) || 0;
+    }
+  });
 
   return transformed;
+};
+
+/**
+ * Transform API response back into form field names.
+ * Used when pre-populating the form for editing an existing project.
+ */
+export const transformAPIToFormData = (apiData) => {
+  if (!apiData) return {};
+  const formData = {};
+
+  for (const [apiKey, value] of Object.entries(apiData)) {
+    const formKey = API_TO_FORM_MAP[apiKey] ?? apiKey;  // fall back to same name
+    formData[formKey] = value;
+  }
+
+  // Strip "%" from percentage strings so the number input works
+  const pctFormFields = ['completion_percentage', 'overall_kpi'];
+  pctFormFields.forEach(f => {
+    if (formData[f] && typeof formData[f] === 'string') {
+      formData[f] = formData[f].replace('%', '');
+    }
+  });
+
+  return formData;
 };

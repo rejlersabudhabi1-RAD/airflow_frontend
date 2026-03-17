@@ -99,7 +99,7 @@ class SalesService {
    * Get at-risk clients (high churn probability)
    */
   async getAtRiskClients() {
-    const response = await apiClient.get(`${BASE_URL}/clients/at_risk/`);
+    const response = await apiClient.get(`${BASE_URL}/analytics/clients/`, { params: { mode: 'at_risk' } });
     return response.data;
   }
 
@@ -108,7 +108,7 @@ class SalesService {
    * @param {Object} params - limit, orderBy (revenue | health_score)
    */
   async getTopClients(params = {}) {
-    const response = await apiClient.get(`${BASE_URL}/clients/top_clients/`, { params });
+    const response = await apiClient.get(`${BASE_URL}/analytics/clients/`, { params: { mode: 'top', ...params } });
     return response.data;
   }
 
@@ -264,7 +264,7 @@ class SalesService {
    * Get pipeline summary statistics
    */
   async getPipelineSummary() {
-    const response = await apiClient.get(`${BASE_URL}/deals/pipeline_summary/`);
+    const response = await apiClient.get(`${BASE_URL}/analytics/pipeline/`);
     return response.data;
   }
 
@@ -374,7 +374,7 @@ class SalesService {
    * @param {number} days - Number of days to look ahead (default: 7)
    */
   async getUpcomingActivities(days = 7) {
-    const response = await apiClient.get(`${BASE_URL}/activities/upcoming/`, {
+    const response = await apiClient.get(`${BASE_URL}/analytics/activities/`, {
       params: { days }
     });
     return response.data;
@@ -476,7 +476,7 @@ class SalesService {
    * Get real-time AI insights and recommendations
    */
   async getAIInsights() {
-    const response = await apiClient.get(`${BASE_URL}/dashboard/ai_insights/`);
+    const response = await apiClient.get(`${BASE_URL}/analytics/insights/`);
     return response.data;
   }
 }

@@ -37,7 +37,7 @@ class EnvironmentConfig {
   detectEnvironment() {
     // Check for explicit environment variable
     const explicitEnv = import.meta.env.VITE_AIFLOW_ENVIRONMENT?.toLowerCase()
-    if (['local', 'dev', 'preprod', 'production'].includes(explicitEnv)) {
+    if (['local', 'dev', 'preprod', 'production', 'testing'].includes(explicitEnv)) {
       return explicitEnv
     }
 

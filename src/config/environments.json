@@ -97,6 +97,34 @@
       }
     },
     
+    "testing": {
+      "name": "Testing (Railway)",
+      "description": "Railway testing backend — aiflowbackend-production-9bdc.up.railway.app — local frontend dev against live Railway backend",
+      "backend": {
+        "url": "https://aiflowbackend-production-9bdc.up.railway.app",
+        "api_url": "https://aiflowbackend-production-9bdc.up.railway.app/api/v1",
+        "host": "0.0.0.0",
+        "port": 8000,
+        "debug": false,
+        "allowed_hosts": ["*"]
+      },
+      "frontend": {
+        "url": "http://localhost:5173",
+        "api_proxy": "/api/v1",
+        "port": 5173,
+        "host": "0.0.0.0"
+      },
+      "database": {
+        "use_url": true,
+        "url_env_var": "DATABASE_URL",
+        "comment": "Uses Railway testing database — managed by Railway backend"
+      },
+      "redis": {
+        "use_url": true,
+        "url_env_var": "REDIS_URL"
+      }
+    },
+
     "production": {
       "name": "Production (Railway)",
       "description": "Production environment on Railway",
@@ -136,6 +164,7 @@
       "allow_credentials": false,
       "allowed_origins": {
         "local": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+        "testing": ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
         "dev": ["https://aiflow-dev.vercel.app"],
         "preprod": ["https://aiflow-preprod.vercel.app"],
         "production": ["https://radai.ae", "https://www.radai.ae"]
@@ -145,6 +174,7 @@
       "enabled": true,
       "trusted_origins": {
         "local": ["http://localhost:5173", "http://127.0.0.1:5173"],
+        "testing": ["http://localhost:5173", "http://127.0.0.1:5173"],
         "dev": ["https://aiflow-dev.vercel.app"],
         "preprod": ["https://aiflow-preprod.vercel.app"],
         "production": ["https://radai.ae", "https://www.radai.ae"]

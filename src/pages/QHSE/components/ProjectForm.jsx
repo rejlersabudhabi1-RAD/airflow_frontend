@@ -5,7 +5,8 @@ import {
   FIELD_TYPES,
   validateField,
   calculateComputedFields,
-  transformFormDataForAPI
+  transformFormDataForAPI,
+  transformAPIToFormData,
 } from '../utils/projectFormConfig';
 import { Card, CardHeader, CardContent } from './ui/Card';
 
@@ -134,8 +135,8 @@ export const ProjectForm = ({ project = null, onSubmit, onCancel }) => {
   // Initialize form data
   useEffect(() => {
     if (project) {
-      // Editing existing project
-      setFormData(project);
+      // Editing existing project — convert API field names → form field names
+      setFormData(transformAPIToFormData(project));
     } else {
       // Creating new project - set defaults
       const defaults = {};
