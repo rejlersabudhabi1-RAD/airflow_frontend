@@ -1122,7 +1122,7 @@ export default function InternalSalesDashboard() {
     pipeline, clients, aiInsights, activities,
     pipelineLoading, pipelineError,
   };
-  const tabActions = { setUserSearch, setEvtCategory, fetchPipeline };
+  const tabActions = { setUserSearch, setEvtCategory, fetchPipeline, fetchUsage };
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1192,13 +1192,23 @@ export default function InternalSalesDashboard() {
           </div>
         </div>
 
-        {/* ── Error / Loading ── */}
-        {usageError && <ErrorBanner message={usageError} />}
-        {usageLoading && !usageError && <Spinner />}
+        {/* ── Loading ── */}
+        {usageLoading && <Spinner />}
 
-        {/* ── Tab content ── */}
-        {!usageLoading && !usageError && (
-          <TabContent tab={activeTab} state={tabState} actions={tabActions} />
+        {/* ── Tab content — always rendered after initial load.
+             usageError shows as a warning banner but does NOT hide tabs.
+             The Sales Pipeline tab uses its own endpoints and stays functional
+             even when the Usage/Analytics API is unreachable. ── */}
+        {!usageLoading && (
+          <>
+            {usageError && (
+              <ErrorBanner
+                message={usageError}
+                onRetry={fetchUsage}
+              />
+            )}
+            <TabContent tab={activeTab} state={tabState} actions={tabActions} />
+          </>
         )}
 
       </div>
