@@ -635,13 +635,13 @@ function AllUsersPanel({ allUsers, userSearch, setUserSearch }) {
                     </td>
                     <td className="py-3 pr-4">
                       <div className="flex flex-wrap gap-1">
-                        {u.roles.length > 0
-                          ? u.roles.slice(0, 2).map(r => (
+                        {(u.roles || []).length > 0
+                          ? (u.roles || []).slice(0, 2).map(r => (
                               <span key={r} className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">{r}</span>
                             ))
                           : <span className="text-gray-400 text-xs">—</span>
                         }
-                        {u.roles.length > 2 && <span className="text-xs text-gray-400">+{u.roles.length - 2}</span>}
+                        {(u.roles || []).length > 2 && <span className="text-xs text-gray-400">+{(u.roles || []).length - 2}</span>}
                       </div>
                     </td>
                     <td className="py-3 pr-4 text-center">
@@ -670,7 +670,454 @@ function AllUsersPanel({ allUsers, userSearch, setUserSearch }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ⑥ TAB CONTENT ROUTER — add a new `if (tab === 'xyz')` block to add a tab
+// ⑥ UTILISATION REPORT PANEL — management/sales comprehensive usage report
+//    Soft-coded: periods, columns, export fields all driven from config arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Period options — add a new object here to add a period; nothing else changes
+const REPORT_PERIOD_OPTIONS = [
+  { key: 'daily',     label: 'Daily (30d)'   },
+  { key: 'weekly',    label: 'Weekly (90d)'  },
+  { key: 'monthly',   label: 'Monthly'       },
+  { key: 'quarterly', label: 'Quarterly'     },
+];
+
+// Dept breakdown table columns — reorder/add here only
+const DEPT_COLUMNS = [
+  { key: 'department',     label: 'Department',     align: 'left'  },
+  { key: 'user_count',     label: 'Users',          align: 'right' },
+  { key: 'requests',       label: 'API Requests',   align: 'right' },
+  { key: 'ai_calls',       label: 'AI Calls',       align: 'right' },
+  { key: 'estimated_cost', label: 'Est. AI Cost',   align: 'right', fmt: v => `$${Number(v).toFixed(4)}` },
+];
+
+// User breakdown CSV export columns — add to include in download
+const USER_CSV_COLS = [
+  { key: 'full_name',       label: 'Name'           },
+  { key: 'email',           label: 'Email'          },
+  { key: 'department',      label: 'Department'     },
+  { key: 'job_title',       label: 'Job Title'      },
+  { key: 'requests',        label: 'API Requests'   },
+  { key: 'ai_calls',        label: 'AI Calls'       },
+  { key: 'estimated_cost',  label: 'Est. AI Cost'   },
+  { key: 'avg_response_ms', label: 'Avg Response ms'},
+  { key: 'disciplines_used',label: 'Disciplines'    },
+  { key: 'last_seen',       label: 'Last Seen'      },
+];
+
+// Chart colour palette — soft-coded; cycles for unknown departments
+const REPORT_COLORS = ['#6366f1','#10b981','#f59e0b','#06b6d4','#ec4899','#84cc16','#ef4444','#8b5cf6','#f97316','#14b8a6'];
+const rptColor = (i) => REPORT_COLORS[i % REPORT_COLORS.length];
+
+function _buildCsv(rows, cols) {
+  const header = cols.map(c => c.label).join(',');
+  const body   = rows.map(r =>
+    cols.map(c => {
+      const v = r[c.key] ?? '';
+      return typeof v === 'string' && v.includes(',') ? `"${v}"` : v;
+    }).join(',')
+  );
+  return [header, ...body].join('\n');
+}
+
+function _downloadBlob(content, filename, type = 'text/csv') {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function UtilisationReportPanel({
+  reportData, reportPeriod, setReportPeriod,
+  reportAnchor, setReportAnchor,
+  reportLoading, reportError, onGenerate,
+}) {
+  const [userSearch, setUserSearch]   = useState('');
+  const [deptFilter, setDeptFilter]   = useState('');
+  const [sortCol, setSortCol]         = useState('requests');
+  const [sortDir, setSortDir]         = useState('desc');
+
+  const meta      = reportData?.report_meta   ?? {};
+  const summary   = reportData?.summary       ?? {};
+  const byDept    = reportData?.by_department ?? [];
+  const byUser    = reportData?.by_user       ?? [];
+  const byDisc    = reportData?.by_discipline ?? [];
+  const trends    = reportData?.trends        ?? [];
+  const costModel = reportData?.ai_cost_model ?? {};
+
+  // Filtered + sorted users
+  const filteredUsers = byUser
+    .filter(u =>
+      (!deptFilter || u.department === deptFilter) &&
+      (!userSearch  || u.full_name.toLowerCase().includes(userSearch.toLowerCase()) ||
+                       u.email.toLowerCase().includes(userSearch.toLowerCase()))
+    )
+    .sort((a, b) => {
+      const av = a[sortCol] ?? 0;
+      const bv = b[sortCol] ?? 0;
+      return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+    });
+
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('desc'); }
+  };
+  const sortIcon = (col) => sortCol !== col ? '↕' : sortDir === 'asc' ? '↑' : '↓';
+
+  // Unique departments for filter dropdown
+  const depts = [...new Set(byUser.map(u => u.department))].sort();
+
+  const handleExportCsv = () => {
+    const csv = _buildCsv(byUser, USER_CSV_COLS);
+    const label = meta.anchor || new Date().toISOString().slice(0, 7);
+    _downloadBlob(csv, `utilisation-report-${meta.period || 'monthly'}-${label}.csv`);
+  };
+
+  const handleExportDeptCsv = () => {
+    const cols = DEPT_COLUMNS.map(c => ({ key: c.key, label: c.label }));
+    const csv  = _buildCsv(byDept, cols);
+    _downloadBlob(csv, `dept-report-${meta.period || 'monthly'}-${meta.anchor || ''}.csv`);
+  };
+
+  const handlePrint = () => window.print();
+
+  // anchor input: default to current YYYY-MM
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  return (
+    <div className="utilisation-report space-y-6">
+      {/* ── Report Header / Controls ── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
+              <span className="text-2xl select-none">📋</span>
+              Utilisation Report
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Department + user breakdown · API usage · AI cost estimation
+              {meta.generated_at && (
+                <span className="ml-2 text-gray-400">
+                  · Generated {new Date(meta.generated_at).toLocaleString()}
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Controls row */}
+          <div className="flex flex-wrap items-center gap-2 print-hide">
+            {/* Period selector */}
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+              {REPORT_PERIOD_OPTIONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setReportPeriod(key)}
+                  className={`px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+                    reportPeriod === key
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Anchor month picker (shown for monthly/quarterly) */}
+            {(reportPeriod === 'monthly' || reportPeriod === 'quarterly') && (
+              <input
+                type="month"
+                value={reportAnchor || currentMonth}
+                onChange={e => setReportAnchor(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+            )}
+
+            {/* Generate button */}
+            <button
+              onClick={onGenerate}
+              disabled={reportLoading}
+              className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {reportLoading ? '⏳ Loading…' : '⚡ Generate'}
+            </button>
+
+            {/* Export buttons — only visible when data exists */}
+            {reportData && (
+              <>
+                <button
+                  onClick={handleExportCsv}
+                  className="px-3 py-1.5 rounded-lg border border-green-200 text-green-700 text-xs font-semibold hover:bg-green-50 transition-colors"
+                  title="Download user-level CSV"
+                >
+                  ⬇ CSV Users
+                </button>
+                <button
+                  onClick={handleExportDeptCsv}
+                  className="px-3 py-1.5 rounded-lg border border-teal-200 text-teal-700 text-xs font-semibold hover:bg-teal-50 transition-colors"
+                  title="Download department-level CSV"
+                >
+                  ⬇ CSV Depts
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition-colors"
+                  title="Print / Save as PDF"
+                >
+                  🖨 PDF
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Error / empty states ── */}
+      {reportError && <ErrorBanner message={reportError} onRetry={onGenerate} />}
+      {reportLoading && <Spinner />}
+
+      {!reportData && !reportLoading && !reportError && (
+        <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-10 text-center text-gray-400">
+          <span className="text-5xl block mb-3 select-none">📋</span>
+          <p className="font-semibold text-gray-600">No report generated yet</p>
+          <p className="text-sm mt-1">Select a period above and click <strong>⚡ Generate</strong></p>
+        </div>
+      )}
+
+      {reportData && !reportLoading && (
+        <>
+          {/* ── Summary KPIs ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <KpiCard icon="⚡" label="Total API Requests" value={fmt(summary.total_requests)}    sub={`${fmt(summary.unique_users)} users`} />
+            <KpiCard icon="🤖" label="AI Calls (Est.)"    value={fmt(summary.total_ai_calls)}    sub={`$${(summary.estimated_ai_cost ?? 0).toFixed(4)} est. cost`} />
+            <KpiCard icon="⏱️" label="Avg Response"       value={`${fmt(summary.avg_response_ms)} ms`} sub={`${pct(summary.success_rate)} success`} />
+            <KpiCard icon="🏢" label="Departments"        value={fmt(byDept.length)}              sub={`${fmt(summary.total_disciplines)} disciplines`} />
+          </div>
+
+          {/* ── Trend chart ── */}
+          {trends.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <SectionHeader
+                icon="📈"
+                title="Request Trend"
+                subtitle={`${REPORT_PERIOD_OPTIONS.find(p => p.key === meta.period)?.label ?? meta.period} — ${meta.period_label}`}
+              />
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={trends} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="rptReq" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}    />
+                    </linearGradient>
+                    <linearGradient id="rptAI" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}    />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip
+                    formatter={(v, n) => [
+                      fmt(v),
+                      n === 'requests' ? 'API Requests' : n === 'ai_calls' ? 'AI Calls' : 'Users',
+                    ]}
+                  />
+                  <Legend formatter={n => n === 'requests' ? 'API Requests' : n === 'ai_calls' ? 'AI Calls (est.)' : 'Unique Users'} />
+                  <Area type="monotone" dataKey="requests"    stroke="#6366f1" fill="url(#rptReq)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="unique_users" stroke="#f59e0b" fill="none"         strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Area type="monotone" dataKey="ai_calls"    stroke="#10b981" fill="url(#rptAI)"  strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* ── Department breakdown ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <SectionHeader icon="🏢" title="Department Breakdown" subtitle="Usage ranked by API volume" />
+
+            {/* Mini bar chart for departments */}
+            {byDept.length > 0 && (
+              <ResponsiveContainer width="100%" height={Math.max(160, byDept.length * 40)}>
+                <BarChart data={byDept} layout="vertical" margin={{ top: 0, right: 60, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="department" width={170} tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v, n) => [fmt(v), n === 'requests' ? 'API Requests' : 'AI Calls']} />
+                  <Legend formatter={n => n === 'requests' ? 'API Requests' : 'AI Calls'} />
+                  <Bar dataKey="requests" name="requests" radius={[0, 4, 4, 0]}>
+                    {byDept.map((_, i) => <Cell key={i} fill={rptColor(i)} />)}
+                  </Bar>
+                  <Bar dataKey="ai_calls" name="ai_calls" fill="#10b981" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+
+            {/* Department table */}
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                    {DEPT_COLUMNS.map(c => (
+                      <th key={c.key} className={`pb-3 pr-4 ${c.align === 'right' ? 'text-right' : ''}`}>
+                        {c.label}
+                      </th>
+                    ))}
+                    <th className="pb-3 text-left">Top Users</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {byDept.map((d, i) => (
+                    <tr key={d.department} className="hover:bg-gray-50 transition-colors">
+                      {DEPT_COLUMNS.map(c => (
+                        <td key={c.key} className={`py-2.5 pr-4 ${c.align === 'right' ? 'text-right' : ''}`}>
+                          {c.key === 'department' ? (
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: rptColor(i) }} />
+                              <span className="font-semibold text-gray-800">{d.department}</span>
+                            </div>
+                          ) : c.fmt ? (
+                            <span className="font-mono text-gray-700">{c.fmt(d[c.key])}</span>
+                          ) : (
+                            <span className={c.key === 'requests' ? 'font-semibold text-indigo-700' : 'text-gray-700'}>
+                              {fmt(d[c.key])}
+                            </span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="py-2.5 text-xs text-gray-500">
+                        {(d.top_users ?? []).map(u => u.full_name || u.email).join(', ')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── Discipline chart ── */}
+          {byDisc.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <SectionHeader icon="🏭" title="Usage by Discipline / Module" subtitle="API volume per engineering area" />
+              <ResponsiveContainer width="100%" height={Math.max(200, byDisc.length * 34)}>
+                <BarChart data={byDisc} layout="vertical" margin={{ top: 0, right: 24, bottom: 0, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="discipline_label" width={155} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v, n) => [fmt(v), n === 'requests' ? 'Requests' : 'Users']} />
+                  <Legend formatter={n => n === 'requests' ? 'Requests' : 'Unique Users'} />
+                  <Bar dataKey="requests" name="requests" radius={[0, 4, 4, 0]}>
+                    {byDisc.map((d, i) => <Cell key={i} fill={discColor(d.discipline_label)} />)}
+                  </Bar>
+                  <Bar dataKey="unique_users" name="unique_users" fill="#a5b4fc" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* ── User breakdown ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <SectionHeader icon="👥" title="User Breakdown" subtitle={`${filteredUsers.length} of ${byUser.length} users`} />
+              <div className="flex gap-2 flex-wrap print-hide">
+                {/* Department filter */}
+                <select
+                  value={deptFilter}
+                  onChange={e => setDeptFilter(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                >
+                  <option value="">All Departments</option>
+                  {depts.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                {/* User search */}
+                <input
+                  placeholder="Search name / email…"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                    <th className="pb-3 pr-4">User</th>
+                    <th className="pb-3 pr-4">Department</th>
+                    {[
+                      { col: 'requests',        label: 'Requests'   },
+                      { col: 'ai_calls',        label: 'AI Calls'   },
+                      { col: 'estimated_cost',  label: 'Est. Cost'  },
+                      { col: 'avg_response_ms', label: 'Avg ms'     },
+                    ].map(({ col, label }) => (
+                      <th
+                        key={col}
+                        className="pb-3 pr-4 text-right cursor-pointer select-none hover:text-indigo-600 transition-colors"
+                        onClick={() => toggleSort(col)}
+                      >
+                        {label} <span className="text-gray-400">{sortIcon(col)}</span>
+                      </th>
+                    ))}
+                    <th className="pb-3 text-right">Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filteredUsers.length === 0 ? (
+                    <tr><td colSpan={7} className="py-8 text-center text-gray-400 text-xs">No users match the current filter.</td></tr>
+                  ) : filteredUsers.map(u => (
+                    <tr key={u.email} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-2.5 pr-4">
+                        <p className="font-semibold text-gray-900 text-sm">{u.full_name}</p>
+                        <p className="text-xs text-gray-400">{u.email}</p>
+                        {u.job_title && <p className="text-xs text-gray-400 italic">{u.job_title}</p>}
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <span className="text-xs bg-indigo-50 text-indigo-700 rounded-full px-2 py-0.5 font-medium">
+                          {u.department}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-4 text-right font-semibold text-indigo-700">{fmt(u.requests)}</td>
+                      <td className="py-2.5 pr-4 text-right text-emerald-700 font-semibold">{fmt(u.ai_calls)}</td>
+                      <td className="py-2.5 pr-4 text-right font-mono text-gray-600 text-xs">${u.estimated_cost.toFixed(4)}</td>
+                      <td className="py-2.5 pr-4 text-right text-gray-500">{fmt(u.avg_response_ms)} ms</td>
+                      <td className="py-2.5 text-right text-xs text-gray-400">
+                        {u.last_seen ? new Date(u.last_seen).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── AI Cost Disclaimer ── */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-amber-800 text-xs space-y-1">
+            <p className="font-bold text-sm flex items-center gap-2">
+              <span className="select-none">⚠️</span> AI Cost Estimation Model
+            </p>
+            <p>
+              AI usage is <strong>estimated</strong> from <code>SystemActivity</code> events of type{' '}
+              <code>ai_analysis</code> and <code>ml_prediction</code>.
+              Actual token counts are not tracked — figures use a blended average of{' '}
+              <strong>{fmt(costModel.avg_tokens_per_call)} tokens/call</strong> at{' '}
+              <strong>${costModel.cost_per_1k_input_tokens}/1k input</strong> /{' '}
+              <strong>${costModel.cost_per_1k_output_tokens}/1k output</strong>{' '}
+              ({costModel.model_assumed}).
+            </p>
+            <p className="text-amber-600">{costModel.note}</p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⑦ TAB CONTENT ROUTER — add a new `if (tab === 'xyz')` block to add a tab
 // ─────────────────────────────────────────────────────────────────────────────
 function TabContent({ tab, state, actions }) {
   const {
@@ -678,8 +1125,10 @@ function TabContent({ tab, state, actions }) {
     allUsers, userSearch, dbEvents, evtCategory, sessions,
     pipeline, clients, aiInsights, activities,
     pipelineLoading, pipelineError,
+    reportData, reportPeriod, reportAnchor, reportLoading, reportError,
   } = state;
-  const { setUserSearch, setEvtCategory, fetchPipeline } = actions;
+  const { setUserSearch, setEvtCategory, fetchPipeline, fetchReport,
+          setReportPeriod, setReportAnchor } = actions;
 
   // ── OVERVIEW ─────────────────────────────────────────────────────────────
   if (tab === 'overview') {
@@ -857,6 +1306,18 @@ function TabContent({ tab, state, actions }) {
             </div>
           </div>
         )}
+
+        {/* Utilisation Report — department/user/AI cost breakdown */}
+        <UtilisationReportPanel
+          reportData={reportData}
+          reportPeriod={reportPeriod}
+          setReportPeriod={setReportPeriod}
+          reportAnchor={reportAnchor}
+          setReportAnchor={setReportAnchor}
+          reportLoading={reportLoading}
+          reportError={reportError}
+          onGenerate={fetchReport}
+        />
       </div>
     );
   }
@@ -1010,6 +1471,13 @@ export default function InternalSalesDashboard() {
   const [pipelineError, setPipelineError]   = useState(null);
   const [pipelineLoaded, setPipelineLoaded] = useState(false); // lazy — load once
 
+  // ── Utilisation Report state ─────────────────────────────────────────────
+  const [reportData,    setReportData]    = useState(null);
+  const [reportPeriod,  setReportPeriod]  = useState('monthly');
+  const [reportAnchor,  setReportAnchor]  = useState(() => new Date().toISOString().slice(0, 7));
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError,   setReportError]   = useState(null);
+
   // ── UI state ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab]   = useState(CONFIG.defaultTab);
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -1087,6 +1555,24 @@ export default function InternalSalesDashboard() {
       setPipelineLoading(false);
     }
   }, [pipelineLoaded]);
+
+  // ── Fetch: utilisation report (manual trigger) ───────────────────────────
+  const fetchReport = useCallback(async () => {
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const data = await internalSalesService.getUtilisationReport({
+        period: reportPeriod,
+        anchor: reportAnchor,
+      });
+      setReportData(data);
+    } catch (e) {
+      console.error('Report fetch error:', e);
+      setReportError('Could not load utilisation report. Please try again.');
+    } finally {
+      setReportLoading(false);
+    }
+  }, [reportPeriod, reportAnchor]);
 
   // ── Lifecycle — usage polling ─────────────────────────────────────────────
   useEffect(() => {
