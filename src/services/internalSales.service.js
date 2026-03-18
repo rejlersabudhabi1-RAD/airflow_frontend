@@ -39,6 +39,15 @@ const internalSalesService = {
   /** Live + recent user sessions (browser, OS, device, current page) */
   getSessions: () =>
     apiClient.get(`${BASE}/sessions/`).then(r => r.data),
+
+  /**
+   * Comprehensive utilisation report — departments, users, AI cost, trends.
+   * period = 'daily' | 'weekly' | 'monthly' | 'quarterly'
+   * anchor = 'YYYY-MM'  (month to anchor to, ignored for daily/weekly)
+   * dept   = department name to filter (optional)
+   */
+  getUtilisationReport: ({ period = 'monthly', anchor = '', dept = '' } = {}) =>
+    apiClient.get(`${BASE}/report/`, { params: { period, anchor, dept } }).then(r => r.data),
 };
 
 export default internalSalesService;
