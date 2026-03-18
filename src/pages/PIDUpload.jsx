@@ -18,15 +18,11 @@ const PIDUpload = () => {
   
   // SOFT-CODED: Reference documents configuration for P&ID verification
   const referenceDocuments = [
-    { key: 'pfd_document', label: 'PFD (Process Flow Diagram)', icon: FileText, color: 'cyan', required: true, description: 'P&IDs are generated from PFDs - upload for cross-verification' },
-    { key: 'iso_standards', label: 'ISO Standards (ISO 15926, ISO 10628)', icon: FileText, color: 'blue', required: false },
-    { key: 'pid_standards', label: 'P&ID Standards & Guidelines', icon: FileText, color: 'green', required: true },
-    { key: 'legends_symbols', label: 'Legends and Symbols', icon: FileText, color: 'purple', required: true },
-    { key: 'equipment_datasheet', label: 'Equipment Datasheets', icon: FileText, color: 'orange', required: false },
-    { key: 'instrument_datasheet', label: 'Instrument Datasheets', icon: FileText, color: 'indigo', required: false },
-    { key: 'process_description', label: 'Process Description', icon: FileText, color: 'pink', required: false },
-    { key: 'safety_requirements', label: 'Safety Requirements (SIL, HAZOP)', icon: FileText, color: 'red', required: false },
-    { key: 'other_documents', label: 'Other Reference Documents', icon: FileText, color: 'gray', required: false }
+    { key: 'equipment_list', label: 'Equipment Datasheet', icon: FileText, color: 'orange', required: false, description: 'Equipment specifications for cross-verification with P&ID equipment tags' },
+    { key: 'line_list', label: 'Line List', icon: FileText, color: 'blue', required: false, description: 'Piping line specifications for verification against P&ID line numbers' },
+    { key: 'alarm_trip_schedule', label: 'Alarm & Trip Schedule', icon: FileText, color: 'red', required: false, description: 'Alarm and trip setpoints for instrument verification' },
+    { key: 'instrument_datasheet', label: 'Instrument Datasheet', icon: FileText, color: 'indigo', required: false, description: 'Instrument specifications for verification' },
+    { key: 'legends_symbols', label: 'Legend P&ID', icon: FileText, color: 'purple', required: false, description: 'Symbol and abbreviation definitions' }
   ];
   
   // Project management state
