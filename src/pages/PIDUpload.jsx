@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, FolderPlus, Edit, Trash2, X, CheckCircle, Loader, ArrowLeft, Upload as UploadIcon, FileText } from 'lucide-react';
+import { Package, FolderPlus, Edit, Trash2, X, CheckCircle, Loader, ArrowLeft, Upload as UploadIcon, FileText, Database } from 'lucide-react';
 import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
 
@@ -36,6 +36,14 @@ const PIDUpload = () => {
   
   // Reference documents state
   const [referenceFiles, setReferenceFiles] = useState({});
+  
+  // SOFT-CODED: DesignIQ Line List import state
+  const [showDesignIQModal, setShowDesignIQModal] = useState(false);
+  const [designIQProjects, setDesignIQProjects] = useState([]);
+  const [loadingDesignIQProjects, setLoadingDesignIQProjects] = useState(false);
+  const [importingLineList, setImportingLineList] = useState(false);
+  const [importedLineListJson, setImportedLineListJson] = useState(null);  // structured JSON from DesignIQ
+  const [importedLineListLabel, setImportedLineListLabel] = useState('');  // display label
   
   // Edit/Delete modals
   const [showEditModal, setShowEditModal] = useState(false);
@@ -255,6 +263,49 @@ const PIDUpload = () => {
     setTimeout(() => setMessage({ type: '', text: '' }), 2000);
   };
 
+  // ========== DESIGNIQ LINE LIST IMPORT HANDLERS (SOFT-CODED) ==========
+
+  const handleOpenDesignIQModal = async () => {
+    setShowDesignIQModal(true);
+    setLoadingDesignIQProjects(true);
+    try {
+      const response = await apiClient.get('/pid/import-linelist/');
+      setDesignIQProjects(response.data.projects || []);
+    } catch (err) {
+      console.error('Failed to fetch DesignIQ projects:', err);
+      setMessage({ type: 'error', text: 'Could not load DesignIQ line list projects' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } finally {
+      setLoadingDesignIQProjects(false);
+    }
+  };
+
+  const handleImportLineList = async (projectId, projectName) => {
+    setImportingLineList(true);
+    try {
+      const response = await apiClient.get(`/pid/import-linelist/?project_id=${projectId}`);
+      const lineListData = response.data.line_list || [];
+      setImportedLineListJson(lineListData);
+      setImportedLineListLabel(`DesignIQ: ${projectName} (${lineListData.length} lines)`);
+      setShowDesignIQModal(false);
+      setMessage({ type: 'success', text: `Line list imported from DesignIQ — ${lineListData.length} lines loaded` });
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    } catch (err) {
+      console.error('Failed to import line list:', err);
+      setMessage({ type: 'error', text: 'Failed to import line list from DesignIQ' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } finally {
+      setImportingLineList(false);
+    }
+  };
+
+  const handleRemoveImportedLineList = () => {
+    setImportedLineListJson(null);
+    setImportedLineListLabel('');
+    setMessage({ type: 'success', text: 'Imported line list removed' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  };
+
   const getColorClasses = (color) => {
     const colors = {
       blue: 'border-blue-200 bg-blue-50',
@@ -350,6 +401,11 @@ const PIDUpload = () => {
     Object.keys(referenceFiles).forEach(key => {
       formDataToSend.append(`reference_${key}`, referenceFiles[key]);
     });
+
+    // SOFT-CODED: Include DesignIQ-imported line list JSON if available
+    if (importedLineListJson) {
+      formDataToSend.append('line_list_json', JSON.stringify(importedLineListJson));
+    }
     
     // Only append non-empty optional fields
     if (formData.drawing_number?.trim()) {
@@ -877,6 +933,7 @@ const PIDUpload = () => {
 
   // ========== UPLOAD INTERFACE (Project Selected - PRESERVED CORE LOGIC) ==========
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
     <div className="max-w-2xl sm:max-w-3xl lg:max-w-4xl mx-auto">
       {/* Back to Projects Button */}
@@ -968,6 +1025,21 @@ const PIDUpload = () => {
                     <X className="w-4 h-4 text-red-600" />
                   </button>
                 </div>
+              ) : doc.key === 'line_list' && importedLineListJson ? (
+                /* SOFT-CODED: Show imported DesignIQ line list badge */
+                <div className="flex items-center justify-between bg-white p-2 rounded border border-green-200">
+                  <div className="flex items-center flex-1 min-w-0 mr-2">
+                    <Database className="w-4 h-4 mr-2 flex-shrink-0 text-green-600" />
+                    <span className="text-sm truncate text-green-700 font-medium">{importedLineListLabel}</span>
+                  </div>
+                  <button
+                    onClick={handleRemoveImportedLineList}
+                    type="button"
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
               ) : (
                 <div>
                   <label htmlFor={`ref-${doc.key}`} className="block">
@@ -984,6 +1056,17 @@ const PIDUpload = () => {
                     onChange={(e) => handleReferenceFileChange(doc.key, e)}
                     className="hidden"
                   />
+                  {/* SOFT-CODED: DesignIQ import button for line list only */}
+                  {doc.key === 'line_list' && (
+                    <button
+                      type="button"
+                      onClick={handleOpenDesignIQModal}
+                      className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
+                    >
+                      <Database className="w-4 h-4" />
+                      Import from DesignIQ Line List
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1327,6 +1410,89 @@ const PIDUpload = () => {
       </div>
     </div>
     </div>
+
+    {/* SOFT-CODED: DesignIQ Line List Import Modal */}
+    {showDesignIQModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Database className="w-6 h-6 text-blue-600" />
+              <h3 className="text-xl font-bold text-gray-900">Import Line List from DesignIQ</h3>
+            </div>
+            <button
+              onClick={() => setShowDesignIQModal(false)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-600 mb-4">
+            Select a DesignIQ project to import its extracted line list. The line list will be cross-referenced with the P&ID for pipe class, LTCS compliance, and routing verification.
+          </p>
+
+          <div className="flex-1 overflow-y-auto">
+            {loadingDesignIQProjects ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+                <span className="text-gray-600">Loading projects...</span>
+              </div>
+            ) : designIQProjects.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Database className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">No line list projects found</p>
+                <p className="text-sm mt-1">Use the Line List extractor at <span className="text-blue-600">/engineering/process/line-list</span> to extract line lists from your P&IDs first.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {designIQProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{project.name}</p>
+                        {project.description && (
+                          <p className="text-sm text-gray-500 mt-0.5">{project.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          Created {new Date(project.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleImportLineList(project.id, project.name)}
+                        disabled={importingLineList}
+                        className="ml-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                        {importingLineList ? (
+                          <Loader className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Database className="w-4 h-4" />
+                        )}
+                        Import
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={() => setShowDesignIQModal(false)}
+              className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 
