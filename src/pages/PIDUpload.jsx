@@ -20,6 +20,7 @@ const PIDUpload = () => {
   const referenceDocuments = [
     { key: 'equipment_list', label: 'Equipment Datasheet', icon: FileText, color: 'orange', required: false, description: 'Equipment specifications for cross-verification with P&ID equipment tags' },
     { key: 'line_list', label: 'Line List', icon: FileText, color: 'blue', required: false, description: 'Piping line specifications for verification against P&ID line numbers' },
+    { key: 'critical_stress_list', label: 'Critical Stress Line List', icon: FileText, color: 'yellow', required: false, description: 'Stress-critical piping lines requiring flexibility, anchor, and support annotation verification' },
     { key: 'alarm_trip_schedule', label: 'Alarm & Trip Schedule', icon: FileText, color: 'red', required: false, description: 'Alarm and trip setpoints for instrument verification' },
     { key: 'instrument_datasheet', label: 'Instrument Datasheet', icon: FileText, color: 'indigo', required: false, description: 'Instrument specifications for verification' },
     { key: 'legends_symbols', label: 'Legend P&ID', icon: FileText, color: 'purple', required: false, description: 'Symbol and abbreviation definitions' }
@@ -44,6 +45,12 @@ const PIDUpload = () => {
   const [importingLineList, setImportingLineList] = useState(false);
   const [importedLineListJson, setImportedLineListJson] = useState(null);  // structured JSON from DesignIQ
   const [importedLineListLabel, setImportedLineListLabel] = useState('');  // display label
+
+  // SOFT-CODED: DesignIQ Critical Stress Line List import state
+  const [showCSSDesignIQModal, setShowCSSDesignIQModal] = useState(false);
+  const [importingCSSList, setImportingCSSList] = useState(false);
+  const [importedCSSJson, setImportedCSSJson] = useState(null);
+  const [importedCSSLabel, setImportedCSSLabel] = useState('');
   
   // Edit/Delete modals
   const [showEditModal, setShowEditModal] = useState(false);
@@ -299,6 +306,32 @@ const PIDUpload = () => {
     }
   };
 
+  const handleImportCSSList = async (projectId, projectName) => {
+    setImportingCSSList(true);
+    try {
+      const response = await apiClient.get(`/pid/import-linelist/?project_id=${projectId}&list_type=critical_stress`);
+      const cssData = response.data.line_list || [];
+      setImportedCSSJson(cssData);
+      setImportedCSSLabel(`DesignIQ: ${projectName} — Critical Stress (${cssData.length} lines)`);
+      setShowCSSDesignIQModal(false);
+      setMessage({ type: 'success', text: `Critical stress line list imported — ${cssData.length} lines loaded` });
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    } catch (err) {
+      console.error('Failed to import critical stress list:', err);
+      setMessage({ type: 'error', text: 'Failed to import critical stress list from DesignIQ' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } finally {
+      setImportingCSSList(false);
+    }
+  };
+
+  const handleRemoveImportedCSSList = () => {
+    setImportedCSSJson(null);
+    setImportedCSSLabel('');
+    setMessage({ type: 'success', text: 'Imported critical stress list removed' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 2000);
+  };
+
   const handleRemoveImportedLineList = () => {
     setImportedLineListJson(null);
     setImportedLineListLabel('');
@@ -316,7 +349,8 @@ const PIDUpload = () => {
       pink: 'border-pink-200 bg-pink-50',
       red: 'border-red-200 bg-red-50',
       gray: 'border-gray-200 bg-gray-50',
-      teal: 'border-teal-200 bg-teal-50'
+      teal: 'border-teal-200 bg-teal-50',
+      yellow: 'border-yellow-200 bg-yellow-50',
     };
     return colors[color] || colors.gray;
   };
@@ -405,6 +439,11 @@ const PIDUpload = () => {
     // SOFT-CODED: Include DesignIQ-imported line list JSON if available
     if (importedLineListJson) {
       formDataToSend.append('line_list_json', JSON.stringify(importedLineListJson));
+    }
+
+    // SOFT-CODED: Include DesignIQ-imported critical stress line list JSON if available
+    if (importedCSSJson) {
+      formDataToSend.append('critical_stress_json', JSON.stringify(importedCSSJson));
     }
     
     // Only append non-empty optional fields
@@ -1040,6 +1079,21 @@ const PIDUpload = () => {
                     <X className="w-4 h-4 text-red-600" />
                   </button>
                 </div>
+              ) : doc.key === 'critical_stress_list' && importedCSSJson ? (
+                /* SOFT-CODED: Show imported DesignIQ critical stress list badge */
+                <div className="flex items-center justify-between bg-white p-2 rounded border border-yellow-300">
+                  <div className="flex items-center flex-1 min-w-0 mr-2">
+                    <Database className="w-4 h-4 mr-2 flex-shrink-0 text-yellow-600" />
+                    <span className="text-sm truncate text-yellow-700 font-medium">{importedCSSLabel}</span>
+                  </div>
+                  <button
+                    onClick={handleRemoveImportedCSSList}
+                    type="button"
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-red-600" />
+                  </button>
+                </div>
               ) : (
                 <div>
                   <label htmlFor={`ref-${doc.key}`} className="block">
@@ -1056,7 +1110,7 @@ const PIDUpload = () => {
                     onChange={(e) => handleReferenceFileChange(doc.key, e)}
                     className="hidden"
                   />
-                  {/* SOFT-CODED: DesignIQ import button for line list only */}
+                  {/* SOFT-CODED: DesignIQ import button for line list */}
                   {doc.key === 'line_list' && (
                     <button
                       type="button"
@@ -1065,6 +1119,17 @@ const PIDUpload = () => {
                     >
                       <Database className="w-4 h-4" />
                       Import from DesignIQ Line List
+                    </button>
+                  )}
+                  {/* SOFT-CODED: DesignIQ import button for critical stress list */}
+                  {doc.key === 'critical_stress_list' && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowCSSDesignIQModal(true); if (designIQProjects.length === 0) handleOpenDesignIQModal(); }}
+                      className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors text-xs font-medium"
+                    >
+                      <Database className="w-4 h-4" />
+                      Import from DesignIQ (Critical Stress)
                     </button>
                   )}
                 </div>
@@ -1484,6 +1549,88 @@ const PIDUpload = () => {
           <div className="mt-4 pt-4 border-t border-gray-200">
             <button
               onClick={() => setShowDesignIQModal(false)}
+              className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* SOFT-CODED: DesignIQ Critical Stress Line List import modal */}
+    {showCSSDesignIQModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Database className="w-6 h-6 text-yellow-600" />
+              <h3 className="text-xl font-bold text-gray-900">Import Critical Stress List from DesignIQ</h3>
+            </div>
+            <button
+              onClick={() => setShowCSSDesignIQModal(false)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-600 mb-4">
+            Select a DesignIQ project to import its critical stress line list. These lines will be cross-checked for anchor points, expansion provisions, and CSS annotations on the P&ID.
+          </p>
+
+          <div className="flex-1 overflow-y-auto">
+            {loadingDesignIQProjects ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader className="w-6 h-6 animate-spin text-yellow-600 mr-2" />
+                <span className="text-gray-600">Loading projects...</span>
+              </div>
+            ) : designIQProjects.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Database className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">No DesignIQ projects found</p>
+                <p className="text-sm mt-1">Use the Critical Stress extractor at <span className="text-yellow-600">/engineering/process/critical-stress</span> to extract stress line lists first.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {designIQProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="border border-gray-200 rounded-lg p-4 hover:border-yellow-300 hover:bg-yellow-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">{project.name}</p>
+                        {project.description && (
+                          <p className="text-sm text-gray-500 mt-0.5">{project.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          Created {new Date(project.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleImportCSSList(project.id, project.name)}
+                        disabled={importingCSSList}
+                        className="ml-3 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-400 text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                        {importingCSSList ? (
+                          <Loader className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Database className="w-4 h-4" />
+                        )}
+                        Import
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={() => setShowCSSDesignIQModal(false)}
               className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
             >
               Cancel

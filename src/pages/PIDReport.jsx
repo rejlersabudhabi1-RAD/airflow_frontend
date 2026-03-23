@@ -449,6 +449,34 @@ const PIDReport = () => {
     return colors[status] || colors.pending;
   };
 
+  const getCategoryInfo = (category) => {
+    const cat = (category || 'other').toLowerCase().trim();
+    const map = {
+      instrument:          { label: 'Instrument',           color: 'text-blue-700 bg-blue-100 border-blue-300',      icon: '⚙️' },
+      equipment:           { label: 'Equipment',            color: 'text-indigo-700 bg-indigo-100 border-indigo-300', icon: '🏭' },
+      piping:              { label: 'Piping',               color: 'text-gray-700 bg-gray-100 border-gray-300',       icon: '🔧' },
+      valve:               { label: 'Valve',                color: 'text-cyan-700 bg-cyan-100 border-cyan-300',       icon: '🔩' },
+      safety:              { label: 'Safety',               color: 'text-red-700 bg-red-100 border-red-300',          icon: '🚨' },
+      control_loop:        { label: 'Control Loop',         color: 'text-purple-700 bg-purple-100 border-purple-300', icon: '🔄' },
+      documentation:       { label: 'Documentation',       color: 'text-slate-700 bg-slate-100 border-slate-300',    icon: '📄' },
+      legend:              { label: 'Legend',               color: 'text-stone-700 bg-stone-100 border-stone-300',    icon: '📖' },
+      pipe_class:          { label: 'Pipe Class',           color: 'text-sky-700 bg-sky-100 border-sky-300',          icon: '📐' },
+      psv_compliance:      { label: 'PSV Compliance',       color: 'text-rose-700 bg-rose-100 border-rose-300',       icon: '⚡' },
+      holds_compliance:    { label: 'HOLDS',                color: 'text-yellow-700 bg-yellow-100 border-yellow-300', icon: '✋' },
+      notes_compliance:    { label: 'Notes',                color: 'text-lime-700 bg-lime-100 border-lime-300',       icon: '📝' },
+      trim_class:          { label: 'Trim Class',           color: 'text-violet-700 bg-violet-100 border-violet-300', icon: '🎯' },
+      dissimilar_material: { label: 'Dissimilar Material',  color: 'text-pink-700 bg-pink-100 border-pink-300',       icon: '⚗️' },
+      ltcs_compliance:     { label: 'LTCS',                 color: 'text-teal-700 bg-teal-100 border-teal-300',       icon: '❄️' },
+      free_drain_slope:    { label: 'Drain/Slope',          color: 'text-green-700 bg-green-100 border-green-300',    icon: '📉' },
+      spool_requirement:   { label: 'Spool / RO',           color: 'text-amber-700 bg-amber-100 border-amber-300',    icon: '📏' },
+      critical_stress:     { label: 'Critical Stress',      color: 'text-orange-700 bg-orange-100 border-orange-300', icon: '💥' },
+      valve_standard:      { label: 'Valve Standard',       color: 'text-fuchsia-700 bg-fuchsia-100 border-fuchsia-300', icon: '🔑' },
+      tie_in_reference:    { label: 'Tie-in / BL',          color: 'text-blue-900 bg-blue-50 border-blue-400',        icon: '🔗' },
+      corrosion_allowance: { label: 'Corrosion / NACE',     color: 'text-emerald-700 bg-emerald-100 border-emerald-300', icon: '🛡️' },
+    };
+    return map[cat] || { label: cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'text-gray-600 bg-gray-100 border-gray-300', icon: '🔍' };
+  };
+
   // SOFT-CODED: Unified filtering — severity, status, and category with robust normalization
   const filteredIssues = report?.issues?.filter(issue => {
     const issueSeverity = (issue.severity || '').toString().toLowerCase().trim();
@@ -974,6 +1002,45 @@ const PIDReport = () => {
             </div>
           )}
 
+          {/* Engineering Category Breakdown */}
+          {Object.keys(categoryCounts).length > 0 && (
+            <div className="bg-white rounded-lg shadow-md p-5 mb-6 border-l-4 border-blue-600">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Engineering Category Breakdown</h3>
+                <span className="text-xs text-gray-500">{report?.issues?.length || 0} total findings</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(categoryCounts)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([cat, count]) => {
+                    const info = getCategoryInfo(cat);
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setFilterCategory(filterCategory === cat ? 'all' : cat)}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border cursor-pointer transition-all hover:shadow-md ${
+                          filterCategory === cat
+                            ? info.color + ' ring-2 ring-offset-1 ring-current'
+                            : info.color + ' opacity-80 hover:opacity-100'
+                        }`}
+                        title={`Filter by ${info.label}`}
+                      >
+                        <span>{info.icon}</span>
+                        <span>{info.label}</span>
+                        <span className="bg-white bg-opacity-60 rounded-full px-1.5 py-0.5 text-xs font-bold">{count}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+              {filterCategory !== 'all' && (
+                <div className="mt-2 flex items-center space-x-2">
+                  <span className="text-xs text-blue-700 font-medium">Filtering by: {getCategoryInfo(filterCategory).label}</span>
+                  <button onClick={() => setFilterCategory('all')} className="text-xs text-gray-500 hover:text-red-500 underline">Clear filter</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Filters */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-6">
             <div className="flex flex-wrap gap-4">
@@ -1122,9 +1189,15 @@ const PIDReport = () => {
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-900">
                         <span className="font-semibold text-blue-900">{issue.pid_reference}</span>
-                        {issue.category && (
-                          <span className="block text-xs text-gray-500 mt-1 italic">{issue.category}</span>
-                        )}
+                        {issue.category && (() => {
+                          const info = getCategoryInfo(issue.category);
+                          return (
+                            <span className={`block mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-medium border ${info.color}`}>
+                              <span>{info.icon}</span>
+                              <span>{info.label}</span>
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
                         {issue.issue_observed}
