@@ -13,6 +13,7 @@ const PIDReport = () => {
   const [error, setError] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
   const [aiAnalysisDetails, setAiAnalysisDetails] = useState(null);
   const [showAiInsights, setShowAiInsights] = useState(false);
   const [showAIDetails, setShowAIDetails] = useState(false);
@@ -26,17 +27,18 @@ const PIDReport = () => {
   const extractAIInsights = (reportData) => {
     if (!reportData) return null;
     
-    // Look for AI metadata in multiple possible locations
+    // SOFT-CODED: Look for AI metadata in multiple possible locations
+    // Priority: analysis_metadata sub-object (service output) → metadata → direct fields
     const analysisData = reportData.analysis_data || reportData.report_data || {};
-    const metadata = analysisData.metadata || {};
+    const metadata = analysisData.analysis_metadata || analysisData.metadata || {};
     
     return {
-      model: metadata.ai_model || analysisData.ai_model || 'GPT-4 Vision',
-      processingTime: metadata.processing_time || analysisData.analysis_duration || 'N/A',
-      confidence: metadata.confidence_score || analysisData.confidence_score || 'Good',
+      model: metadata.ai_model || analysisData.ai_model || 'GPT-4 Vision (gpt-4o)',
+      processingTime: metadata.analysis_duration || metadata.processing_time || analysisData.analysis_duration || 'Multi-pass',
+      confidence: metadata.confidence_score || analysisData.confidence_score || analysisData.confidence || 'Good',
       analysisType: metadata.analysis_type || analysisData.analysis_type || 'comprehensive',
       pageCount: metadata.page_count || 1,
-      ragContext: metadata.rag_context_used || analysisData.rag_context_used || false,
+      ragContext: metadata.rag_context_used ?? analysisData.rag_context_used ?? false,
       ragContextLength: metadata.rag_context_length || 0,
       tokensUsed: metadata.tokens_used || analysisData.tokens_used || 'N/A',
       temperature: metadata.ai_temperature || 'N/A',
@@ -415,9 +417,10 @@ const PIDReport = () => {
       const issuesSheet = XLSX.utils.aoa_to_sheet(issuesData);
       XLSX.utils.book_append_sheet(wb, issuesSheet, 'Issues');
 
-      // Generate filename
+      // Generate filename using drawing number for readability
       const timestamp = new Date().toISOString().split('T')[0];
-      const filename = `PID_Report_${report.pid_drawing}_${timestamp}.xlsx`;
+      const drawingRef = report.pid_drawing_number || `DRW-${report.pid_drawing}`;
+      const filename = `PID_Report_${drawingRef}_${timestamp}.xlsx`;
 
       // Download
       XLSX.writeFile(wb, filename);
@@ -446,22 +449,25 @@ const PIDReport = () => {
     return colors[status] || colors.pending;
   };
 
-  // Enhanced filtering with robust normalization and console logging for debugging
+  // SOFT-CODED: Unified filtering — severity, status, and category with robust normalization
   const filteredIssues = report?.issues?.filter(issue => {
-    // Normalize values to handle any case/whitespace inconsistencies  
     const issueSeverity = (issue.severity || '').toString().toLowerCase().trim();
     const issueStatus = (issue.status || '').toString().toLowerCase().trim();
-    const filterSev = filterSeverity.toLowerCase().trim();
-    const filterStat = filterStatus.toLowerCase().trim();
-    
-    // Apply severity filter
-    if (filterSev !== 'all' && issueSeverity !== filterSev) return false;
-    
-    // Apply status filter
-    if (filterStat !== 'all' && issueStatus !== filterStat) return false;
-    
+    const issueCategory = (issue.category || '').toString().toLowerCase().trim();
+
+    if (filterSeverity !== 'all' && issueSeverity !== filterSeverity.toLowerCase().trim()) return false;
+    if (filterStatus !== 'all' && issueStatus !== filterStatus.toLowerCase().trim()) return false;
+    if (filterCategory !== 'all' && issueCategory !== filterCategory.toLowerCase().trim()) return false;
+
     return true;
   }) || [];
+
+  // Derived category counts for badge display (soft-coded: recomputed from filtered issues)
+  const categoryCounts = (report?.issues || []).reduce((acc, issue) => {
+    const cat = (issue.category || 'other').toLowerCase();
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {});
 
   if (loading) {
     return (
@@ -989,6 +995,21 @@ const PIDReport = () => {
                 </select>
               </div>
               
+              <div>
+                <label className="text-sm font-medium text-gray-700 mr-2">Category:</label>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="all">All ({report?.issues?.length || 0})</option>
+                  {/* SOFT-CODED: Category options derived from actual issue data */}
+                  {Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
+                    <option key={cat} value={cat}>{cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} ({count})</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="text-sm font-medium text-gray-700 mr-2">Status:</label>
                 <select
