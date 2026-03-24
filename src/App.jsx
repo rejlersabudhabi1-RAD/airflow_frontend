@@ -52,6 +52,7 @@ import InternalSalesDashboard from './pages/InternalSalesDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
+import WrenchIntegration from './pages/WrenchIntegration'
 // SOFT-CODED: Subscription feature disabled for in-house deployment
 // import SubscriptionManagement from './pages/SubscriptionManagement'
 // import SubscriptionPlans from './pages/SubscriptionPlans'
@@ -957,6 +958,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UserDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/wrench"
+          element={
+            <ProtectedRoute>
+              <WrenchIntegration />
             </ProtectedRoute>
           }
         />

@@ -25,7 +25,8 @@ import {
   TableCellsIcon,
   SparklesIcon,
   BuildingOffice2Icon,
-  RocketLaunchIcon
+  RocketLaunchIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 
 /**
@@ -488,6 +489,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
+        },
+        {
+          id: 'wrenchIntegration',
+          title: '8.3 Wrench Integration',
+          icon: WrenchScrewdriverIcon,
+          path: '/admin/wrench',
+          description: 'Wrench Project Platform sync'
         }
         // SOFT-CODED: Subscription feature disabled for in-house deployment
         // {
