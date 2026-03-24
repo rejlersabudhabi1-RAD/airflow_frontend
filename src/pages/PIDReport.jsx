@@ -4,6 +4,252 @@ import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
 import * as XLSX from 'xlsx';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LINE SIZE VALIDATION PANEL
+// Displays AI-generated line size recommendations from Pass 7 of the analysis.
+// ─────────────────────────────────────────────────────────────────────────────
+const SEVERITY_STYLES = {
+  critical:    { badge: 'bg-red-100 text-red-800 border border-red-300',    dot: 'bg-red-500',    label: 'Critical'    },
+  major:       { badge: 'bg-orange-100 text-orange-800 border border-orange-300', dot: 'bg-orange-500', label: 'Major' },
+  minor:       { badge: 'bg-yellow-100 text-yellow-800 border border-yellow-300', dot: 'bg-yellow-400', label: 'Minor' },
+  observation: { badge: 'bg-blue-100 text-blue-800 border border-blue-300',  dot: 'bg-blue-400',   label: 'Observation' },
+};
+
+const CHECK_TYPE_LABELS = {
+  nozzle_mismatch:    { icon: '🔌', label: 'Nozzle Mismatch' },
+  size_jump:          { icon: '↕️', label: 'Unjustified Size Jump' },
+  velocity_estimate:  { icon: '💨', label: 'Velocity Estimate' },
+  ref_list_mismatch:  { icon: '📋', label: 'Reference List Mismatch' },
+  psv_discharge:      { icon: '⚠️', label: 'PSV Discharge Sizing' },
+  pump_suction:       { icon: '🔄', label: 'Pump Suction/Discharge' },
+  utility_oversized:  { icon: '🔧', label: 'Utility Line Oversized' },
+};
+
+const LineSizePanel = ({ recommendations }) => {
+  const [expanded, setExpanded] = useState(true);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const severityCounts = recommendations.reduce((acc, r) => {
+    const sev = (r.severity || 'observation').toLowerCase();
+    acc[sev] = (acc[sev] || 0) + 1;
+    return acc;
+  }, {});
+
+  const filtered = activeFilter === 'all'
+    ? recommendations
+    : recommendations.filter(r => (r.severity || '').toLowerCase() === activeFilter);
+
+  return (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden border-l-4 border-orange-500 mb-6">
+      {/* Header */}
+      <div
+        className="bg-gradient-to-r from-orange-50 to-amber-50 px-6 py-4 border-b border-orange-200 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-lg">📐</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                AI Line Size Validation
+                <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full font-bold">
+                  {recommendations.length} Anomal{recommendations.length === 1 ? 'y' : 'ies'}
+                </span>
+              </h3>
+              <p className="text-sm text-gray-600">
+                GPT-4o pass 7 — sizing cross-check against equipment nozzles, continuity &amp; velocity rules
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Severity mini-summary */}
+            <div className="hidden sm:flex items-center gap-2">
+              {['critical', 'major', 'minor'].map(sev =>
+                severityCounts[sev] ? (
+                  <span key={sev} className={`px-2 py-0.5 rounded-full text-xs font-semibold ${SEVERITY_STYLES[sev].badge}`}>
+                    {severityCounts[sev]} {SEVERITY_STYLES[sev].label}
+                  </span>
+                ) : null
+              )}
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-500 transform transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="p-6">
+          {/* Quick-filter pills */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            {[['all', 'All', `${recommendations.length}`], ...Object.entries(severityCounts).map(([s, c]) => [s, SEVERITY_STYLES[s]?.label || s, c])].map(([filter, label, count]) => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  activeFilter === filter
+                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300'
+                }`}
+              >
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+
+          {/* Recommendation Cards */}
+          <div className="space-y-4">
+            {filtered.map((rec, idx) => {
+              const sev = (rec.severity || 'observation').toLowerCase();
+              const sevStyle = SEVERITY_STYLES[sev] || SEVERITY_STYLES.observation;
+              const checkInfo = CHECK_TYPE_LABELS[rec.check_type] || { icon: '🔍', label: rec.check_type || 'General' };
+              const hasRecommendedSize = rec.recommended_size_inch && rec.recommended_size_inch !== 'Verify';
+              const confidence = (rec.confidence || 'Medium');
+              const confColor = confidence === 'High' ? 'text-green-700 bg-green-50' : confidence === 'Low' ? 'text-red-600 bg-red-50' : 'text-blue-700 bg-blue-50';
+
+              return (
+                <div
+                  key={idx}
+                  className="border-2 border-orange-100 rounded-xl p-4 hover:border-orange-300 hover:shadow-md transition-all bg-gradient-to-r from-white to-orange-50"
+                >
+                  {/* Card header row */}
+                  <div className="flex flex-wrap items-start gap-2 mb-3">
+                    {/* Line number badge */}
+                    <span className="font-mono font-bold text-base text-gray-900 bg-gray-100 border border-gray-300 px-3 py-1 rounded-lg">
+                      {rec.line_number || 'Unknown Line'}
+                    </span>
+
+                    {/* Check type */}
+                    <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 border border-amber-200 rounded-full font-medium">
+                      {checkInfo.icon} {checkInfo.label}
+                    </span>
+
+                    {/* Severity */}
+                    <span className={`text-xs px-2 py-1 rounded-full font-semibold ${sevStyle.badge}`}>
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${sevStyle.dot}`}></span>
+                      {sevStyle.label}
+                    </span>
+
+                    {/* Confidence */}
+                    <span className={`text-xs px-2 py-1 rounded-full border font-medium ${confColor}`}>
+                      Confidence: {confidence}
+                    </span>
+                  </div>
+
+                  {/* Size comparison block */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-3">
+                    {/* Current size */}
+                    <div className="flex-1 bg-red-50 border-2 border-red-200 rounded-lg p-3 text-center">
+                      <p className="text-xs text-red-500 font-semibold uppercase tracking-wide mb-1">Annotated on P&ID</p>
+                      <p className="text-3xl font-black text-red-700">
+                        {rec.current_size_inch ? `${rec.current_size_inch}"` : 'N/A'}
+                      </p>
+                    </div>
+
+                    {/* Arrow */}
+                    <div className="flex items-center justify-center text-2xl text-gray-400">→</div>
+
+                    {/* Recommended size */}
+                    <div className={`flex-1 rounded-lg p-3 text-center border-2 ${
+                      hasRecommendedSize
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}>
+                      <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${hasRecommendedSize ? 'text-green-600' : 'text-gray-500'}`}>
+                        AI Recommended
+                      </p>
+                      <p className={`text-3xl font-black ${hasRecommendedSize ? 'text-green-700' : 'text-gray-500'}`}>
+                        {hasRecommendedSize ? `${rec.recommended_size_inch}"` : 'Verify'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Engineering basis */}
+                  {rec.engineering_basis && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-2 flex items-start gap-2">
+                      <span className="text-blue-500 mt-0.5 flex-shrink-0">📖</span>
+                      <div>
+                        <span className="text-xs font-semibold text-blue-700">Engineering Basis: </span>
+                        <span className="text-xs text-blue-800">{rec.engineering_basis}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reasoning */}
+                  {rec.reasoning && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2">
+                      <span className="text-gray-400 mt-0.5 flex-shrink-0">💬</span>
+                      <div>
+                        <span className="text-xs font-semibold text-gray-600">AI Reasoning: </span>
+                        <span className="text-xs text-gray-700">{rec.reasoning}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location */}
+                  {rec.location_on_drawing?.zone && (
+                    <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                      <span>📍</span>
+                      <span>
+                        {rec.location_on_drawing.zone}
+                        {rec.location_on_drawing.proximity_description ? ` — ${rec.location_on_drawing.proximity_description}` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Summary Footer */}
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-orange-50 rounded-lg p-3 text-center border border-orange-200">
+              <p className="text-2xl font-bold text-orange-600">{recommendations.length}</p>
+              <p className="text-xs text-orange-500">Total Anomalies</p>
+            </div>
+            {['critical', 'major', 'minor'].map(sev => (
+              <div key={sev} className={`rounded-lg p-3 text-center border ${
+                sev === 'critical' ? 'bg-red-50 border-red-200' :
+                sev === 'major'    ? 'bg-orange-50 border-orange-200' :
+                                     'bg-yellow-50 border-yellow-200'
+              }`}>
+                <p className={`text-2xl font-bold ${
+                  sev === 'critical' ? 'text-red-600' :
+                  sev === 'major'    ? 'text-orange-600' :
+                                       'text-yellow-600'
+                }`}>{severityCounts[sev] || 0}</p>
+                <p className={`text-xs ${
+                  sev === 'critical' ? 'text-red-500' :
+                  sev === 'major'    ? 'text-orange-500' :
+                                       'text-yellow-500'
+                }`}>{SEVERITY_STYLES[sev]?.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Disclaimer */}
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+            <span className="text-amber-500 flex-shrink-0 mt-0.5">⚠️</span>
+            <p className="text-xs text-amber-700">
+              Line size recommendations are generated by AI (GPT-4o) using visual inspection,
+              process engineering rules of thumb, and reference data if provided.
+              All recommendations <strong>must be verified</strong> by a qualified process engineer
+              against hydraulic calculations, process datasheets, and project specifications before any change is made.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PIDReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -473,6 +719,7 @@ const PIDReport = () => {
       valve_standard:      { label: 'Valve Standard',       color: 'text-fuchsia-700 bg-fuchsia-100 border-fuchsia-300', icon: '🔑' },
       tie_in_reference:    { label: 'Tie-in / BL',          color: 'text-blue-900 bg-blue-50 border-blue-400',        icon: '🔗' },
       corrosion_allowance: { label: 'Corrosion / NACE',     color: 'text-emerald-700 bg-emerald-100 border-emerald-300', icon: '🛡️' },
+      line_size:           { label: 'Line Size',            color: 'text-orange-700 bg-orange-100 border-orange-300',  icon: '📐' },
     };
     return map[cat] || { label: cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'text-gray-600 bg-gray-100 border-gray-300', icon: '🔍' };
   };
@@ -704,7 +951,7 @@ const PIDReport = () => {
       {/* Report Summary */}
       {report && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow p-4">
               <p className="text-sm text-gray-500 mb-1">Total Issues</p>
               <p className="text-3xl font-bold text-gray-900">{report.total_issues}</p>
@@ -726,6 +973,13 @@ const PIDReport = () => {
               <p className="text-3xl font-bold text-purple-600">
                 {report.specification_breaks?.length || 0}
               </p>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <p className="text-sm text-gray-500 mb-1">Line Size</p>
+              <p className="text-3xl font-bold text-orange-600">
+                {report.line_size_recommendations?.length || 0}
+              </p>
+              <p className="text-xs text-orange-400 mt-1">AI Anomalies</p>
             </div>
           </div>
 
@@ -1000,6 +1254,13 @@ const PIDReport = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════
+              LINE SIZE VALIDATION & AI RECOMMENDATION PANEL
+              ═══════════════════════════════════════════════ */}
+          {report.line_size_recommendations && report.line_size_recommendations.length > 0 && (
+            <LineSizePanel recommendations={report.line_size_recommendations} />
           )}
 
           {/* Engineering Category Breakdown */}
