@@ -19,11 +19,20 @@ const getAuthHeaders = () => {
 
 /**
  * Handle API responses
+ * Supports DRF field-level validation error dicts: { fieldName: ["msg", ...], ... }
+ * as well as the standard { detail: "..." } format.
  */
 const handleResponse = async (response) => {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-    throw new Error(error.detail || error.message || 'API request failed');
+    const errorData = await response.json().catch(() => ({ detail: 'Request failed' }));
+    const message =
+      errorData.detail ||
+      (errorData.non_field_errors && errorData.non_field_errors.join(', ')) ||
+      Object.entries(errorData)
+        .map(([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(', ') : errs}`)
+        .join(' | ') ||
+      'API request failed';
+    throw new Error(message);
   }
   return response.json();
 };

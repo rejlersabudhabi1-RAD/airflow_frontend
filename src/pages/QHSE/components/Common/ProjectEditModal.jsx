@@ -28,6 +28,14 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
+  // Return a valid YYYY-MM-DD string or '' — prevents browser date-input warnings
+  // when existing DB rows contain non-date text (e.g. spreadsheet artefacts).
+  const safeDate = (value) => {
+    if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return value;
+    return '';
+  };
+
   // Initialize form data when project changes or in create mode
   useEffect(() => {
     if (isCreateMode) {
@@ -71,21 +79,21 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
         projectTitle: project.projectTitle || '',
         client: project.client || '',
         projectManager: project.projectManager || '',
-        projectStartingDate: project.projectStartingDate || '',
-        projectClosingDate: project.projectClosingDate || '',
-        projectExtension: project.projectExtension || '',
+        projectStartingDate: safeDate(project.projectStartingDate),
+        projectClosingDate: safeDate(project.projectClosingDate),
+        projectExtension: safeDate(project.projectExtension),
         projectQualityEng: project.projectQualityEng || '',
         manHourForQuality: project.manHourForQuality || 0,
         manhoursUsed: project.manhoursUsed || 0,
         qualityBillabilityPercent: project.qualityBillabilityPercent || '0%',
         projectQualityPlanStatusRev: project.projectQualityPlanStatusRev || '',
-        projectQualityPlanStatusIssueDate: project.projectQualityPlanStatusIssueDate || '',
-        projectAudit1: project.projectAudit1 || '',
-        projectAudit2: project.projectAudit2 || '',
-        projectAudit3: project.projectAudit3 || '',
-        projectAudit4: project.projectAudit4 || '',
-        clientAudit1: project.clientAudit1 || '',
-        clientAudit2: project.clientAudit2 || '',
+        projectQualityPlanStatusIssueDate: safeDate(project.projectQualityPlanStatusIssueDate),
+        projectAudit1: safeDate(project.projectAudit1),
+        projectAudit2: safeDate(project.projectAudit2),
+        projectAudit3: safeDate(project.projectAudit3),
+        projectAudit4: safeDate(project.projectAudit4),
+        clientAudit1: safeDate(project.clientAudit1),
+        clientAudit2: safeDate(project.clientAudit2),
         delayInAuditsNoDays: project.delayInAuditsNoDays || 0,
         carsOpen: project.carsOpen || 0,
         carsDelayedClosingNoDays: project.carsDelayedClosingNoDays || 0,
@@ -173,7 +181,14 @@ export const ProjectEditModal = ({ open, onClose, project, onUpdate, mode = 'edi
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error occurred' }));
         console.error('[ProjectEditModal] Error response:', errorData);
-        throw new Error(errorData.detail || errorData.error || `Failed to ${isCreateMode ? 'create' : 'update'} project`);
+        const message =
+          errorData.detail ||
+          (errorData.non_field_errors && errorData.non_field_errors.join(', ')) ||
+          Object.entries(errorData)
+            .map(([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(', ') : errs}`)
+            .join(' | ') ||
+          `Failed to ${isCreateMode ? 'create' : 'update'} project`;
+        throw new Error(message);
       }
 
       const savedProject = await response.json();
