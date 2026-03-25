@@ -75,6 +75,7 @@ const PIDUpload = () => {
     revision: '',
     project_name: '',
     auto_analyze: true,
+    analysis_mode: 'standard',   // 'standard' = drawing-only | 'premium' = with RAD/external refs
     // Structured drawing number fields
     area: '',
     p_area: '',
@@ -507,6 +508,8 @@ const PIDUpload = () => {
     
     // CRITICAL: Convert boolean to string for DRF BooleanField
     formDataToSend.append('auto_analyze', formData.auto_analyze ? 'true' : 'false');
+    // SOFT-CODED: Analysis mode — 'standard' or 'premium'
+    formDataToSend.append('analysis_mode', formData.analysis_mode || 'standard');
 
     try {
       console.log('[DEBUG] ===== UPLOAD REQUEST =====');
@@ -1119,6 +1122,82 @@ const PIDUpload = () => {
                   </div>
                 ))}
               </div>
+
+              {/* ── Analysis Mode Selector ─────────────────────────────────────── */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">Analysis Mode</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Standard */}
+                  <button type="button"
+                    onClick={() => setFormData(p => ({ ...p, analysis_mode: 'standard' }))}
+                    className={`relative rounded-2xl p-4 border-2 text-left transition-all duration-200 focus:outline-none ${
+                      formData.analysis_mode === 'standard'
+                        ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100'
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/30'
+                    }`}>
+                    {formData.analysis_mode === 'standard' && (
+                      <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        formData.analysis_mode === 'standard' ? 'bg-blue-500' : 'bg-slate-100'
+                      }`}>
+                        <Shield className={`w-4 h-4 ${formData.analysis_mode === 'standard' ? 'text-white' : 'text-slate-400'}`} />
+                      </div>
+                      <div>
+                        <p className={`text-sm font-bold ${formData.analysis_mode === 'standard' ? 'text-blue-700' : 'text-slate-700'}`}>Standard</p>
+                        <p className="text-xs text-slate-400">Drawing-only analysis</p>
+                      </div>
+                    </div>
+                    <ul className="space-y-1 mt-1">
+                      {['8-pass AI review of the uploaded drawing','OCR + Vision + Engineering checks','Fast & focused — no external files needed','Best for quick IFC checks'].map(t => (
+                        <li key={t} className="flex items-start gap-1.5 text-xs text-slate-600">
+                          <span className="text-emerald-500 mt-0.5 flex-shrink-0">✓</span>{t}
+                        </li>
+                      ))}
+                    </ul>
+                  </button>
+
+                  {/* Premium */}
+                  <button type="button"
+                    onClick={() => setFormData(p => ({ ...p, analysis_mode: 'premium' }))}
+                    className={`relative rounded-2xl p-4 border-2 text-left transition-all duration-200 focus:outline-none ${
+                      formData.analysis_mode === 'premium'
+                        ? 'border-violet-500 bg-violet-50 shadow-lg shadow-violet-100'
+                        : 'border-slate-200 bg-white hover:border-violet-300 hover:bg-violet-50/30'
+                    }`}>
+                    {formData.analysis_mode === 'premium' && (
+                      <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-violet-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      </span>
+                    )}
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        formData.analysis_mode === 'premium' ? 'bg-violet-500' : 'bg-slate-100'
+                      }`}>
+                        <Layers className={`w-4 h-4 ${formData.analysis_mode === 'premium' ? 'text-white' : 'text-slate-400'}`} />
+                      </div>
+                      <div>
+                        <p className={`text-sm font-bold ${formData.analysis_mode === 'premium' ? 'text-violet-700' : 'text-slate-700'}`}>Premium</p>
+                        <p className="text-xs text-slate-400">Drawing + reference docs</p>
+                      </div>
+                    </div>
+                    <ul className="space-y-1 mt-1">
+                      {['Everything in Standard','Cross-checks against datasheets & line list','DesignIQ import + RAD document intelligence','Deep compliance against project standards'].map(t => (
+                        <li key={t} className="flex items-start gap-1.5 text-xs text-slate-600">
+                          <span className="text-violet-500 mt-0.5 flex-shrink-0">✦</span>{t}
+                        </li>
+                      ))}
+                    </ul>
+                    {formData.analysis_mode !== 'premium' && (
+                      <p className="mt-2 text-xs text-violet-500 font-medium">Upload reference docs below to enable ↓</p>
+                    )}
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-50 border border-blue-100">
                 <div onClick={() => setFormData(p => ({ ...p, auto_analyze: !p.auto_analyze }))}
                   className={`relative w-11 h-6 rounded-full cursor-pointer transition-colors flex-shrink-0 ${formData.auto_analyze ? 'bg-blue-500' : 'bg-slate-300'}`}>
@@ -1188,7 +1267,9 @@ const PIDUpload = () => {
                   style={uploading || !file ? undefined : { background:'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow:'0 4px 14px rgba(99,102,241,0.35)' }}>
                   {uploading
                     ? <><Loader className="w-4 h-4 animate-spin" />{formData.auto_analyze ? 'Uploading & Analysing…' : 'Uploading…'}</>
-                    : <><Zap className="w-4 h-4" />{formData.auto_analyze ? 'Upload & Run 8-Pass Analysis' : 'Upload Drawing'}</>
+                    : <><Zap className="w-4 h-4" />{formData.auto_analyze
+                        ? `Upload & Run ${formData.analysis_mode === 'premium' ? 'Premium' : 'Standard'} 8-Pass Analysis`
+                        : 'Upload Drawing'}</>
                   }
                 </button>
                 <button type="button" onClick={() => navigate('/dashboard')}

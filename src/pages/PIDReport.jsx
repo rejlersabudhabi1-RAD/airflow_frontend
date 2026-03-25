@@ -290,7 +290,9 @@ const PIDReport = () => {
       temperature: metadata.ai_temperature || 'N/A',
       retryAttempt: metadata.retry_attempt || 1,
       timestamp: metadata.analysis_timestamp ? new Date(metadata.analysis_timestamp).toLocaleString() : 'N/A',
-      success: metadata.success !== false
+      success: metadata.success !== false,
+      // SOFT-CODED: Analysis mode badge — 'standard' or 'premium'
+      analysisMode: metadata.analysis_mode || analysisData.analysis_mode || 'standard',
     };
   };
 
@@ -318,6 +320,22 @@ const PIDReport = () => {
             </div>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Analysis Mode Badge */}
+            {aiInsights.analysisMode === 'premium' ? (
+              <div className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 bg-violet-100 text-violet-700 border border-violet-200 text-xs sm:text-sm font-semibold rounded-full whitespace-nowrap">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Premium
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 text-xs sm:text-sm font-semibold rounded-full whitespace-nowrap">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Standard
+              </div>
+            )}
             <div className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 text-xs sm:text-sm font-medium rounded-full whitespace-nowrap">
               ⚡ {aiInsights.processingTime}
             </div>
@@ -367,6 +385,20 @@ const PIDReport = () => {
                   <div>
                     <p className="text-sm text-gray-600">Analysis Type</p>
                     <p className="font-medium text-gray-900 capitalize">{aiInsights.analysisType}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`bg-white rounded-lg p-4 shadow-sm border ${aiInsights.analysisMode === 'premium' ? 'border-violet-200' : 'border-blue-200'}`}>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${aiInsights.analysisMode === 'premium' ? 'bg-violet-100' : 'bg-blue-100'}`}>
+                    {aiInsights.analysisMode === 'premium' ? '✦' : '🛡️'}
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Analysis Mode</p>
+                    <p className={`font-semibold capitalize ${aiInsights.analysisMode === 'premium' ? 'text-violet-700' : 'text-blue-700'}`}>
+                      {aiInsights.analysisMode === 'premium' ? 'Premium' : 'Standard'}
+                    </p>
                   </div>
                 </div>
               </div>
