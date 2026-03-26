@@ -26,7 +26,7 @@
  * Build: v2.1.0 — AbortController upload timeout
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
@@ -43,11 +43,13 @@ const API_CONFIG = envConfig.getApiConfig();
 
 // How often to poll for OCR progress (ms)
 // SOFT-CODED: environments.json → api.retry_delay
-const POLL_INTERVAL_MS   = Number(API_CONFIG.retry_delay)       || 3000;
+const POLL_INTERVAL_MS   = Number(API_CONFIG.retry_delay)              || 3000;
 
 // Maximum total polling window — give up after this (ms)
-// SOFT-CODED: environments.json → api.timeout_long
-const POLL_MAX_WAIT_MS   = Number(API_CONFIG.timeout_long)      || 1200000;  // 20 min
+// SOFT-CODED: environments.json → api.timeout_extraction_poll
+// Default 60 min — Railway OCR on dense multi-page P&IDs can take 30-45 min.
+// Change this in environments.json without touching code.
+const POLL_MAX_WAIT_MS   = Number(API_CONFIG.timeout_extraction_poll)  || 3600000;  // 60 min
 
 // Timeout for the initial filing POST (upload + broker dispatch, NOT OCR time).
 // Uses AbortController so it cannot be bypassed by Axios instance settings.
@@ -83,10 +85,12 @@ const LineList = () => {
   const [error, setError] = useState(null);
   const [formatType, setFormatType] = useState('onshore');
   const [includeArea, setIncludeArea] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const pidRef = useRef(null);
   const pollTimerRef = useRef(null);
   const pollStartRef = useRef(null);
+  const elapsedTimerRef = useRef(null);
 
   // -------------------------------------------------------------------------
   // File selection
@@ -103,12 +107,38 @@ const LineList = () => {
   };
 
   // -------------------------------------------------------------------------
+  // Elapsed-time ticker (runs while processing, so users know it's alive)
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (isProcessing) {
+      setElapsedSeconds(0);
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSeconds(s => s + 1);
+      }, 1000);
+    } else {
+      clearInterval(elapsedTimerRef.current);
+    }
+    return () => clearInterval(elapsedTimerRef.current);
+  }, [isProcessing]);
+
+  // Friendly elapsed-time string e.g. "2m 34s"
+  const formatElapsed = (secs) => {
+    if (secs < 60) return `${secs}s`;
+    return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  };
+
+  // -------------------------------------------------------------------------
   // Polling helper
   // -------------------------------------------------------------------------
   const pollStatus = useCallback((taskId) => {
     if (Date.now() - pollStartRef.current > POLL_MAX_WAIT_MS) {
       clearTimeout(pollTimerRef.current);
-      setError('Extraction timed out. The file may be too large — please try again.');
+      const waited = Math.round(POLL_MAX_WAIT_MS / 60000);
+      setError(
+        `Extraction is taking longer than ${waited} minutes. The server is still working — ` +
+        `please refresh the page and try again, or contact support if the problem persists. ` +
+        `(Tip: reduce PDF size or split into single-sheet P&IDs for faster results.)`
+      );
       setIsProcessing(false);
       return;
     }
@@ -447,7 +477,10 @@ const LineList = () => {
           <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-gray-700">{statusMessage || 'Processing…'}</span>
-              <span className="text-sm font-medium text-blue-600">{progress}%</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
+                <span className="text-sm font-medium text-blue-600">{progress}%</span>
+              </div>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3">
               <div
@@ -455,8 +488,16 @@ const LineList = () => {
                 style={{ width: `${Math.max(5, progress)}%` }}
               />
             </div>
+            {/* Dynamic patience message — changes tone after 3 min */}
             <p className="text-xs text-gray-500 mt-2">
-              OCR extraction runs in the background. This usually takes 2–5 minutes depending on drawing complexity.
+              {elapsedSeconds < 60
+                ? 'OCR extraction running in the background — usually 2–10 min for standard P&IDs.'
+                : elapsedSeconds < 180
+                ? 'Still working… multi-page or high-density P&IDs take longer. Please keep this tab open.'
+                : elapsedSeconds < 600
+                ? `Running for ${formatElapsed(elapsedSeconds)} — complex drawings with many lines can take 10–30 min on the server. You can safely leave this tab open.`
+                : `Running for ${formatElapsed(elapsedSeconds)} — still processing. For very large files consider splitting into single-sheet P&IDs to speed things up.`
+              }
             </p>
           </div>
         )}
