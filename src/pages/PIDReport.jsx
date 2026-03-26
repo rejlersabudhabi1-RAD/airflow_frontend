@@ -658,7 +658,7 @@ const PIDReport = () => {
 
       // Issues Sheet with exact column headers requested
       const issuesData = [
-        ['#', 'P&ID Reference', 'Issue Observed', 'Action Required', 'Direction', 'Severity', 'Status', 'Actions']
+        ['#', 'P&ID Reference', 'Issue Observed', 'Action Required', 'Reason', 'Direction', 'Severity', 'Status', 'Actions']
       ];
 
       report.issues.forEach((issue, index) => {
@@ -683,6 +683,7 @@ const PIDReport = () => {
           (issue.pid_reference || 'N/A') + (issue.category ? ` - ${issue.category}` : ''),
           issue.issue_observed || 'N/A',
           issue.action_required || 'N/A',
+          issue.evidence || 'N/A',
           direction,
           issue.severity || 'N/A',
           issue.status || 'pending',
@@ -1415,6 +1416,14 @@ const PIDReport = () => {
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-blue-50">
                       Action Required
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-purple-50">
+                      <div className="flex items-center space-x-1">
+                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <span>Reason</span>
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-amber-50">
                       <div className="flex items-center space-x-1">
                         <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1438,7 +1447,7 @@ const PIDReport = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredIssues.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="px-6 py-12 text-center">
+                      <td colSpan="9" className="px-6 py-12 text-center">
                         <div className="space-y-3">
                           <div className="flex justify-center">
                             <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1497,6 +1506,15 @@ const PIDReport = () => {
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-700 max-w-md">
                         {issue.action_required}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-700 max-w-xs">
+                        {issue.evidence ? (
+                          <div className="bg-purple-50 border border-purple-200 rounded p-2 text-xs text-purple-900 leading-relaxed italic">
+                            {issue.evidence}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs italic">No evidence recorded</span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-sm">
                         {issue.location_on_drawing ? (
