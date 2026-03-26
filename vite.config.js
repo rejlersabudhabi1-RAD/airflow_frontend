@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0', // Listen on all interfaces for Docker
       port: 5173, // Use port 5173 for local development
+      watch: {
+        usePolling: true, // Required for Docker on Windows (no native FS events through bind mounts)
+        interval: 1000,
+      },
       proxy: {
         '/api': {
           target: apiUrl,

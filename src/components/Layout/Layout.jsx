@@ -20,6 +20,8 @@ const Layout = () => {
   const publicRoutes = ['/', '/login', '/home', '/enquiry', '/solutions', '/about', '/services/pid-analysis', '/services/pfd-conversion', '/services/asset-integrity', '/services/consulting', '/data-governance', '/security', '/terms-of-service', '/privacy-policy']
   
   const showSidebar = isAuthenticated && !publicRoutes.includes(location.pathname)
+  // Hide the shared footer on public pages that render their own (e.g. Home)
+  const showFooter = !publicRoutes.includes(location.pathname)
   
   // Log sidebar state for debugging
   React.useEffect(() => {
@@ -42,7 +44,7 @@ const Layout = () => {
           <Outlet />
         </main>
       </div>
-      <Footer />
+      {showFooter && <Footer />}
     </div>
   )
 }

@@ -137,7 +137,7 @@ export const FOOTER_CONFIG = {
 
   // Bottom Bar Links
   bottomBar: {
-    copyright: '© 2025 REJLERS AB • Engineering Excellence Since 1942',
+    copyright: `© ${new Date().getFullYear()} REJLERS AB • Engineering Excellence Since 1942`,
     links: [
       {
         label: 'Privacy Policy',
