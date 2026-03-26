@@ -13,7 +13,7 @@ import envConfig, { getApiBaseUrl, getApiTimeouts } from './environment.config'
 export const API_BASE_URL = getApiBaseUrl()
 
 // Get timeout settings from centralized configuration
-const { timeout, timeoutLong, timeoutUpload, timeoutRefresh } = getApiTimeouts()
+const { timeout, timeoutLong, timeoutUpload, timeoutRefresh, timeoutPfdVerify } = getApiTimeouts()
 
 // Log configuration for debugging
 console.log('[API Config] ✅ Using centralized environment configuration')
@@ -50,6 +50,7 @@ export const API_TIMEOUT_LONG = timeoutLong // From centralized config
 export const API_TIMEOUT_UPLOAD = timeoutUpload // From centralized config (default 120s, file upload + cold-start)
 export const API_TIMEOUT_REFRESH = timeoutRefresh // From centralized config (default 90s, token refresh cold-start)
 export const API_TIMEOUT_AI_GENERATION = 300000 // 5 minutes for AI P&ID generation (OpenAI API calls)
+export const API_TIMEOUT_PFD_VERIFY = timeoutPfdVerify // SOFT-CODED from environments.json (default 600s — PFD AI multi-pass takes 5-8 min)
 
 export const HTTP_STATUS = {
   OK: 200,

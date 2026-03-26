@@ -6,6 +6,7 @@ import {
   Cpu, BookOpen, SearchCode, GitMerge, Info, Shield
 } from 'lucide-react';
 import api from '../../services/api.service';
+import { API_TIMEOUT_PFD_VERIFY } from '../../config/api.config';
 
 // â”€â”€â”€ Soft-coded configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -280,9 +281,11 @@ const PFDVerification = () => {
     setIsVerifying(true);
     startStageAnimation();
     try {
+      // SOFT-CODED timeout: controlled via timeout_pfd_verify in config/environments.json
+      // (default 600 s — PFD AI multi-pass analysis on large drawings can take 5-8 min)
       const res = await api.post('/pfd/verify/start-verification/', {
         upload_id: uploadId, auto_analyze: true
-      });
+      }, { timeout: API_TIMEOUT_PFD_VERIFY });
       if (res.data.success) {
         stopStageAnimation();
         setVerificationReport(res.data.report);

@@ -282,6 +282,8 @@ export const getApiTimeouts = () => {
     // SOFT-CODED: Upload and refresh timeouts for Railway cold-start resilience
     timeoutUpload: config.timeout_upload || 120000,
     timeoutRefresh: config.timeout_refresh || 90000,
+    // SOFT-CODED: PFD AI verification — multi-page analysis can take 5-8 min
+    timeoutPfdVerify: config.timeout_pfd_verify || 600000,
   }
 }
 
