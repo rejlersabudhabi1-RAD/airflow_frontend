@@ -367,10 +367,11 @@ const PFDVerification = () => {
   const handleExportExcel = () => {
     if (!filteredIssues.length) { showMsg('error', 'No issues to export'); return; }
     let csv = '\uFEFF';
-    csv += 'S/N,Severity,Category,Issue Found,Action Required,Status,Remark\n';
+    csv += 'S/N,Severity,Category,Issue Found,Evidence,Action Required,Status,Remark\n';
     filteredIssues.forEach(i => {
       csv += `"${i.serial_number}","${i.severity}","${i.category}",`;
       csv += `"${(i.issue_found || '').replace(/"/g,'""')}",`;
+      csv += `"${(i.evidence  || '').replace(/"/g,'""')}",`;
       csv += `"${(i.action_required || '').replace(/"/g,'""')}",`;
       csv += `"${i.status}","${(i.remark || '').replace(/"/g,'""')}"\n`;
     });
@@ -426,12 +427,12 @@ const PFDVerification = () => {
   <span class="chip chip-obs">Observations: ${verificationReport?.observation_count || 0}</span>
 </div>
 <table>
-<thead><tr><th>#</th><th>Severity</th><th>Category</th><th>Issue Found</th><th>Action Required</th><th>Status</th></tr></thead>
+<thead><tr><th>#</th><th>Severity</th><th>Category</th><th>Issue Found</th><th>Evidence</th><th>Action Required</th><th>Status</th></tr></thead>
 <tbody>
 ${filteredIssues.map(i => `<tr>
   <td>${i.serial_number}</td>
   <td><span class="badge" style="background:${severityBgHex(i.severity)};color:${severityColorHex(i.severity)}">${i.severity}</span></td>
-  <td>${i.category}</td><td>${i.issue_found}</td><td>${i.action_required}</td>
+  <td>${i.category}</td><td>${i.issue_found}</td><td>${i.evidence || ''}</td><td>${i.action_required}</td>
   <td>${i.status}</td></tr>`).join('')}
 </tbody></table>
 </body></html>`);
@@ -1080,6 +1081,12 @@ const IssuesTable = ({ issues, selectedIssues, onToggle, onSelectAll, allSelecte
           <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Severity</th>
           <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
           <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Issue Found</th>
+          <th className="px-3 py-3 text-left text-xs font-semibold text-purple-600 uppercase tracking-wide">
+            <span className="flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.05A3.878 3.878 0 0015 17H9a3.878 3.878 0 00-1.797-.546l-.347-.05z" /></svg>
+              Evidence
+            </span>
+          </th>
           <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Action Required</th>
           <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
         </tr>
@@ -1098,6 +1105,13 @@ const IssuesTable = ({ issues, selectedIssues, onToggle, onSelectAll, allSelecte
               <td className="px-3 py-3"><span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">{issue.category}</span></td>
               <td className="px-3 py-3 text-gray-800 max-w-xs">
                 <p className="line-clamp-2 text-xs leading-relaxed">{issue.issue_found}</p>
+              </td>
+              <td className="px-3 py-3 max-w-sm bg-purple-50/50">
+                {issue.evidence ? (
+                  <p className="line-clamp-3 text-xs leading-relaxed text-purple-900">{issue.evidence}</p>
+                ) : (
+                  <span className="text-gray-300 text-xs italic">Re-analyze to generate</span>
+                )}
               </td>
               <td className="px-3 py-3 text-gray-600 max-w-xs">
                 <p className="line-clamp-2 text-xs leading-relaxed">{issue.action_required}</p>
@@ -1124,12 +1138,21 @@ const IssuesTable = ({ issues, selectedIssues, onToggle, onSelectAll, allSelecte
             {/* Expanded row */}
             {expandedIssue === issue.id && (
               <tr className="bg-indigo-50/50">
-                <td colSpan="7" className="px-4 py-4">
+                <td colSpan="8" className="px-4 py-4">
                   <div className="grid md:grid-cols-2 gap-4 text-xs">
                     <div>
                       <p className="font-semibold text-gray-700 mb-1 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5 text-indigo-500" />Full Issue Description</p>
                       <p className="text-gray-600 leading-relaxed bg-white p-3 rounded-xl border border-indigo-100">{issue.issue_found}</p>
                     </div>
+                    {issue.evidence && (
+                      <div>
+                        <p className="font-semibold text-purple-700 mb-1 flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.05A3.878 3.878 0 0015 17H9a3.878 3.878 0 00-1.797-.546l-.347-.05z" /></svg>
+                          Evidence
+                        </p>
+                        <p className="text-purple-900 leading-relaxed bg-purple-50 p-3 rounded-xl border border-purple-100">{issue.evidence}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="font-semibold text-gray-700 mb-1 flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500" />Full Action Required</p>
                       <p className="text-gray-600 leading-relaxed bg-white p-3 rounded-xl border border-indigo-100">{issue.action_required}</p>
@@ -1147,7 +1170,7 @@ const IssuesTable = ({ issues, selectedIssues, onToggle, onSelectAll, allSelecte
           </React.Fragment>
         ))}
         {issues.length === 0 && (
-          <tr><td colSpan="7" className="py-10 text-center text-gray-400 text-sm">No issues match the current filters.</td></tr>
+          <tr><td colSpan="8" className="py-10 text-center text-gray-400 text-sm">No issues match the current filters.</td></tr>
         )}
       </tbody>
     </table>
