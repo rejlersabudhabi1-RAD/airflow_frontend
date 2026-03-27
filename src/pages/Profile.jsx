@@ -295,24 +295,18 @@ const Profile = () => {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  {photoPreview ? (
-                    <>
-                      <img
-                        src={photoPreview}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                      <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
-                        {getUserInitials()}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
-                      {getUserInitials()}
-                    </div>
+                  {/* Initials are always the base layer — visible when photo is absent or fails */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
+                    {getUserInitials()}
+                  </div>
+                  {/* Photo layer on top — hides itself via onError if URL is broken */}
+                  {photoPreview && (
+                    <img
+                      src={photoPreview}
+                      alt="Profile"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
                   )}
                   
                   {isEditing && (
