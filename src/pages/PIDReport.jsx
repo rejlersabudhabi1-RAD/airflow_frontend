@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../services/api.service';
 import { STORAGE_KEYS } from '../config/app.config';
@@ -263,9 +263,22 @@ const PIDReport = () => {
   const [aiAnalysisDetails, setAiAnalysisDetails] = useState(null);
   const [showAiInsights, setShowAiInsights] = useState(false);
   const [showAIDetails, setShowAIDetails] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingRef = useRef(null);
+
+  // Stop polling helper
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setIsPolling(false);
+  };
 
   useEffect(() => {
     fetchReport();
+    // Cleanup polling on unmount or id change
+    return () => stopPolling();
   }, [id]);
 
 
@@ -533,11 +546,36 @@ const PIDReport = () => {
         }
         
         setReport(reportData);
+      } else if (drawingResponse.data.status === 'processing' || drawingResponse.data.status === 'uploaded') {
+        console.log('[PIDReport] Drawing status is:', drawingResponse.data.status, '- starting polling...');
+        setLoading(false);
+        // Start polling every 10 seconds if not already polling
+        if (!pollingRef.current) {
+          setIsPolling(true);
+          pollingRef.current = setInterval(async () => {
+            try {
+              const pollResp = await apiClient.get(`/pid/drawings/${id}/`);
+              setDrawing(pollResp.data);
+              if (pollResp.data.status === 'completed') {
+                stopPolling();
+                const reportResp = await apiClient.get(`/pid/drawings/${id}/report/`);
+                setReport(reportResp.data);
+              } else if (pollResp.data.status === 'failed') {
+                stopPolling();
+                setError(`Analysis failed: ${pollResp.data.error_message || 'Unknown error. Please try re-uploading.'}`);
+              }
+            } catch (pollErr) {
+              console.error('[PIDReport] Polling error:', pollErr);
+            }
+          }, 10000);
+        }
       } else {
-        console.log('[PIDReport] Drawing status is:', drawingResponse.data.status, '- not completed yet');
+        // failed or unknown status
+        console.log('[PIDReport] Drawing status is:', drawingResponse.data.status);
+        setLoading(false);
       }
       
-      setLoading(false);
+      if (drawingResponse.data.status === 'completed') setLoading(false);
     } catch (err) {
       console.error('[PIDReport] Error fetching report:', err);
       console.error('[PIDReport] Error response:', err.response);
@@ -822,6 +860,23 @@ const PIDReport = () => {
           </div>
         </div>
       </div>
+
+      {/* Processing / Analysis-in-progress banner */}
+      {(drawing.status === 'processing' || drawing.status === 'uploaded') && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-5 flex items-start gap-4">
+          <svg className="animate-spin h-7 w-7 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <div>
+            <h3 className="text-base font-semibold text-blue-900">AI Analysis in Progress</h3>
+            <p className="text-sm text-blue-700 mt-0.5">
+              Your P&ID drawing is being analyzed by the 8-pass AI engine. This typically takes 3–8 minutes.
+              This page will automatically refresh when the analysis is complete.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Enhanced AI Analysis Insights Panel */}
       {renderAIInsightsPanel()}
