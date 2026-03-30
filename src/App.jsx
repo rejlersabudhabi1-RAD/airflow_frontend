@@ -1,7 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { API_BASE_URL, API_ENDPOINTS } from './config/api.config'
 import { FEATURE_FLAGS, ENV } from './config/features.config'
 import Layout from './components/Layout/Layout'
@@ -121,10 +121,12 @@ function App() {
   const [modulesLoaded, setModulesLoaded] = useState(false)
   const [mustChangePassword, setMustChangePassword] = useState(false)
 
-  // Log environment and component selection
-  console.log('🎯 App Environment:', ENV)
-  console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
-  console.log('📋 CRS Multi-Revision Component:', FEATURE_FLAGS.crsMultiRevisionVersion === 'smart' ? 'CRSMultiRevisionSmart (with Finish Early)' : 'CRSMultipleRevision (Classic)')
+  // SOFT-CODED: dev-only environment logging (avoids console noise on every render in production)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🎯 App Environment:', ENV)
+    console.log('🎛️ PFD Upload Component:', FEATURE_FLAGS.pfdUploadVersion === 'new' ? 'PFDUploadNew (Ultra Complete)' : 'PFDUpload (Classic)')
+    console.log('📋 CRS Multi-Revision Component:', FEATURE_FLAGS.crsMultiRevisionVersion === 'smart' ? 'CRSMultiRevisionSmart (with Finish Early)' : 'CRSMultipleRevision (Classic)')
+  }
 
   // Fetch user modules on mount
   useEffect(() => {
@@ -184,12 +186,15 @@ function App() {
   }, [isAuthenticated])
 
   // Protected Route wrapper
-  const ProtectedRoute = ({ children }) => {
+  // SOFT-CODED: useCallback ensures stable component identity across renders —
+  // prevents React from unmounting/remounting children on every App re-render
+  const ProtectedRoute = useCallback(({ children }) => {
     return isAuthenticated ? children : <Navigate to="/login" replace />
-  }
+  }, [isAuthenticated])
 
   // Module Protected Route wrapper
-  const ModuleProtectedRoute = ({ children, moduleCode }) => {
+  // SOFT-CODED: stable reference via useCallback prevents remount loop
+  const ModuleProtectedRoute = useCallback(({ children, moduleCode }) => {
     if (!isAuthenticated) {
       return <Navigate to="/login" replace />
     }
@@ -248,10 +253,13 @@ function App() {
     )
   }
 
+  }, [isAuthenticated, user, modulesLoaded, userModules])
+
   // Public Route wrapper (redirect if authenticated)
-  const PublicRoute = ({ children }) => {
+  // SOFT-CODED: stable reference via useCallback prevents remount loop
+  const PublicRoute = useCallback(({ children }) => {
     return !isAuthenticated ? children : <Navigate to="/dashboard" replace />
-  }
+  }, [isAuthenticated])
   
   // Handle password change success
   const handlePasswordChangeSuccess = async () => {

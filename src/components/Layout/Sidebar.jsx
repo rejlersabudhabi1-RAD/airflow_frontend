@@ -94,7 +94,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         
         // Update Redux store with profile photo and other user data
         // Note: profile_photo currently disabled in backend until S3 CORS configured
-        if (data.profile_photo) {
+        // SOFT-CODED: only dispatch if profile_photo value actually changed
+        // to avoid triggering a user-object reference change in Redux (which
+        // would re-fire this effect and create an infinite update loop)
+        if (data.profile_photo && data.profile_photo !== user?.profile_photo) {
           dispatch(updateUser({ profile_photo: data.profile_photo }))
           console.log('✅ Profile photo updated in Redux store')
         }
@@ -113,10 +116,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       }
     }
     
+    // SOFT-CODED: depend on stable user ID so the effect only re-fires
+    // when the authenticated user changes, not on every Redux object update
     if (user) {
       fetchUserModules()
     }
-  }, [user])
+  }, [user?.id])
 
   // Debug logging
   React.useEffect(() => {
