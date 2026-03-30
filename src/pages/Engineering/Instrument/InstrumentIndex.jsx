@@ -164,7 +164,7 @@ const InstrumentIndex = () => {
     formData.append('project_name', projectName);
 
     const token  = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    const url    = `${API_BASE}/pid_analysis/instrument-index/analyze/`;
+    const url    = `${API_BASE}/pid/instrument-index/analyze/`;
     const ctrl   = new AbortController();
     const abort  = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
 
