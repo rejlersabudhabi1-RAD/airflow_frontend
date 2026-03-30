@@ -104,6 +104,11 @@ import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDa
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
 // Mechanical Datasheet Components
 import MechanicalDatasheetPage from './pages/Engineering/Mechanical/MechanicalDatasheetPage'
+// Civil Datasheet Components
+import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
+// Digitization Components
+import SpecCustomizationPage from './pages/Engineering/Digitization/SpecCustomizationPage'
+import DigitizationDatasheetPage from './pages/Engineering/Digitization/DigitizationDatasheetPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
@@ -902,6 +907,34 @@ function App() {
             <ModuleProtectedRoute moduleCode="mechanical_datasheet">
               <MechanicalDatasheetPage />
             </ModuleProtectedRoute>
+          }
+        />
+
+        {/* Civil Datasheet Routes — Coming Soon hub (soft-coded: cards configured in CivilDatasheetPage.jsx) */}
+        <Route
+          path="engineering/civil/datasheet"
+          element={
+            <ProtectedRoute>
+              <CivilDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Digitization Routes — Coming Soon hubs (soft-coded: cards configured in each page file) */}
+        <Route
+          path="engineering/digitization/spec-customization"
+          element={
+            <ProtectedRoute>
+              <SpecCustomizationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/digitization/datasheet"
+          element={
+            <ProtectedRoute>
+              <DigitizationDatasheetPage />
+            </ProtectedRoute>
           }
         />
 
