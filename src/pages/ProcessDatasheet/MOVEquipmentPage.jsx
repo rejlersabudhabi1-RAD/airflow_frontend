@@ -170,15 +170,32 @@ const MOVEquipmentPage = () => {
     }
   };
 
+  // ── Soft-coded polling config ──────────────────────────────────────────────
+  // Adaptive intervals: fast at first, slows down to reduce server load.
+  // Total timeout = sum of all intervals across phases.
+  // Increase POLL_PHASES entries or POLL_MAX_TOTAL_MS to allow longer jobs.
+  const POLL_PHASES = [
+    { upToSeconds: 120, intervalMs: 3000 },   // 0–2 min  : every 3 s
+    { upToSeconds: 360, intervalMs: 5000 },   // 2–6 min  : every 5 s
+    { upToSeconds: 900, intervalMs: 8000 },   // 6–15 min : every 8 s
+  ];
+  const POLL_MAX_TOTAL_MS = 15 * 60 * 1000;  // 15 minutes absolute max
+  // ────────────────────────────────────────────────────────────────────────────
+
   // Poll job status
   const pollJobStatus = async (jobId) => {
-    const maxAttempts = 120;
-    let attempts = 0;
+    const startTime = Date.now();
+
+    const getInterval = () => {
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      for (const phase of POLL_PHASES) {
+        if (elapsedSec <= phase.upToSeconds) return phase.intervalMs;
+      }
+      return POLL_PHASES[POLL_PHASES.length - 1].intervalMs;
+    };
 
     const poll = async () => {
       try {
-        attempts++;
-
         const statusResponse = await apiClient.get(`/process-datasheet/mov-job-status/${jobId}/`);
         const { status, progress, stage, result, error: jobError } = statusResponse.data;
 
@@ -202,10 +219,14 @@ const MOVEquipmentPage = () => {
         } else if (status === 'failed') {
           throw new Error(jobError || 'Processing failed');
         } else if (status === 'processing') {
-          if (attempts < maxAttempts) {
-            setTimeout(poll, 3000);
+          const elapsed = Date.now() - startTime;
+          if (elapsed < POLL_MAX_TOTAL_MS) {
+            const elapsedMin = Math.floor(elapsed / 60000);
+            const elapsedSec = Math.floor((elapsed % 60000) / 1000);
+            setAnalysisStage(stage || `Processing... (${elapsedMin}m ${elapsedSec}s)`);
+            setTimeout(poll, getInterval());
           } else {
-            throw new Error('Processing timeout - please try again');
+            throw new Error(`Processing is taking longer than expected (>${POLL_MAX_TOTAL_MS / 60000} min). Please try again.`);
           }
         }
 
