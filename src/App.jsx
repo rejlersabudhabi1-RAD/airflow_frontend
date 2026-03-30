@@ -251,8 +251,6 @@ function App() {
         </div>
       </div>
     )
-  }
-
   }, [isAuthenticated, user, modulesLoaded, userModules])
 
   // Public Route wrapper (redirect if authenticated)
