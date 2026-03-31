@@ -374,7 +374,7 @@ const LineList = () => {
             <div className="text-sm">
               <h3 className="font-semibold text-amber-800 mb-2">Important Note: Supported Line Number Formats</h3>
               <p className="text-amber-700 mb-3 text-xs italic">Please stick to these formats only and upload accordingly.</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-amber-700">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-amber-700">
                 <div>
                   <span className="font-medium text-amber-800">Offshore:</span>
                   <ul className="mt-1 space-y-0.5 font-mono text-xs">
@@ -395,6 +395,13 @@ const LineList = () => {
                   <ul className="mt-1 space-y-0.5 font-mono text-xs">
                     <li>16"-PG-4667-031441-X</li>
                     <li>6"-VG-4952-011503-X</li>
+                  </ul>
+                </div>
+                <div>
+                  <span className="font-medium text-amber-800">Abu Dhabi Oil Co. Ltd:</span>
+                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
+                    <li>6"-CD-AC3N-8256</li>
+                    <li>8"-HO-BD2A-1023</li>
                   </ul>
                 </div>
               </div>
@@ -454,6 +461,7 @@ const LineList = () => {
                 <option value="onshore">Onshore (SIZE-FLUID-SEQ-CLASS)</option>
                 <option value="offshore">Offshore (AREA-FLUID-SIZE-CLASS-SEQ)</option>
                 <option value="general">General (Auto-detect)</option>
+                <option value="adnoc">Abu Dhabi Oil Co. Ltd (SIZE"-FLUID-CLASS-SEQ)</option>
               </select>
             </div>
 
