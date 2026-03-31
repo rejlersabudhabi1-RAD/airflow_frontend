@@ -406,4 +406,144 @@ export const prepareUserPayload = (formData) => {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ROLE DISPLAY CONFIG (soft-coded)
+// Maps role.code → label, badge color (Tailwind), and description.
+// Synced with backend SYSTEM_ROLES_CONFIG in rbac_config.py.
+// Add/edit entries here to change how roles appear in the UI — no JSX changes needed.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ROLE_DISPLAY_CONFIG = {
+  super_admin: {
+    label: 'Super Administrator',
+    shortLabel: 'Super Admin',
+    badge: 'bg-red-100 text-red-800',
+    dot: 'bg-red-500',
+    description: 'Full platform access. Bypasses all module checks.',
+    discipline: 'Platform',
+  },
+  admin: {
+    label: 'Administrator',
+    shortLabel: 'Admin',
+    badge: 'bg-orange-100 text-orange-800',
+    dot: 'bg-orange-500',
+    description: 'Manages users, roles, modules, and org settings.',
+    discipline: 'Platform',
+  },
+  process_engineer: {
+    label: 'Process Engineer',
+    shortLabel: 'Process',
+    badge: 'bg-blue-100 text-blue-800',
+    dot: 'bg-blue-500',
+    description: 'Process datasheets, P&ID analysis, PFD tools.',
+    discipline: 'Process',
+  },
+  electrical_engineer: {
+    label: 'Electrical Engineer',
+    shortLabel: 'Electrical',
+    badge: 'bg-yellow-100 text-yellow-800',
+    dot: 'bg-yellow-500',
+    description: 'Electrical datasheets and SLD analysis.',
+    discipline: 'Electrical',
+  },
+  instrument_engineer: {
+    label: 'Instrument Engineer',
+    shortLabel: 'Instrument',
+    badge: 'bg-purple-100 text-purple-800',
+    dot: 'bg-purple-500',
+    description: 'Instrument datasheets and instrument index.',
+    discipline: 'Instrument',
+  },
+  mechanical_engineer: {
+    label: 'Mechanical Engineer',
+    shortLabel: 'Mechanical',
+    badge: 'bg-gray-100 text-gray-800',
+    dot: 'bg-gray-500',
+    description: 'Mechanical equipment datasheets.',
+    discipline: 'Mechanical',
+  },
+  civil_engineer: {
+    label: 'Civil Engineer',
+    shortLabel: 'Civil',
+    badge: 'bg-green-100 text-green-800',
+    dot: 'bg-green-500',
+    description: 'Civil and structural engineering datasheets.',
+    discipline: 'Civil',
+  },
+  piping_engineer: {
+    label: 'Piping Engineer',
+    shortLabel: 'Piping',
+    badge: 'bg-indigo-100 text-indigo-800',
+    dot: 'bg-indigo-500',
+    description: 'Piping datasheets and material specifications.',
+    discipline: 'Piping',
+  },
+  qhse_engineer: {
+    label: 'QHSE Engineer',
+    shortLabel: 'QHSE',
+    badge: 'bg-teal-100 text-teal-800',
+    dot: 'bg-teal-500',
+    description: 'Quality, Health, Safety and Environment.',
+    discipline: 'QHSE',
+  },
+  design_engineer: {
+    label: 'Design Engineer',
+    shortLabel: 'Design',
+    badge: 'bg-cyan-100 text-cyan-800',
+    dot: 'bg-cyan-500',
+    description: 'DesignIQ, PFD to P&ID, and P&ID analysis.',
+    discipline: 'Design',
+  },
+  project_manager: {
+    label: 'Project Manager',
+    shortLabel: 'PM',
+    badge: 'bg-pink-100 text-pink-800',
+    dot: 'bg-pink-500',
+    description: 'Cross-discipline read access and reporting.',
+    discipline: 'Management',
+  },
+  viewer: {
+    label: 'Viewer',
+    shortLabel: 'Viewer',
+    badge: 'bg-slate-100 text-slate-800',
+    dot: 'bg-slate-400',
+    description: 'Read-only access. No modules unless explicitly assigned.',
+    discipline: 'General',
+  },
+  // Fallback for unknown / legacy roles
+  _default: {
+    label: 'User',
+    shortLabel: 'User',
+    badge: 'bg-gray-100 text-gray-600',
+    dot: 'bg-gray-400',
+    description: 'Custom role.',
+    discipline: 'General',
+  },
+}
+
+/**
+ * Get display config for a role by its code.
+ * Falls back to `_default` for unknown role codes.
+ * @param {string} roleCode  e.g. "process_engineer"
+ */
+export const getRoleDisplay = (roleCode) =>
+  ROLE_DISPLAY_CONFIG[roleCode] ?? ROLE_DISPLAY_CONFIG._default
+
+/**
+ * Discipline-grouping order for the Create User roles picker.
+ * Roles are shown grouped by discipline in this order.
+ */
+export const ROLE_DISCIPLINE_ORDER = [
+  'Platform',
+  'Process',
+  'Electrical',
+  'Instrument',
+  'Mechanical',
+  'Civil',
+  'Piping',
+  'QHSE',
+  'Design',
+  'Management',
+  'General',
+]
+
 export default USER_MANAGEMENT_CONFIG

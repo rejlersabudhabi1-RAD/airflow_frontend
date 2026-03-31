@@ -7,6 +7,7 @@ import { STORAGE_KEYS } from '../config/app.config';
 import { isUserAdmin } from '../utils/rbac.utils';
 import { withDashboardControls } from '@/hoc/withPageControls';
 import { PageControlButtons } from '@/components/PageControlButtons';
+import { getRoleDisplay, ROLE_DISCIPLINE_ORDER } from '../config/userManagement.config';
 import { 
   validateUserForm, 
   parseBackendError, 
@@ -1912,24 +1913,30 @@ const UserManagement = ({ pageControls }) => {
                 </h3>
                 {detailedUser.roles && detailedUser.roles.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3">
-                    {detailedUser.roles.map((role) => (
-                      <div key={role.id} className="bg-white rounded-lg p-4 border border-purple-200">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold text-gray-900">{role.name}</p>
-                            <p className="text-sm text-gray-600">{role.code}</p>
+                    {detailedUser.roles.map((role) => {
+                      const display = getRoleDisplay(role.code);
+                      return (
+                        <div key={role.id} className="bg-white rounded-lg p-4 border border-purple-200">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-semibold text-gray-900">{role.name}</p>
+                              <span className={`mt-1 inline-block px-2 py-0.5 text-xs rounded-full font-medium ${display.badge}`}>
+                                {display.shortLabel || role.code}
+                              </span>
+                            </div>
+                            {role.is_primary && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">
+                                Primary
+                              </span>
+                            )}
                           </div>
-                          {role.is_primary && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">
-                              Primary
-                            </span>
+                          <p className="mt-2 text-xs text-gray-500">{display.discipline}</p>
+                          {(role.description || display.description) && (
+                            <p className="mt-1 text-sm text-gray-600">{role.description || display.description}</p>
                           )}
                         </div>
-                        {role.description && (
-                          <p className="mt-2 text-sm text-gray-600">{role.description}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-gray-500 italic">No roles assigned</p>
