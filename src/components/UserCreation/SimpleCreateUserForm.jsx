@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import rbacService from '../../services/rbac.service';
 import { fetchRoles, fetchModules, fetchOrganizations, fetchDepartments, fetchJobTitles } from '../../store/slices/rbacSlice';
 import { groupModulesByCategory, MODULE_CATEGORIES_CONFIG } from '../../config/moduleCategories.config';
+import { getRoleDisplay, ROLE_DISCIPLINE_ORDER } from '../../config/userManagement.config';
 
 /**
  * Enhanced Create User Form - Aligned with Edit User Modal Design
@@ -821,64 +822,54 @@ const SimpleCreateUserForm = ({ onSuccess, onCancel }) => {
                 {/* Roles Grid - Enhanced */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto border-2 border-purple-100 rounded-xl p-4 bg-gradient-to-br from-white to-purple-50 shadow-inner">
                   {roles.length > 0 ? (
-                    roles.map((role) => {
-                      const isSelected = formData.role_ids.includes(role.id);
-                      const isAdmin = role.name?.toLowerCase().includes('admin');
-                      const isSuperAdmin = role.name?.toLowerCase().includes('super');
-                      const roleIcon = isSuperAdmin ? '👑' : isAdmin ? '🛡️' : '👤';
-                      const roleLevel = isSuperAdmin ? 'SUPER' : isAdmin ? 'ADMIN' : 'STANDARD';
+                    // Group roles by discipline from ROLE_DISPLAY_CONFIG
+                    ROLE_DISCIPLINE_ORDER.flatMap(discipline =>
+                      roles
+                        .filter(role => (getRoleDisplay(role.code).discipline ?? 'General') === discipline)
+                        .map((role) => {
+                          const isSelected = formData.role_ids.includes(role.id);
+                          const display = getRoleDisplay(role.code);
 
-                      return (
-                        <label
-                          key={role.id}
-                          className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-lg group ${
-                            isSelected
-                              ? isAdmin && FORM_CONFIG.roleDisplay.highlightAdmin
-                                ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-md ring-2 ring-purple-300 ring-offset-2'
-                                : 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-300 ring-offset-2'
-                              : 'border-gray-200 bg-white hover:border-purple-400 hover:bg-purple-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleRole(role.id)}
-                            className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500 cursor-pointer"
-                            disabled={isLoading}
-                          />
-                          <div className="ml-3 flex-1">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-2xl">{roleIcon}</span>
-                                <div className="font-bold text-gray-900 group-hover:text-purple-700 transition-colors">
-                                  {role.name}
+                          return (
+                            <label
+                              key={role.id}
+                              className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-lg group ${
+                                isSelected
+                                  ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 shadow-md ring-2 ring-purple-300 ring-offset-2'
+                                  : 'border-gray-200 bg-white hover:border-purple-400 hover:bg-purple-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleRole(role.id)}
+                                className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                                disabled={isLoading}
+                              />
+                              <div className="ml-3 flex-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${display.badge}`}>
+                                      {display.discipline}
+                                    </span>
+                                    <div className="font-bold text-gray-900 group-hover:text-purple-700 transition-colors">
+                                      {role.name}
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-green-600 text-lg">✓</span>
+                                  )}
                                 </div>
+                                {(role.description || display.description) && (
+                                  <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                    {role.description || display.description}
+                                  </div>
+                                )}
                               </div>
-                              {isSelected && (
-                                <span className="text-green-600 text-lg">✓</span>
-                              )}
-                            </div>
-                            {FORM_CONFIG.roleDisplay.showDescription && role.description && (
-                              <div className="text-xs text-gray-600 mt-2 line-clamp-2">
-                                {role.description}
-                              </div>
-                            )}
-                            <div className="mt-2 flex items-center gap-2">
-                              {isAdmin && (
-                                <div className="inline-flex items-center text-xs font-bold text-purple-700 bg-purple-100 px-2 py-1 rounded-lg">
-                                  ⚡ {roleLevel}
-                                </div>
-                              )}
-                              {isSelected && (
-                                <div className="inline-flex items-center text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-lg">
-                                  ✓ Assigned
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })
+                            </label>
+                          );
+                        })
+                    ).filter(Boolean)
                   ) : (
                     <div className="col-span-2 text-center py-8 text-gray-500">
                       <div className="text-4xl mb-2">🔒</div>
