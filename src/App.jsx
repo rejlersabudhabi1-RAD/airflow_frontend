@@ -668,9 +668,9 @@ function App() {
         <Route
           path="engineering/process/datasheet"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <ProcessDatasheetPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -678,9 +678,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/pfd"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <ComprehensivePumpForm />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -688,9 +688,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/view/:id"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <PumpDataSheetView />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -698,26 +698,26 @@ function App() {
         <Route
           path="engineering/process/datasheet/streams"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <SDVStreamsPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />          {/* Smart Datasheet - Unified AI Tool for All 4 Datasheet Types */}
           <Route
             path="engineering/process/datasheet/smart"
             element={
-              <ProtectedRoute>
+              <ModuleProtectedRoute moduleCode="process_datasheet">
                 <SmartDatasheetPage />
-              </ProtectedRoute>
+              </ModuleProtectedRoute>
             }
           />
         {/* Process Data Sheet - MOV Equipment P&ID Upload */}
         <Route
           path="engineering/process/datasheet/equipment"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <MOVEquipmentPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -726,9 +726,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/pressure-instrument"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <PressureInstrumentPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -736,9 +736,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/equipment"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <ProcessEquipmentDatasheet />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -747,9 +747,9 @@ function App() {
         <Route
           path="engineering/process/line-list"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="pid_analysis">
               <LineList />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
         {/* Critical Line List - Full Enrichment (5 Documents) */}
