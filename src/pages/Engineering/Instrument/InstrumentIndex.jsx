@@ -65,6 +65,7 @@ const InstrumentIndex = () => {
 
   // Upload state
   const [pidFile, setPidFile]             = useState(null);
+  const [legendFile, setLegendFile]       = useState(null);
   const [drawingNumber, setDrawingNumber] = useState('');
   const [drawingTitle, setDrawingTitle]   = useState('');
   const [revision, setRevision]           = useState('0');
@@ -86,6 +87,7 @@ const InstrumentIndex = () => {
   const [activeView, setActiveView]         = useState('table'); // 'table' | 'summary'
 
   const fileInputRef = useRef(null);
+  const legendInputRef = useRef(null);
   const elapsedRef   = useRef(null);
 
   // ── Elapsed timer ────────────────────────────────────────────────────
@@ -103,15 +105,34 @@ const InstrumentIndex = () => {
     s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 
   // ── Fake progress (visual only — real work is done server-side) ──────
+  // Multi-pass extraction: 1 standard + 2 rotations + 4 tiles = 7 passes total
+  // Progress milestones match approximate pass sequence
+  const PROGRESS_MESSAGES = [
+    { pct: 5,  msg: 'Uploading P&ID…' },
+    { pct: 15, msg: 'Pass 1 — Full drawing (standard orientation)…' },
+    { pct: 28, msg: 'Pass 2 — 90° rotation (vertical text)…' },
+    { pct: 41, msg: 'Pass 3 — 270° rotation (opposite vertical)…' },
+    { pct: 53, msg: 'Pass 4 — Tile scan: top-left quadrant…' },
+    { pct: 63, msg: 'Pass 5 — Tile scan: top-right quadrant…' },
+    { pct: 73, msg: 'Pass 6 — Tile scan: bottom-left quadrant…' },
+    { pct: 83, msg: 'Pass 7 — Tile scan: bottom-right quadrant…' },
+    { pct: 91, msg: 'Merging & deduplicating results…' },
+  ];
+
   useEffect(() => {
     if (!isProcessing) return;
-    // Advance to ~90 % over ~3 min, then hold until response arrives
+    let msgIdx = 0;
     const id = setInterval(() => {
       setProgress(p => {
-        if (p >= 90) return p;
-        return p + (90 - p) * 0.04;
+        const next = PROGRESS_MESSAGES[msgIdx];
+        if (next && p >= next.pct - 5) {
+          setStatusMessage(next.msg);
+          msgIdx = Math.min(msgIdx + 1, PROGRESS_MESSAGES.length - 1);
+        }
+        if (p >= 91) return p;
+        return p + (91 - p) * 0.035;
       });
-    }, 1500);
+    }, 1800);
     return () => clearInterval(id);
   }, [isProcessing]);
 
@@ -130,6 +151,17 @@ const InstrumentIndex = () => {
     if (!drawingNumber) {
       setDrawingNumber(file.name.replace(/\.pdf$/i, ''));
     }
+  };
+
+  const handleLegendFileSelect = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Legend sheet must be a PDF file.');
+      return;
+    }
+    setLegendFile(file);
+    setError(null);
   };
 
   // ── Drag & drop ──────────────────────────────────────────────────────
@@ -158,6 +190,7 @@ const InstrumentIndex = () => {
 
     const formData = new FormData();
     formData.append('pid_file', pidFile);
+    if (legendFile) formData.append('legend_file', legendFile);
     formData.append('drawing_number', drawingNumber || pidFile.name.replace(/\.pdf$/i, ''));
     formData.append('drawing_title', drawingTitle);
     formData.append('revision', revision);
@@ -225,27 +258,28 @@ const InstrumentIndex = () => {
     if (!result?.instruments?.length) return;
 
     const headers = [
-      'Index No.', 'Tag Number', 'Instrument Type', 'Category',
+      'Index No.', 'Tag Number', 'CS Tag', 'Instrument Type', 'Category',
       'P&ID No.', 'Service Description', 'Line Number', 'Equipment No.',
       'Loop No.', 'Fail Safe', 'Signal Type', 'Set Point',
       'Drawing No.', 'Rev.', 'Notes',
     ];
     const rows = result.instruments.map(i => [
-      i.index_no        || '',
-      i.tag_number      || '',
-      i.instrument_type || '',
-      i.category        || '',
-      i.pid_no          || '',
-      i.service_description || '',
-      i.line_number     || '',
-      i.equipment_number|| '',
-      i.loop_number     || '',
-      i.fail_safe       || '',
-      i.signal_type     || '',
-      i.set_point       || '',
-      i.drawing_number  || '',
-      i.revision        || '',
-      i.notes           || '',
+      i.index_no              || '',
+      i.tag_number            || '',
+      i.control_system_tag    || '',
+      i.instrument_type       || '',
+      i.category              || '',
+      i.pid_no                || '',
+      i.service_description   || '',
+      i.line_number           || '',
+      i.equipment_number      || '',
+      i.loop_number           || '',
+      i.fail_safe             || '',
+      i.signal_type           || '',
+      i.set_point             || '',
+      i.drawing_number        || '',
+      i.revision              || '',
+      i.notes                 || '',
     ]);
 
     const wsData = [headers, ...rows];
@@ -304,7 +338,9 @@ const InstrumentIndex = () => {
             </h1>
             <p className="mt-1 text-gray-600">
               Extract all instrument Tag Numbers from any P&ID — Flow, Pressure,
-              Temperature, Level, SDV/BDV, MOV, Safety valves and more.
+              Temperature, Level, SDV/BDV, MOV, Safety valves and more. When
+              available, symbol and control convention data may also be enriched
+              from uploaded legend sheets and related legend PDFs found in AWS S3.
             </p>
           </div>
           <button
@@ -359,9 +395,37 @@ const InstrumentIndex = () => {
             </div>
           </div>
 
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">
+            2. Attach Legend / Symbol Sheet (optional)
+          </h2>
+          <div
+            className="border border-dashed border-cyan-300 rounded-lg p-4 mb-4 bg-cyan-50/50 cursor-pointer hover:border-cyan-400 transition-colors"
+            onClick={() => legendInputRef.current?.click()}
+          >
+            <input
+              ref={legendInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handleLegendFileSelect}
+              className="hidden"
+            />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-cyan-900">
+                  {legendFile ? legendFile.name : 'Attach legend/symbol sheet PDF for cross-verification'}
+                </p>
+                <p className="text-xs text-cyan-700 mt-1">
+                  The app will cross-check extracted values against the uploaded legend sheet,
+                  then also look for matching legend sheets in AWS S3 when available.
+                </p>
+              </div>
+              {legendFile && <CheckCircleIcon className="h-6 w-6 text-cyan-600 shrink-0" />}
+            </div>
+          </div>
+
           {/* Metadata fields */}
           <h2 className="text-lg font-semibold text-gray-800 mb-3">
-            2. Drawing Info (optional)
+            3. Drawing Info (optional)
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
@@ -464,6 +528,24 @@ const InstrumentIndex = () => {
         {/* ── Results ─────────────────────────────────────────────────── */}
         {result && (
           <>
+            {/* Empty-state banner — shown when extraction returned 0 instruments */}
+            {result.total === 0 && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-5 mb-6 flex gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <p className="font-semibold text-amber-800">No instruments were extracted from this drawing.</p>
+                  <p className="text-sm text-amber-700 mt-1">Possible reasons:</p>
+                  <ul className="text-sm text-amber-700 list-disc list-inside mt-1 space-y-0.5">
+                    <li>The PDF is a <strong>scanned image</strong> with no embedded text — Tesseract OCR will be used next.</li>
+                    <li>All AI Vision engines (Gemini, OpenAI) are temporarily <strong>rate-limited or quota-exceeded</strong>.</li>
+                    <li>The PDF does not contain ISA-standard instrument tag formats.</li>
+                  </ul>
+                  <p className="text-sm text-amber-700 mt-2">
+                    Try uploading again in a few seconds, or check backend logs for details.
+                  </p>
+                </div>
+              </div>
+            )}
             {/* Stats bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
@@ -539,9 +621,9 @@ const InstrumentIndex = () => {
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-100 text-xs uppercase tracking-wider text-gray-600">
                       <tr>
-                        {['#', 'Tag Number', 'Instrument Type', 'Category', 'Service Description',
+                        {['#', 'Tag Number', 'CS Tag', 'Instrument Type', 'Category', 'Service Description',
                           'Line No.', 'Equipment No.', 'Loop No.', 'Fail Safe', 'Signal',
-                          'Set Point', 'P&ID No.', 'Rev.', 'Notes'].map(h => (
+                          'Set Point', 'P&ID No.', 'Rev.', 'Source'].map(h => (
                           <th key={h} className="px-3 py-3 text-left whitespace-nowrap font-semibold">
                             {h}
                           </th>
@@ -551,19 +633,31 @@ const InstrumentIndex = () => {
                     <tbody className="divide-y divide-gray-100">
                       {filteredInstruments.length === 0 ? (
                         <tr>
-                          <td colSpan={14} className="px-4 py-8 text-center text-gray-400">
+                          <td colSpan={15} className="px-4 py-8 text-center text-gray-400">
                             No instruments match the current filter.
                           </td>
                         </tr>
                       ) : (
                         filteredInstruments.map((inst, idx) => {
                           const style = categoryStyle(inst.category);
+                          // Source badge styling
+                          const note = inst.notes || '';
+                          const sourceStyle = note.includes('Legends sheet')
+                            ? { bg: '#ECFEFF', text: '#155E75' }  // cyan — legend-assisted
+                            : note.startsWith('AI')
+                            ? { bg: '#EEF2FF', text: '#3730A3' }  // indigo — AI
+                            : note.startsWith('OCR circle')
+                            ? { bg: '#FFF7ED', text: '#C2410C' }  // orange — OCR circle
+                            : note.startsWith('OCR')
+                            ? { bg: '#FEF9C3', text: '#713F12' }  // yellow — OCR plain
+                            : { bg: '#F0FDF4', text: '#166534' }; // green  — PDF text
                           return (
                             <tr key={idx} className="hover:brightness-95 transition-all">
                               <td className="px-3 py-2.5 text-gray-500 tabular-nums">{inst.index_no ?? idx + 1}</td>
                               <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: style.text }}>
                                 {inst.tag_number || '—'}
                               </td>
+                              <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-indigo-700">{inst.control_system_tag || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-700 max-w-xs">{inst.instrument_type || '—'}</td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
                                 <span
@@ -582,7 +676,17 @@ const InstrumentIndex = () => {
                               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.set_point         || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.pid_no            || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-600 text-center">{inst.revision || '0'}</td>
-                              <td className="px-3 py-2.5 text-gray-500 max-w-xs text-xs">{inst.notes || ''}</td>
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                {note && (
+                                  <span
+                                    className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                                    style={{ backgroundColor: sourceStyle.bg, color: sourceStyle.text }}
+                                    title={note}
+                                  >
+                                    {note}
+                                  </span>
+                                )}
+                              </td>
                             </tr>
                           );
                         })
