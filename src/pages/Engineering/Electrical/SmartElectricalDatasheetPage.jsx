@@ -8,7 +8,8 @@ import {
   ArrowDownTrayIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import apiClient, { API_TIMEOUT_UPLOAD } from '../../../utils/apiClient';
+import apiClient from '../../../services/api.service';
+import { API_TIMEOUT_UPLOAD } from '../../../config/api.config';
 
 // Equipment type configurations
 const EQUIPMENT_TYPES = [
@@ -69,7 +70,7 @@ const EQUIPMENT_TYPES = [
 ];
 
 const SmartElectricalDatasheetPage = () => {
-  const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [selectedEquipmentType, setSelectedEquipmentType] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -77,6 +78,16 @@ const SmartElectricalDatasheetPage = () => {
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
   const [excelBlob, setExcelBlob] = useState(null);
+
+  const selectedEquipment = EQUIPMENT_TYPES.find(eq => eq.id === selectedEquipmentType);
+
+  const handleEquipmentChange = (e) => {
+    const newType = e.target.value;
+    setSelectedEquipmentType(newType);
+    setUploadedFiles({});
+    setError('');
+    setResults(null);
+  };
 
   const handleFileUpload = (fileType, file) => {
     setUploadedFiles(prev => ({
@@ -97,98 +108,16 @@ const SmartElectricalDatasheetPage = () => {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const handleGenerate = async () => {
-    if (!selectedEquipment) {
-      setError('Please select an equipment type');
-      return;
-    }
-
-    const equipment = EQUIPMENT_TYPES.find(e => e.id === selectedEquipment);
-    const requiredCount = equipment.requiredFiles.length;
-    const uploadedCount = Object.keys(uploadedFiles).length;
-
-    if (uploadedCount < requiredCount) {
-      setError(`Please upload at least ${requiredCount} required file(s)`);
-      return;
-    }
-
-    setUploading(true);
-    setError('');
-    setUploadProgress(0);
-    setAnalysisStage('Uploading files...');
-    setResults(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('equipment_type', selectedEquipment);
-      
-      // Append all uploaded files
-      Object.entries(uploadedFiles).forEach(([fileType, file]) => {
-        formData.append('files', file);
-        formData.append(`file_type_${file.name}`, fileType);
-      });
-
-      const response = await apiClient.post(
-        '/electrical-datasheet/datasheets/generate-smart/',
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: API_TIMEOUT_UPLOAD,
-          onUploadProgress: (progressEvent) => {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(progress);
-            if (progress === 100) {
-              setAnalysisStage('Processing files with AI...');
-            }
-          }
-        }
-      );
-
-      setAnalysisStage('Generating datasheet...');
-      
-      if (response.data.success) {
-        setResults(response.data);
-        setAnalysisStage('✓ Datasheet generated successfully!');
-        
-        // If Excel file is returned, prepare for download
-        if (response.data.excel_url) {
-          // Fetch the Excel file
-          const excelResponse = await apiClient.get(response.data.excel_url, {
-            responseType: 'blob'
-          });
-          setExcelBlob(excelResponse.data);
-        }
-      } else {
-        setError(response.data.error || 'Failed to generate datasheet');
-        setAnalysisStage('');
-      }
-    } catch (err) {
-      console.error('Generation error:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to generate datasheet');
-      setAnalysisStage('');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const downloadExcel = () => {
-    if (excelBlob) {
-      const url = window.URL.createObjectURL(excelBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${selectedEquipment}_datasheet_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    }
+  const canSubmit = () => {
+    if (!selectedEquipment) return false;
+    return selectedEquipment.requiredFiles.every(fileType => uploadedFiles[fileType]);
   };
 
   const resetForm = () => {
-    setSelectedEquipment(null);
+    setSelectedEquipmentType('');
     setUploadedFiles({});
     setUploading(false);
     setUploadProgress(0);
@@ -198,105 +127,221 @@ const SmartElectricalDatasheetPage = () => {
     setExcelBlob(null);
   };
 
-  const selectedEquipmentData = EQUIPMENT_TYPES.find(e => e.id === selectedEquipment);
+  const handleGenerate = async () => {
+    if (!canSubmit()) {
+      setError('Please upload all required documents');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('equipment_type', selectedEquipmentType);
+
+      Object.entries(uploadedFiles).forEach(([fileType, file]) => {
+        formData.append('files', file);
+        formData.append('file_types', fileType);
+      });
+
+      setAnalysisStage('Uploading files...');
+
+      const response = await apiClient.post(
+        '/electrical-datasheet/datasheets/generate-smart/',
+        formData,
+        {
+          timeout: API_TIMEOUT_UPLOAD,
+          onUploadProgress: (progressEvent) => {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          },
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+
+      setAnalysisStage('Processing complete!');
+      setResults(response.data);
+
+      if (response.data.excel_url) {
+        const excelResponse = await apiClient.get(response.data.excel_url, {
+          responseType: 'blob'
+        });
+        setExcelBlob(excelResponse.data);
+      }
+
+    } catch (err) {
+      console.error('Generation error:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to generate datasheet');
+      setAnalysisStage('');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!excelBlob) return;
+
+    const url = window.URL.createObjectURL(excelBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedEquipment.name.replace(/\s+/g, '_')}_Datasheet_${Date.now()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-8 px-4">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl p-3">
-              <DocumentTextIcon className="h-8 w-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Electrical Equipment Datasheet Generator
-              </h1>
-              <p className="text-gray-600 mt-1">
-                AI-powered datasheet generation for electrical equipment
-              </p>
-            </div>
-          </div>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">
+            ⚡ Smart Electrical Datasheet Generator
+          </h1>
+          <p className="text-lg text-gray-600">
+            AI-powered datasheet generation for 6 electrical equipment types
+          </p>
+        </div>
 
-          {/* Equipment Type Selection */}
-          {!selectedEquipment && (
-            <div className="mt-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Select Equipment Type
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {EQUIPMENT_TYPES.map((equipment) => (
-                  <button
-                    key={equipment.id}
-                    onClick={() => setSelectedEquipment(equipment.id)}
-                    className={`group relative bg-gradient-to-br from-${equipment.color}-50 to-${equipment.color}-100 
-                      border-2 border-${equipment.color}-200 rounded-xl p-6 text-left
-                      hover:shadow-xl hover:scale-105 transition-all duration-200
-                      hover:border-${equipment.color}-400`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="text-4xl">{equipment.icon}</div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-lg mb-1">
-                          {equipment.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-3">
-                          {equipment.description}
-                        </p>
-                        <div className="text-xs text-gray-500">
-                          <div className="font-medium">Required Files:</div>
-                          <ul className="ml-4 mt-1 space-y-0.5">
-                            {equipment.requiredFiles.map((file, idx) => (
-                              <li key={idx}>• {file}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-sm font-semibold text-blue-600">
-                        Select →
+        {/* Equipment Type Selector - Always Visible */}
+        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            Select Equipment Type
+          </label>
+          <select
+            value={selectedEquipmentType}
+            onChange={handleEquipmentChange}
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg
+                     focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all
+                     bg-white cursor-pointer hover:border-gray-400"
+            disabled={uploading}
+          >
+            <option value="">-- Choose Equipment Type --</option>
+            {EQUIPMENT_TYPES.map((equipment) => (
+              <option key={equipment.id} value={equipment.id}>
+                {equipment.icon} {equipment.name} - {equipment.description}
+              </option>
+            ))}
+          </select>
+
+          {selectedEquipment && !results && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-3">
+                <span className="text-3xl">{selectedEquipment.icon}</span>
+                <div>
+                  <h3 className="font-semibold text-gray-900">{selectedEquipment.name}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{selectedEquipment.description}</p>
+                  <div className="mt-2 text-sm text-gray-700">
+                    <span className="font-medium">Required:</span> {selectedEquipment.requiredFiles.length} document(s)
+                    {selectedEquipment.optionalFiles.length > 0 && (
+                      <span className="ml-3">
+                        <span className="font-medium">Optional:</span> {selectedEquipment.optionalFiles.length} document(s)
                       </span>
-                    </div>
-                  </button>
-                ))}
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
+        </div>
 
-          {/* File Upload Section */}
-          {selectedEquipment && !results && (
-            <div className="mt-8">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                    <span className="text-3xl">{selectedEquipmentData.icon}</span>
-                    {selectedEquipmentData.name}
-                  </h2>
-                  <p className="text-gray-600 mt-1">{selectedEquipmentData.description}</p>
-                </div>
-                <button
-                  onClick={resetForm}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  ← Change Equipment
-                </button>
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg flex items-start gap-3">
+            <XCircleIcon className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-semibold text-red-900">Error</h4>
+              <p className="text-red-700 text-sm mt-1">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* File Upload Section */}
+        {selectedEquipment && !results && (
+          <div className="space-y-6">
+            {/* Required Files */}
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+              <h3 className="font-semibold text-blue-900 mb-4 flex items-center gap-2 text-lg">
+                <DocumentArrowUpIcon className="h-6 w-6" />
+                Required Documents
+              </h3>
+              <div className="space-y-3">
+                {selectedEquipment.requiredFiles.map((fileType, idx) => (
+                  <div key={idx}>
+                    {uploadedFiles[fileType] ? (
+                      <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <CheckCircleIcon className="h-6 w-6 text-green-600" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {uploadedFiles[fileType].name}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {formatFileSize(uploadedFiles[fileType].size)}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeFile(fileType)}
+                          className="p-2 hover:bg-red-100 rounded-full transition-colors"
+                        >
+                          <XMarkIcon className="h-5 w-5 text-red-600" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="file"
+                          id={`required-${idx}`}
+                          accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleFileUpload(fileType, e.target.files[0]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor={`required-${idx}`}
+                          className="flex items-center gap-3 p-4 border-2 border-dashed border-blue-300
+                                   rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
+                        >
+                          <DocumentArrowUpIcon className="h-6 w-6 text-blue-600" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {fileType} <span className="text-red-600">*</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              Click to upload PDF, Excel, or Image
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
+            </div>
 
-              {/* Required Files */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
-                <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                  <DocumentArrowUpIcon className="h-5 w-5" />
-                  Required Documents
+            {/* Optional Files */}
+            {selectedEquipment.optionalFiles.length > 0 && (
+              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-gray-400">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2 text-lg">
+                  <DocumentTextIcon className="h-6 w-6" />
+                  Optional Documents
                 </h3>
                 <div className="space-y-3">
-                  {selectedEquipmentData.requiredFiles.map((fileType, idx) => (
+                  {selectedEquipment.optionalFiles.map((fileType, idx) => (
                     <div key={idx}>
                       {uploadedFiles[fileType] ? (
-                        <div className="bg-white border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                        <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                            <CheckCircleIcon className="h-6 w-6 text-green-600" />
                             <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {uploadedFiles[fileType].name}
@@ -308,7 +353,7 @@ const SmartElectricalDatasheetPage = () => {
                           </div>
                           <button
                             onClick={() => removeFile(fileType)}
-                            className="p-1 hover:bg-red-100 rounded-full transition-colors"
+                            className="p-2 hover:bg-red-100 rounded-full transition-colors"
                           >
                             <XMarkIcon className="h-5 w-5 text-red-600" />
                           </button>
@@ -317,7 +362,7 @@ const SmartElectricalDatasheetPage = () => {
                         <div>
                           <input
                             type="file"
-                            id={`file-${idx}`}
+                            id={`optional-${idx}`}
                             accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg"
                             onChange={(e) => {
                               if (e.target.files && e.target.files[0]) {
@@ -327,11 +372,11 @@ const SmartElectricalDatasheetPage = () => {
                             className="hidden"
                           />
                           <label
-                            htmlFor={`file-${idx}`}
-                            className="flex items-center gap-3 p-4 border-2 border-dashed border-blue-300 
-                              rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors"
+                            htmlFor={`optional-${idx}`}
+                            className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300
+                                     rounded-lg hover:border-gray-500 hover:bg-gray-100 cursor-pointer transition-all"
                           >
-                            <DocumentArrowUpIcon className="h-6 w-6 text-blue-600" />
+                            <DocumentTextIcon className="h-6 w-6 text-gray-600" />
                             <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {fileType}
@@ -347,213 +392,143 @@ const SmartElectricalDatasheetPage = () => {
                   ))}
                 </div>
               </div>
+            )}
 
-              {/* Optional Files */}
-              {selectedEquipmentData.optionalFiles.length > 0 && (
-                <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-6 mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <DocumentTextIcon className="h-5 w-5" />
-                    Optional Documents
-                  </h3>
-                  <div className="space-y-3">
-                    {selectedEquipmentData.optionalFiles.map((fileType, idx) => (
-                      <div key={idx}>
-                        {uploadedFiles[fileType] ? (
-                          <div className="bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <CheckCircleIcon className="h-5 w-5 text-green-600" />
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {uploadedFiles[fileType].name}
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                  {formatFileSize(uploadedFiles[fileType].size)}
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => removeFile(fileType)}
-                              className="p-1 hover:bg-red-100 rounded-full transition-colors"
-                            >
-                              <XMarkIcon className="h-5 w-5 text-red-600" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div>
-                            <input
-                              type="file"
-                              id={`optional-${idx}`}
-                              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg"
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  handleFileUpload(fileType, e.target.files[0]);
-                                }
-                              }}
-                              className="hidden"
-                            />
-                            <label
-                              htmlFor={`optional-${idx}`}
-                              className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 
-                                rounded-lg hover:border-gray-500 hover:bg-gray-100 cursor-pointer transition-colors"
-                            >
-                              <DocumentTextIcon className="h-6 w-6 text-gray-600" />
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {fileType}
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                  Optional - Click to upload
-                                </div>
-                              </div>
-                            </label>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Error Display */}
-              {error && (
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-                  <XCircleIcon className="h-6 w-6 text-red-600 flex-shrink-0" />
-                  <div className="text-sm text-red-800">{error}</div>
-                </div>
-              )}
-
-              {/* Upload Progress */}
-              {uploading && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <ArrowPathIcon className="h-6 w-6 text-blue-600 animate-spin" />
-                    <span className="font-semibold text-blue-900">{analysisStage}</span>
-                  </div>
-                  <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                  <div className="text-right text-sm text-blue-800 mt-2">{uploadProgress}%</div>
-                </div>
-              )}
-
-              {/* Generate Button */}
-              <div className="flex gap-4">
-                <button
-                  onClick={handleGenerate}
-                  disabled={uploading || Object.keys(uploadedFiles).length < selectedEquipmentData.requiredFiles.length}
-                  className={`flex-1 py-4 px-6 rounded-xl font-semibold text-white transition-all duration-200 ${
-                    uploading || Object.keys(uploadedFiles).length < selectedEquipmentData.requiredFiles.length
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl'
+            {/* Generate Button */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <button
+                onClick={handleGenerate}
+                disabled={!canSubmit() || uploading}
+                className={`w-full py-4 px-6 rounded-lg font-semibold text-lg transition-all
+                          ${canSubmit() && !uploading
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   }`}
-                >
-                  {uploading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                      Generating...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <DocumentTextIcon className="h-5 w-5" />
-                      Generate Datasheet
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={resetForm}
-                  disabled={uploading}
-                  className="px-6 py-4 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 
-                    hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          )}
+              >
+                {uploading ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <ArrowPathIcon className="h-6 w-6 animate-spin" />
+                    Generating Datasheet...
+                  </span>
+                ) : (
+                  'Generate Smart Datasheet'
+                )}
+              </button>
 
-          {/* Results Section */}
-          {results && (
-            <div className="mt-8">
-              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-6">
-                <div className="flex items-start gap-4">
-                  <CheckCircleIcon className="h-8 w-8 text-green-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h3 className="font-bold text-green-900 text-xl mb-2">
-                      Datasheet Generated Successfully!
-                    </h3>
-                    <p className="text-green-800 mb-4">
-                      Your {selectedEquipmentData.name} datasheet has been generated and is ready for download.
-                    </p>
-                    {excelBlob && (
-                      <button
-                        onClick={downloadExcel}
-                        className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg 
-                          font-semibold hover:bg-green-700 transition-colors"
-                      >
-                        <ArrowDownTrayIcon className="h-5 w-5" />
-                        Download Excel Datasheet
-                      </button>
-                    )}
+              {uploading && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">{analysisStage}</span>
+                    <span className="text-sm font-semibold text-blue-600">{uploadProgress}%</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Summary Statistics */}
-              {results.summary && (
-                <div className="bg-white border-2 border-gray-200 rounded-xl p-6 mb-6">
-                  <h3 className="font-bold text-gray-900 text-lg mb-4">Generation Summary</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600 mb-1">Files Processed</div>
-                      <div className="text-2xl font-bold text-blue-600">
-                        {results.summary.files_processed || 0}
-                      </div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600 mb-1">Fields Extracted</div>
-                      <div className="text-2xl font-bold text-green-600">
-                        {results.summary.fields_extracted || 0}
-                      </div>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600 mb-1">Confidence</div>
-                      <div className="text-2xl font-bold text-purple-600">
-                        {results.summary.confidence || 'High'}
-                      </div>
-                    </div>
-                    <div className="bg-indigo-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600 mb-1">Processing Time</div>
-                      <div className="text-2xl font-bold text-indigo-600">
-                        {results.summary.processing_time || '< 1min'}
-                      </div>
-                    </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
 
-              {/* New Generation Button */}
-              <div className="flex gap-4">
-                <button
-                  onClick={resetForm}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white 
-                    rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
-                >
-                  Generate New Datasheet
-                </button>
+        {/* Results Section */}
+        {results && (
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <div className="text-center mb-6">
+              <CheckCircleIcon className="h-16 w-16 text-green-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Datasheet Generated Successfully! 🎉
+              </h2>
+              <p className="text-gray-600">
+                Your {selectedEquipment.name} datasheet is ready for download
+              </p>
+            </div>
+
+            {/* Results Summary */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Generation Summary</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Equipment Type:</span>
+                  <p className="font-semibold text-gray-900">{selectedEquipment.name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Files Processed:</span>
+                  <p className="font-semibold text-gray-900">{Object.keys(uploadedFiles).length}</p>
+                </div>
+                {results.datasheet_id && (
+                  <div>
+                    <span className="text-gray-600">Datasheet ID:</span>
+                    <p className="font-semibold text-gray-900">{results.datasheet_id}</p>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Info Footer */}
-        <div className="bg-white/80 backdrop-blur rounded-xl p-6 text-center">
-          <p className="text-sm text-gray-600">
-            Powered by AI • Supported formats: PDF, Excel, Images • Max file size: 50MB
-          </p>
-        </div>
+            {/* Download Button */}
+            <div className="flex gap-4">
+              {excelBlob && (
+                <button
+                  onClick={handleDownload}
+                  className="flex-1 py-3 px-6 bg-gradient-to-r from-green-600 to-emerald-600
+                           hover:from-green-700 hover:to-emerald-700 text-white rounded-lg
+                           font-semibold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg"
+                >
+                  <ArrowDownTrayIcon className="h-5 w-5" />
+                  Download Excel Datasheet
+                </button>
+              )}
+              <button
+                onClick={resetForm}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg
+                         hover:bg-gray-50 font-semibold transition-all"
+              >
+                Generate Another
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Instructions */}
+        {!selectedEquipmentType && !results && (
+          <div className="bg-white rounded-xl shadow-md p-8 mt-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">How It Works</h3>
+            <ol className="space-y-3 text-gray-700">
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">1</span>
+                <span>Select your equipment type from the dropdown above</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">2</span>
+                <span>Upload all required documents (marked with *)</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">3</span>
+                <span>Optionally upload additional supporting documents</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">4</span>
+                <span>Click "Generate Smart Datasheet" and wait for AI processing</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">5</span>
+                <span>Download your completed datasheet in Excel format</span>
+              </li>
+            </ol>
+
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-900">
+                <strong>Supported Equipment Types:</strong> Transformers, DG Set, MV Switchgear (11kV/33kV), 
+                LV Switchgear, AC UPS, and DC UPS
+              </p>
+              <p className="text-sm text-blue-900 mt-2">
+                <strong>Accepted File Formats:</strong> PDF, Excel (.xlsx, .xls), Images (.png, .jpg, .jpeg)
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
