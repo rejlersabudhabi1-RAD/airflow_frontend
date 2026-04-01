@@ -5,7 +5,6 @@ import {
   CpuChipIcon,
   CircleStackIcon,
   ArrowLeftIcon,
-  BatteryCharging,
   ServerIcon,
   PowerIcon
 } from '@heroicons/react/24/outline';
@@ -115,7 +114,7 @@ const ElectricalDatasheetPage = () => {
       name: 'DC UPS',
       fullName: 'DC Uninterruptible Power Supply',
       description: 'Intelligent datasheet creation for DC UPS with battery sizing calculations',
-      icon: BatteryCharging,
+      icon: BoltIcon as BatteryIcon,
       emoji: '',
       color: 'indigo',
       gradient: 'from-indigo-500 to-purple-600',
