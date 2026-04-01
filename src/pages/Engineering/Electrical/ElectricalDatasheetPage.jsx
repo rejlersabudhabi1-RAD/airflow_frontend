@@ -114,7 +114,7 @@ const ElectricalDatasheetPage = () => {
       name: 'DC UPS',
       fullName: 'DC Uninterruptible Power Supply',
       description: 'Intelligent datasheet creation for DC UPS with battery sizing calculations',
-      icon: BoltIcon as BatteryIcon,
+      icon: BoltIcon,
       emoji: '',
       color: 'indigo',
       gradient: 'from-indigo-500 to-purple-600',
