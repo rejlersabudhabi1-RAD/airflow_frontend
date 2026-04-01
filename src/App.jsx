@@ -99,6 +99,7 @@ import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/Electric
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
 import UnifiedElectricalQualityChecker from './pages/Engineering/Electrical/UnifiedElectricalQualityChecker'
+import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartElectricalDatasheetPage'
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
