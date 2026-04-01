@@ -863,6 +863,15 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        {/* Smart Electrical Datasheet Generator - 6 Equipment Types (Transformer, DG Set, MV/LV Switchgear, AC/DC UPS) */}
+        <Route
+          path="engineering/electrical/datasheet/smart-generator"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <SmartElectricalDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
         <Route
           path="engineering/electrical/datasheet/create"
           element={
