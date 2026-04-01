@@ -398,7 +398,7 @@ const LineList = () => {
                   </ul>
                 </div>
                 <div>
-                  <span className="font-medium text-amber-800">Abu Dhabi Oil Co. Ltd:</span>
+                  <span className="font-medium text-amber-800">SIZE"-FLUID-CLASS-SEQ:</span>
                   <ul className="mt-1 space-y-0.5 font-mono text-xs">
                     <li>6"-CD-AC3N-8256</li>
                     <li>8"-HO-BD2A-1023</li>
@@ -461,7 +461,7 @@ const LineList = () => {
                 <option value="onshore">Onshore (SIZE-FLUID-SEQ-CLASS)</option>
                 <option value="offshore">Offshore (AREA-FLUID-SIZE-CLASS-SEQ)</option>
                 <option value="general">General (Auto-detect)</option>
-                <option value="adnoc">Abu Dhabi Oil Co. Ltd (SIZE"-FLUID-CLASS-SEQ)</option>
+                <option value="adnoc">SIZE"-FLUID-CLASS-SEQ</option>
               </select>
             </div>
 
