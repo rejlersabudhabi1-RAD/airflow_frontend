@@ -9,7 +9,7 @@ import {
 
 /**
  * Electrical Data Sheet Page
- * SOFT-CODED: Central hub for electrical engineering technical data sheets
+ * SOFT-CODED: Central hub for Smart Datasheet Generator technical data sheets
  * Follows the same design pattern as Process Datasheets for consistency
  * 
  * Current Focus:
@@ -121,7 +121,7 @@ const ElectricalDatasheetPage = () => {
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
           >
             <ArrowLeftIcon className="h-5 w-5" />
-            Back to Electrical Engineering
+            Back to Smart Datasheet Generator
           </button>
           
           <div className="flex items-center justify-between mb-3">
@@ -136,10 +136,10 @@ const ElectricalDatasheetPage = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => navigate('/engineering/electrical/datasheet/smart')}
+                onClick={() => navigate('/engineering/electrical/datasheet/smart-generator')}
                 className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full text-sm font-semibold shadow-lg whitespace-nowrap hover:shadow-xl hover:scale-105 transition-all duration-300 cursor-pointer"
               >
-                ⚡ Electrical Engineering
+                ⚡ Smart Datasheet Generator
               </button>
             </div>
           </div>
@@ -323,7 +323,7 @@ const ElectricalDatasheetPage = () => {
                 This module provides comprehensive technical data sheets for critical electrical power equipment. 
                 Each datasheet template is designed to comply with ADNOC standards and international specifications (IEC, IEEE). 
                 The system facilitates standardized documentation for {dataSheetTypes.map(t => t.name).join(', ')}, 
-                ensuring consistency across all electrical engineering deliverables.
+                ensuring consistency across all Smart Datasheet Generator deliverables.
               </p>
             </div>
           </div>
