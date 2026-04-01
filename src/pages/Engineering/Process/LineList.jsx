@@ -367,6 +367,47 @@ const LineList = () => {
           </p>
         </div>
 
+        {/* Important Note - Supported Line Number Formats */}
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-amber-600 text-xl flex-shrink-0"></span>
+            <div className="text-sm">
+              <h3 className="font-semibold text-amber-800 mb-2">Important Note: Supported Line Number Formats</h3>
+              <p className="text-amber-700 mb-3 text-xs italic">Please stick to these formats only and upload accordingly.</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-amber-700">
+                <div>
+                  <span className="font-medium text-amber-800">Offshore:</span>
+                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
+                    <li>604-LFG-3-AC2GA0-2012</li>
+                    <li>604-PW-2"-AE2LOD-FA-2779</li>
+                  </ul>
+                </div>
+                <div>
+                  <span className="font-medium text-amber-800">General:</span>
+                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
+                    <li>4"-41-SWR-64313-A2AU16-V</li>
+                    <li>16"-41-SWS-65324-A2AU16-V</li>
+                  </ul>
+                  <p className="mt-1 text-[10px] text-amber-600 italic"> Tick "Include Area Code" checkbox for General only</p>
+                </div>
+                <div>
+                  <span className="font-medium text-amber-800">Onshore:</span>
+                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
+                    <li>16"-PG-4667-031441-X</li>
+                    <li>6"-VG-4952-011503-X</li>
+                  </ul>
+                </div>
+                <div>
+                  <span className="font-medium text-amber-800">SIZE"-FLUID-CLASS-SEQ:</span>
+                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
+                    <li>6"-CD-AC3N-8256</li>
+                    <li>8"-HO-BD2A-1023</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">1. Upload P&ID Document</h2>
@@ -419,6 +460,7 @@ const LineList = () => {
                 <option value="onshore">Onshore (SIZE-FLUID-SEQ-CLASS)</option>
                 <option value="offshore">Offshore (AREA-FLUID-SIZE-CLASS-SEQ)</option>
                 <option value="general">General (Auto-detect)</option>
+                <option value="adnoc">SIZE"-FLUID-CLASS-SEQ</option>
               </select>
             </div>
 
