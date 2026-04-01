@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import {
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
   DocumentArrowUpIcon,
   DocumentTextIcon,
   ArrowPathIcon,
@@ -70,6 +70,16 @@ const EQUIPMENT_TYPES = [
 ];
 
 const SmartElectricalDatasheetPage = () => {
+  const [searchParams] = useSearchParams();
+
+  // Pre-select equipment from URL parameter
+  useEffect(() => {
+    const equipmentParam = searchParams.get('equipment');
+    if (equipmentParam && EQUIPMENT_TYPES.find(eq => eq.id === equipmentParam)) {
+      setSelectedEquipmentType(equipmentParam);
+    }
+  }, [searchParams]);
+
   const [selectedEquipmentType, setSelectedEquipmentType] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [uploading, setUploading] = useState(false);
