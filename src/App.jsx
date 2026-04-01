@@ -19,7 +19,8 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import NotificationPanel from './pages/NotificationPanel'
 import UsageDashboard from './pages/UsageDashboard'
-import PIDUpload from './pages/PIDUpload'
+// SOFT-CODED: /pid/upload disabled — replaced by Engineering > Process > P&ID Verification
+// import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
 // Soft-coded PFD Upload - Use different components based on environment
@@ -71,7 +72,8 @@ import NotFound from './pages/NotFound'
 import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
 import DesignIQLists from './pages/DesignIQ/DesignIQLists'
 import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
-import PFDVerification from './pages/DesignIQ/PFDVerification'
+// SOFT-CODED: PFD Verification disabled — import kept for reference
+// import PFDVerification from './pages/DesignIQ/PFDVerification'
 import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
 import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
@@ -90,6 +92,8 @@ import MOVEquipmentPage from './pages/ProcessDatasheet/MOVEquipmentPage'
 import SmartDatasheetPage from './pages/ProcessDatasheet/SmartDatasheetPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 import LineList from './pages/Engineering/Process/LineList'
+import PIDVerification from './pages/Engineering/Process/PIDVerification'
+import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
@@ -401,15 +405,17 @@ function App() {
           }
         />
         
-        {/* Feature Routes - PID Analysis */}
-        <Route
+        {/* SOFT-CODED: /pid/upload disabled — replaced by /engineering/process/pid-verification */}
+        {/* <Route
           path="pid/upload"
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDUpload />
             </ModuleProtectedRoute>
           }
-        />
+        /> */}
+        {/* Redirect old /pid/upload path to new location */}
+        <Route path="pid/upload" element={<Navigate to="/engineering/process/pid-verification" replace />} />
         <Route
           path="pid/report/:id"
           element={
@@ -604,6 +610,7 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        {/* SOFT-CODED: PFD Verification route disabled — source files preserved
         <Route
           path="designiq/pfd-verification"
           element={
@@ -612,6 +619,7 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        */}
         <Route
           path="designiq/projects/:id"
           element={
@@ -742,6 +750,26 @@ function App() {
           }
         />
 
+
+        {/* P&ID Verification */}
+        <Route
+          path="engineering/process/pid-verification"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <PIDVerification />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* PFD Quality Checker */}
+        <Route
+          path="engineering/process/pfd-quality-checker"
+          element={
+            <ProtectedRoute>
+              <PFDQualityChecker />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Line List - Base Extraction (P&ID Only) */}
         <Route
