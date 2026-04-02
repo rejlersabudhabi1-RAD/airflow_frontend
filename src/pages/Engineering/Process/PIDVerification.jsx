@@ -6,7 +6,8 @@ import {
   Upload as UploadIcon, FileText, CheckCircle, AlertTriangle,
   Loader, X, Download, Activity, Shield, GitBranch, Cpu, Clock,
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
-  Trash2, ArrowLeft, BarChart2, Save,
+  Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
+  Ruler, ScanLine, Brain, CircleDot,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,6 +19,14 @@ const KEYFRAMES = `
   @keyframes floatC { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,35px) scale(1.05)} }
   @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
   @keyframes gradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+  @keyframes scanLine { 0%{top:0%} 100%{top:100%} }
+  @keyframes nodeGlow { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.35);opacity:1} }
+  @keyframes factSlide { 0%{opacity:0;transform:translateY(8px)} 15%,85%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-8px)} }
+  @keyframes checkPop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+  @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes orbitA { 0%{transform:rotate(0deg) translateX(52px) rotate(0deg)} 100%{transform:rotate(360deg) translateX(52px) rotate(-360deg)} }
+  @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg) translateX(52px) rotate(-480deg)} }
+  @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg) translateX(52px) rotate(-600deg)} }
 `;
 
 const T = {
@@ -90,8 +99,11 @@ const CATEGORY_LABELS = {
   connectivity: 'Connectivity',
   valve:        'Valve & Equipment',
   line_size:    'Line Size',
-  notes:        'Notes & HOLDs',
 };
+
+// Soft-coded: categories excluded from the report view.
+// Extend this set to suppress additional categories without touching rule logic.
+const HIDDEN_CATEGORIES = new Set(['notes']);
 
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
@@ -99,8 +111,163 @@ const authHeader = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Component
+// SOFT-CODED: Processing loader configuration
+// Edit ANALYSIS_STAGES to add/remove/reorder stages.
+// Edit PID_FACTS to add engineering trivia shown during processing.
 // ─────────────────────────────────────────────────────────────────────────────
+const ANALYSIS_STAGES = [
+  { id: 'ocr',        label: 'OCR text extraction',          icon: ScanLine,   durationMs: 6000  },
+  { id: 'tags',       label: 'Tag pattern recognition',      icon: Tag,        durationMs: 8000  },
+  { id: 'conn',       label: 'Connectivity graph build',     icon: Link,       durationMs: 10000 },
+  { id: 'valves',     label: 'Valve & equipment checks',     icon: Sliders,    durationMs: 12000 },
+  { id: 'linesizes',  label: 'Line size validation',         icon: Ruler,      durationMs: 15000 },
+  { id: 'rules',      label: 'Deterministic rule engine',    icon: Brain,      durationMs: 18000 },
+  { id: 'report',     label: 'Building findings report',     icon: FileText,   durationMs: 22000 },
+];
+
+const PID_FACTS = [
+  'A typical offshore P&ID can contain 2,000+ instrument tags across 80+ drawings.',
+  'ISA 5.1 defines the standard symbols for instruments used in P&IDs worldwide.',
+  'Line designation tables link every pipe segment to its service, size and material.',
+  'PSVs (Pressure Safety Valves) are critical — a missing or wrong tag is a Safety-critical finding.',
+  'HOLD annotations mark items awaiting client or vendor approval before finalisation.',
+  'DN (Diameter Nominal) and NPS (Nominal Pipe Size) use different numbering — DN50 ≈ NPS 2".',
+  'Connectivity checks trace fluid paths from source to destination through all inline equipment.',
+  'A 6" valve on a 4" line is a classic P&ID inconsistency that this engine catches automatically.',
+  'IEC 62424 and ISO 10628-2 govern how P&IDs are structured for international projects.',
+  'Early detection of tag duplicates can prevent costly field rework and commissioning delays.',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AnalysisLoader — shown while backend processes the P&ID
+// Props: elapsedSec (number), fileName (string)
+// ─────────────────────────────────────────────────────────────────────────────
+const AnalysisLoader = ({ elapsedSec, fileName }) => {
+  const [factIdx, setFactIdx] = React.useState(0);
+  const [factKey, setFactKey] = React.useState(0);
+
+  // Rotate facts every 5 seconds
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      setFactIdx(i => (i + 1) % PID_FACTS.length);
+      setFactKey(k => k + 1);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Which stages are "done" based on elapsed time
+  const completedStages = ANALYSIS_STAGES.filter(s => elapsedSec * 1000 >= s.durationMs);
+  const activeIdx = Math.min(completedStages.length, ANALYSIS_STAGES.length - 1);
+
+  const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+  const secs = String(elapsedSec % 60).padStart(2, '0');
+
+  return (
+    <div className="mt-5 rounded-2xl overflow-hidden border border-indigo-200"
+      style={{ background: 'linear-gradient(135deg,#eef2ff 0%,#eff6ff 50%,#f0f9ff 100%)', animation: 'fadeUp 0.4s ease-out both' }}>
+
+      {/* Top bar — timer + filename */}
+      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 flex-wrap border-b border-indigo-100/60">
+        <div className="flex items-center gap-2">
+          <CircleDot className="w-4 h-4 text-indigo-500" style={{ animation: 'pulse2 1.4s ease-in-out infinite' }} />
+          <span className="text-sm font-bold text-slate-800">Analysing P&amp;ID…</span>
+          {fileName && (
+            <span className="text-xs text-slate-400 truncate max-w-[180px]">{fileName}</span>
+          )}
+        </div>
+        {/* Elapsed timer */}
+        <div className="flex items-center gap-1.5 bg-white/70 border border-indigo-200 rounded-xl px-3 py-1.5 font-mono tabular-nums">
+          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+          <span className="text-sm font-bold text-indigo-700">{mins}:{secs}</span>
+        </div>
+      </div>
+
+      <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Left — orbiting animation + central icon */}
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="relative w-32 h-32 flex items-center justify-center">
+            {/* Centre circle */}
+            <div className="w-14 h-14 rounded-full flex items-center justify-center z-10"
+              style={{ background: 'linear-gradient(135deg,#6366f1,#3b82f6)', boxShadow: '0 0 24px rgba(99,102,241,0.45)' }}>
+              <Cpu className="w-7 h-7 text-white" />
+            </div>
+            {/* Orbiting dots */}
+            {[
+              { color: '#ef4444', anim: 'orbitA 2.4s linear infinite' },
+              { color: '#f59e0b', anim: 'orbitB 2.4s linear infinite' },
+              { color: '#10b981', anim: 'orbitC 2.4s linear infinite' },
+            ].map((o, i) => (
+              <span key={i} className="absolute w-3 h-3 rounded-full"
+                style={{ background: o.color, animation: o.anim,
+                  boxShadow: `0 0 8px ${o.color}`, top: '50%', left: '50%',
+                  marginTop: '-6px', marginLeft: '-6px' }} />
+            ))}
+          </div>
+          {/* Scan-line progress bar */}
+          <div className="w-full relative h-2 bg-white/60 rounded-full overflow-hidden border border-indigo-100">
+            <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-[2500ms] ease-out"
+              style={{
+                width: `${Math.min(98, (completedStages.length / ANALYSIS_STAGES.length) * 100 + 4)}%`,
+                background: 'linear-gradient(90deg,#6366f1,#3b82f6,#06b6d4)',
+                boxShadow: '0 0 8px rgba(99,102,241,0.5)',
+              }} />
+          </div>
+          <p className="text-xs text-slate-500 text-center">
+            {completedStages.length} of {ANALYSIS_STAGES.length} stages complete
+          </p>
+        </div>
+
+        {/* Right — rule checklist */}
+        <div className="space-y-1.5">
+          {ANALYSIS_STAGES.map((stage, i) => {
+            const done    = elapsedSec * 1000 >= stage.durationMs;
+            const running = i === activeIdx && !done;
+            const Icon    = stage.icon;
+            return (
+              <div key={stage.id}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-500 ${
+                  done    ? 'bg-emerald-50/80 border border-emerald-200/60'
+                  : running ? 'bg-indigo-50 border border-indigo-300/60'
+                  :            'bg-white/40 border border-transparent'
+                }`}>
+                {done ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0"
+                    style={{ animation: 'checkPop 0.35s ease-out both' }} />
+                ) : running ? (
+                  <Loader className="w-4 h-4 text-indigo-500 flex-shrink-0 animate-spin" />
+                ) : (
+                  <Icon className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                )}
+                <span className={`text-xs font-medium ${
+                  done ? 'text-emerald-700' : running ? 'text-indigo-700' : 'text-slate-400'
+                }`}>{stage.label}</span>
+                {done && (
+                  <span className="ml-auto text-[10px] text-emerald-500 font-semibold">✓</span>
+                )}
+                {running && (
+                  <span className="ml-auto text-[10px] text-indigo-400 font-semibold"
+                    style={{ animation: 'pulse2 1s ease-in-out infinite' }}>running</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom — rotating P&ID fact */}
+      <div className="px-5 pb-4">
+        <div className="bg-white/60 border border-indigo-100 rounded-xl px-4 py-3 min-h-[52px] flex items-start gap-2.5">
+          <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" style={{ animation: 'pulse2 2s ease-in-out infinite' }} />
+          <p key={factKey} className="text-xs text-slate-600 leading-relaxed"
+            style={{ animation: 'factSlide 5s ease-in-out forwards' }}>
+            <span className="font-semibold text-amber-600">Did you know? </span>
+            {PID_FACTS[factIdx]}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
 const PIDVerification = () => {
 
   // ── Project management state ──────────────────────────────────────────────
@@ -131,7 +298,10 @@ const PIDVerification = () => {
   const [results,      setResults]      = useState(null);
   const [error,        setError]        = useState('');
   const [activeDrawing,setActiveDrawing]= useState(null);
-  const pollRef = useRef(null);
+  const pollRef    = useRef(null);
+  // ── Elapsed-time timer for the processing loader ──────────────────────────
+  const [elapsedSec,   setElapsedSec]   = useState(0);
+  const timerRef   = useRef(null);
 
   // ── Engineer review overrides ─────────────────────────────────────────────
   const [overrides,       setOverrides]       = useState({});
@@ -141,9 +311,48 @@ const PIDVerification = () => {
   // ── History (documents in project) ───────────────────────────────────────
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [legendFile,      setLegendFile]      = useState(null);
+  const [legendKnowledge, setLegendKnowledge] = useState(null);
+  const [buildingLegend,  setBuildingLegend]  = useState(false);
+  const [runningCompare,  setRunningCompare]  = useState(false);
+  const [comparison,      setComparison]      = useState(null);
+  const [showUncertainHighlights, setShowUncertainHighlights] = useState(false);
+  const [focusedFindingId, setFocusedFindingId] = useState(null);
+  // ── Drawing image (lazy-loaded for overlay) ───────────────────────────────
+  const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
+  const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  // ── Findings filters (soft-coded, additive) ───────────────────────────────
+  const [filterSeverity, setFilterSeverity] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus,   setFilterStatus]   = useState('all');
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
+
+  // ── Drawing image loader — refetch whenever the active drawing changes ─────
+  useEffect(() => {
+    let objectUrl = null;
+    const docId = documentId || results?.document_id;
+    if (!docId || !activeDrawingData) {
+      setDrawingImageUrl(null);
+      return;
+    }
+    const pageIndex = activeDrawingData.page_index ?? 0;
+    setDrawingImageLoading(true);
+    setDrawingImageUrl(null);
+    axios.get(
+      `${API_PREFIX}/drawing-image/${docId}/${pageIndex}/`,
+      { headers: authHeader(), responseType: 'blob', timeout: 30000 }
+    ).then(res => {
+      objectUrl = URL.createObjectURL(res.data);
+      setDrawingImageUrl(objectUrl);
+    }).catch(() => {
+      setDrawingImageUrl(null);
+    }).finally(() => {
+      setDrawingImageLoading(false);
+    });
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [documentId, activeDrawing, results?.document_id]);
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -167,6 +376,15 @@ const PIDVerification = () => {
       // non-fatal
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const fetchLegendKnowledge = async () => {
+    try {
+      const res = await axios.get(`${API_PREFIX}/legend-knowledge/`, { headers: authHeader() });
+      setLegendKnowledge(res.data?.legend_knowledge || null);
+    } catch (_) {
+      // non-fatal
     }
   };
 
@@ -228,6 +446,7 @@ const PIDVerification = () => {
     resetUpload();
     setResults(null);
     fetchHistory(p.project_id);
+    fetchLegendKnowledge();
   };
 
   const handleBackToProjects = () => {
@@ -236,7 +455,49 @@ const PIDVerification = () => {
     setHistory([]);
     resetUpload();
     setResults(null);
+    setComparison(null);
+    setLegendFile(null);
     setMessage({ type:'', text:'' });
+  };
+
+  const handleBuildLegend = async () => {
+    if (!legendFile) {
+      flash('error', 'Please choose a legend sheet file first.');
+      return;
+    }
+    setBuildingLegend(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', legendFile);
+      const res = await axios.post(`${API_PREFIX}/legend-knowledge/build/`, fd, {
+        headers: { ...authHeader(), 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      setLegendKnowledge(res.data?.legend_knowledge || null);
+      flash('success', 'Legend knowledge updated and stored for future recognition.');
+    } catch (e) {
+      flash('error', e?.response?.data?.error || 'Failed to build legend knowledge');
+    } finally {
+      setBuildingLegend(false);
+    }
+  };
+
+  const runAccuracyCompare = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) {
+      flash('error', 'No processed document available for comparison.');
+      return;
+    }
+    setRunningCompare(true);
+    try {
+      const res = await axios.post(`${API_PREFIX}/compare/${docId}/`, {}, { headers: authHeader(), timeout: 180000 });
+      setComparison(res.data?.comparison || null);
+      flash('success', 'Legend-backed accuracy comparison completed.');
+    } catch (e) {
+      flash('error', e?.response?.data?.error || 'Failed to run accuracy comparison');
+    } finally {
+      setRunningCompare(false);
+    }
   };
 
   // ── Upload / verification API ─────────────────────────────────────────────
@@ -278,17 +539,22 @@ const PIDVerification = () => {
 
   const startPolling = (docId) => {
     setPolling(true);
+    setElapsedSec(0);
+    // Start the elapsed-time ticker (1 s resolution, purely cosmetic)
+    timerRef.current = setInterval(() => {
+      setElapsedSec(s => s + 1);
+    }, 1000);
     pollRef.current = setInterval(async () => {
       try {
         const res = await axios.get(`${API_PREFIX}/status/${docId}/`, { headers: authHeader(), timeout: 15000 });
         const s = res.data.status;
         setDocStatus(s);
         if (s === 'completed') {
-          clearInterval(pollRef.current); setPolling(false);
+          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
           await fetchResults(docId);
           if (selectedProject) fetchHistory(selectedProject.project_id);
         } else if (s === 'failed') {
-          clearInterval(pollRef.current); setPolling(false);
+          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
           setError(res.data.error_message || 'Processing failed.');
         }
       } catch (_) {}
@@ -307,9 +573,12 @@ const PIDVerification = () => {
 
   const resetUpload = () => {
     clearInterval(pollRef.current);
+    clearInterval(timerRef.current);
     setFile(null); setDocumentId(null); setDocStatus(null);
     setError(''); setPolling(false); setActiveDrawing(null);
+    setElapsedSec(0);
     setOverrides({}); setOverridesSaved(false);
+    setComparison(null);
   };
 
   const handleOverrideChange = (findingId, field, value) => {
@@ -394,6 +663,7 @@ const PIDVerification = () => {
   };
 
   const activeDrawingData = results?.drawings?.find(d => d.drawing_id === activeDrawing);
+  const extractionSummary = activeDrawingData?.metadata?.extraction_summary || null;
 
   // Override-aware helpers — use local draft until saved
   const getVal = (f, field) => overrides[f.id]?.[field] ?? f[field];
@@ -402,6 +672,126 @@ const PIDVerification = () => {
   const totalIssues   = results?.total_issues ?? allIssues.length;
   const criticalCount = allIssues.filter(f => getVal(f, 'severity') === 'critical').length;
   const majorCount    = allIssues.filter(f => getVal(f, 'severity') === 'major').length;
+
+  // Soft-coded overlay helpers (frontend only): infer confidence and pseudo-position from evidence.
+  const bandRank = { low: 1, medium: 2, high: 3 };
+
+  const detectConfidenceBand = (finding) => {
+    const txt = `${finding.issue_observed || ''}`;
+    const explicit = txt.match(/confidence:\s*(high|medium|low)/i)?.[1]?.toLowerCase();
+    if (explicit) return explicit;
+
+    const sev = getVal(finding, 'severity');
+    if (sev === 'critical' || sev === 'major') return 'high';
+    if (sev === 'minor') return 'medium';
+    return 'low';
+  };
+
+  const inferEvidenceKey = (finding) => {
+    if (finding.evidence?.trim()) return finding.evidence.trim();
+    const quoted = (finding.issue_observed || '').match(/'([^']+)'/)?.[1];
+    if (quoted) return quoted;
+    return `${finding.rule_id}-${finding.sl_no}`;
+  };
+
+  const stableUnit = (str, salt) => {
+    let h = 2166136261 ^ salt;
+    for (let i = 0; i < str.length; i += 1) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const n = (h >>> 0) % 10000;
+    return n / 10000;
+  };
+
+  const buildOverlayNodes = (issues = []) => {
+    // v4: real coords (exact) > NPS extracted from evidence string > hash fallback.
+    const realPositions = activeDrawingData?.metadata?.tag_positions || {};
+
+    // Normalize curly/smart quotes → straight ASCII " for consistent key lookup.
+    const normKey = (k) =>
+      (k || '').replace(/[\u201c\u201d\u2018\u2019]/g, '"').trim();
+
+    // Extract all NPS sizes contained in an evidence string.
+    // e.g. 'SUCTION KOD 6" 4"-BD-4860-033842-X-N ...' -> ['6"', '4"']
+    const extractNpsKeys = (str) => {
+      const keys = [];
+      const re = /\b(\d+(?:\.\d+)?)[""\u201c\u201d]/g;
+      let m;
+      while ((m = re.exec(str)) !== null) { keys.push(m[1] + '"'); }
+      return keys;
+    };
+
+    // Resolve the best real position for a finding.
+    // Priority: exact key match > NPS extracted from evidence string > null.
+    const resolveReal = (nk, rawKey) => {
+      let r = realPositions[nk] ?? realPositions[rawKey] ?? null;
+      if (r) return r;
+      for (const nps of extractNpsKeys(nk)) {
+        r = realPositions[nps] ?? realPositions[normKey(nps)] ?? null;
+        if (r) return r;
+      }
+      return null;
+    };
+
+    // Group findings by normalised evidence key; keep highest-severity band.
+    const grouped = new Map();
+    for (const f of issues) {
+      const rawKey = inferEvidenceKey(f);
+      const nk = normKey(rawKey);
+      const band = detectConfidenceBand(f);
+      const cur = grouped.get(nk);
+      if (!cur || bandRank[band] > bandRank[cur.band]) {
+        grouped.set(nk, { finding: f, band, key: nk, rawKey });
+      }
+    }
+
+    const nodes = [];
+    for (const [nk, x] of grouped) {
+      const real = resolveReal(nk, x.rawKey);
+
+      if (real?.all?.length > 0) {
+        // Multi-instance: one dot per body occurrence (one per pipe on drawing).
+        real.all.forEach((pt, idx) => {
+          nodes.push({
+            ...x,
+            key: real.all.length > 1 ? `${nk}#${idx}` : nk,
+            left: Math.min(95, Math.max(5, pt.x_pct)),
+            top:  Math.min(95, Math.max(5, pt.y_pct)),
+            anchored: true,
+          });
+        });
+      } else if (real) {
+        nodes.push({
+          ...x,
+          left: Math.min(95, Math.max(5, real.x_pct)),
+          top:  Math.min(95, Math.max(5, real.y_pct)),
+          anchored: true,
+        });
+      } else {
+        // Deterministic pseudo-position from FNV-1a hash (dashed marker).
+        const seed = `${activeDrawing || 'drawing'}:${nk}`;
+        nodes.push({
+          ...x,
+          left: 8  + (stableUnit(seed, 11) * 84),
+          top:  10 + (stableUnit(seed, 29) * 78),
+          anchored: false,
+        });
+      }
+    }
+    return nodes;
+  };
+
+  const overlayNodes = buildOverlayNodes(activeDrawingData?.issues || []);
+  const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
+
+  const jumpToFinding = (findingId) => {
+    setFocusedFindingId(findingId);
+    const el = document.getElementById(`finding-row-${findingId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // Flash banner
@@ -446,7 +836,6 @@ const PIDVerification = () => {
                 { icon:'🔗', label:'Connectivity Checks',  cls:'bg-indigo-50 border-indigo-200 text-indigo-700' },
                 { icon:'🔧', label:'Valve Compliance',     cls:'bg-purple-50 border-purple-200 text-purple-700' },
                 { icon:'📐', label:'Line Size Rules',      cls:'bg-amber-50 border-amber-200 text-amber-700'    },
-                { icon:'📋', label:'Notes & HOLDs',        cls:'bg-emerald-50 border-emerald-200 text-emerald-700' },
               ].map(b => (
                 <span key={b.label} className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}>
                   <span>{b.icon}</span>{b.label}
@@ -674,6 +1063,42 @@ const PIDVerification = () => {
               </div>
             )}
 
+            <div className="mt-4 bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Legend Knowledge</p>
+                  <p className="text-sm text-slate-700">Upload legends sheet once, then reuse for future recognition runs.</p>
+                </div>
+                <div className="text-xs text-slate-500">
+                  Instrument prefixes: <span className="font-semibold text-slate-700">{legendKnowledge?.instrument_prefixes?.length ?? 0}</span>
+                  {' · '}
+                  Valve prefixes: <span className="font-semibold text-slate-700">{legendKnowledge?.valve_prefixes?.length ?? 0}</span>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={e => setLegendFile(e.target.files?.[0] || null)}
+                  className="text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                />
+                <button
+                  onClick={handleBuildLegend}
+                  disabled={buildingLegend || !legendFile}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                  style={{ background:'linear-gradient(135deg,#2563eb,#1d4ed8)' }}
+                >
+                  {buildingLegend ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                  {buildingLegend ? 'Building…' : 'Build Legend Knowledge'}
+                </button>
+              </div>
+              {legendKnowledge?.sources?.length > 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Sources: {legendKnowledge.sources.join(', ')}
+                </p>
+              )}
+            </div>
+
             {error && (
               <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -690,23 +1115,8 @@ const PIDVerification = () => {
               {uploading ? <><Loader className="w-4 h-4 animate-spin" />Uploading…</> : <><Cpu className="w-4 h-4" />Run P&amp;ID Verification</>}
             </button>
 
-            {polling && (
-              <div className="mt-5 rounded-2xl p-5 space-y-3 border border-blue-200" style={{ background:'linear-gradient(135deg,#eff6ff,#eef2ff)' }}>
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-blue-500 animate-pulse" />
-                  <span className="text-sm font-bold text-slate-800">Analysing drawing…</span>
-                </div>
-                <div className="w-full bg-white rounded-full h-2 overflow-hidden border border-blue-100">
-                  <div className="h-full rounded-full animate-pulse"
-                    style={{ width:'60%', background:'linear-gradient(90deg,#3b82f6,#6366f1)', boxShadow:'0 0 8px rgba(99,102,241,0.5)' }} />
-                </div>
-                <p className="text-xs text-slate-400 text-center">Checking tags, connectivity, valves &amp; line sizes — polling every 3 s</p>
-              </div>
-            )}
-            {docStatus === 'processing' && !polling && (
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-amber-600 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <Clock className="w-4 h-4" />Still processing — please wait…
-              </div>
+            {(polling || docStatus === 'processing') && (
+              <AnalysisLoader elapsedSec={elapsedSec} fileName={file?.name} />
             )}
           </div>
         )}
@@ -731,6 +1141,12 @@ const PIDVerification = () => {
                 <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Critical</p><p className="font-bold text-2xl text-red-700">{criticalCount}</p></div>
                 <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Major</p><p className="font-bold text-2xl text-orange-600">{majorCount}</p></div>
                 <div className="ml-auto flex gap-2 flex-wrap">
+                  <button onClick={runAccuracyCompare} disabled={runningCompare}
+                    className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{ background:'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow:'0 4px 14px rgba(13,148,136,0.35)' }}>
+                    {runningCompare ? <Loader className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                    {runningCompare ? 'Comparing…' : 'Compare Accuracy'}
+                  </button>
                   <button onClick={downloadExcel} disabled={downloadingXlsx}
                     className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 4px 14px rgba(16,185,129,0.35)' }}>
@@ -751,6 +1167,35 @@ const PIDVerification = () => {
               </div>
             </div>
 
+            {comparison && (
+              <div className="rounded-2xl p-5" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.12s both' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Shield className="w-4 h-4 text-teal-600" />
+                  <h3 className="text-sm font-bold text-slate-900">Legend-Backed Accuracy Comparison</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="font-semibold text-slate-700 mb-2">Before (Defaults)</p>
+                    <p className="text-slate-500">Instruments: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.instruments ?? 0}</span></p>
+                    <p className="text-slate-500">Valves: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.valves ?? 0}</span></p>
+                    <p className="text-slate-500">Line sizes: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.line_sizes ?? 0}</span></p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="font-semibold text-emerald-700 mb-2">After (Legend-Backed)</p>
+                    <p className="text-emerald-700">Instruments: <span className="font-bold">{comparison?.after_legend_backed?.summary?.instruments ?? 0}</span></p>
+                    <p className="text-emerald-700">Valves: <span className="font-bold">{comparison?.after_legend_backed?.summary?.valves ?? 0}</span></p>
+                    <p className="text-emerald-700">Line sizes: <span className="font-bold">{comparison?.after_legend_backed?.summary?.line_sizes ?? 0}</span></p>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                    <p className="font-semibold text-blue-700 mb-2">Delta (After - Before)</p>
+                    <p className="text-blue-700">Instruments: <span className="font-bold">{comparison?.delta_after_minus_before?.instruments ?? 0}</span></p>
+                    <p className="text-blue-700">Valves: <span className="font-bold">{comparison?.delta_after_minus_before?.valves ?? 0}</span></p>
+                    <p className="text-blue-700">Line sizes: <span className="font-bold">{comparison?.delta_after_minus_before?.line_sizes ?? 0}</span></p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <CrossRecommendationPanel
               sourceType="pid"
               documentId={documentId || results?.document_id}
@@ -770,6 +1215,23 @@ const PIDVerification = () => {
                     {d.drawing_id}<span className={`ml-1.5 text-xs font-semibold ${activeDrawing === d.drawing_id ? 'text-blue-200' : 'text-slate-400'}`}>({d.issue_count})</span>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {results.drawings?.length === 0 && (
+              <div className="rounded-2xl p-6 border" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.2s both' }}>
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">No drawing pages detected</h3>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Processing completed, but this file produced zero segmented drawings. Try re-uploading as PNG/JPG
+                      or use a PDF export with visible vector/text content.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -809,6 +1271,140 @@ const PIDVerification = () => {
                     )}
                   </div>
                 </div>
+                {extractionSummary && (
+                  <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/70">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Extraction Summary</p>
+                      <p className="text-xs text-slate-500">Raw OCR length: {extractionSummary.raw_text_length ?? 0}</p>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
+                      <div className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600">Tags: <span className="font-bold text-slate-800">{extractionSummary.tags ?? 0}</span></div>
+                      <div className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600">Instr: <span className="font-bold text-slate-800">{extractionSummary.instruments ?? 0}</span></div>
+                      <div className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600">Valves: <span className="font-bold text-slate-800">{extractionSummary.valves ?? 0}</span></div>
+                      <div className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600">Equip: <span className="font-bold text-slate-800">{extractionSummary.equipment ?? 0}</span></div>
+                      <div className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600">Sizes: <span className="font-bold text-slate-800">{extractionSummary.line_sizes ?? 0}</span></div>
+                    </div>
+                    {extractionSummary.no_text_detected && (
+                      <p className="mt-2 text-xs text-amber-600">No OCR text was detected on this page. The source may be low-contrast scan/title sheet.</p>
+                    )}
+                  </div>
+                )}
+                {activeDrawingData.issues?.length > 0 && (
+                  <div className="px-5 py-4 border-b border-slate-100 bg-white">
+                    {/* ── Header row ── */}
+                    <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                      <div>
+                        {(() => {
+                          const hasReal = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length > 0;
+                          return (
+                            <>
+                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                Drawing Overlay
+                                <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${hasReal ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {hasReal ? 'Diagram-Anchored' : 'Heuristic'}
+                                </span>
+                              </p>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                {hasReal
+                                  ? 'Markers pinned to exact tag coordinates extracted from the drawing.'
+                                  : 'No real coordinates — markers use stable heuristic positions. Re-process to anchor them.'}
+                              </p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-slate-600 flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={showUncertainHighlights}
+                          onChange={e => setShowUncertainHighlights(e.target.checked)}
+                          className="rounded border-slate-300"
+                        />
+                        Show low-confidence
+                      </label>
+                    </div>
+
+                    {/* ── Drawing + overlay ── */}
+                    <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                      {drawingImageLoading && (
+                        <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-xs">
+                          <Loader className="w-4 h-4 animate-spin" />Loading drawing…
+                        </div>
+                      )}
+
+                      {!drawingImageLoading && !drawingImageUrl && (
+                        <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-xs">
+                          <AlertTriangle className="w-4 h-4" />Drawing preview unavailable
+                        </div>
+                      )}
+
+                      {!drawingImageLoading && drawingImageUrl && (
+                        /*
+                          KEY FIX: scroll wrapper handles height capping.
+                          The inner div + img have no objectFit/maxHeight so the
+                          rendered image always fills exactly 100% of its element
+                          width with its natural aspect ratio.  The overlay div
+                          (absolute inset-0) therefore covers the exact same pixel
+                          area as the image — no letterboxing offset.
+                        */
+                        <div className="overflow-auto" style={{ maxHeight: '72vh' }}>
+                          <div className="relative w-full" style={{ lineHeight: 0 }}>
+                            <img
+                              src={drawingImageUrl}
+                              alt={activeDrawing}
+                              draggable={false}
+                              className="w-full block"
+                              style={{ height: 'auto', background: '#f8fafc', userSelect: 'none' }}
+                            />
+                            {/* Overlay wrapper — inset-0 matches the image exactly */}
+                            <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
+                              {visibleOverlayNodes.map((n) => {
+                                const isFocused = focusedFindingId === n.finding.id;
+                                const colorCls = n.band === 'high'
+                                  ? 'bg-red-500 border-red-600'
+                                  : n.band === 'medium'
+                                    ? 'bg-amber-500 border-amber-600'
+                                    : 'bg-sky-500 border-sky-600';
+                                const anchorStyle = n.anchored
+                                  ? {}
+                                  : { outline: '2px dashed rgba(100,116,139,0.7)', outlineOffset: '3px' };
+                                return (
+                                  <button
+                                    key={n.key}
+                                    onClick={() => jumpToFinding(n.finding.id)}
+                                    title={`${n.key} · ${n.finding.issue_observed}`}
+                                    className={`absolute rounded-full border-2 transition-all ${colorCls} ${isFocused ? 'scale-150 ring-4 ring-white/80 z-20' : 'hover:scale-125 z-10'}`}
+                                    style={{
+                                      left: `${n.left}%`,
+                                      top:  `${n.top}%`,
+                                      width: '16px',
+                                      height: '16px',
+                                      transform: 'translate(-50%, -50%)',
+                                      pointerEvents: 'all',
+                                      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                                      ...anchorStyle,
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+
+                            {/* Legend */}
+                            <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-600" style={{ pointerEvents: 'none' }}>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />High</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />Medium</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />Low</span>
+                                <span className="text-slate-400">·</span>
+                                <span className="text-slate-500">Dashed = heuristic</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {activeDrawingData.issues?.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16">
                     <div className="w-16 h-16 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center mb-4">
@@ -818,56 +1414,125 @@ const PIDVerification = () => {
                     <p className="text-sm text-slate-400 mt-1">This drawing passed all verification checks.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead style={{ background:'#f8fafc' }}>
-                        <tr>
-                          {['SL', 'Category', 'Rule', 'Issue Observed', 'Action Required', 'Evidence', 'Severity', 'Status'].map(h => (
-                            <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {activeDrawingData.issues.map(f => (
-                          <tr key={f.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="px-4 py-3 text-slate-400 text-xs">{f.sl_no}</td>
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-medium border border-blue-100">
-                                {CATEGORY_LABELS[f.category] || f.category}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-400">{f.rule_id}</td>
-                            <td className="px-4 py-3 text-slate-800 text-xs max-w-xs">{f.issue_observed}</td>
-                            <td className="px-4 py-3 text-slate-600 text-xs max-w-xs">{f.action_required}</td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-400 max-w-[120px] truncate" title={f.evidence}>{f.evidence}</td>
-                            <td className="px-4 py-3">
-                              <select
-                                value={getVal(f, 'severity')}
-                                onChange={e => handleOverrideChange(f.id, 'severity', e.target.value)}
-                                className={`text-xs px-2 py-1 rounded-full border font-semibold uppercase cursor-pointer outline-none transition-all ${SEVERITY_STYLES[getVal(f, 'severity')] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                {['critical', 'major', 'minor', 'info'].map(s => (
-                                  <option key={s} value={s}>{s.toUpperCase()}</option>
+                  <div>
+                    {/* ── Filter bar ── */}
+                    {(() => {
+                      const visibleIssues = activeDrawingData.issues.filter(f => !HIDDEN_CATEGORIES.has(f.category));
+                      const availableCategories = [...new Set(visibleIssues.map(f => f.category))];
+                      const filteredIssues = visibleIssues.filter(f => {
+                        if (filterSeverity !== 'all' && (overrides[f.id]?.severity || f.severity) !== filterSeverity) return false;
+                        if (filterCategory !== 'all' && f.category !== filterCategory) return false;
+                        if (filterStatus   !== 'all' && (overrides[f.id]?.status   || f.status)   !== filterStatus)   return false;
+                        return true;
+                      });
+                      const activeFilterCount = [filterSeverity, filterCategory, filterStatus].filter(v => v !== 'all').length;
+                      return (
+                        <>
+                          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex flex-wrap items-center gap-3">
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Filter</span>
+
+                            {/* Severity filter */}
+                            <select
+                              value={filterSeverity}
+                              onChange={e => setFilterSeverity(e.target.value)}
+                              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 cursor-pointer outline-none hover:border-slate-400 transition-colors">
+                              <option value="all">All Severities</option>
+                              {['critical','major','minor','info'].map(s => (
+                                <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                              ))}
+                            </select>
+
+                            {/* Category filter */}
+                            <select
+                              value={filterCategory}
+                              onChange={e => setFilterCategory(e.target.value)}
+                              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 cursor-pointer outline-none hover:border-slate-400 transition-colors">
+                              <option value="all">All Categories</option>
+                              {availableCategories.map(c => (
+                                <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
+                              ))}
+                            </select>
+
+                            {/* Status filter */}
+                            <select
+                              value={filterStatus}
+                              onChange={e => setFilterStatus(e.target.value)}
+                              className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 cursor-pointer outline-none hover:border-slate-400 transition-colors">
+                              <option value="all">All Statuses</option>
+                              {['open','reviewed','resolved'].map(s => (
+                                <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+                              ))}
+                            </select>
+
+                            <span className="text-xs text-slate-400 ml-auto">
+                              {filteredIssues.length} of {visibleIssues.length} finding{visibleIssues.length !== 1 ? 's' : ''}
+                              {activeFilterCount > 0 && (
+                                <button
+                                  onClick={() => { setFilterSeverity('all'); setFilterCategory('all'); setFilterStatus('all'); }}
+                                  className="ml-2 text-indigo-500 hover:text-indigo-700 underline">
+                                  clear filters
+                                </button>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead style={{ background:'#f8fafc' }}>
+                                <tr>
+                                  {['SL', 'Category', 'Rule', 'Issue Observed', 'Action Required', 'Evidence', 'Severity', 'Status'].map(h => (
+                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50">
+                                {filteredIssues.length === 0 ? (
+                                  <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-xs">No findings match the current filters.</td></tr>
+                                ) : filteredIssues.map(f => (
+                                  <tr id={`finding-row-${f.id}`} key={f.id}
+                                    className={`hover:bg-slate-50/70 transition-colors ${focusedFindingId === f.id ? 'bg-indigo-50/60' : ''}`}>
+                                    <td className="px-4 py-3 text-slate-400 text-xs">{f.sl_no}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-medium border border-blue-100">
+                                        {CATEGORY_LABELS[f.category] || f.category}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 font-mono text-xs text-slate-400">{f.rule_id}</td>
+                                    <td className="px-4 py-3 text-slate-800 text-xs max-w-xs">{f.issue_observed}</td>
+                                    <td className="px-4 py-3 text-slate-600 text-xs max-w-xs">{f.action_required}</td>
+                                    <td className="px-4 py-3 font-mono text-xs text-slate-400 max-w-[120px] truncate" title={f.evidence}>{f.evidence}</td>
+                                    <td className="px-4 py-3">
+                                      <select
+                                        value={getVal(f, 'severity')}
+                                        onChange={e => handleOverrideChange(f.id, 'severity', e.target.value)}
+                                        className={`text-xs px-2 py-1 rounded-full border font-semibold uppercase cursor-pointer outline-none transition-all ${SEVERITY_STYLES[getVal(f, 'severity')] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                        {['critical', 'major', 'minor', 'info'].map(s => (
+                                          <option key={s} value={s}>{s.toUpperCase()}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <select
+                                        value={getVal(f, 'status')}
+                                        onChange={e => handleOverrideChange(f.id, 'status', e.target.value)}
+                                        className={`text-xs px-2.5 py-1 rounded-lg border cursor-pointer capitalize outline-none transition-all ${
+                                          getVal(f, 'status') === 'resolved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : getVal(f, 'status') === 'reviewed' ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}>
+                                        {['open', 'reviewed', 'resolved'].map(s => (
+                                          <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  </tr>
                                 ))}
-                              </select>
-                            </td>
-                            <td className="px-4 py-3">
-                              <select
-                                value={getVal(f, 'status')}
-                                onChange={e => handleOverrideChange(f.id, 'status', e.target.value)}
-                                className={`text-xs px-2.5 py-1 rounded-lg border cursor-pointer capitalize outline-none transition-all ${
-                                  getVal(f, 'status') === 'resolved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : getVal(f, 'status') === 'reviewed' ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200'
-                                }`}>
-                                {['open', 'reviewed', 'resolved'].map(s => (
-                                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                                ))}
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
