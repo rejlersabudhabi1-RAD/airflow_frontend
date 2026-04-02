@@ -750,22 +750,16 @@ const PIDVerification = () => {
     for (const [nk, x] of grouped) {
       const real = resolveReal(nk, x.rawKey);
 
-      if (real?.all?.length > 0) {
-        // Multi-instance: one dot per body occurrence (one per pipe on drawing).
-        real.all.forEach((pt, idx) => {
-          nodes.push({
-            ...x,
-            key: real.all.length > 1 ? `${nk}#${idx}` : nk,
-            left: Math.min(95, Math.max(5, pt.x_pct)),
-            top:  Math.min(95, Math.max(5, pt.y_pct)),
-            anchored: true,
-          });
-        });
-      } else if (real) {
+      // One marker per unique finding group — use primary coord (x_pct/y_pct).
+      // real.all contains every OCR occurrence; we intentionally ignore it here
+      // so that dot count == finding count, not occurrence count.
+      if (real) {
+        const xp = real.x_pct ?? real.all?.[0]?.x_pct;
+        const yp = real.y_pct ?? real.all?.[0]?.y_pct;
         nodes.push({
           ...x,
-          left: Math.min(95, Math.max(5, real.x_pct)),
-          top:  Math.min(95, Math.max(5, real.y_pct)),
+          left: Math.min(95, Math.max(5, xp)),
+          top:  Math.min(95, Math.max(5, yp)),
           anchored: true,
         });
       } else {
@@ -1360,11 +1354,11 @@ const PIDVerification = () => {
                             <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
                               {visibleOverlayNodes.map((n) => {
                                 const isFocused = focusedFindingId === n.finding.id;
-                                const colorCls = n.band === 'high'
-                                  ? 'bg-red-500 border-red-600'
-                                  : n.band === 'medium'
-                                    ? 'bg-amber-500 border-amber-600'
-                                    : 'bg-sky-500 border-sky-600';
+                                const sev = (n.finding?.severity || '').toLowerCase();
+                                const colorCls = sev === 'critical' ? 'bg-red-600 border-red-700'
+                                  : sev === 'major'    ? 'bg-orange-500 border-orange-600'
+                                  : sev === 'minor'    ? 'bg-amber-400 border-amber-500'
+                                  : 'bg-blue-500 border-blue-600';
                                 const anchorStyle = n.anchored
                                   ? {}
                                   : { outline: '2px dashed rgba(100,116,139,0.7)', outlineOffset: '3px' };
@@ -1392,11 +1386,12 @@ const PIDVerification = () => {
                             {/* Legend */}
                             <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-600" style={{ pointerEvents: 'none' }}>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />High</span>
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />Medium</span>
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />Low</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />Critical</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />Major</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Minor</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />Info</span>
                                 <span className="text-slate-400">·</span>
-                                <span className="text-slate-500">Dashed = heuristic</span>
+                                <span className="text-slate-500">Dashed = estimate</span>
                               </div>
                             </div>
                           </div>
