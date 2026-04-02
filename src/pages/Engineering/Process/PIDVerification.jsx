@@ -101,9 +101,11 @@ const CATEGORY_LABELS = {
   line_size:    'Line Size',
 };
 
-// Soft-coded: categories excluded from the report view.
+// Soft-coded: categories excluded from the view, overlay, and PDF export.
 // Extend this set to suppress additional categories without touching rule logic.
-const HIDDEN_CATEGORIES = new Set(['notes']);
+// 'connectivity' is excluded: orphan-node graph checks produce too many
+// false-positives on scanned drawings and are not useful for process engineers.
+const HIDDEN_CATEGORIES = new Set(['notes', 'connectivity']);
 
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
@@ -776,7 +778,9 @@ const PIDVerification = () => {
     return nodes;
   };
 
-  const overlayNodes = buildOverlayNodes(activeDrawingData?.issues || []);
+  const overlayNodes = buildOverlayNodes(
+    (activeDrawingData?.issues || []).filter(f => !HIDDEN_CATEGORIES.has(f.category))
+  );
   const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
 
   const jumpToFinding = (findingId) => {
