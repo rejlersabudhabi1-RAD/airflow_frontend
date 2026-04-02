@@ -375,7 +375,7 @@ export const BRANDING_CONFIG = {
     settings: 'Settings - RADAI',
     login: 'Login - RADAI AI Platform',
     register: 'Register - RADAI AI Platform',
-    pidVerification: 'P&ID Verification - RADAI',
+    pidVerification: 'P&ID QC - RADAI', // SOFT-CODED: renamed from 'P&ID Verification'
     pfdConversion: 'PFD to P&ID - RADAI',
     projectControl: 'Project Control - RADAI'
   }

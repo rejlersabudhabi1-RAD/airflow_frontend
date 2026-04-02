@@ -20,7 +20,7 @@ export const PASSWORD_RESET_API = {
  */
 export const PASSWORD_EXPIRY_CONFIG = {
   policyDays: 30,
-  warningDays: 7,
+  warningDays: 3,
   graceDays: 3,
   checkInterval: 3600000, // Check every hour (in milliseconds)
 }

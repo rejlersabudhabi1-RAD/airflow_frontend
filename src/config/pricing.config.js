@@ -222,7 +222,7 @@ export const PRICING_CONFIG = {
       features: [
         { name: 'CRS Documents', free: true, basic: true, professional: true, enterprise: true },
         { name: 'PFD to P&ID Conversion', free: false, basic: true, professional: true, enterprise: true },
-        { name: 'P&ID Verification', free: false, basic: true, professional: true, enterprise: true },
+        { name: 'P&ID QC', free: false, basic: true, professional: true, enterprise: true }, // SOFT-CODED: renamed from 'P&ID Verification'
         { name: 'Mobile Access', free: true, basic: true, professional: true, enterprise: true },
       ],
     },
