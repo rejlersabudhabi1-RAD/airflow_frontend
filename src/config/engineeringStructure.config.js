@@ -107,6 +107,17 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'Extract 8 base columns from P&ID (P&ID-only, no enrichment)',
         moduleCode: 'pid_analysis'
       }
+      ,
+      {
+        id: 'equipmentList',
+        name: 'Equipment List',
+        fullName: 'Equipment List - P&ID Extraction',
+        icon: TableCellsIcon,
+        path: '/engineering/process/equipment-list',
+        description: 'Extract equipment tags (Vessels, Pumps, HE, Reactors…) from P&ID with type classification and line connections',
+        moduleCode: 'pid_analysis',
+        badge: 'NEW'
+      }
     ]
   },
 
