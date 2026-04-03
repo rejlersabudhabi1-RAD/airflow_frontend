@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { REJLERS_COLORS, BRAND_TEXT } from '../config/theme.config'
 import { LOGO_CONFIG, getLogoPath } from '../config/logo.config'
@@ -28,21 +28,21 @@ const LANDING_CONFIG = {
   particleCount: 22,
   counterDuration: 2200, // ms for number counter animation
   showProductModules: false, // set true to re-enable the Product Suite section
-  // Floating AI keyword chips in the hero — edit labels freely
+  // Floating AI keyword chips in the hero � edit labels freely
   heroTokens: ['LLM', 'SLM', 'ML', 'ADNOC', 'ISA-5.1', 'Quantum', 'P&ID', 'RAG', 'API-520', 'IEC-61511', 'ASME', 'NLP'],
-  // AI Engine section — soft-coded, edit freely
+  // AI Engine section � soft-coded, edit freely
   aiEngine: {
     sectionLabel: 'AI ENGINE',
     headline:     'Multi-Model Intelligence for',
     headlineGrad: 'Engineering Precision',
-    body: 'RADAI orchestrates a layered AI stack — Large Language Models for contextual understanding, Small Language Models for rapid clause-matching, Classical ML for anomaly detection, and Quantum-inspired optimisation for complex constraint solving — all converging on a single verified P&ID finding.',
+    body: 'RADAI orchestrates a layered AI stack � Large Language Models for contextual understanding, Small Language Models for rapid clause-matching, Classical ML for anomaly detection, and Quantum-inspired optimisation for complex constraint solving � all converging on a single verified P&ID finding.',
     layers: [
       { label:'LLM Layer',     desc:'Contextual P&ID understanding + standard interpretation', color:'#7FCAB5', width:'100%' },
       { label:'SLM Layer',     desc:'High-speed clause extraction + ADNOC rule matching',      color:'#0ea5e9', width:'82%'  },
       { label:'ML / Vision',   desc:'Symbol detection, valve classification, anomaly flags',   color:'#a78bfa', width:'91%'  },
       { label:'Quantum Optim.',desc:'Multi-constraint compliance solving + risk scoring',       color:'#f59e0b', width:'74%'  },
     ],
-    // Radar axes — change labels/values (0–1) freely
+    // Radar axes � change labels/values (0�1) freely
     radar: [
       { axis:'LLM Context',    value: 0.97 },
       { axis:'SLM Speed',      value: 0.91 },
@@ -54,25 +54,25 @@ const LANDING_CONFIG = {
   },
   stats: [
     {
-      value: 99,  suffix: '%',  label: 'Accuracy Rate',      icon: '★',
+      value: 99,  suffix: '%',  label: 'Accuracy Rate',      icon: '?',
       color: '#7FCAB5', sub: 'LLM + SLM + ML consensus scoring',
       sparkline: [60,72,78,85,88,91,94,97,98,99],
       badge: 'AI VERIFIED',
     },
     {
-      value: 10,  suffix: 'x',  label: 'Faster Reviews',     icon: '▲',
+      value: 10,  suffix: 'x',  label: 'Faster Reviews',     icon: '?',
       color: '#0ea5e9', sub: 'vs manual ADNOC compliance audit',
       sparkline: [1,1.5,2,3,4,5,6,7,9,10],
       badge: 'SPEED',
     },
     {
-      value: 500, suffix: '+',  label: 'Drawings Analysed',  icon: '■',
+      value: 500, suffix: '+',  label: 'Drawings Analysed',  icon: '�',
       color: '#a78bfa', sub: 'P&ID / PFD / isometric sheets',
       sparkline: [20,60,110,180,240,310,370,420,470,500],
       badge: 'PROCESSED',
     },
     {
-      value: 80,  suffix: '+',  label: 'Years of Expertise', icon: '◆',
+      value: 80,  suffix: '+',  label: 'Years of Expertise', icon: '?',
       color: '#f59e0b', sub: 'Rejlers Engineering in Abu Dhabi',
       sparkline: [10,20,30,40,50,55,62,68,75,80],
       badge: 'TRUSTED',
@@ -104,7 +104,7 @@ const LANDING_CONFIG = {
     {
       icon: 'AI',
       title: 'Multi-Model AI Stack',
-      desc: 'LLM, SLM, ML Vision and Quantum-inspired optimisation run in parallel — every P&ID finding is consensus-verified before reaching your engineers.',
+      desc: 'LLM, SLM, ML Vision and Quantum-inspired optimisation run in parallel � every P&ID finding is consensus-verified before reaching your engineers.',
       color: '#a78bfa',
       tags: ['LLM','SLM','ML Vision','Quantum','RAG'],
       highlight: '99% accuracy',
@@ -134,23 +134,23 @@ const LANDING_CONFIG = {
       highlight: '40+ yrs local',
     },
   ],
-  // ── CTA section ── edit labels/buttons/steps freely
+  // -- CTA section -- edit labels/buttons/steps freely
   cta: {
     sectionLabel: 'GET STARTED TODAY',
     headline:     'Ready to Transform Your',
     headlineGrad: 'Engineering Workflow?',
     body: "Join Abu Dhabi's engineering teams already using RADAI to review P&IDs faster, catch compliance issues earlier, and deliver better drawings to their clients.",
-    primaryBtn:   { label: 'Start Free — No Credit Card Required', to: '/register' },
+    primaryBtn:   { label: 'Start Free � No Credit Card Required', to: '/register' },
     secondaryBtn: { label: 'Request a Demo', href: 'mailto:info@radai.ae' },
     trustPills:   ['Free to start', 'Abu Dhabi support', 'ADNOC compliant', 'ISO 27001', 'No lock-in'],
     steps: [
-      { num: '01', icon: '▲', label: 'Upload Drawing',   desc: 'Upload any P&ID PDF or image — ADNOC, ISA-5.1 or custom format', color: '#7FCAB5' },
-      { num: '02', icon: '■', label: 'AI Multi-Pass',    desc: 'LLM + SLM + ML Vision run in parallel — findings in under 60 s',  color: '#0ea5e9' },
-      { num: '03', icon: '◆', label: 'Certified Report', desc: 'Standards-cited findings, evidence clips and exportable PDF report', color: '#a78bfa' },
+      { num: '01', icon: '?', label: 'Upload Drawing',   desc: 'Upload any P&ID PDF or image � ADNOC, ISA-5.1 or custom format', color: '#7FCAB5' },
+      { num: '02', icon: '�', label: 'AI Multi-Pass',    desc: 'LLM + SLM + ML Vision run in parallel � findings in under 60 s',  color: '#0ea5e9' },
+      { num: '03', icon: '?', label: 'Certified Report', desc: 'Standards-cited findings, evidence clips and exportable PDF report', color: '#a78bfa' },
     ],
     bgWords: ['P&ID','LLM','ADNOC','ISA-5.1','SLM','Quantum','ML','RAG','API-520','NLP','ASME','IEC'],
   },
-  // ── Abu Dhabi Market section ── edit freely
+  // -- Abu Dhabi Market section -- edit freely
   abuDhabiMarket: {
     sectionLabel: 'REGIONAL EXPERTISE',
     headline:     'Designed for',
@@ -160,19 +160,19 @@ const LANDING_CONFIG = {
     sectors: [
       {
         icon: 'UP', label: 'Upstream',
-        desc: 'E&P field development, wellhead P&IDs, gathering systems — verified against ADNOC drilling and production standards.',
+        desc: 'E&P field development, wellhead P&IDs, gathering systems � verified against ADNOC drilling and production standards.',
         orgs: ['ADNOC Upstream','ADNOC Onshore','ADNOC Offshore'],
         color: '#0ea5e9',
       },
       {
         icon: 'MX', label: 'Midstream',
-        desc: 'Gas processing, LNG, pipelines and storage — automatic compliance checking for gas handling and safety systems.',
+        desc: 'Gas processing, LNG, pipelines and storage � automatic compliance checking for gas handling and safety systems.',
         orgs: ['ADNOC Gas','ADNOC LNG','GASCO'],
         color: '#7FCAB5',
       },
       {
         icon: 'DS', label: 'Downstream',
-        desc: 'Refineries, petrochemicals and distribution — ADNOC-L&S approved symbol libraries and hazard categorisation.',
+        desc: 'Refineries, petrochemicals and distribution � ADNOC-L&S approved symbol libraries and hazard categorisation.',
         orgs: ['ADNOC Refining','BOROUGE','TAKREER'],
         color: '#a78bfa',
       },
@@ -185,8 +185,8 @@ const LANDING_CONFIG = {
     ],
     pipelineSteps: ['UPLOAD','OCR','LLM','VERIFY','REPORT'],
     heritage: {
-      text: 'has been delivering engineering excellence in the GCC since 1983 — 80+ years of global expertise, Abu Dhabi roots.',
-      pills: ['1983 — Founded','Abu Dhabi HQ','500+ P&IDs Verified','Engineering Excellence','AI-First Approach'],
+      text: 'has been delivering engineering excellence in the GCC since 1983 � 80+ years of global expertise, Abu Dhabi roots.',
+      pills: ['1983 � Founded','Abu Dhabi HQ','500+ P&IDs Verified','Engineering Excellence','AI-First Approach'],
     },
   },
 }
@@ -376,7 +376,7 @@ const Home = () => {
         .pipeline-svg { animation: pipeFlow 3s ease forwards; stroke-dasharray: 600; stroke-dashoffset: 600; }
         .scan-line { animation: scanLine 3.5s linear infinite; }
 
-        /* ── AI Neural-Net (right panel) ── */
+        /* -- AI Neural-Net (right panel) -- */
         @keyframes hexRing  { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
         @keyframes innerRing{ from { transform: rotate(0deg); }   to { transform: rotate(-360deg); } }
         @keyframes aiNode   { 0%,100%{ opacity:.45; } 50%{ opacity:1; } }
@@ -394,7 +394,7 @@ const Home = () => {
           100% { transform: translateY(14px); opacity: 0; }
         }
 
-        /* ── Headline glitch ── */
+        /* -- Headline glitch -- */
         @keyframes glitchShiftA {
           0%,73%,100% { transform: translate(0); opacity: 0; clip-path: none; }
           75%  { transform: translate(-5px,1px);  opacity: .55; clip-path: inset(14% 0 66% 0); }
@@ -410,7 +410,7 @@ const Home = () => {
           81%  { transform: translate(0);         opacity: 0;   clip-path: none; }
         }
 
-        /* ── Scan beam across headline ── */
+        /* -- Scan beam across headline -- */
         @keyframes scanBeam {
           0%   { left: -55%; opacity: 0; }
           8%   { opacity: .9; }
@@ -418,7 +418,7 @@ const Home = () => {
           100% { left: 115%; opacity: 0; }
         }
 
-        /* ── Floating token chips ── */
+        /* -- Floating token chips -- */
         @keyframes tokenRise {
           0%   { transform: translateY(0) scale(1);    opacity: 0; }
           10%  { opacity: .65; }
@@ -426,19 +426,19 @@ const Home = () => {
           100% { transform: translateY(-130px) scale(.5); opacity: 0; }
         }
 
-        /* ── "Abu Dhabi" glow pulse ── */
+        /* -- "Abu Dhabi" glow pulse -- */
         @keyframes abGlow {
           0%,100% { opacity: 1; }
           50%     { opacity: .88; filter: drop-shadow(0 0 14px rgba(127,202,181,.7)); }
         }
 
-        /* ── AI layer progress bar fill ── */
+        /* -- AI layer progress bar fill -- */
         @keyframes barFill {
           from { width: 0%; opacity: 0; }
           to   { opacity: 1; }
         }
 
-        /* ── Floating quantum particles ── */
+        /* -- Floating quantum particles -- */
         @keyframes qDrift {
           0%   { transform: translate(0,0) scale(1);     opacity: 0; }
           15%  { opacity: .55; }
@@ -446,41 +446,41 @@ const Home = () => {
           100% { transform: translate(var(--qx),var(--qy)) scale(0.4); opacity: 0; }
         }
 
-        /* ── Radar-chart polygon stroke ── */
+        /* -- Radar-chart polygon stroke -- */
         @keyframes radarDraw {
           from { stroke-dashoffset: 1000; opacity: 0; }
           to   { stroke-dashoffset: 0;    opacity: 1; }
         }
 
-        /* ── Radar label pulse ── */
+        /* -- Radar label pulse -- */
         @keyframes axPulse {
           0%,100% { opacity: .6; }
           50%      { opacity: 1; }
         }
 
-        /* ── Processing status ticker ── */
+        /* -- Processing status ticker -- */
         @keyframes tickerSlide {
           0%   { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
 
-        /* ── Stack layer card enter ── */
+        /* -- Stack layer card enter -- */
         @keyframes layerEnter {
           from { opacity: 0; transform: translateX(-28px); }
           to   { opacity: 1; transform: translateX(0); }
         }
 
-        /* ── Central AI core pulse ── */
+        /* -- Central AI core pulse -- */
         @keyframes corePulse {
           0%,100% { box-shadow: 0 0 25px rgba(127,202,181,0.25), 0 0 60px rgba(42,167,132,0.1); }
           50%      { box-shadow: 0 0 55px rgba(127,202,181,0.55), 0 0 110px rgba(42,167,132,0.25); }
         }
 
-        /* ── Quantum ring rotation ── */
+        /* -- Quantum ring rotation -- */
         @keyframes qRing1 { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
         @keyframes qRing2 { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
         @keyframes qRing3 { from { transform: rotate(20deg);  } to { transform: rotate(380deg);  } }
-        /* ── CTA section ── */
+        /* -- CTA section -- */
         @keyframes ctaRingPulse {
           0%   { transform: scale(1);   opacity: 0.6; }
           100% { transform: scale(2.8); opacity: 0;   }
@@ -508,7 +508,7 @@ const Home = () => {
           0%   { background-position: 0 0; }
           100% { background-position: 40px 40px; }
         }
-        /* ── Stats section ── */
+        /* -- Stats section -- */
         @keyframes statCardIn {
           from { opacity:0; transform: translateY(32px) scale(0.95); }
           to   { opacity:1; transform: translateY(0)    scale(1);    }
@@ -531,7 +531,7 @@ const Home = () => {
           0%,100% { opacity:1;   }
           50%     { opacity:0.2; }
         }
-        /* ── WHY RADAI section ── */
+        /* -- WHY RADAI section -- */
         @keyframes featCardIn {
           from { opacity:0; transform: translateY(36px) scale(0.96); }
           to   { opacity:1; transform: translateY(0)    scale(1);    }
@@ -553,7 +553,7 @@ const Home = () => {
           0%,100% { box-shadow: 0 0 0 0 transparent; }
           50%     { box-shadow: 0 0 12px 2px var(--hc,#7FCAB5)44; }
         }
-        /* ── Abu Dhabi Market section ── */
+        /* -- Abu Dhabi Market section -- */
         @keyframes mktCardIn {
           from { opacity:0; transform: translateX(-24px); }
           to   { opacity:1; transform: translateX(0);     }
@@ -678,7 +678,7 @@ const Home = () => {
 
       {/* SVG pipeline decoration - right side */}
           <div className="absolute right-0 top-0 h-full w-1/2 pointer-events-none hidden lg:block">
-            {/* ── AI Neural Network visualisation ── */}
+            {/* -- AI Neural Network visualisation -- */}
             <svg viewBox="0 0 500 700" className="absolute right-0 top-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <radialGradient id="cGlow" cx="50%" cy="50%" r="50%">
@@ -702,7 +702,7 @@ const Home = () => {
                 strokeDasharray="3 5" opacity="0.08"
                 style={{transformBox:'fill-box',transformOrigin:'center',animation:'hexRing 14s linear infinite'}}/>
 
-              {/* Edges: center → each node */}
+              {/* Edges: center ? each node */}
               {[
                 ['M250,270 L390,270','#7FCAB5','0s'],
                 ['M250,270 L320,153','#0ea5e9','0.7s'],
@@ -833,7 +833,7 @@ const Home = () => {
                 <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#2AA784', animationDelay: '0.5s' }}/>
               </div>
 
-              {/* Main headline — glitch + scan beam + Abu Dhabi glow */}
+              {/* Main headline � glitch + scan beam + Abu Dhabi glow */}
               <div className="hero-animate-d1 relative">
                 {/* Scan beam sweeping across headline */}
                 <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
@@ -850,7 +850,7 @@ const Home = () => {
                   {/* "Engineering AI" with RGB glitch layers */}
                   <span className="block relative text-5xl sm:text-6xl md:text-7xl lg:text-8xl mb-2" style={{fontWeight:900}}>
                     <span className="gradient-text-animated">Engineering AI</span>
-                    {/* Glitch layer A — cyan offset */}
+                    {/* Glitch layer A � cyan offset */}
                     <span aria-hidden="true" style={{
                       position:'absolute', inset:0, display:'block', fontWeight:900,
                       background:'linear-gradient(90deg,#73BDC8,#7FCAB5,#0ea5e9)',
@@ -858,7 +858,7 @@ const Home = () => {
                       animation:'glitchShiftA 9s ease-in-out 1s infinite',
                       userSelect:'none', pointerEvents:'none',
                     }}>Engineering AI</span>
-                    {/* Glitch layer B — green offset */}
+                    {/* Glitch layer B � green offset */}
                     <span aria-hidden="true" style={{
                       position:'absolute', inset:0, display:'block', fontWeight:900,
                       background:'linear-gradient(90deg,#2AA784,#617AAD,#7FCAB5)',
@@ -919,7 +919,7 @@ const Home = () => {
                 {['ISO 27001','ADNOC Standards','API / ISA / ASME','IEC 61511','Abu Dhabi Based'].map(tag => (
                   <span key={tag} className="text-xs px-3 py-1.5 rounded-full font-semibold"
                     style={{ background: 'rgba(127,202,181,0.1)', border: '1px solid rgba(127,202,181,0.25)', color: '#7FCAB5' }}>
-                    ✓ {tag}
+                    ? {tag}
                   </span>
                 ))}
               </div>
@@ -1246,13 +1246,13 @@ const Home = () => {
         {/* AI CAPABILITIES */}
         <section className="py-20 lg:py-28 relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#0d1c2e,#1a2f45,#0d2a1e)' }}>
 
-          {/* ── Background: animated quantum-grid ── */}
+          {/* -- Background: animated quantum-grid -- */}
           <div className="absolute inset-0 opacity-[0.035]" style={{
             backgroundImage: 'linear-gradient(rgba(127,202,181,1) 1px, transparent 1px), linear-gradient(90deg,rgba(127,202,181,1) 1px,transparent 1px)',
             backgroundSize: '40px 40px',
           }}/>
 
-          {/* ── Floating quantum particles ── */}
+          {/* -- Floating quantum particles -- */}
           {[...Array(18)].map((_,i) => {
             const cols = ['#7FCAB5','#0ea5e9','#a78bfa','#f59e0b','#2AA784','#73BDC8']
             const qx = `${(Math.sin(i*1.7)*90).toFixed(0)}px`
@@ -1274,15 +1274,15 @@ const Home = () => {
             )
           })}
 
-          {/* ── Processing status ticker ── */}
+          {/* -- Processing status ticker -- */}
           <div className="absolute top-0 left-0 right-0 overflow-hidden h-7 z-20"
             style={{ background:'rgba(0,0,0,0.35)', borderBottom:'1px solid rgba(127,202,181,0.12)' }}>
             <div className="flex items-center gap-0 whitespace-nowrap text-[9px] font-mono h-full"
               style={{ animation:'tickerSlide 22s linear infinite' }}>
-              {[...Array(2)].flatMap(() =>
-                ['● LLM inference active','● SLM clause scan','● ML anomaly check','● Quantum constraint solve','● RAG retrieval','● Evidence linking','● P&ID pass complete','● Standards updated','● ADNOC GSP verified','● NLP extraction done']
+              {[...Array(2)].flatMap((_, groupIdx) =>
+                ['? LLM inference active','? SLM clause scan','? ML anomaly check','? Quantum constraint solve','? RAG retrieval','? Evidence linking','? P&ID pass complete','? Standards updated','? ADNOC GSP verified','? NLP extraction done']
                 .map((t,i) => (
-                  <span key={i} className="px-6" style={{ color: ['#7FCAB5','#0ea5e9','#a78bfa','#f59e0b','#2AA784','#73BDC8'][i%6] }}>{t}</span>
+                  <span key={`ticker-${groupIdx}-${i}`} className="px-6" style={{ color: ['#7FCAB5','#0ea5e9','#a78bfa','#f59e0b','#2AA784','#73BDC8'][i%6] }}>{t}</span>
                 ))
               )}
             </div>
@@ -1291,7 +1291,7 @@ const Home = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8">
             <div className="grid lg:grid-cols-2 gap-14 items-start">
 
-              {/* ── LEFT: label + headline + body + layer stack ── */}
+              {/* -- LEFT: label + headline + body + layer stack -- */}
               <RevealSection direction="left">
                 <span className="text-xs font-bold tracking-widest uppercase mb-3 block" style={{ color: '#7FCAB5' }}>
                   {LANDING_CONFIG.aiEngine.sectionLabel}
@@ -1345,7 +1345,7 @@ const Home = () => {
                 </div>
               </RevealSection>
 
-              {/* ── RIGHT: Radar chart + Quantum orb ── */}
+              {/* -- RIGHT: Radar chart + Quantum orb -- */}
               <RevealSection direction="right" className="flex flex-col items-center gap-8">
 
                 {/* Quantum orb */}
@@ -1444,7 +1444,7 @@ const Home = () => {
                           <line key={i} x1={CX} y1={CY} x2={p.x} y2={p.y}
                             stroke="rgba(127,202,181,0.18)" strokeWidth="0.8"/>
                         ))}
-                        {/* Value polygon — animated draw */}
+                        {/* Value polygon � animated draw */}
                         <polygon points={valPoly}
                           fill="rgba(127,202,181,0.1)"
                           stroke="#7FCAB5" strokeWidth="1.8"
@@ -1626,7 +1626,7 @@ const Home = () => {
                     style={{ borderColor:'rgba(127,202,181,0.08)', background:'rgba(0,0,0,0.25)' }}>
                     <span className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ background:'#10b981', animation:'statDotBlink 2s ease-in-out infinite' }}/>
-                    <span className="text-[10px] font-mono text-gray-400 tracking-widest">RADAI — LIVE AI ANALYSIS</span>
+                    <span className="text-[10px] font-mono text-gray-400 tracking-widest">RADAI � LIVE AI ANALYSIS</span>
                   </div>
 
                   <div className="p-6 flex flex-col gap-5 flex-1">
@@ -1667,7 +1667,7 @@ const Home = () => {
                     <div className="rounded-xl p-4 relative overflow-hidden mt-auto"
                       style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(127,202,181,0.08)' }}>
                       <div className="text-[9px] font-mono tracking-widest mb-3" style={{ color:'rgba(127,202,181,0.45)' }}>
-                        ACTIVE PROCESSING — P&amp;ID STREAM
+                        ACTIVE PROCESSING � P&amp;ID STREAM
                       </div>
                       <div className="flex items-center gap-1">
                         {LANDING_CONFIG.abuDhabiMarket.pipelineSteps.map((step, i) => (
@@ -1702,7 +1702,7 @@ const Home = () => {
                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                           style={{ background:'#7FCAB5', animation:'statDotBlink 1.5s ease-in-out infinite' }}/>
                         <span className="text-[9px] font-mono" style={{ color:'rgba(127,202,181,0.55)' }}>
-                          LLM pass 3/4 complete — 2 findings queued for review
+                          LLM pass 3/4 complete � 2 findings queued for review
                         </span>
                       </div>
                     </div>
@@ -1962,7 +1962,7 @@ const Home = () => {
             {/* Bottom bar */}
             <div className="border-t border-gray-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
               <p className="text-gray-500 text-xs text-center md:text-left">
-                {FOOTER_CONFIG.bottomBar?.copyright || `© ${new Date().getFullYear()} Rejlers Engineering Solutions. All rights reserved.`}
+                {FOOTER_CONFIG.bottomBar?.copyright || `� ${new Date().getFullYear()} Rejlers Engineering Solutions. All rights reserved.`}
               </p>
               <div className="flex flex-wrap gap-4">
                 {(FOOTER_CONFIG.bottomBar?.links || []).map((link, i) => (

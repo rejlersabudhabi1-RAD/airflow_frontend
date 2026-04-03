@@ -103,6 +103,7 @@ import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/Electric
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
 import UnifiedElectricalQualityChecker from './pages/Engineering/Electrical/UnifiedElectricalQualityChecker'
+import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartElectricalDatasheetPage'
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
@@ -887,6 +888,15 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="electrical_datasheet">
               <ElectricalDocumentsHub />
+            </ModuleProtectedRoute>
+          }
+        />
+        {/* Smart Electrical Datasheet Generator - 6 Equipment Types (Transformer, DG Set, MV/LV Switchgear, AC/DC UPS) */}
+        <Route
+          path="engineering/electrical/datasheet/smart-generator"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <SmartElectricalDatasheetPage />
             </ModuleProtectedRoute>
           }
         />

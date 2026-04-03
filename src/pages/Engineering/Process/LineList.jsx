@@ -408,6 +408,7 @@ const LineList = () => {
             </div>
           </div>
         </div>
+
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">1. Upload P&ID Document</h2>
