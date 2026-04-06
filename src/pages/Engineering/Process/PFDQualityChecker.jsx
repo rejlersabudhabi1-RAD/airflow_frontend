@@ -11,58 +11,227 @@ import {
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Animation keyframes — identical pattern to PIDVerification for visual parity
+// Animation keyframes — PFD Quality Checker signature animations
+// Reference: P&ID Verification animation style, extended with PFD-specific
+// process-flow, data-stream, pipe-flow, circuit-trace & scan-beam effects.
+// SOFT-CODED: edit durations/distances here; no JSX changes needed.
 // ─────────────────────────────────────────────────────────────────────────────
 const KEYFRAMES = `
+  /* ── Ambient background floats ── */
   @keyframes floatA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.06)} }
   @keyframes floatB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-35px,25px) scale(1.04)} }
   @keyframes floatC { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,35px) scale(1.05)} }
-  @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── Entry & transition ── */
+  @keyframes fadeUp    { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+  @keyframes cardIn    { from{opacity:0;transform:translateY(10px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes panelSlide{ from{opacity:0;transform:translateX(-14px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes railIn    { from{opacity:0;transform:translateX(-24px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes slideRight{ from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+  /* ── Gradient bar & shimmer ── */
   @keyframes gradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+  @keyframes shimmer   { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+  /* ── Loader stages ── */
   @keyframes factSlide { 0%{opacity:0;transform:translateY(8px)} 15%,85%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-8px)} }
-  @keyframes checkPop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
-  @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  @keyframes panelSlide { from{opacity:0;transform:translateX(-14px)} to{opacity:1;transform:translateX(0)} }
-  @keyframes railIn { from{opacity:0;transform:translateX(-24px)} to{opacity:1;transform:translateX(0)} }
-  @keyframes orbitA { 0%{transform:rotate(0deg) translateX(52px) rotate(0deg)} 100%{transform:rotate(360deg) translateX(52px) rotate(-360deg)} }
-  @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg) translateX(52px) rotate(-480deg)} }
-  @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg) translateX(52px) rotate(-600deg)} }
+  @keyframes checkPop  { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+  @keyframes pulse2    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Orbit electrons (AI brain loader) ── */
+  @keyframes orbitA { 0%{transform:rotate(0deg)   translateX(52px) rotate(0deg)}   100%{transform:rotate(360deg)  translateX(52px) rotate(-360deg)} }
+  @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg)  translateX(52px) rotate(-480deg)} }
+  @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg)  translateX(52px) rotate(-600deg)} }
+
+  /* ── PFD-specific: scan beam sweeps top→bottom over the drawing placeholder ── */
+  @keyframes scanBeam {
+    0%   { top:-4px; opacity:0; }
+    5%   { opacity:1; }
+    95%  { opacity:0.85; }
+    100% { top:100%; opacity:0; }
+  }
+
+  /* ── PFD-specific: circuit trace along upload-zone border ── */
+  @keyframes traceH {
+    0%   { width:0%;  left:0%;   opacity:0; }
+    10%  { opacity:1; }
+    45%  { width:100%; left:0%;  opacity:1; }
+    55%  { width:0%;  left:100%; opacity:0; }
+    100% { width:0%;  left:0%;   opacity:0; }
+  }
+  @keyframes traceV {
+    0%   { height:0%;  top:0%;   opacity:0; }
+    10%  { opacity:1; }
+    45%  { height:100%; top:0%;  opacity:1; }
+    55%  { height:0%;  top:100%; opacity:0; }
+    100% { height:0%;  top:0%;   opacity:0; }
+  }
+
+  /* ── PFD-specific: data-stream dots flowing left→right through pipe ── */
+  @keyframes streamDot {
+    0%   { transform:translateX(-12px); opacity:0; }
+    15%  { opacity:1; }
+    85%  { opacity:1; }
+    100% { transform:translateX(calc(100% + 12px)); opacity:0; }
+  }
+
+  /* ── PFD-specific: pipe flow dash animation on SVG ── */
+  @keyframes pipeFlow {
+    0%   { stroke-dashoffset: 120; }
+    100% { stroke-dashoffset: 0;   }
+  }
+
+  /* ── PFD-specific: node glow pulse for project cards ── */
+  @keyframes nodeGlow {
+    0%,100% { box-shadow: 0 0 0 0 rgba(13,148,136,0); transform:scale(1); }
+    50%     { box-shadow: 0 0 18px 4px rgba(13,148,136,0.35); transform:scale(1.04); }
+  }
+
+  /* ── PFD-specific: progress bar fill wave ── */
+  @keyframes barWave {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  /* ── PFD-specific: stat counter roll-up ── */
+  @keyframes countUp {
+    from { transform: translateY(8px); opacity:0; }
+    to   { transform: translateY(0);   opacity:1; }
+  }
+
+  /* ── PFD-specific: tag badge pop-in for capability chips ── */
+  @keyframes chipPop {
+    0%   { transform:scale(0.7) translateY(6px); opacity:0; }
+    70%  { transform:scale(1.08) translateY(-1px); }
+    100% { transform:scale(1) translateY(0); opacity:1; }
+  }
+
+  /* ── PFD-specific: rotating rule-ring on hero ── */
+  @keyframes spinSlow   { from{transform:rotate(0deg)}   to{transform:rotate(360deg)}  }
+  @keyframes spinSlowRev{ from{transform:rotate(0deg)}   to{transform:rotate(-360deg)} }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Theme constants — teal/cyan palette (mirrors PIDVerification structure)
+// Theme constants — teal/cyan palette with deep-ocean accent
+// SOFT-CODED: all visual values live here; JSX references T.xxx only.
 // ─────────────────────────────────────────────────────────────────────────────
 const T = {
-  bg:    'linear-gradient(135deg, #f0fdfa 0%, #ecfeff 45%, #f0f9ff 75%, #f0fdfa 100%)',
+  // Page background — subtle deep-sea gradient
+  bg: 'linear-gradient(145deg, #f0fdfa 0%, #ecfeff 30%, #f0f9ff 65%, #f0fdfa 100%)',
+
+  // Ambient blob colours & positions
   blobs: [
-    { color:'rgba(20,184,166,0.09)',  size:'520px', top:'-80px',    left:'18%',    anim:'floatA 14s ease-in-out infinite'    },
-    { color:'rgba(6,182,212,0.07)',   size:'430px', top:'28%',      right:'-60px', anim:'floatB 17s ease-in-out infinite'    },
-    { color:'rgba(16,185,129,0.07)',  size:'380px', bottom:'-60px', left:'32%',    anim:'floatC 12s ease-in-out infinite'    },
-    { color:'rgba(14,165,233,0.06)',  size:'300px', top:'62%',      left:'-40px',  anim:'floatA 10s ease-in-out infinite 3s' },
+    { color:'rgba(20,184,166,0.10)',  size:'580px', top:'-100px',   left:'15%',    anim:'floatA 14s ease-in-out infinite'    },
+    { color:'rgba(6,182,212,0.08)',   size:'460px', top:'25%',      right:'-80px', anim:'floatB 17s ease-in-out infinite'    },
+    { color:'rgba(16,185,129,0.08)',  size:'400px', bottom:'-80px', left:'30%',    anim:'floatC 12s ease-in-out infinite'    },
+    { color:'rgba(14,165,233,0.07)',  size:'320px', top:'60%',      left:'-60px',  anim:'floatA 10s ease-in-out infinite 3s' },
+    { color:'rgba(20,184,166,0.05)',  size:'260px', top:'40%',      right:'20%',   anim:'floatB  9s ease-in-out infinite 2s' },
   ],
-  card:  { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06),0 4px 12px rgba(0,0,0,0.04)' },
-  cardH: { boxShadow:'0 10px 30px rgba(0,0,0,0.10),0 2px 8px rgba(0,0,0,0.05)', borderColor:'#5eead4' },
-  panel: { background:'rgba(255,255,255,0.85)', border:'1px solid #d1fae5', backdropFilter:'blur(12px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' },
-  modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' },
+
+  // Card & panel surfaces
+  card:  { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)' },
+  cardH: { boxShadow:'0 12px 40px rgba(13,148,136,0.14),0 2px 8px rgba(0,0,0,0.05)', borderColor:'#5eead4', transform:'translateY(-2px)' },
+  panel: { background:'rgba(255,255,255,0.90)', border:'1px solid #ccfbf1', backdropFilter:'blur(16px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' },
+  modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 24px 70px rgba(0,0,0,0.16)' },
   input: { background:'#f8fafc', border:'1px solid #e2e8f0' },
+
+  // Accent colours
   accent:       'linear-gradient(135deg,#0d9488,#0891b2)',
+  accentDeep:   'linear-gradient(135deg,#0f766e,#0e7490)',
   accentHex:    '#0d9488',
-  accentShadow: '0 4px 14px rgba(8,145,178,0.35)',
-  gradBar:      'linear-gradient(90deg,#14b8a6,#0891b2,#10b981,#14b8a6)',
+  accentShadow: '0 4px 18px rgba(8,145,178,0.38)',
+  accentShadowLg:'0 8px 28px rgba(8,145,178,0.42)',
+
+  // Top gradient bar (animated)
+  gradBar: 'linear-gradient(90deg,#14b8a6,#0891b2,#06b6d4,#10b981,#14b8a6)',
+
+  // Grid dot overlay
+  gridDot: 'radial-gradient(circle, rgba(20,184,166,0.07) 1px, transparent 1px)',
+
+  // Scan beam sweep colour
+  scanBeam: 'linear-gradient(180deg,transparent,rgba(20,184,166,0.18),rgba(6,182,212,0.22),rgba(20,184,166,0.18),transparent)',
+
+  // Circuit trace colour
+  trace: 'rgba(20,184,166,0.6)',
+
+  // Stream dot colours for the pipe‑flow illustration
+  streamColors: ['#14b8a6','#0891b2','#06b6d4','#10b981'],
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DarkBg — full-page animated background
+// Contains: grid dots, ambient blobs, gradient top-bar, animated SVG pipe-flow
+// ribbon, and three data-stream tokens sweeping across a pipe illustration.
+// SOFT-CODED: all visual values come from T; JSX structure is stable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Soft-coded stream dot positions and delays for background pipe decoration
+const STREAM_DOTS = [
+  { top:'23%', delay:'0s',    dur:'3.2s', color:'#14b8a6' },
+  { top:'23%', delay:'1.1s',  dur:'3.2s', color:'#0891b2' },
+  { top:'23%', delay:'2.2s',  dur:'3.2s', color:'#06b6d4' },
+  { top:'67%', delay:'0.4s',  dur:'2.8s', color:'#10b981' },
+  { top:'67%', delay:'1.6s',  dur:'2.8s', color:'#14b8a6' },
+  { top:'67%', delay:'2.4s',  dur:'2.8s', color:'#0891b2' },
+];
 
 const DarkBg = ({ children }) => (
   <div className="min-h-screen relative overflow-hidden" style={{ background: T.bg }}>
     <style>{KEYFRAMES}</style>
+
+    {/* Fine dot grid */}
     <div className="absolute inset-0 pointer-events-none"
-      style={{ backgroundImage:'radial-gradient(circle, rgba(20,184,166,0.055) 1px, transparent 1px)', backgroundSize:'40px 40px' }} />
+      style={{ backgroundImage: T.gridDot, backgroundSize:'44px 44px' }} />
+
+    {/* Ambient gradient blobs */}
     {T.blobs.map((b, i) => (
       <div key={i} className="absolute rounded-full pointer-events-none"
         style={{ width:b.size, height:b.size, top:b.top, bottom:b.bottom, left:b.left, right:b.right,
           background:`radial-gradient(circle, ${b.color} 0%, transparent 70%)`, animation:b.anim }} />
     ))}
-    <div className="absolute inset-x-0 top-0 h-1 pointer-events-none"
-      style={{ background:T.gradBar, backgroundSize:'200% auto', animation:'gradShift 4s linear infinite' }} />
+
+    {/* ── Animated SVG pipe-flow ribbon (decorative, right-side) ── */}
+    <div className="absolute right-0 top-0 bottom-0 w-64 pointer-events-none overflow-hidden opacity-30 hidden xl:block">
+      <svg width="256" height="100%" viewBox="0 0 256 800" preserveAspectRatio="none"
+        fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Horizontal pipe at 23% */}
+        <line x1="0" y1="184" x2="256" y2="184" stroke="#14b8a6" strokeWidth="2.5"
+          strokeDasharray="12 8" style={{ animation:'pipeFlow 2.4s linear infinite' }} />
+        {/* Horizontal pipe at 67% */}
+        <line x1="0" y1="536" x2="256" y2="536" stroke="#0891b2" strokeWidth="2.5"
+          strokeDasharray="12 8" style={{ animation:'pipeFlow 2.8s linear infinite 0.4s' }} />
+        {/* Vertical connector */}
+        <line x1="128" y1="184" x2="128" y2="536" stroke="#06b6d4" strokeWidth="1.5"
+          strokeDasharray="8 10" style={{ animation:'pipeFlow 3.2s linear infinite 0.8s' }} />
+        {/* Equipment boxes */}
+        <rect x="44"  y="162" width="40" height="44" rx="5" fill="rgba(20,184,166,0.14)" stroke="#14b8a6" strokeWidth="1.5"/>
+        <rect x="172" y="162" width="40" height="44" rx="5" fill="rgba(8,145,178,0.12)"  stroke="#0891b2" strokeWidth="1.5"/>
+        <rect x="108" y="514" width="40" height="44" rx="5" fill="rgba(6,182,212,0.12)"  stroke="#06b6d4" strokeWidth="1.5"/>
+        {/* Stream number labels */}
+        <text x="58"  y="190" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">E-101</text>
+        <text x="184" y="190" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">V-201</text>
+        <text x="118" y="542" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">P-301</text>
+        {/* Stream numbers */}
+        <text x="6"   y="178" fill="#0891b2" fontSize="8" fontFamily="monospace" opacity="0.7">S-01</text>
+        <text x="6"   y="530" fill="#0891b2" fontSize="8" fontFamily="monospace" opacity="0.7">S-03</text>
+      </svg>
+      {/* Flowing data dots on pipe lines */}
+      {STREAM_DOTS.map((d, i) => (
+        <div key={i} className="absolute w-2 h-2 rounded-full pointer-events-none"
+          style={{
+            top: d.top, left:0,
+            background: d.color,
+            boxShadow: `0 0 6px ${d.color}`,
+            animation: `streamDot ${d.dur} linear infinite ${d.delay}`,
+          }} />
+      ))}
+    </div>
+
+    {/* Top gradient bar */}
+    <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
+      style={{ background:T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
+
     <div className="relative z-10">{children}</div>
   </div>
 );
@@ -116,6 +285,22 @@ const CATEGORY_LABELS = {
 // Soft-coded: categories hidden from the findings table
 const HIDDEN_CATEGORIES = new Set([]);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: VIEW 1 hero capability badges
+// Extend this array to add new capability chips — no JSX changes needed.
+// ─────────────────────────────────────────────────────────────────────────────
+const HERO_BADGES = [
+  { icon:'🔧', label:'Equipment Tagging',  cls:'bg-teal-50 border-teal-200 text-teal-700'          },
+  { icon:'🌊', label:'Stream Numbers',      cls:'bg-cyan-50 border-cyan-200 text-cyan-700'          },
+  { icon:'📋', label:'Title Block',         cls:'bg-sky-50 border-sky-200 text-sky-700'             },
+  { icon:'🛡️', label:'Safety Devices',     cls:'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  { icon:'⚙️', label:'Control Elements',   cls:'bg-teal-50 border-teal-200 text-teal-700'          },
+  { icon:'📌', label:'ISO 10628',           cls:'bg-indigo-50 border-indigo-200 text-indigo-700'    },
+];
+
+// Tick-mark angles for the animated rule-ring decoration (12 rules → 30° apart)
+const RULE_RING_TICKS = Array.from({ length: 12 }, (_, i) => i * 30);
+
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -152,7 +337,8 @@ const PFD_FACTS = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AnalysisLoader — shown while backend processes the PFD
-// Mirrors PIDVerification's AnalysisLoader for visual parity
+// Design: scan beam + circular stage-dial + shimmer progress bar + fact card
+// SOFT-CODED: stage list comes from PFD_STAGES; facts from PFD_FACTS.
 // ─────────────────────────────────────────────────────────────────────────────
 const AnalysisLoader = ({ elapsedSec, fileName }) => {
   const [factIdx, setFactIdx] = React.useState(0);
@@ -167,88 +353,169 @@ const AnalysisLoader = ({ elapsedSec, fileName }) => {
   }, []);
 
   const completedStages = PFD_STAGES.filter(s => elapsedSec * 1000 >= s.durationMs);
-  const activeIdx = Math.min(completedStages.length, PFD_STAGES.length - 1);
+  const activeIdx       = Math.min(completedStages.length, PFD_STAGES.length - 1);
+  const progressPct     = Math.min(98, Math.round((completedStages.length / PFD_STAGES.length) * 100) + 2);
   const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
   const secs = String(elapsedSec % 60).padStart(2, '0');
 
   return (
-    <div className="mt-5 rounded-2xl overflow-hidden border border-teal-200"
-      style={{ background:'linear-gradient(135deg,#f0fdfa 0%,#ecfeff 50%,#f0f9ff 100%)', animation:'fadeUp 0.4s ease-out both' }}>
+    <div className="mt-5 rounded-2xl overflow-hidden"
+      style={{ border:'1px solid #99f6e4', background:'linear-gradient(145deg,#f0fdfa,#ecfeff 50%,#f0f9ff)', animation:'fadeUp 0.45s ease-out both' }}>
 
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 flex-wrap border-b border-teal-100/60">
-        <div className="flex items-center gap-2">
-          <CircleDot className="w-4 h-4 text-teal-500" style={{ animation:'pulse2 1.4s ease-in-out infinite' }} />
-          <span className="text-sm font-bold text-slate-800">Analysing PFD drawing…</span>
-          {fileName && <span className="text-xs text-slate-400 truncate max-w-[180px]">{fileName}</span>}
+      {/* ── Header bar ── */}
+      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ borderBottom:'1px solid rgba(153,246,228,0.5)' }}>
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-5 h-5">
+            <div className="absolute inset-0 rounded-full border-2 border-teal-200" />
+            <div className="absolute inset-0 rounded-full border-2 border-teal-500 border-t-transparent"
+              style={{ animation:'spinSlow 1s linear infinite' }} />
+          </div>
+          <span className="text-sm font-bold text-slate-800">Analysing PFD Drawing</span>
+          {fileName && (
+            <span className="hidden sm:inline text-xs text-slate-400 truncate max-w-[200px] font-mono">· {fileName}</span>
+          )}
         </div>
-        <div className="flex items-center gap-1.5 bg-white/70 border border-teal-200 rounded-xl px-3 py-1.5 font-mono tabular-nums">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono tabular-nums"
+          style={{ background:'rgba(255,255,255,0.8)', border:'1px solid #99f6e4' }}>
           <Clock className="w-3.5 h-3.5 text-teal-500" />
           <span className="text-sm font-bold text-teal-700">{mins}:{secs}</span>
         </div>
       </div>
 
-      <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="flex flex-col items-center justify-center gap-4">
-          <div className="relative w-32 h-32 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center z-10"
-              style={{ background:'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 0 24px rgba(13,148,136,0.45)' }}>
-              <Cpu className="w-7 h-7 text-white" />
-            </div>
+      <div className="px-5 py-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* ── LEFT: scan-beam illustration + progress ── */}
+        <div className="flex flex-col items-center gap-4">
+
+          {/* Scan-beam box — mimics a drawing being scanned */}
+          <div className="relative w-full rounded-xl overflow-hidden flex items-center justify-center"
+            style={{ background:'rgba(255,255,255,0.6)', border:'1px solid #99f6e4',
+                     height:'140px', boxShadow:'inset 0 2px 8px rgba(13,148,136,0.06)' }}>
+
+            {/* Faint PFD grid lines */}
+            <div className="absolute inset-0 pointer-events-none opacity-20"
+              style={{ backgroundImage:'linear-gradient(rgba(13,148,136,0.4) 1px,transparent 1px),linear-gradient(90deg,rgba(13,148,136,0.4) 1px,transparent 1px)',
+                       backgroundSize:'28px 28px' }} />
+
+            {/* Tiny equipment boxes decoration */}
             {[
-              { color:'#14b8a6', anim:'orbitA 2.4s linear infinite' },
-              { color:'#0891b2', anim:'orbitB 2.4s linear infinite' },
-              { color:'#10b981', anim:'orbitC 2.4s linear infinite' },
-            ].map((o, i) => (
-              <span key={i} className="absolute w-3 h-3 rounded-full"
-                style={{ background:o.color, animation:o.anim, boxShadow:`0 0 8px ${o.color}`,
-                  top:'50%', left:'50%', marginTop:'-6px', marginLeft:'-6px' }} />
+              { left:'12%', top:'28%', w:32, h:22, label:'V-101' },
+              { left:'42%', top:'18%', w:28, h:22, label:'E-201' },
+              { left:'68%', top:'32%', w:30, h:22, label:'P-301' },
+            ].map((b, i) => (
+              <div key={i} className="absolute rounded flex items-center justify-center"
+                style={{ left:b.left, top:b.top, width:b.w, height:b.h,
+                         background:'rgba(13,148,136,0.08)', border:'1px solid rgba(13,148,136,0.3)' }}>
+                <span style={{ fontSize:7, color:'#0d9488', fontFamily:'monospace', fontWeight:700 }}>{b.label}</span>
+              </div>
+            ))}
+
+            {/* AI brain orb */}
+            <div className="relative w-14 h-14 z-10">
+              <div className="absolute inset-0 rounded-full flex items-center justify-center"
+                style={{ background:'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 0 28px rgba(13,148,136,0.5)' }}>
+                <Cpu className="w-6 h-6 text-white" />
+              </div>
+              {[
+                { color:'#14b8a6', anim:'orbitA 2.2s linear infinite' },
+                { color:'#0891b2', anim:'orbitB 2.2s linear infinite' },
+                { color:'#10b981', anim:'orbitC 2.2s linear infinite' },
+              ].map((o, i) => (
+                <span key={i} className="absolute w-2.5 h-2.5 rounded-full"
+                  style={{ background:o.color, animation:o.anim, boxShadow:`0 0 6px ${o.color}`,
+                    top:'50%', left:'50%', marginTop:'-5px', marginLeft:'-5px' }} />
+              ))}
+            </div>
+
+            {/* Scan beam sweeping downward */}
+            <div className="absolute left-0 right-0 h-[3px] pointer-events-none"
+              style={{ background:T.scanBeam, animation:'scanBeam 2.2s ease-in-out infinite', zIndex:20 }} />
+
+            {/* Corner brackets */}
+            {[
+              'top-2 left-2   border-t-2 border-l-2',
+              'top-2 right-2  border-t-2 border-r-2',
+              'bottom-2 left-2  border-b-2 border-l-2',
+              'bottom-2 right-2 border-b-2 border-r-2',
+            ].map((cls, i) => (
+              <div key={i} className={`absolute w-5 h-5 pointer-events-none ${cls}`}
+                style={{ borderColor:'rgba(13,148,136,0.5)', borderRadius:2 }} />
             ))}
           </div>
-          <div className="w-full relative h-2 bg-white/60 rounded-full overflow-hidden border border-teal-100">
-            <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-[2500ms] ease-out"
-              style={{
-                width:`${Math.min(98, (completedStages.length / PFD_STAGES.length) * 100 + 4)}%`,
-                background:'linear-gradient(90deg,#0d9488,#0891b2,#06b6d4)',
-                boxShadow:'0 0 8px rgba(13,148,136,0.5)',
-              }} />
+
+          {/* Progress bar with shimmer wave */}
+          <div className="w-full">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-slate-600">
+                {PFD_STAGES[activeIdx]?.label || 'Processing…'}
+              </span>
+              <span className="text-xs font-bold text-teal-600 tabular-nums">{progressPct}%</span>
+            </div>
+            <div className="relative w-full h-3 rounded-full overflow-hidden"
+              style={{ background:'rgba(255,255,255,0.7)', border:'1px solid #99f6e4' }}>
+              <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-[2000ms] ease-out overflow-hidden"
+                style={{
+                  width:`${progressPct}%`,
+                  background:'linear-gradient(90deg,#0d9488,#0891b2,#06b6d4)',
+                  boxShadow:'0 0 10px rgba(13,148,136,0.5)',
+                }}>
+                {/* Shimmer wave overlay */}
+                <div className="absolute inset-0"
+                  style={{
+                    background:'linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.5) 50%,transparent 100%)',
+                    backgroundSize:'200% 100%',
+                    animation:'barWave 1.8s linear infinite',
+                  }} />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 text-right">
+              {completedStages.length} / {PFD_STAGES.length} stages complete
+            </p>
           </div>
-          <p className="text-xs text-slate-500 text-center">
-            {completedStages.length} of {PFD_STAGES.length} stages complete
-          </p>
         </div>
 
-        <div className="space-y-1.5">
+        {/* ── RIGHT: stage checklist ── */}
+        <div className="space-y-1">
           {PFD_STAGES.map((stage, i) => {
             const done    = elapsedSec * 1000 >= stage.durationMs;
             const running = i === activeIdx && !done;
             const Icon    = stage.icon;
             return (
               <div key={stage.id}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-500 ${
-                  done    ? 'bg-emerald-50/80 border border-emerald-200/60'
-                  : running ? 'bg-teal-50 border border-teal-300/60'
-                  :           'bg-white/40 border border-transparent'
-                }`}>
-                {done    ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" style={{ animation:'checkPop 0.35s ease-out both' }} />
-                : running ? <Loader className="w-4 h-4 text-teal-500 flex-shrink-0 animate-spin" />
-                :           <Icon className="w-4 h-4 text-slate-300 flex-shrink-0" />}
-                <span className={`text-xs font-medium ${done ? 'text-emerald-700' : running ? 'text-teal-700' : 'text-slate-400'}`}>
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-500"
+                style={
+                  done    ? { background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)'  }
+                : running ? { background:'rgba(13,148,136,0.09)', border:'1px solid rgba(13,148,136,0.3)', boxShadow:'0 0 10px rgba(13,148,136,0.1)' }
+                :           { background:'transparent',           border:'1px solid transparent' }
+                }>
+                {done
+                  ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" style={{ animation:'checkPop 0.35s ease-out both' }} />
+                  : running
+                    ? <Loader className="w-4 h-4 text-teal-500 flex-shrink-0 animate-spin" />
+                    : <Icon className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                <span className={`text-xs font-medium flex-1 ${done ? 'text-emerald-700' : running ? 'text-teal-700 font-semibold' : 'text-slate-400'}`}>
                   {stage.label}
                 </span>
-                {done    && <span className="ml-auto text-[10px] text-emerald-500 font-semibold">✓</span>}
-                {running && <span className="ml-auto text-[10px] text-teal-400 font-semibold" style={{ animation:'pulse2 1s ease-in-out infinite' }}>running</span>}
+                {done    && <span className="text-[10px] text-emerald-500 font-bold">✓</span>}
+                {running && (
+                  <span className="text-[10px] text-teal-500 font-bold tabular-nums"
+                    style={{ animation:'pulse2 1s ease-in-out infinite' }}>running</span>
+                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="px-5 pb-4">
-        <div className="bg-white/60 border border-teal-100 rounded-xl px-4 py-3 min-h-[52px] flex items-start gap-2.5">
+      {/* ── Fact card ── */}
+      <div className="px-5 pb-5">
+        <div className="rounded-xl px-4 py-3 min-h-[52px] flex items-start gap-2.5"
+          style={{ background:'rgba(255,255,255,0.65)', border:'1px solid #99f6e4' }}>
           <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
           <p key={factKey} className="text-xs text-slate-600 leading-relaxed"
             style={{ animation:'factSlide 5s ease-in-out forwards' }}>
-            <span className="font-semibold text-amber-600">Did you know? </span>
+            <span className="font-bold text-amber-600">Did you know? </span>
             {PFD_FACTS[factIdx]}
           </p>
         </div>
@@ -719,41 +986,78 @@ const PFDQualityChecker = () => {
       <DarkBg>
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-          <div className="mb-10" style={{ animation:'fadeUp 0.6s ease-out both' }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-1 h-7 rounded-full" style={{ background:'linear-gradient(180deg,#0d9488,#0891b2)' }} />
-              <span className="text-teal-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
-              PFD Quality
-              <span className="block" style={{ background:'linear-gradient(90deg,#0d9488,#0891b2)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-                Rule Engine
-              </span>
-            </h1>
-            <p className="text-slate-500 max-w-xl text-sm sm:text-base">
-              Deterministic 12-rule PFD quality checks — equipment tags, stream numbers, title block, safety devices &amp; more.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-4">
-              {[
-                { icon:'🔧', label:'Equipment Tagging', cls:'bg-teal-50 border-teal-200 text-teal-700'           },
-                { icon:'🌊', label:'Stream Numbers',     cls:'bg-cyan-50 border-cyan-200 text-cyan-700'           },
-                { icon:'📋', label:'Title Block',        cls:'bg-sky-50 border-sky-200 text-sky-700'              },
-                { icon:'🛡️', label:'Safety Devices',    cls:'bg-emerald-50 border-emerald-200 text-emerald-700'  },
-                { icon:'⚙️', label:'Control Elements',  cls:'bg-teal-50 border-teal-200 text-teal-700'           },
-              ].map(b => (
-                <span key={b.label} className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}>
-                  <span>{b.icon}</span>{b.label}
+          {/* ── VIEW 1 hero ── */}
+          <div className="mb-10 flex flex-col lg:flex-row lg:items-center gap-8" style={{ animation:'fadeUp 0.6s ease-out both' }}>
+
+            {/* Left: text + badges */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-7 rounded-full" style={{ background:'linear-gradient(180deg,#0d9488,#0891b2)' }} />
+                <span className="text-teal-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
+              </div>
+              <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
+                PFD Quality
+                <span className="block" style={{ background:'linear-gradient(90deg,#0d9488,#0891b2)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                  Rule Engine
                 </span>
-              ))}
+              </h1>
+              <p className="text-slate-500 max-w-xl text-sm sm:text-base mb-4">
+                Deterministic 12-rule PFD quality checks — equipment tags, stream numbers, title block, safety devices &amp; more.
+              </p>
+
+              {/* ── Animated capability badges (chipPop stagger) ── */}
+              <div className="flex flex-wrap gap-2">
+                {HERO_BADGES.map((b, i) => (
+                  <span key={b.label}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}
+                    style={{ animation:`chipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both`, animationDelay:`${0.08 + i * 0.07}s` }}>
+                    <span>{b.icon}</span>{b.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* ── Cross-tool link ── */}
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
+                style={{ animation:'chipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' }}>
+                <Activity className="w-3.5 h-3.5" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
+                Cross-linked with
+                <a href="/engineering/process/pid-verification"
+                  className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
+                  P&amp;ID Verification <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
-            {/* Interconnect CTA */}
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold">
-              <Activity className="w-3.5 h-3.5" />
-              Cross-linked with
-              <a href="/engineering/process/pid-verification"
-                className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
-                P&amp;ID Verification <ExternalLink className="w-3 h-3" />
-              </a>
+
+            {/* Right: animated rule-ring SVG decoration */}
+            <div className="flex-none hidden lg:flex items-center justify-center w-44 h-44 relative">
+              {/* Outer ring — slow CW */}
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation:'spinSlow 22s linear infinite' }}>
+                <circle cx="88" cy="88" r="80" fill="none" stroke="rgba(20,184,166,0.18)" strokeWidth="1.5" strokeDasharray="4 6" />
+                {RULE_RING_TICKS.map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 80 * Math.cos(rad), y1 = 88 + 80 * Math.sin(rad);
+                  const x2 = 88 + 72 * Math.cos(rad), y2 = 88 + 72 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0d9488" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              {/* Inner ring — slow CCW */}
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation:'spinSlowRev 16s linear infinite' }}>
+                <circle cx="88" cy="88" r="58" fill="none" stroke="rgba(8,145,178,0.20)" strokeWidth="1.5" strokeDasharray="3 9" />
+                {RULE_RING_TICKS.filter((_, j) => j % 3 === 0).map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 58 * Math.cos(rad), y1 = 88 + 58 * Math.sin(rad);
+                  const x2 = 88 + 50 * Math.cos(rad), y2 = 88 + 50 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              {/* Centre badge */}
+              <div className="relative z-10 w-20 h-20 rounded-2xl flex flex-col items-center justify-center"
+                style={{ background: T.accent, boxShadow: T.accentShadowLg }}>
+                <span className="text-2xl font-black text-white leading-none" style={{ animation:'countUp 0.6s ease-out 0.4s both' }}>12</span>
+                <span className="text-[10px] font-semibold text-teal-100 tracking-wider uppercase mt-0.5">Rules</span>
+              </div>
             </div>
           </div>
 
@@ -798,17 +1102,25 @@ const PFDQualityChecker = () => {
               {projects.map((p, idx) => (
                 <div key={p.project_id} onClick={() => handleSelectProject(p)}
                   className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 overflow-hidden"
-                  style={{ ...T.card, animation:`fadeUp 0.5s ease-out ${idx * 0.07}s both` }}
+                  style={{ ...T.card, animation:`cardIn 0.55s ease-out ${0.05 + idx * 0.07}s both` }}
                   onMouseEnter={e => Object.assign(e.currentTarget.style, T.cardH)}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = T.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
-                  <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    style={{ background: T.accent }} />
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = T.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = ''; }}>
+
+                  {/* Animated accent bar — slides in on hover via CSS transition */}
+                  <div className="absolute top-0 left-0 right-0 rounded-t-2xl overflow-hidden h-[3px]">
+                    <div className="h-full w-0 group-hover:w-full transition-all duration-500 ease-out rounded-t-2xl"
+                      style={{ background: T.accent }} />
+                  </div>
+
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-11 h-11 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                    {/* nodeGlow icon — pulses gently on hover */}
+                    <div className="w-11 h-11 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center transition-colors group-hover:bg-teal-100"
+                      style={{ animation:'nodeGlow 3s ease-in-out infinite' }}>
                       <Layers className="w-5 h-5 text-teal-600" />
                     </div>
                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-teal-500 group-hover:translate-x-1 transition-all duration-300" />
                   </div>
+
                   <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors line-clamp-1">{p.project_name}</h3>
                   {p.description && <p className="text-xs text-slate-400 line-clamp-2 mb-4">{p.description}</p>}
                   <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100 mb-4">
@@ -958,28 +1270,68 @@ const PFDQualityChecker = () => {
         {!results && (
           <div className="rounded-2xl p-5 sm:p-6 mb-5" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.2s both' }}>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">PFD Drawing (PDF) *</label>
-            <div
+
+            {/* ── Drop zone with circuit-trace border animation ── */}
+            <div className="relative"
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
-              onClick={() => document.getElementById('pfdq-file-input').click()}
-              className={`border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 cursor-pointer ${
+              onClick={() => document.getElementById('pfdq-file-input').click()}>
+
+              {/* Circuit trace lines — only visible when not dragging */}
+              {!dragOver && !file && (<>
+                <div className="absolute top-0 left-0 right-0 h-[2px] pointer-events-none overflow-hidden rounded-t-xl">
+                  <div className="absolute h-full rounded-full"
+                    style={{ background: T.trace, width:'40%', animation:'traceH 3.5s ease-in-out infinite' }} />
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] pointer-events-none overflow-hidden rounded-b-xl">
+                  <div className="absolute h-full rounded-full"
+                    style={{ background: T.trace, width:'40%', animation:'traceH 3.5s ease-in-out infinite 1.75s' }} />
+                </div>
+                <div className="absolute top-0 bottom-0 left-0 w-[2px] pointer-events-none overflow-hidden rounded-l-xl">
+                  <div className="absolute w-full rounded-full"
+                    style={{ background: T.trace, height:'35%', animation:'traceV 3.5s ease-in-out infinite 0.5s' }} />
+                </div>
+                <div className="absolute top-0 bottom-0 right-0 w-[2px] pointer-events-none overflow-hidden rounded-r-xl">
+                  <div className="absolute w-full rounded-full"
+                    style={{ background: T.trace, height:'35%', animation:'traceV 3.5s ease-in-out infinite 2.25s' }} />
+                </div>
+              </>)}
+
+              {/* Corner brackets */}
+              {(['top-0 left-0','top-0 right-0','bottom-0 left-0','bottom-0 right-0']).map((pos, i) => (
+                <div key={i} className={`absolute ${pos} w-4 h-4 pointer-events-none`}>
+                  <div className="absolute top-0 left-0 w-full h-[2px] rounded-full" style={{ background: T.accentHex, opacity: 0.5 }} />
+                  <div className="absolute top-0 left-0 h-full w-[2px] rounded-full" style={{ background: T.accentHex, opacity: 0.5 }} />
+                </div>
+              ))}
+
+              <div className={`border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 cursor-pointer ${
                 dragOver ? 'border-cyan-400 bg-cyan-50 shadow-lg shadow-cyan-200/60'
                 : file    ? 'border-teal-400 bg-teal-50'
                 :           'border-slate-300 hover:border-teal-400 bg-white hover:bg-teal-50/40'
               }`}>
-              <div className={`w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center transition-all ${
-                dragOver ? 'bg-cyan-100 animate-bounce' : file ? 'bg-teal-50 border border-teal-200' : 'bg-teal-50 border border-teal-200'
-              }`}>
-                {file
-                  ? <FileText className="w-7 h-7 text-teal-500" />
-                  : <UploadIcon className={`w-7 h-7 ${dragOver ? 'text-cyan-500' : 'text-teal-500'}`} />}
+                {/* Scan beam overlay when file is loaded */}
+                {file && (
+                  <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
+                    <div className="absolute inset-x-0 h-16 pointer-events-none"
+                      style={{ background: T.scanBeam, animation:'scanBeam 2.5s ease-in-out infinite' }} />
+                  </div>
+                )}
+
+                <div className={`w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center transition-all ${
+                  dragOver ? 'bg-cyan-100 animate-bounce' : file ? 'bg-teal-50 border border-teal-200' : 'bg-teal-50 border border-teal-200'
+                }`}>
+                  {file
+                    ? <FileText className="w-7 h-7 text-teal-500" />
+                    : <UploadIcon className={`w-7 h-7 ${dragOver ? 'text-cyan-500' : 'text-teal-500'}`} />}
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-1">
+                  {file ? file.name : dragOver ? 'Drop your PFD here' : 'Drag & drop or click to upload'}
+                </p>
+                <p className="text-xs text-slate-400">{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'PDF, PNG, JPG, TIFF · Max 50 MB'}</p>
+                <input id="pfdq-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={handleFileChange} />
               </div>
-              <p className="text-sm font-semibold text-slate-700 mb-1">
-                {file ? file.name : dragOver ? 'Drop your PFD here' : 'Drag & drop or click to upload'}
-              </p>
-              <p className="text-xs text-slate-400">{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'PDF, PNG, JPG, TIFF · Max 50 MB'}</p>
-              <input id="pfdq-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={handleFileChange} />
             </div>
 
             {file && (
@@ -1115,36 +1467,48 @@ const PFDQualityChecker = () => {
             {/* ── CONTENT AREA ────────────────────────────────────────────── */}
             <div className="flex-1 min-w-0 space-y-4">
 
-              {/* Stats bar */}
-              <div className="rounded-2xl p-4" style={{ ...T.panel, animation:'fadeUp 0.4s ease-out 0.08s both' }}>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: totalIssues > 0 ? 'linear-gradient(135deg,#fef2f2,#fee2e2)' : 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
-                               border:`1px solid ${totalIssues > 0 ? '#fca5a5' : '#86efac'}` }}>
-                      {totalIssues > 0 ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <CheckCircle className="w-5 h-5 text-green-500" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Active File</p>
-                      <p className="text-sm font-bold text-slate-800 truncate max-w-[220px]" title={results.file_name}>{results.file_name}</p>
-                    </div>
+              {/* ── Results hero banner ── */}
+              <div className="relative rounded-2xl overflow-hidden" style={{ animation:'fadeUp 0.35s ease-out both' }}>
+                <div className="px-5 py-4 flex items-center gap-4 flex-wrap"
+                  style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff,#f0f9ff)', border:'1px solid #99f6e4' }}>
+                  {/* Status icon */}
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: totalIssues > 0 ? 'linear-gradient(135deg,#fef2f2,#fee2e2)' : 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
+                             border:`1px solid ${totalIssues > 0 ? '#fca5a5' : '#86efac'}` }}>
+                    {totalIssues > 0 ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <CheckCircle className="w-5 h-5 text-green-500" style={{ animation:'checkPop 0.4s ease-out both' }} />}
                   </div>
-                  <div className="hidden sm:block w-px h-10 bg-slate-200 flex-shrink-0" />
-                  {[
-                    { v: results.drawings?.length ?? 0, label:'Drawings', color:'text-teal-600',   bg:'rgba(20,184,166,0.08)',  border:'rgba(20,184,166,0.18)'  },
-                    { v: totalIssues,   label:'Issues',   color: totalIssues > 0 ? 'text-red-600' : 'text-green-600',
-                      bg: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
-                      border: totalIssues > 0 ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)' },
-                    { v: criticalCount, label:'Critical',  color:'text-red-700',    bg:'rgba(239,68,68,0.08)',  border:'rgba(239,68,68,0.15)'   },
-                    { v: majorCount,    label:'Major',     color:'text-orange-600', bg:'rgba(234,88,12,0.08)',  border:'rgba(234,88,12,0.15)'   },
-                  ].map(chip => (
-                    <div key={chip.label} className="rounded-xl px-3 py-2 text-center flex-shrink-0"
-                      style={{ background:chip.bg, border:`1px solid ${chip.border}`, minWidth:'62px' }}>
-                      <p className={`font-bold text-lg leading-none ${chip.color}`}>{chip.v}</p>
-                      <p className="text-[10px] text-slate-500 font-medium mt-0.5">{chip.label}</p>
-                    </div>
-                  ))}
-                  <div className="ml-auto flex items-center gap-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Analysis Complete</p>
+                    <p className="text-sm font-bold text-slate-800 truncate max-w-[260px]" title={results.file_name}>{results.file_name}</p>
+                  </div>
+                  {/* Stat chips with countUp animation */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { v: results.drawings?.length ?? 0, label:'Drawings',
+                        color:'text-teal-700', bg:'rgba(20,184,166,0.10)', border:'rgba(20,184,166,0.22)', glow:'' },
+                      { v: totalIssues, label:'Issues',
+                        color: totalIssues > 0 ? 'text-red-700' : 'text-green-700',
+                        bg: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
+                        border: totalIssues > 0 ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)',
+                        glow: totalIssues > 0 ? '0 0 10px rgba(239,68,68,0.15)' : '' },
+                      { v: criticalCount, label:'Critical',
+                        color:'text-red-800', bg:'rgba(220,38,38,0.09)', border:'rgba(220,38,38,0.20)',
+                        glow: criticalCount > 0 ? '0 0 12px rgba(220,38,38,0.22)' : '' },
+                      { v: majorCount, label:'Major',
+                        color:'text-orange-700', bg:'rgba(234,88,12,0.08)', border:'rgba(234,88,12,0.18)',
+                        glow: majorCount > 0 ? '0 0 12px rgba(234,88,12,0.18)' : '' },
+                    ].map((chip, ci) => (
+                      <div key={chip.label} className="rounded-xl px-3 py-2 text-center flex-shrink-0 transition-all"
+                        style={{ background:chip.bg, border:`1px solid ${chip.border}`, minWidth:'62px',
+                          boxShadow: chip.glow || undefined,
+                          animation:`countUp 0.5s ease-out ${0.1 + ci * 0.08}s both` }}>
+                        <p className={`font-black text-lg leading-none ${chip.color}`}>{chip.v}</p>
+                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">{chip.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 flex-wrap ml-auto">
                     <button onClick={downloadExcel} disabled={downloadingXlsx}
                       className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
                       style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
@@ -1161,6 +1525,8 @@ const PFDQualityChecker = () => {
                     </button>
                   </div>
                 </div>
+                {/* Gradient bar at bottom of hero */}
+                <div className="h-[3px]" style={{ background: T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
               </div>
 
               {/* Drawing tabs */}
