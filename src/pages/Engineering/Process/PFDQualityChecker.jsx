@@ -301,6 +301,69 @@ const HERO_BADGES = [
 // Tick-mark angles for the animated rule-ring decoration (12 rules → 30° apart)
 const RULE_RING_TICKS = Array.from({ length: 12 }, (_, i) => i * 30);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: "How It Works" 3-step workflow shown below the project grid
+// ─────────────────────────────────────────────────────────────────────────────
+const HOW_IT_WORKS = [
+  {
+    step: '01',
+    title: 'Upload PFD Drawing',
+    desc: 'Drop a PDF, PNG or TIFF of your Process Flow Diagram. Multi-page documents supported.',
+    icon: UploadIcon,
+    accent: '#0d9488',
+    glow: 'rgba(13,148,136,0.20)',
+    bg: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)',
+    border: '#99f6e4',
+  },
+  {
+    step: '02',
+    title: 'AI + Rule Engine Scan',
+    desc: '12 deterministic rules run against OCR text, equipment tags, stream numbers, title block and safety devices.',
+    icon: Brain,
+    accent: '#0891b2',
+    glow: 'rgba(8,145,178,0.20)',
+    bg: 'linear-gradient(135deg,#ecfeff,#cffafe)',
+    border: '#a5f3fc',
+  },
+  {
+    step: '03',
+    title: 'Quality Report',
+    desc: 'Receive a ranked findings list with severity, rule reference and one-click overlay markers on the drawing.',
+    icon: CheckCircle,
+    accent: '#10b981',
+    glow: 'rgba(16,185,129,0.20)',
+    bg: 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
+    border: '#86efac',
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: Rule coverage grid shown below "How It Works" (8 categories)
+// ─────────────────────────────────────────────────────────────────────────────
+const RULE_COVERAGE = [
+  { icon:'🔧', label:'Equipment Tags',   sub:'Naming & sequence',          color:'#0d9488' },
+  { icon:'🌊', label:'Stream Numbers',   sub:'Continuity & coverage',       color:'#0891b2' },
+  { icon:'📋', label:'Title Block',      sub:'Rev, scale, approval',        color:'#0284c7' },
+  { icon:'🛡️', label:'Safety Devices',  sub:'PRV, BDV placement',          color:'#dc2626' },
+  { icon:'⚙️', label:'Control Elements',sub:'Valves, instruments',          color:'#7c3aed' },
+  { icon:'🔁', label:'Utility Lines',    sub:'Utility & service headers',   color:'#0891b2' },
+  { icon:'📌', label:'HOLD Notations',   sub:'Pending decisions flagged',   color:'#d97706' },
+  { icon:'⚡', label:'ISO 10628',        sub:'Standard compliance check',   color:'#0d9488' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: "What Gets Checked" compact tiles shown below upload area
+// This is a subset — shown inside a project before uploading a file
+// ─────────────────────────────────────────────────────────────────────────────
+const CHECKS_PREVIEW = [
+  { icon: Tag,      label: 'Equipment Tagging', desc: 'Tag format & sequence'   },
+  { icon: Ruler,    label: 'Stream Numbers',    desc: 'Continuity validation'   },
+  { icon: FileText, label: 'Title Block',       desc: 'Rev, scale, sign-off'    },
+  { icon: Shield,   label: 'Safety Devices',    desc: 'PRV/BDV coverage'        },
+  { icon: Sliders,  label: 'Control Elements',  desc: 'Valve & loop checks'     },
+  { icon: Brain,    label: 'AI Rule Engine',    desc: '12-rule deterministic'   },
+];
+
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -1142,6 +1205,120 @@ const PFDQualityChecker = () => {
             </div>
           )}
 
+          {/* ══════════════════════════════════════════════════════════════════
+              BOTTOM SECTION — fills the page so it never looks empty
+          ══════════════════════════════════════════════════════════════════ */}
+
+          {/* Divider with centred label */}
+          <div className="relative flex items-center my-12">
+            <div className="flex-1 h-px" style={{ background:'linear-gradient(90deg,transparent,#99f6e4,transparent)' }} />
+            <span className="mx-4 text-xs font-bold text-teal-600 tracking-[0.25em] uppercase px-3 py-1.5 rounded-full"
+              style={{ background:'rgba(240,253,250,0.9)', border:'1px solid #99f6e4' }}>
+              How the Engine Works
+            </span>
+            <div className="flex-1 h-px" style={{ background:'linear-gradient(90deg,transparent,#99f6e4,transparent)' }} />
+          </div>
+
+          {/* ── How It Works — 3 animated step cards ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+            {HOW_IT_WORKS.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.step} className="relative rounded-2xl p-6 overflow-hidden"
+                  style={{ background: step.bg, border:`1px solid ${step.border}`,
+                    animation:`cardIn 0.55s ease-out ${0.1 + i * 0.12}s both` }}>
+
+                  {/* Large ghost step number */}
+                  <span className="absolute -top-2 -right-1 text-[80px] font-black leading-none select-none pointer-events-none"
+                    style={{ color: step.accent, opacity: 0.07 }}>{step.step}</span>
+
+                  {/* Animated accent bar top */}
+                  <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
+                    style={{ background:`linear-gradient(90deg,${step.accent},${step.accent}80)`,
+                      backgroundSize:'200% auto', animation:'gradShift 3s linear infinite' }} />
+
+                  {/* Icon */}
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                    style={{ background:'rgba(255,255,255,0.7)', border:`1px solid ${step.border}`,
+                      boxShadow:`0 4px 14px ${step.glow}`, animation:'nodeGlow 4s ease-in-out infinite' }}>
+                    <Icon className="w-6 h-6" style={{ color: step.accent }} />
+                  </div>
+
+                  {/* Step pill */}
+                  <span className="inline-block text-[10px] font-black tracking-[0.2em] uppercase px-2 py-0.5 rounded-full mb-2"
+                    style={{ background: step.accent, color:'#fff', opacity:0.9 }}>Step {step.step}</span>
+
+                  <h3 className="text-sm font-black text-slate-900 mb-1.5">{step.title}</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+
+                  {/* Connector arrow (not on last) */}
+                  {i < HOW_IT_WORKS.length - 1 && (
+                    <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 hidden md:flex items-center justify-center z-10">
+                      <ChevronRight className="w-5 h-5 text-teal-500" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Rule Coverage Grid ── */}
+          <div className="rounded-2xl overflow-hidden mb-4"
+            style={{ background:'rgba(255,255,255,0.80)', border:'1px solid #e2e8f0',
+              backdropFilter:'blur(12px)', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.28)' }}>
+                <Shield className="w-4 h-4 text-white" />
+              </div>
+              <h2 className="text-sm font-black text-slate-900">Quality Rules Coverage</h2>
+              <span className="ml-auto text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                12 Rules · ISO 10628
+              </span>
+            </div>
+
+            {/* 4-col tile grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-slate-100">
+              {RULE_COVERAGE.map((rule, i) => (
+                <div key={rule.label}
+                  className="flex items-start gap-3 px-4 py-4 hover:bg-teal-50/40 transition-colors"
+                  style={{ animation:`fadeUp 0.45s ease-out ${0.05 + i * 0.06}s both` }}>
+                  <span className="text-xl flex-shrink-0 mt-0.5">{rule.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 leading-tight">{rule.label}</p>
+                    <p className="text-[10px] text-slate-400 leading-snug mt-0.5">{rule.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Bottom standards strip ── */}
+          <div className="rounded-2xl px-6 py-4 flex flex-wrap items-center justify-between gap-3 mb-2"
+            style={{ background:'linear-gradient(135deg,rgba(240,253,250,0.8),rgba(236,254,255,0.8))',
+              border:'1px solid #99f6e4' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.30)' }}>
+                <Activity className="w-4 h-4 text-white" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-900">AI-Powered · Standards-Compliant</p>
+                <p className="text-[10px] text-slate-500">ISO 10628-1 &amp; -2 · ISA-S5.1 · IEC 61511</p>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {['PDF Export','Excel Export','Drawing Overlay','Cross-Ref P&ID'].map((tag, i) => (
+                <span key={tag} className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full"
+                  style={{ animation:`chipPop 0.4s ease-out ${0.1 + i * 0.07}s both` }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <DarkModal show={showCreateModal} onClose={() => { setShowCreateModal(false); setNewProjectName(''); setNewProjectDesc(''); }}
             title="Create New Project" subtitle="Set up a folder for your PFD quality drawings"
             iconEl={<div className="w-9 h-9 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center"><FolderPlus className="w-4 h-4 text-teal-600" /></div>}>
@@ -1364,6 +1541,57 @@ const PFDQualityChecker = () => {
             {(polling || docStatus === 'processing') && (
               <AnalysisLoader elapsedSec={elapsedSec} fileName={file?.name} />
             )}
+          </div>
+        )}
+
+        {/* ── "What Gets Checked" info panel — shown only before results load ── */}
+        {!results && !polling && docStatus !== 'processing' && (
+          <div className="rounded-2xl overflow-hidden mb-5"
+            style={{ background:'rgba(255,255,255,0.80)', border:'1px solid #e2e8f0',
+              backdropFilter:'blur(12px)', animation:'fadeUp 0.5s ease-out 0.35s both' }}>
+
+            {/* Header row */}
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.28)' }}>
+                <Shield className="w-3.5 h-3.5 text-white" />
+              </div>
+              <h2 className="text-xs font-black text-slate-700 uppercase tracking-wider">What Gets Checked</h2>
+              <span className="ml-auto text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                12 Deterministic Rules
+              </span>
+            </div>
+
+            {/* 3-col checks grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+              {CHECKS_PREVIEW.map((check, i) => {
+                const Icon = check.icon;
+                return (
+                  <div key={check.label} className="flex items-center gap-3 px-4 py-3.5 hover:bg-teal-50/30 transition-colors"
+                    style={{ animation:`fadeUp 0.4s ease-out ${0.05 + i * 0.07}s both` }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background:'rgba(240,253,250,0.9)', border:'1px solid #ccfbf1' }}>
+                      <Icon className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 leading-none">{check.label}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{check.desc}</p>
+                    </div>
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: T.accentHex, animation:'pulse2 2s ease-in-out infinite', animationDelay:`${i * 0.25}s` }} />
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Mini standards strip */}
+            <div className="px-5 py-2.5 border-t border-slate-100 flex items-center gap-2 flex-wrap"
+              style={{ background:'rgba(240,253,250,0.5)' }}>
+              <span className="text-[10px] text-slate-500 font-medium">Standards:</span>
+              {['ISO 10628-1','ISO 10628-2','ISA-S5.1','IEC 61511'].map(s => (
+                <span key={s} className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">{s}</span>
+              ))}
+            </div>
           </div>
         )}
 
