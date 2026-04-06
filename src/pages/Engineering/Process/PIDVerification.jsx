@@ -104,10 +104,13 @@ const SEVERITY_STYLES = {
 };
 
 const CATEGORY_LABELS = {
-  tag:          'Tag Issues',
-  connectivity: 'Connectivity',
-  valve:        'Valve & Equipment',
-  line_size:    'Line Size',
+  tag:              'Tag Issues',
+  connectivity:     'Connectivity',
+  valve:            'Valve & Equipment',
+  line_size:        'Line Size',
+  line_designation: 'Line Designation',
+  equipment:        'Equipment',
+  notes:            'Notes / HOLDs',
 };
 
 // Soft-coded: categories excluded from the view, overlay, and PDF export.
@@ -115,6 +118,12 @@ const CATEGORY_LABELS = {
 // 'connectivity' is excluded: orphan-node graph checks produce too many
 // false-positives on scanned drawings and are not useful for process engineers.
 const HIDDEN_CATEGORIES = new Set(['notes', 'connectivity']);
+
+// Soft-coded: severity levels excluded from the view, overlay, and master index.
+// INFO-level findings are observational notes with no required action; they add
+// noise to the report and are hidden by default.  Add other severity labels here
+// to suppress them globally without touching any rule logic.
+const HIDDEN_SEVERITIES = new Set(['info']);
 
 // Soft-coded: all rule IDs that represent duplicate pipeline line designations.
 // Add new duplicate-detection rule IDs here to automatically propagate them to:
@@ -602,7 +611,19 @@ const PIDVerification = () => {
   const [overridesSaved,  setOverridesSaved]  = useState(false);  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
   const [lineTagsExpanded, setLineTagsExpanded] = useState(false);
+  // Sub-tab within the Lines panel: 'qc' | 'designations'
+  const [lineQcSubTab, setLineQcSubTab] = useState('qc');
+  // QC Checks sub-tab filters
+  const [qcSearch,     setQcSearch]     = useState('');
+  const [qcSevFilter,  setQcSevFilter]  = useState('all');
+  const [qcRuleFilter, setQcRuleFilter] = useState('all');
   const [lineTagSearch,    setLineTagSearch]    = useState('');
+  // Equipment panel state
+  const [equipSubTab,   setEquipSubTab]   = useState('all');
+  const [equipTagSearch, setEquipTagSearch] = useState('');
+  // Naming panel filters
+  const [namingSearch,   setNamingSearch]   = useState('');
+  const [namingSevFilter, setNamingSevFilter] = useState('all');
   const [showLineTagOverlay, setShowLineTagOverlay] = useState(true);
   const [focusedLineTagKey,  setFocusedLineTagKey]  = useState(null);
   // Duplicate-line highlight overlay: semi-transparent glow rectangles drawn at
@@ -1116,6 +1137,79 @@ const PIDVerification = () => {
         }
       }
 
+      // P4: line_tags text match — resolves LN-001, LN-002, LSZ-010 findings
+      // whose evidence is a pipeline designation like '4"-BD-4860-033842-X-N'.
+      // Split by " · " to handle multi-tag evidence strings (LSZ-010).
+      const lineTagsArr = activeDrawingData?.metadata?.line_tags || [];
+      if (lineTagsArr.length > 0) {
+        const candidates = [...new Set(
+          [nk, normKey(rawKey)]
+            .flatMap(s => s.split(/\s*[·\u00b7]\s*/).map(p => p.trim()))
+            .filter(Boolean)
+        )];
+
+        // P4-exact: strict normalised key match
+        for (const cand of candidates) {
+          for (const lt of lineTagsArr) {
+            const ltText = normKey(lt.text || '');
+            if (!ltText) continue;
+            if (ltText === cand || cand === ltText) {
+              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
+              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+            }
+          }
+        }
+
+        // P4-norm: separator-normalised comparison — handles OCR reading '_' for '-'
+        // or extra spaces introduced when joining splits across font runs.
+        // Soft-coded inline: normalise spaces/underscores to dashes, collapse doubles.
+        const normSep = (s) => s.replace(/[\s_]+/g, '-').replace(/-{2,}/g, '-').toUpperCase();
+        for (const cand of candidates) {
+          const nc = normSep(cand);
+          if (nc.length < 8) continue;
+          for (const lt of lineTagsArr) {
+            const nltText = normSep(normKey(lt.text || ''));
+            if (!nltText) continue;
+            if (nltText === nc) {
+              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
+              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+            }
+          }
+        }
+
+        // P4-partial: substring match for fragment evidence (min 8 chars to avoid noise).
+        // Resolves cases where evidence text is a partial designation like '017011-Y'
+        // that is a sub-sequence of a full tag stored in line_tags.
+        for (const cand of candidates) {
+          if (cand.length < 8) continue;
+          for (const lt of lineTagsArr) {
+            const ltText = normKey(lt.text || '');
+            if (!ltText || ltText.length < 8) continue;
+            if (ltText.includes(cand) || cand.includes(ltText)) {
+              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
+              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+            }
+          }
+        }
+      }
+
+      // P5: red_annotations text match — resolves RED-001 findings and any
+      // annotation-based findings (ANN-001, VLV-002/003) whose evidence text
+      // appears as a red span on the drawing with a known bounding-box position.
+      const redAnnsArr = activeDrawingData?.metadata?.red_annotations || [];
+      if (redAnnsArr.length > 0) {
+        const evNk = normKey(rawKey);
+        for (const ra of redAnnsArr) {
+          const raNk = normKey(ra.text || '');
+          if (!raNk) continue;
+          if (evNk.includes(raNk) || raNk.includes(evNk)) {
+            if (ra.x_pct != null && ra.y_pct != null) {
+              return { x_pct: ra.x_pct, y_pct: ra.y_pct };
+            }
+          }
+        }
+      }
+
       return null;
     };
 
@@ -1162,7 +1256,10 @@ const PIDVerification = () => {
   };
 
   const overlayNodes = buildOverlayNodes(
-    (activeDrawingData?.issues || []).filter(f => !HIDDEN_CATEGORIES.has(f.category))
+    (activeDrawingData?.issues || []).filter(f =>
+      !HIDDEN_CATEGORIES.has(f.category) &&
+      !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+    )
   );
   const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
 
@@ -1581,11 +1678,24 @@ const PIDVerification = () => {
             {
               id: 'comparison',
               label: 'Compare',
-              icon: ({ cls }) => <Shield className={cls} />,
+              icon: ({ cls }) => <BarChart2 className={cls} />,
               badge: comparison ? '✓' : null,
               badgeCls: 'bg-teal-500 text-white',
               accent: '#0f766e',
               glow: 'rgba(15,118,110,0.25)',
+            },
+            {
+              id: 'equipment',
+              label: 'Equipment',
+              icon: ({ cls }) => <Cpu className={cls} />,
+              badge: (() => {
+                const tp = activeDrawingData?.metadata?.tag_positions || {};
+                const k = Object.keys(tp).length;
+                return k || (activeDrawingData?.metadata?.extraction_summary?.tags > 0 ? activeDrawingData.metadata.extraction_summary.tags : null);
+              })(),
+              badgeCls: 'bg-violet-500 text-white',
+              accent: '#7c3aed',
+              glow: 'rgba(124,58,237,0.25)',
             },
             {
               id: 'cross',
@@ -2211,7 +2321,10 @@ const PIDVerification = () => {
                     {/* ── Filter bar ── */}
                     {/* ── Filter bar ── */}
                     {(() => {
-                      const visibleIssues = activeDrawingData.issues.filter(f => !HIDDEN_CATEGORIES.has(f.category));
+                      const visibleIssues = activeDrawingData.issues.filter(f =>
+                        !HIDDEN_CATEGORIES.has(f.category) &&
+                        !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                      );
                       const availableCategories = [...new Set(visibleIssues.map(f => f.category))];
                       const filteredIssues = visibleIssues.filter(f => {
                         if (filterSeverity !== 'all' && (overrides[f.id]?.severity || f.severity) !== filterSeverity) return false;
@@ -2232,7 +2345,7 @@ const PIDVerification = () => {
                               onChange={e => setFilterSeverity(e.target.value)}
                               className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 cursor-pointer outline-none hover:border-slate-400 transition-colors">
                               <option value="all">All Severities</option>
-                              {['critical','major','minor','info'].map(s => (
+                              {['critical','major','minor'].map(s => (
                                 <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
                               ))}
                             </select>
@@ -2495,83 +2608,449 @@ const PIDVerification = () => {
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
               const lineTags = activeDrawingData?.metadata?.line_tags || [];
-              if (lineTags.length === 0) return <div className="p-8 text-center text-slate-400 text-sm">No line tags extracted for this drawing.</div>;
+              const allIssuesHere = activeDrawingData?.issues || [];
+
+              // ── Soft-coded: LSZ rule catalogue ─────────────────────────────────────
+              // Add/edit entries here to change how each rule appears in the QC table.
+              // No other code needs changing.
+              const LINE_QC_RULES = {
+                'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏' },
+                'LSZ-002': { short: 'Conflicting sizes on segment', desc: 'Two or more different NPS sizes recorded on the same pipeline segment — inspect for mis-reads.',                          checkName: 'Size Consistency',   icon: '⚠️' },
+                'LSZ-003': { short: 'Valve bore mismatch',         desc: 'A valve bore size does not match the adjacent line size — spec break or wrong tag.',                                      checkName: 'Valve Bore',         icon: '🔧' },
+                'LSZ-004': { short: 'Inline size conflict',        desc: 'Multiple distinct NPS sizes appear on a single OCR line reference — possible scan artefact or copy-paste error.',        checkName: 'Annotation Clarity', icon: '🔍' },
+                'LSZ-005': { short: '3+ distinct NPS on drawing',  desc: '3 or more different pipe sizes found on this drawing — check for undocumented spec-breaks or off-cuts.',                  checkName: 'NPS Diversity',      icon: '📐' },
+                'LSZ-006': { short: 'NPS conflict — same base',    desc: 'The same pipeline designation base exists with conflicting NPS sizes — strong indicator of a duplication error.',         checkName: 'Duplicate (NPS)',    icon: '🚨' },
+                'LSZ-007': { short: 'Designation ×3 (same axis)',  desc: 'Identical pipeline designation appears 3 or more times in the same orientation — likely copy-paste or OCR repeat.',       checkName: 'Duplicate (Count)',  icon: '🔁' },
+                'LSZ-008': { short: 'H + V confirmed duplicate',   desc: 'Pipeline designation confirmed in both horizontal and vertical orientations — strong duplicate signal.',                   checkName: 'Duplicate (H+V)',    icon: '↕️' },
+                'LSZ-009': { short: 'Cloud-boundary truncation',   desc: 'A cloud revision mark is masking part of a line designation — ensure the underlying tag is fully visible.',               checkName: 'Cloud Truncation',   icon: '☁️' },
+                'LSZ-010': { short: 'Shared suffix — copy-paste',  desc: 'Different pipeline identities share the same sequence/pipe-class/insulation suffix — strong copy-paste numbering error.', checkName: 'Suffix Sharing',     icon: '📋' },
+              };
+
+              // Soft-coded: which finding categories count as "line" quality issues.
+              // Add more category keys here to broaden the scope without touching logic.
+              const LINE_ISSUE_CATEGORIES = new Set(['line_size']);
+              // Also catch any finding whose rule_id begins with 'LSZ'
+              const isLineFinding = (f) =>
+                LINE_ISSUE_CATEGORIES.has(f.category) || (f.rule_id || '').startsWith('LSZ');
+
+              // Soft-coded sub-tabs for the Lines panel.
+              const LINE_SUBTABS = [
+                { id: 'qc',           label: 'QC Checks',    icon: Shield,   color: '#0d9488' },
+                { id: 'designations', label: 'Designations', icon: Ruler,    color: '#0891b2' },
+              ];
+
+              // Derived data
+              const lineFindings = allIssuesHere.filter(isLineFinding);
+              const criticalLF   = lineFindings.filter(f => f.severity === 'critical').length;
+              const majorLF      = lineFindings.filter(f => f.severity === 'major').length;
+              const minorLF      = lineFindings.filter(f => f.severity === 'minor').length;
               const multiAngleCount = lineTags.filter(lt => lt.multi_angle).length;
-              const npsSet = [...new Set(lineTags.map(lt => lt.size).filter(Boolean))];
+              const npsSet   = [...new Set(lineTags.map(lt => lt.size).filter(Boolean))];
               const fluidSet = [...new Set(lineTags.map(lt => lt.fluid_code).filter(Boolean))];
+
+              // Map each line tag text → its related findings (for QC dot on cards)
+              const tagFindingsMap = new Map();
+              for (const f of lineFindings) {
+                const ev = (f.evidence || f.issue || '').toLowerCase();
+                for (const lt of lineTags) {
+                  if (lt.text && ev.includes(lt.text.toLowerCase())) {
+                    if (!tagFindingsMap.has(lt.text)) tagFindingsMap.set(lt.text, []);
+                    tagFindingsMap.get(lt.text).push(f);
+                  }
+                }
+              }
+
+              // Highest severity for a tag (for dot colour)
+              const sevRank = { critical: 4, major: 3, minor: 2, info: 1 };
+              const tagMaxSev = (text) => {
+                const fds = tagFindingsMap.get(text) || [];
+                if (!fds.length) return null;
+                return fds.reduce((best, f) =>
+                  (sevRank[f.severity] || 0) > (sevRank[best] || 0) ? f.severity : best, fds[0].severity);
+              };
+
+              const SEV_DOT_COLOR = {
+                critical: '#dc2626', major: '#f97316', minor: '#fbbf24', info: '#3b82f6',
+              };
+              const SEV_BADGE_CLS = {
+                critical: 'bg-red-100 text-red-800 border-red-300',
+                major:    'bg-orange-100 text-orange-800 border-orange-300',
+                minor:    'bg-yellow-100 text-yellow-800 border-yellow-300',
+                info:     'bg-green-100 text-green-800 border-green-300',
+              };
+
+              // Search filter (designations tab)
               const query = lineTagSearch.trim().toLowerCase();
-              const filtered = query ? lineTags.filter(lt =>
+              const filteredTags = query ? lineTags.filter(lt =>
                 lt.text?.toLowerCase().includes(query) ||
                 lt.fluid_code?.toLowerCase().includes(query) ||
                 lt.area_code?.toLowerCase().includes(query) ||
                 lt.size?.toLowerCase().includes(query)
               ) : lineTags;
+
+              // QC findings filters (state lives at component level)
+              const qcQ = qcSearch.trim().toLowerCase();
+              const filteredFindings = lineFindings.filter(f => {
+                if (qcSevFilter !== 'all' && f.severity !== qcSevFilter) return false;
+                if (qcRuleFilter !== 'all' && f.rule_id !== qcRuleFilter) return false;
+                if (!qcQ) return true;
+                return (f.issue || '').toLowerCase().includes(qcQ) ||
+                       (f.evidence || '').toLowerCase().includes(qcQ) ||
+                       (f.rule_id || '').toLowerCase().includes(qcQ);
+              });
+              const uniqueRules = [...new Set(lineFindings.map(f => f.rule_id).filter(Boolean))].sort();
+
+              if (lineTags.length === 0 && lineFindings.length === 0)
+                return <div className="p-10 text-center text-slate-400 text-sm">No line designations or quality findings for this drawing.</div>;
+
+              const ActiveSubIcon = LINE_SUBTABS.find(t => t.id === lineQcSubTab)?.icon || Shield;
+
               return (
                 <div>
-                  {/* Header */}
+                  {/* ── Panel header ── */}
                   <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#0d9488,#14b8a6)' }}>
-                      <Ruler className="w-4 h-4 text-white" />
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)' }}>
+                      <Shield className="w-4 h-4 text-white" />
                     </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">Pipeline Line Designations</h2>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900">Pipeline Line QC</h2>
                       <p className="text-xs text-slate-500">
-                        {lineTags.length} tags · {npsSet.length} NPS · {fluidSet.length} fluid codes
+                        {lineTags.length} designations extracted · {lineFindings.length} quality finding{lineFindings.length !== 1 ? 's' : ''}
                         {multiAngleCount > 0 ? ` · ${multiAngleCount} H+V confirmed` : ''}
                       </p>
                     </div>
-                  </div>
-                  {/* Search */}
-                  <div className="px-5 py-3 border-b border-slate-100">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={lineTagSearch}
-                        onChange={e => setLineTagSearch(e.target.value)}
-                        placeholder={`Search ${lineTags.length} designations…`}
-                        className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50"
-                      />
-                      <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
-                      {lineTagSearch && (
-                        <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                    {/* QC traffic-light */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {criticalLF > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
+                          {criticalLF} CRIT
+                        </span>
+                      )}
+                      {majorLF > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                          {majorLF} MAJ
+                        </span>
+                      )}
+                      {minorLF > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                          {minorLF} MIN
+                        </span>
+                      )}
+                      {lineFindings.length === 0 && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> All Pass
+                        </span>
                       )}
                     </div>
                   </div>
-                  {/* Card grid */}
-                  <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight:'70vh' }}>
-                    <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(170px,1fr))' }}>
-                      {filtered.map((lt, idx) => {
-                        const isFocused = focusedLineTagKey === lt.text;
-                        return (
-                          <div
-                            key={lt.text}
-                            id={`line-tag-row-${lt.text}`}
-                            onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
-                            className={`relative rounded-xl border cursor-pointer transition-all duration-200 p-3 flex flex-col gap-1.5 overflow-hidden ${
-                              isFocused ? 'border-teal-400 bg-teal-50 shadow-md shadow-teal-100'
-                              : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400'
-                              : 'border-slate-200 bg-white hover:border-teal-300'
-                            }`}
-                            style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx * 0.02, 0.4)}s both` }}
-                          >
-                            <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{
-                              background: lt.multi_angle || isFocused
-                                ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
-                                : 'linear-gradient(90deg,#e2e8f0,#cbd5e1)'
-                            }} />
-                            <code className={`text-[11px] font-mono font-bold ${isFocused ? 'text-teal-700' : 'text-slate-800'}`}>{lt.text}</code>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {lt.size && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
-                              {lt.fluid_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{lt.fluid_code}</span>}
-                              {lt.area_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
-                              {lt.pipe_class && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">{lt.pipe_class}</span>}
+
+                  {/* ── QC summary stat chips ── */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v: lineTags.length,                              label: 'Total Lines',  color:'text-teal-600',    bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.18)' },
+                      { v: lineTags.length - tagFindingsMap.size,         label: 'Clean',        color:'text-emerald-600', bg:'rgba(16,185,129,0.08)',  border:'rgba(16,185,129,0.18)' },
+                      { v: criticalLF,                                   label: 'Critical',     color:'text-red-600',     bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.18)'  },
+                      { v: majorLF,                                      label: 'Major',        color:'text-orange-600',  bg:'rgba(234,88,12,0.08)',   border:'rgba(234,88,12,0.18)'  },
+                      { v: lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length, label: 'Duplicates', color:'text-sky-600', bg:'rgba(14,165,233,0.08)', border:'rgba(14,165,233,0.18)' },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center"
+                        style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+                        <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Sub-tab switcher ── */}
+                  <div className="flex border-b border-slate-100 bg-slate-50/40">
+                    {LINE_SUBTABS.map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = lineQcSubTab === tab.id;
+                      const cnt = tab.id === 'qc' ? lineFindings.length : lineTags.length;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setLineQcSubTab(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'border-teal-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                          }`}
+                          style={active ? { color: tab.color } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${
+                            active ? 'text-white' : 'bg-slate-200 text-slate-500'
+                          }`}
+                          style={active ? { background: tab.color } : undefined}>
+                            {cnt}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ═══════════════════════════════
+                      QC CHECKS sub-tab
+                  ═══════════════════════════════ */}
+                  {lineQcSubTab === 'qc' && (
+                    <div>
+                      {lineFindings.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-3">
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                            style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border:'1px solid #86efac' }}>
+                            <CheckCircle className="w-8 h-8 text-emerald-500" />
+                          </div>
+                          <p className="text-base font-bold text-slate-700">All Line Designations Pass QC</p>
+                          <p className="text-xs text-slate-400 text-center max-w-xs">
+                            The rule engine found no line-designation quality issues on this drawing.
+                            {lineTags.length > 0 && ` ${lineTags.length} pipeline designations were extracted and verified.`}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          {/* ── QC checks covered — soft-coded rule breakdown ── */}
+                          <div className="px-5 pt-4 pb-2">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Checks Performed</p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
+                                const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                                return (
+                                  <button
+                                    key={rid}
+                                    onClick={() => setQcRuleFilter(r => r === rid ? 'all' : rid)}
+                                    title={def.desc}
+                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition-all ${
+                                      cnt > 0 ? (qcRuleFilter === rid ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300')
+                                             : 'bg-slate-50 border-slate-100 text-slate-400'
+                                    }`}
+                                    style={cnt > 0 && qcRuleFilter === rid ? { background:'linear-gradient(135deg,#0d9488,#0891b2)' } : undefined}
+                                  >
+                                    <span>{def.icon}</span>
+                                    <code className="font-mono">{rid}</code>
+                                    {cnt > 0 && (
+                                      <span className={`ml-0.5 px-1 rounded-full font-black ${qcRuleFilter === rid ? 'bg-white/20 text-white' : 'bg-teal-50 text-teal-700'}`}>{cnt}</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })}
+
+                          {/* ── Filters ── */}
+                          <div className="px-5 py-2 border-t border-slate-100 flex gap-2 items-center flex-wrap">
+                            <div className="relative flex-1 min-w-[180px]">
+                              <input
+                                type="text"
+                                value={qcSearch}
+                                onChange={e => setQcSearch(e.target.value)}
+                                placeholder="Search findings, evidence…"
+                                className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 transition"
+                              />
+                              <ScanLine className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
+                              {qcSearch && <button onClick={() => setQcSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
+                            </div>
+                            <select value={qcSevFilter} onChange={e => setQcSevFilter(e.target.value)}
+                              className="text-xs px-2 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-300">
+                              <option value="all">All severities</option>
+                              {['critical','major','minor','info'].map(s => (
+                                <option key={s} value={s}>{s[0].toUpperCase()+s.slice(1)}</option>
+                              ))}
+                            </select>
+                            {(qcSevFilter !== 'all' || qcRuleFilter !== 'all' || qcSearch) && (
+                              <button onClick={() => { setQcSevFilter('all'); setQcRuleFilter('all'); setQcSearch(''); }}
+                                className="text-xs text-teal-600 hover:text-teal-800 underline">clear</button>
+                            )}
+                            <span className="text-[10px] text-slate-400 ml-auto">
+                              {filteredFindings.length} of {lineFindings.length} findings
+                            </span>
+                          </div>
+
+                          {/* ── Findings table ── */}
+                          <div className="overflow-y-auto" style={{ maxHeight: '58vh' }}>
+                            {filteredFindings.length === 0 ? (
+                              <div className="py-12 text-center text-slate-400 text-sm">No findings match filters.</div>
+                            ) : (
+                              <div className="divide-y divide-slate-50">
+                                {filteredFindings.map((f, idx) => {
+                                  const ruleDef    = LINE_QC_RULES[f.rule_id] || {};
+                                  const isDup      = DUP_LINE_RULES.has(f.rule_id);
+                                  const isCloudTrunc = CLOUD_TRUNC_RULES.has(f.rule_id);
+                                  const isSharedSfx  = SHARED_SUFFIX_RULES.has(f.rule_id);
+                                  return (
+                                    <div
+                                      key={f.id || idx}
+                                      className="px-5 py-4 hover:bg-teal-50/30 transition-colors"
+                                      style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}
+                                    >
+                                      {/* Row 1: rule + severity + badges */}
+                                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                                        {/* Rule ID pill */}
+                                        <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border"
+                                          style={{ background:'rgba(13,148,136,0.07)', borderColor:'rgba(13,148,136,0.2)', color:'#0d9488' }}>
+                                          {f.rule_id}
+                                        </code>
+                                        {/* Severity badge */}
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                          {f.severity?.toUpperCase()}
+                                        </span>
+                                        {/* Check name from soft-coded catalogue */}
+                                        {ruleDef.checkName && (
+                                          <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>
+                                        )}
+                                        {/* Special duplicate badges */}
+                                        {isDup && !isCloudTrunc && !isSharedSfx && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300">Duplicate Line</span>
+                                        )}
+                                        {isCloudTrunc && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">☁️ Cloud Truncation</span>
+                                        )}
+                                        {isSharedSfx && (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300">📋 Shared Suffix</span>
+                                        )}
+                                        {/* Jump to findings panel */}
+                                        <button
+                                          className="ml-auto text-[10px] flex items-center gap-1 text-indigo-500 hover:text-indigo-700 font-medium"
+                                          onClick={() => { setActivePanel('findings'); setFocusedFindingId(f.id); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                        >
+                                          <Eye className="w-3 h-3" /> Locate
+                                        </button>
+                                      </div>
+                                      {/* Row 2: short description from catalogue + actual issue text */}
+                                      {ruleDef.short && (
+                                        <p className="text-[10px] font-semibold text-teal-700 mb-1">{ruleDef.short}</p>
+                                      )}
+                                      <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{f.issue}</p>
+                                      {/* Row 3: evidence + rule explanation */}
+                                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                        {f.evidence && (
+                                          <div className="flex items-start gap-1 text-[10px] text-slate-500 max-w-full">
+                                            <Tag className="w-3 h-3 flex-shrink-0 mt-0.5 text-slate-400" />
+                                            <code className="font-mono bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-slate-700 truncate max-w-[280px]" title={f.evidence}>
+                                              {f.evidence}
+                                            </code>
+                                          </div>
+                                        )}
+                                        {ruleDef.desc && (
+                                          <div className="flex items-start gap-1 text-[10px] text-slate-400 max-w-full">
+                                            <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
+                                            <span className="leading-relaxed">{ruleDef.desc}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  )}
+
+                  {/* ═══════════════════════════════
+                      DESIGNATIONS sub-tab
+                  ═══════════════════════════════ */}
+                  {lineQcSubTab === 'designations' && (
+                    <div>
+                      {/* Search */}
+                      <div className="px-5 py-3 border-b border-slate-100">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={lineTagSearch}
+                            onChange={e => setLineTagSearch(e.target.value)}
+                            placeholder={`Search ${lineTags.length} designations…`}
+                            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50"
+                          />
+                          <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
+                          {lineTagSearch && (
+                            <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1.5">
+                          {npsSet.length} NPS sizes · {fluidSet.length} fluid codes
+                          {multiAngleCount > 0 && ` · ${multiAngleCount} H+V confirmed`}
+                          {tagFindingsMap.size > 0 && (
+                            <span className="ml-2 text-orange-500 font-semibold">· {tagFindingsMap.size} designations with QC issues</span>
+                          )}
+                        </p>
+                      </div>
+                      {/* Card grid */}
+                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+                        {filteredTags.length === 0 ? (
+                          <div className="py-12 text-center text-slate-400 text-sm">No designations match search.</div>
+                        ) : (
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(170px,1fr))' }}>
+                            {filteredTags.map((lt, idx) => {
+                              const isFocused = focusedLineTagKey === lt.text;
+                              const maxSev    = tagMaxSev(lt.text);
+                              const hasIssue  = !!maxSev;
+                              return (
+                                <div
+                                  key={lt.text}
+                                  id={`line-tag-row-${lt.text}`}
+                                  onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
+                                  className={`relative rounded-xl border cursor-pointer transition-all duration-200 p-3 flex flex-col gap-1.5 overflow-hidden ${
+                                    isFocused  ? 'border-teal-400 bg-teal-50 shadow-md shadow-teal-100'
+                                    : hasIssue  ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400'
+                                    : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400'
+                                    : 'border-slate-200 bg-white hover:border-teal-300'
+                                  }`}
+                                  style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx * 0.02, 0.4)}s both` }}
+                                >
+                                  {/* Top colour bar */}
+                                  <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{
+                                    background: hasIssue        ? `linear-gradient(90deg,${SEV_DOT_COLOR[maxSev]},${SEV_DOT_COLOR[maxSev]}88)`
+                                               : lt.multi_angle || isFocused ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
+                                               : 'linear-gradient(90deg,#e2e8f0,#cbd5e1)'
+                                  }} />
+                                  {/* QC status dot + line text */}
+                                  <div className="flex items-center justify-between gap-1">
+                                    <code className={`text-[11px] font-mono font-bold truncate flex-1 ${isFocused ? 'text-teal-700' : hasIssue ? 'text-orange-800' : 'text-slate-800'}`}>
+                                      {lt.text}
+                                    </code>
+                                    {/* QC dot */}
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      style={{
+                                        background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981',
+                                        boxShadow: hasIssue ? `0 0 4px ${SEV_DOT_COLOR[maxSev]}88` : '0 0 4px #10b98188',
+                                      }}
+                                      title={hasIssue ? `${(tagFindingsMap.get(lt.text)||[]).length} QC issue(s): ${maxSev}` : 'QC pass'}
+                                    />
+                                  </div>
+                                  {/* Attribute chips */}
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {lt.size && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
+                                    {lt.fluid_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{lt.fluid_code}</span>}
+                                    {lt.area_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
+                                    {lt.pipe_class && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">{lt.pipe_class}</span>}
+                                  </div>
+                                  {/* Issue count hint */}
+                                  {hasIssue && (
+                                    <p className="text-[10px] text-orange-600 font-semibold">
+                                      {(tagFindingsMap.get(lt.text)||[]).length} QC issue{(tagFindingsMap.get(lt.text)||[]).length !== 1 ? 's' : ''} · {maxSev}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
+                    <span style={{ color:'#0d9488' }}>
+                      {lineQcSubTab === 'qc'
+                        ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
+                        : `${filteredTags.length} of ${lineTags.length} designations`}
+                    </span>
+                    <span>LSZ-001 – LSZ-010 · 10 line quality rules active</span>
                   </div>
                 </div>
               );
@@ -2584,36 +3063,55 @@ const PIDVerification = () => {
             {activePanel === 'naming' && (
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
+              // ── Soft-coded: NAM rule catalogue ──────────────────────────────────────
+              // Add/edit ruleId entries here — nothing else needs to change.
+              const NAMING_QC_RULES = {
+                'NAM-001': { short: 'Wrong separator',     desc: 'Tag uses wrong delimiter character (e.g. "." or space instead of "-").',    icon: '🔡', checkName: 'Separator Format'   },
+                'NAM-002': { short: 'Unknown acronym',     desc: 'Instrument function acronym is not in the project or ISA 5.1 dictionary.', icon: '❓', checkName: 'Acronym Registry'  },
+                'NAM-003': { short: 'Incomplete tag',      desc: 'Tag is missing one or more mandatory fields (prefix, loop, suffix).',       icon: '⚠️', checkName: 'Tag Completeness' },
+                'NAM-004': { short: 'Inconsistent format', desc: 'Tag format deviates from the dominant format pattern on this drawing.',     icon: '🔄', checkName: 'Format Consistency'},
+                'NAM-AI':  { short: 'AI visual finding',   desc: 'AI vision model detected a potential tag-naming issue not found by rules.', icon: '🤖', checkName: 'AI Vision Check'   },
+              };
               const NAMING_SEV_BADGE = {
                 critical:'bg-red-100 text-red-800 border border-red-300',
                 major:'bg-orange-100 text-orange-800 border border-orange-300',
                 minor:'bg-yellow-100 text-yellow-800 border border-yellow-300',
-                info:'bg-green-100 text-green-800 border border-green-300',
+                info:'bg-emerald-100 text-emerald-800 border border-emerald-300',
               };
               const SOURCE_BADGE = {
-                deterministic:{ label:'Rule', style:'bg-blue-50 text-blue-700 border border-blue-200' },
-                ai_vision:{ label:'AI Vision', style:'bg-purple-50 text-purple-700 border border-purple-200' },
+                deterministic:{ label:'📐 Rule Engine', style:'bg-blue-50 text-blue-700 border border-blue-200' },
+                ai_vision:{ label:'🤖 AI Vision', style:'bg-purple-50 text-purple-700 border border-purple-200' },
               };
-              const RULE_LABEL = {
-                'NAM-001':'Wrong Separator',
-                'NAM-002':'Unknown Acronym',
-                'NAM-003':'Incomplete Tag',
-                'NAM-004':'Inconsistent Format',
-                'NAM-AI':'AI Visual Finding',
-              };
+              // Derived
+              const issues = namingResults?.naming_issues || [];
+              const bySev = namingResults?.by_severity || {};
+              const critN  = bySev.critical || 0;
+              const majN   = bySev.major    || 0;
+              const minN   = bySev.minor    || 0;
+              const aiN    = issues.filter(i => i.source === 'ai_vision').length;
+              const nmQ    = namingSearch.trim().toLowerCase();
+              const filteredNaming = issues.filter(iss => {
+                if (namingSevFilter !== 'all' && iss.severity !== namingSevFilter) return false;
+                if (!nmQ) return true;
+                return (iss.description || '').toLowerCase().includes(nmQ) ||
+                       (iss.tag_found   || '').toLowerCase().includes(nmQ) ||
+                       (iss.rule_id     || '').toLowerCase().includes(nmQ) ||
+                       (iss.suggested_fix || '').toLowerCase().includes(nmQ);
+              });
+              const uniqueNamingRules = [...new Set(issues.map(i => i.rule_id).filter(Boolean))];
               return (
                 <div>
-                  {/* Header + Run button */}
+                  {/* ── Header + Run button ── */}
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
                         <Type className="w-4 h-4 text-white" />
                       </div>
                       <div>
-                        <h2 className="text-sm font-bold text-slate-900">Tag Naming &amp; Acronym Check</h2>
+                        <h2 className="text-sm font-bold text-slate-900">Tag Naming &amp; Acronym QC</h2>
                         {namingResults
-                          ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} found</p>
-                          : <p className="text-xs text-slate-400">Not yet run</p>}
+                          ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} · page {(namingResults.page_index ?? 0) + 1} · {namingResults.ai_used ? 'AI + Rules' : 'Rules only'}</p>
+                          : <p className="text-xs text-slate-400">Not yet run — checks ISA 5.1 tag naming conventions</p>}
                       </div>
                     </div>
                     <button
@@ -2623,60 +3121,150 @@ const PIDVerification = () => {
                       style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow:'0 4px 14px rgba(109,40,217,0.3)' }}
                     >
                       {checkingNaming ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Type className="w-3.5 h-3.5" />}
-                      {checkingNaming ? 'Checking…' : 'Run Check'}
+                      {checkingNaming ? 'Checking…' : namingResults ? 'Re-run' : 'Run Check'}
                     </button>
                   </div>
+
                   {!namingResults ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                      <Type className="w-10 h-10 mb-3 opacity-30" />
-                      <p className="text-sm font-medium">Click "Run Check" to analyse tag naming</p>
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
+                        <Type className="w-8 h-8 text-violet-400" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">Tag Naming &amp; Acronym Check</p>
+                      <p className="text-xs text-slate-400 text-center max-w-xs">
+                        Validates P&amp;ID tag names against ISA 5.1 conventions — checks
+                        separators, acronym registries, completeness, and format consistency.
+                        {namingResults?.ai_used !== false && ' AI vision can also be included.'}
+                      </p>
+                      {/* Soft-coded: show which checks will run */}
+                      <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+                        {Object.entries(NAMING_QC_RULES).map(([rid, def]) => (
+                          <span key={rid} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-violet-50 text-violet-600 border border-violet-200">
+                            {def.icon} {def.checkName}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ) : namingResults.total === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16">
-                      <CheckCircle className="w-10 h-10 text-emerald-500 mb-3" />
-                      <p className="font-semibold text-slate-700">No naming issues found</p>
+                    <div className="flex flex-col items-center justify-center py-16 gap-2">
+                      <CheckCircle className="w-12 h-12 text-emerald-500" />
+                      <p className="font-bold text-slate-700">All tags pass naming conventions</p>
+                      <p className="text-xs text-slate-400 text-center max-w-xs">
+                        {issues.length === 0 && namingResults.ai_used
+                          ? 'Rule engine + AI vision found no naming or acronym violations.'
+                          : 'Rule engine found no naming or acronym violations.'}
+                      </p>
                     </div>
                   ) : (
-                    <div className="px-5 py-4 space-y-2">
-                      {namingResults.naming_issues.map((iss, idx) => (
-                        <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3.5 flex flex-col gap-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${NAMING_SEV_BADGE[iss.severity] || 'bg-slate-100 text-slate-600'}`}>
-                              {iss.severity?.toUpperCase()}
-                            </span>
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-mono">
-                              {iss.rule_id}
-                            </span>
-                            {RULE_LABEL[iss.rule_id] && <span className="text-xs text-slate-500">{RULE_LABEL[iss.rule_id]}</span>}
-                            {iss.source && SOURCE_BADGE[iss.source] && (
-                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SOURCE_BADGE[iss.source].style}`}>
-                                {SOURCE_BADGE[iss.source].label}
+                    <div>
+                      {/* ── Stats bar ── */}
+                      <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                        {[
+                          { v: namingResults.total,         label:'Total',       color:'text-violet-600',  bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)' },
+                          { v: critN,                       label:'Critical',     color:'text-red-600',     bg:'rgba(239,68,68,0.07)',  border:'rgba(239,68,68,0.18)'  },
+                          { v: majN,                        label:'Major',        color:'text-orange-600',  bg:'rgba(234,88,12,0.07)',  border:'rgba(234,88,12,0.18)'  },
+                          { v: minN,                        label:'Minor',        color:'text-yellow-700',  bg:'rgba(202,138,4,0.07)',  border:'rgba(202,138,4,0.18)'  },
+                          { v: aiN,                         label:'AI-flagged',   color:'text-purple-600',  bg:'rgba(147,51,234,0.07)', border:'rgba(147,51,234,0.18)' },
+                        ].map(c => (
+                          <div key={c.label} className="rounded-xl p-2.5 text-center" style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                            <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {/* ── Rule chips ── */}
+                      <div className="px-5 pt-3 pb-1 border-b border-slate-100">
+                        <div className="flex flex-wrap gap-1.5">
+                          {uniqueNamingRules.map(rid => {
+                            const def = NAMING_QC_RULES[rid] || {};
+                            const cnt = issues.filter(i => i.rule_id === rid).length;
+                            return (
+                              <span key={rid}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 cursor-default"
+                                title={def.desc}>
+                                {def.icon || '🏷'} <code className="font-mono">{rid}</code> · {cnt}
                               </span>
-                            )}
-                            {iss.tag_found && (
-                              <code className="ml-auto text-xs font-mono font-bold bg-violet-50 text-violet-800 border border-violet-200 px-2 py-0.5 rounded">
-                                {iss.tag_found}
-                              </code>
-                            )}
-                          </div>
-                          <p className="text-sm text-slate-700">{iss.description}</p>
-                          <div className="flex items-start gap-3 flex-wrap">
-                            {iss.suggested_fix && (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                                <span className="text-slate-500">Fix: </span>
-                                <code className="font-mono font-semibold text-emerald-700">{iss.suggested_fix}</code>
-                              </div>
-                            )}
-                            {iss.location_hint && (
-                              <div className="flex items-center gap-1 text-xs text-slate-400">
-                                <Eye className="w-3 h-3" />
-                                <span>{iss.location_hint}</span>
-                              </div>
-                            )}
-                          </div>
+                            );
+                          })}
                         </div>
-                      ))}
+                      </div>
+                      {/* ── Filters ── */}
+                      <div className="px-5 py-2 flex gap-2 items-center flex-wrap">
+                        <div className="relative flex-1 min-w-[180px]">
+                          <input type="text" value={namingSearch} onChange={e => setNamingSearch(e.target.value)}
+                            placeholder="Search tags, descriptions…"
+                            className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition" />
+                          <Type className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-violet-400 pointer-events-none" />
+                          {namingSearch && <button onClick={() => setNamingSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
+                        </div>
+                        <select value={namingSevFilter} onChange={e => setNamingSevFilter(e.target.value)}
+                          className="text-xs px-2 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-violet-300">
+                          <option value="all">All severities</option>
+                          {['critical','major','minor','info'].map(s => <option key={s} value={s}>{s[0].toUpperCase()+s.slice(1)}</option>)}
+                        </select>
+                        <span className="text-[10px] text-slate-400 ml-auto">{filteredNaming.length} of {issues.length}</span>
+                      </div>
+                      {/* ── Issue cards ── */}
+                      <div className="px-5 pb-4 space-y-2 overflow-y-auto" style={{ maxHeight:'58vh' }}>
+                        {filteredNaming.length === 0 ? (
+                          <div className="py-10 text-center text-slate-400 text-sm">No issues match filters.</div>
+                        ) : filteredNaming.map((iss, idx) => {
+                          const ruleDef = NAMING_QC_RULES[iss.rule_id] || {};
+                          return (
+                          <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3.5 flex flex-col gap-1.5"
+                            style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${NAMING_SEV_BADGE[iss.severity] || 'bg-slate-100 text-slate-600'}`}>
+                                {iss.severity?.toUpperCase()}
+                              </span>
+                              <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border" style={{ background:'rgba(124,58,237,0.07)', borderColor:'rgba(124,58,237,0.2)', color:'#7c3aed' }}>
+                                {iss.rule_id}
+                              </code>
+                              {ruleDef.checkName && <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>}
+                              {iss.source && SOURCE_BADGE[iss.source] && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${SOURCE_BADGE[iss.source].style}`}>
+                                  {SOURCE_BADGE[iss.source].label}
+                                </span>
+                              )}
+                              {iss.tag_found && (
+                                <code className="ml-auto text-[10px] font-mono font-bold bg-violet-50 text-violet-800 border border-violet-200 px-2 py-0.5 rounded">
+                                  {iss.tag_found}
+                                </code>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-700 leading-relaxed">{iss.description}</p>
+                            <div className="flex items-start gap-4 flex-wrap">
+                              {iss.suggested_fix && (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                  <span className="text-slate-500">Suggested fix: </span>
+                                  <code className="font-mono font-semibold text-emerald-700">{iss.suggested_fix}</code>
+                                </div>
+                              )}
+                              {iss.location_hint && (
+                                <div className="flex items-center gap-1 text-xs text-slate-400">
+                                  <Eye className="w-3 h-3" />
+                                  <span>{iss.location_hint}</span>
+                                </div>
+                              )}
+                              {ruleDef.desc && (
+                                <div className="flex items-start gap-1 text-[10px] text-slate-400">
+                                  <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
+                                  <span>{ruleDef.desc}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Footer */}
+                  {namingResults && (
+                    <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
+                      <span style={{ color:'#7c3aed' }}>{filteredNaming.length} of {issues.length} findings</span>
+                      <span>{Object.keys(NAMING_QC_RULES).length} naming rules active · {namingResults.ai_used ? 'AI + rules' : 'rules only'}</span>
                     </div>
                   )}
                 </div>
@@ -2689,58 +3277,454 @@ const PIDVerification = () => {
             {/* ─── COMPARISON panel ─── */}
             {activePanel === 'comparison' && (
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#0f766e,#0d9488)' }}>
-                    <Shield className="w-4 h-4 text-white" />
+            {(() => {
+              // Soft-coded: all metrics shown in the comparison table.
+              // Add a key here to make a new metric appear in all three columns automatically.
+              const COMPARE_METRICS = [
+                { key:'tags',        label:'Total Tags',   icon:'🏷', color:'#3b82f6' },
+                { key:'instruments', label:'Instruments',  icon:'🔬', color:'#7c3aed' },
+                { key:'valves',      label:'Valves',       icon:'🔧', color:'#0d9488' },
+                { key:'equipment',   label:'Equipment',    icon:'⚙️', color:'#f59e0b' },
+                { key:'line_sizes',  label:'Line Sizes',   icon:'📏', color:'#10b981' },
+                { key:'notes',       label:'Notes',        icon:'📝', color:'#6366f1' },
+                { key:'holds',       label:'Holds',        icon:'⏸',  color:'#ef4444' },
+              ];
+              const bef  = comparison?.before_defaults_only?.summary  || {};
+              const aft  = comparison?.after_legend_backed?.summary   || {};
+              const dlt  = comparison?.delta_after_minus_before        || {};
+              const rep  = comparison?.report_findings                 || {};
+              const legK = comparison?.legend_knowledge                || {};
+              const befSizes = comparison?.before_defaults_only?.line_sizes_unique || [];
+              const aftSizes = comparison?.after_legend_backed?.line_sizes_unique  || [];
+              return (
+                <div>
+                  {/* Header + Run button */}
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#0f766e,#0d9488)' }}>
+                        <BarChart2 className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-900">Legend-Backed Accuracy Comparison</h2>
+                        {comparison
+                          ? <p className="text-xs text-slate-500">Default prefixes vs legend-knowledge extraction · {rep.total_findings ?? 0} finding{rep.total_findings !== 1 ? 's' : ''}</p>
+                          : <p className="text-xs text-slate-400">Not yet run — re-runs extraction with legend knowledge</p>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={runAccuracyCompare}
+                      disabled={runningCompare}
+                      className="flex items-center gap-2 text-xs font-bold text-white px-4 py-2 rounded-xl disabled:opacity-60 transition-all hover:-translate-y-px"
+                      style={{ background:'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow:'0 4px 14px rgba(13,148,136,0.3)' }}
+                    >
+                      {runningCompare ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <BarChart2 className="w-3.5 h-3.5" />}
+                      {runningCompare ? 'Comparing…' : comparison ? 'Re-run' : 'Run Compare'}
+                    </button>
                   </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900">Legend-Backed Accuracy Comparison</h2>
-                    {comparison
-                      ? <p className="text-xs text-slate-500">Comparison complete</p>
-                      : <p className="text-xs text-slate-400">Not yet run</p>}
-                  </div>
+
+                  {!comparison ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f0fdfa,#ccfbf1)', border:'1px solid #5eead4' }}>
+                        <BarChart2 className="w-8 h-8 text-teal-500" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">Legend-Backed Accuracy Comparison</p>
+                      <p className="text-xs text-slate-400 text-center max-w-xs">
+                        Runs P&amp;ID extraction twice — once with default ISA prefixes and once
+                        with legend-knowledge prefixes — then computes the delta to measure
+                        how much the legend improves recognition accuracy.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-y-auto" style={{ maxHeight:'80vh' }}>
+                      {/* ── Legend knowledge metadata ── */}
+                      {legK.sources?.length > 0 && (
+                        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Legend Knowledge Used</p>
+                          <div className="flex flex-wrap gap-2 text-[10px]">
+                            {legK.sources.map((s, i) => (
+                              <span key={i} className="px-2 py-1 rounded-md bg-teal-50 text-teal-700 border border-teal-200 font-medium">{s}</span>
+                            ))}
+                            {legK.instrument_prefixes?.length > 0 && (
+                              <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                                {legK.instrument_prefixes.length} instr. prefixes
+                              </span>
+                            )}
+                            {legK.valve_prefixes?.length > 0 && (
+                              <span className="px-2 py-1 rounded-md bg-violet-50 text-violet-700 border border-violet-200">
+                                {legK.valve_prefixes.length} valve prefixes
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Main comparison table ── */}
+                      <div className="px-5 py-4">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Extraction Comparison — All Metrics</p>
+                        <div className="rounded-xl overflow-hidden border border-slate-200">
+                          {/* Table header */}
+                          <div className="grid grid-cols-4 bg-slate-700 text-white text-[10px] font-bold">
+                            {['Metric','Before (Defaults)','After (Legend)','Δ Delta'].map(h => (
+                              <div key={h} className="px-3 py-2.5">{h}</div>
+                            ))}
+                          </div>
+                          {/* Rows — soft-coded from COMPARE_METRICS */}
+                          {COMPARE_METRICS.map((m, idx) => {
+                            const b = bef[m.key] ?? 0;
+                            const a = aft[m.key] ?? 0;
+                            const d = dlt[m.key] ?? (a - b);
+                            const pct = b > 0 ? Math.round((d / b) * 100) : (d !== 0 ? 100 : 0);
+                            return (
+                              <div key={m.key}
+                                className={`grid grid-cols-4 text-xs border-t border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                                <div className="px-3 py-3 flex items-center gap-2 font-semibold text-slate-700">
+                                  <span>{m.icon}</span> {m.label}
+                                </div>
+                                <div className="px-3 py-3 text-slate-600 font-mono">{b}</div>
+                                <div className="px-3 py-3 font-mono" style={{ color: a > b ? '#059669' : a < b ? '#dc2626' : '#64748b' }}>
+                                  {a}
+                                </div>
+                                <div className="px-3 py-3 flex items-center gap-1.5">
+                                  <span className={`font-bold font-mono ${d > 0 ? 'text-emerald-600' : d < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                    {d > 0 ? '+' : ''}{d}
+                                  </span>
+                                  {d !== 0 && b > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                      d > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                                    }`}>{pct > 0 ? '+' : ''}{pct}%</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ── Unique line sizes comparison ── */}
+                      {(befSizes.length > 0 || aftSizes.length > 0) && (
+                        <div className="px-5 pb-4">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Unique Line Sizes Detected</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-[10px] font-bold text-slate-500 mb-2">Before ({befSizes.length})</p>
+                              <div className="flex flex-wrap gap-1">
+                                {befSizes.map(s => <span key={s} className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">{s}</span>)}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                              <p className="text-[10px] font-bold text-emerald-600 mb-2">After ({aftSizes.length})</p>
+                              <div className="flex flex-wrap gap-1">
+                                {aftSizes.map(s => <span key={s} className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-700">{s}</span>)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Findings severity breakdown ── */}
+                      {rep.total_findings > 0 && (
+                        <div className="px-5 pb-5 border-t border-slate-100 pt-4">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Verification Findings Severity Breakdown</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(rep.severity_counts || {}).map(([sev, cnt]) => {
+                              if (!cnt) return null;
+                              const cols = { critical:'bg-red-100 text-red-800 border-red-300', major:'bg-orange-100 text-orange-800 border-orange-300', minor:'bg-yellow-100 text-yellow-800 border-yellow-300', info:'bg-emerald-100 text-emerald-800 border-emerald-300' };
+                              return (
+                                <div key={sev} className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold ${cols[sev] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                  <span className="text-lg leading-none">{cnt}</span>
+                                  <span className="font-semibold normal-case">{sev}</span>
+                                </div>
+                              );
+                            })}
+                            <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold bg-slate-100 text-slate-700 border-slate-200 ml-auto">
+                              <span className="text-lg leading-none">{rep.total_findings}</span>
+                              <span className="font-semibold">Total</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={runAccuracyCompare}
-                  disabled={runningCompare}
-                  className="flex items-center gap-2 text-xs font-bold text-white px-4 py-2 rounded-xl disabled:opacity-60 transition-all hover:-translate-y-px"
-                  style={{ background:'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow:'0 4px 14px rgba(13,148,136,0.3)' }}
-                >
-                  {runningCompare ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
-                  {runningCompare ? 'Comparing…' : 'Run Compare'}
-                </button>
-              </div>
-              {!comparison ? (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                  <Shield className="w-10 h-10 mb-3 opacity-30" />
-                  <p className="text-sm font-medium">Click "Run Compare" to analyse accuracy</p>
-                </div>
-              ) : (
-                <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4">
-                    <p className="font-semibold text-slate-700 mb-2">Before (Defaults)</p>
-                    <p className="text-slate-500">Instruments: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.instruments ?? 0}</span></p>
-                    <p className="text-slate-500">Valves: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.valves ?? 0}</span></p>
-                    <p className="text-slate-500">Line sizes: <span className="text-slate-800 font-semibold">{comparison?.before_defaults_only?.summary?.line_sizes ?? 0}</span></p>
-                  </div>
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                    <p className="font-semibold text-emerald-700 mb-2">After (Legend-Backed)</p>
-                    <p className="text-emerald-700">Instruments: <span className="font-bold">{comparison?.after_legend_backed?.summary?.instruments ?? 0}</span></p>
-                    <p className="text-emerald-700">Valves: <span className="font-bold">{comparison?.after_legend_backed?.summary?.valves ?? 0}</span></p>
-                    <p className="text-emerald-700">Line sizes: <span className="font-bold">{comparison?.after_legend_backed?.summary?.line_sizes ?? 0}</span></p>
-                  </div>
-                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                    <p className="font-semibold text-blue-700 mb-2">Delta (After − Before)</p>
-                    <p className="text-blue-700">Instruments: <span className="font-bold">{comparison?.delta_after_minus_before?.instruments ?? 0}</span></p>
-                    <p className="text-blue-700">Valves: <span className="font-bold">{comparison?.delta_after_minus_before?.valves ?? 0}</span></p>
-                    <p className="text-blue-700">Line sizes: <span className="font-bold">{comparison?.delta_after_minus_before?.line_sizes ?? 0}</span></p>
-                  </div>
-                </div>
-              )}
+              );
+            })()}
             </div>
             )}
             {/* ─── end COMPARISON panel ─── */}
+
+            {/* ─── EQUIPMENT panel ─── */}
+            {activePanel === 'equipment' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ── Soft-coded: ISA 5.1 instrument / valve / equipment families ──────────
+              // Add or edit entries here to extend classification without changing any
+              // render logic.  All columns/chips/tables derive from this object.
+              const EQUIP_FAMILIES = {
+                // Instruments — measurement & control
+                PT:  { label:'Pressure Transmitter',   type:'instrument', icon:'🔵', color:'#3b82f6'  },
+                PI:  { label:'Pressure Indicator',      type:'instrument', icon:'🔵', color:'#3b82f6'  },
+                PIC: { label:'Pressure IC',             type:'instrument', icon:'🔵', color:'#3b82f6'  },
+                PSV: { label:'Pressure Safety Valve',   type:'valve',      icon:'🔴', color:'#ef4444'  },
+                PSE: { label:'Pressure Safety Element', type:'instrument', icon:'🔵', color:'#3b82f6'  },
+                FT:  { label:'Flow Transmitter',        type:'instrument', icon:'🟢', color:'#22c55e'  },
+                FI:  { label:'Flow Indicator',          type:'instrument', icon:'🟢', color:'#22c55e'  },
+                FIC: { label:'Flow IC',                 type:'instrument', icon:'🟢', color:'#22c55e'  },
+                FE:  { label:'Flow Element',            type:'instrument', icon:'🟢', color:'#22c55e'  },
+                FCV: { label:'Flow Control Valve',      type:'valve',      icon:'🔴', color:'#ef4444'  },
+                LT:  { label:'Level Transmitter',       type:'instrument', icon:'🟡', color:'#eab308'  },
+                LI:  { label:'Level Indicator',         type:'instrument', icon:'🟡', color:'#eab308'  },
+                LIC: { label:'Level IC',                type:'instrument', icon:'🟡', color:'#eab308'  },
+                TT:  { label:'Temperature Transmitter', type:'instrument', icon:'🟠', color:'#f97316'  },
+                TI:  { label:'Temperature Indicator',   type:'instrument', icon:'🟠', color:'#f97316'  },
+                TIC: { label:'Temperature IC',          type:'instrument', icon:'🟠', color:'#f97316'  },
+                AT:  { label:'Analyser Transmitter',    type:'instrument', icon:'🟣', color:'#a855f7'  },
+                AI:  { label:'Analyser Indicator',      type:'instrument', icon:'🟣', color:'#a855f7'  },
+                WT:  { label:'Weight Transmitter',      type:'instrument', icon:'⚪', color:'#64748b'  },
+                // Valves
+                FV:  { label:'Control Valve (Flow)',    type:'valve',      icon:'🔴', color:'#ef4444'  },
+                SDV: { label:'Shutdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444'  },
+                BDV: { label:'Blowdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444'  },
+                XV:  { label:'Solenoid/On-Off Valve',   type:'valve',      icon:'🔴', color:'#ef4444'  },
+                HV:  { label:'Hand Valve',              type:'valve',      icon:'🔴', color:'#ef4444'  },
+                SV:  { label:'Safety Valve',            type:'valve',      icon:'🔴', color:'#ef4444'  },
+                CV:  { label:'Check Valve',             type:'valve',      icon:'🔴', color:'#ef4444'  },
+                // Equipment
+                P:   { label:'Pump',                    type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                E:   { label:'Heat Exchanger',          type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                V:   { label:'Vessel / Drum',           type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                T:   { label:'Tank',                    type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                K:   { label:'Compressor',              type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                C:   { label:'Column',                  type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                F:   { label:'Filter/Strainer',         type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+              };
+
+              // Soft-coded: sub-tabs for the Equipment panel.
+              const EQUIP_SUBTABS = [
+                { id:'all',        label:'All'         },
+                { id:'instrument', label:'Instruments' },
+                { id:'valve',      label:'Valves'      },
+                { id:'equipment',  label:'Equipment'   },
+              ];
+
+              // ── Build equipment inventory from tag_positions + findings ─────────────
+              const tagPos   = activeDrawingData?.metadata?.tag_positions || {};
+              const allTagIds = Object.keys(tagPos);
+              const extSumm  = activeDrawingData?.metadata?.extraction_summary || {};
+              const valveFindingsByTag = {};
+              for (const f of (activeDrawingData?.issues || [])) {
+                if (HIDDEN_CATEGORIES.has(f.category)) continue;
+                const ev = (f.evidence || f.issue_observed || '').toLowerCase();
+                // Extract tag IDs from evidence using the same regex as the INDEX panel
+                const TAG_RE_LOCAL = /\b([A-Z]{1,4}[-_]?\d{2,6}[A-Z]?)\b/g;
+                for (const [, tid] of (ev.toUpperCase().matchAll(TAG_RE_LOCAL) || [])) {
+                  if (!valveFindingsByTag[tid]) valveFindingsByTag[tid] = [];
+                  valveFindingsByTag[tid].push(f);
+                }
+              }
+
+              // Classify every extracted tag
+              const classifyTag = (tagId) => {
+                const upper = tagId.toUpperCase();
+                // Try longest-prefix-first match
+                const sortedPfx = Object.keys(EQUIP_FAMILIES)
+                  .sort((a, b) => b.length - a.length);
+                for (const pfx of sortedPfx) {
+                  if (upper.startsWith(pfx)) return EQUIP_FAMILIES[pfx];
+                }
+                return { label:'Unknown', type:'instrument', icon:'❔', color:'#94a3b8' };
+              };
+
+              const tagInventory = allTagIds.map(id => ({
+                id,
+                cls: classifyTag(id),
+                pos: tagPos[id],
+                findings: valveFindingsByTag[id.toUpperCase()] || [],
+              }));
+
+              const instrItems = tagInventory.filter(t => t.cls.type === 'instrument');
+              const valveItems = tagInventory.filter(t => t.cls.type === 'valve');
+              const equpItems  = tagInventory.filter(t => t.cls.type === 'equipment');
+              const unknItems  = tagInventory.filter(t => t.cls.label === 'Unknown');
+              const issueCount = tagInventory.filter(t => t.findings.length > 0).length;
+
+              const displayItems = {
+                all:        tagInventory,
+                instrument: instrItems,
+                valve:      valveItems,
+                equipment:  equpItems,
+              }[equipSubTab] || tagInventory;
+
+              const eqQuery = equipTagSearch.trim().toLowerCase();
+              const filteredEquip = eqQuery
+                ? displayItems.filter(t =>
+                    t.id.toLowerCase().includes(eqQuery) ||
+                    t.cls.label.toLowerCase().includes(eqQuery))
+                : displayItems;
+
+              const SEV_DOT = { critical:'#dc2626', major:'#f97316', minor:'#fbbf24', info:'#3b82f6' };
+
+              // Family summary counts for stat chips
+              const familyCounts = {};
+              for (const t of tagInventory) {
+                const lbl = t.cls.label;
+                familyCounts[lbl] = (familyCounts[lbl] || 0) + 1;
+              }
+
+              return (
+                <div>
+                  {/* ── Panel header ── */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#7c3aed,#9333ea)' }}>
+                      <Cpu className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900">Equipment &amp; Instrument Verification</h2>
+                      <p className="text-xs text-slate-500">
+                        {tagInventory.length} tags extracted · {instrItems.length} instruments · {valveItems.length} valves · {equpItems.length} equipment
+                        {issueCount > 0 && <span className="text-orange-500 font-semibold"> · {issueCount} with QC issues</span>}
+                      </p>
+                    </div>
+                    {/* Summary pills */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {extSumm.instruments > 0 && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{extSumm.instruments} Instr</span>}
+                      {extSumm.valves > 0     && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">{extSumm.valves} Valves</span>}
+                      {extSumm.equipment > 0  && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-teal-100 text-teal-700 border border-teal-200">{extSumm.equipment} Equip</span>}
+                    </div>
+                  </div>
+
+                  {tagInventory.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
+                        <Cpu className="w-8 h-8 text-violet-400" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">No Equipment Tags Extracted</p>
+                      <p className="text-xs text-slate-400 text-center max-w-xs">
+                        Equipment tag coordinates are extracted during P&amp;ID analysis.
+                        Re-upload or reprocess the drawing to populate this panel.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* ── Stats bar ── */}
+                      <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                        {[
+                          { v: tagInventory.length, label:'Total Tags',   color:'text-violet-600', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)' },
+                          { v: instrItems.length,   label:'Instruments',  color:'text-blue-600',   bg:'rgba(59,130,246,0.07)', border:'rgba(59,130,246,0.18)'  },
+                          { v: valveItems.length,   label:'Valves',       color:'text-red-600',    bg:'rgba(239,68,68,0.07)',  border:'rgba(239,68,68,0.18)'   },
+                          { v: issueCount,          label:'QC Issues',    color:'text-orange-600', bg:'rgba(234,88,12,0.07)',  border:'rgba(234,88,12,0.18)'   },
+                        ].map(c => (
+                          <div key={c.label} className="rounded-xl p-2.5 text-center" style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                            <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* ── Sub-tabs ── */}
+                      <div className="flex border-b border-slate-100 bg-slate-50/40">
+                        {EQUIP_SUBTABS.map(tab => {
+                          const cnt = tab.id === 'all' ? tagInventory.length : tab.id === 'instrument' ? instrItems.length : tab.id === 'valve' ? valveItems.length : equpItems.length;
+                          const active = equipSubTab === tab.id;
+                          return (
+                            <button key={tab.id}
+                              onClick={() => setEquipSubTab(tab.id)}
+                              className={`flex-1 py-2.5 text-xs font-bold transition-all border-b-2 ${active ? 'border-violet-500 text-violet-700 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'}`}>
+                              {tab.label}
+                              <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{cnt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* ── Search ── */}
+                      <div className="px-5 py-3 border-b border-slate-100">
+                        <div className="relative">
+                          <input type="text" value={equipTagSearch} onChange={e => setEquipTagSearch(e.target.value)}
+                            placeholder={`Search ${displayItems.length} tags…`}
+                            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-violet-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-violet-300/50" />
+                          <Cpu className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-violet-400 pointer-events-none" />
+                          {equipTagSearch && <button onClick={() => setEquipTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
+                        </div>
+                      </div>
+
+                      {/* ── Tag grid ── */}
+                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight:'60vh' }}>
+                        {filteredEquip.length === 0 ? (
+                          <div className="py-10 text-center text-slate-400 text-sm">No tags match search.</div>
+                        ) : (
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))' }}>
+                            {filteredEquip.map((t, idx) => {
+                              const maxSev = t.findings.reduce((best, f) => {
+                                const rank = { critical:4, major:3, minor:2, info:1 };
+                                return (rank[f.severity] || 0) > (rank[best] || 0) ? f.severity : best;
+                              }, null);
+                              const hasIssue = !!maxSev;
+                              return (
+                                <div key={t.id} className={`relative rounded-xl border p-3 flex flex-col gap-1.5 overflow-hidden transition-all cursor-default ${
+                                  hasIssue ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400' : 'border-slate-200 bg-white hover:border-violet-300'
+                                }`}
+                                style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.018,0.4)}s both` }}>
+                                  {/* Top accent bar */}
+                                  <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: hasIssue ? `${SEV_DOT[maxSev]}` : t.cls.color }} />
+                                  {/* Tag ID + QC dot */}
+                                  <div className="flex items-center justify-between gap-1">
+                                    <code className="text-[11px] font-mono font-bold text-slate-800 truncate flex-1">{t.id}</code>
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      style={{ background: hasIssue ? SEV_DOT[maxSev] : '#10b981', boxShadow: hasIssue ? `0 0 4px ${SEV_DOT[maxSev]}88` : '0 0 4px #10b98188' }}
+                                      title={hasIssue ? `${t.findings.length} QC issue(s): ${maxSev}` : 'QC pass'} />
+                                  </div>
+                                  {/* Family classification chip */}
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md w-fit"
+                                    style={{ background:`${t.cls.color}15`, color:t.cls.color, border:`1px solid ${t.cls.color}33` }}>
+                                    {t.cls.icon} {t.cls.label}
+                                  </span>
+                                  {/* QC issue hint */}
+                                  {hasIssue && (
+                                    <p className="text-[10px] text-orange-600 font-semibold">
+                                      {t.findings.length} issue{t.findings.length !== 1 ? 's' : ''} · {maxSev}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ── Family summary section ── */}
+                      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Tag Families Detected</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(EQUIP_FAMILIES)
+                            .filter(([pfx]) => tagInventory.some(t => t.id.toUpperCase().startsWith(pfx)))
+                            .map(([pfx, def]) => {
+                              const cnt = tagInventory.filter(t => t.id.toUpperCase().startsWith(pfx)).length;
+                              return (
+                                <span key={pfx}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border cursor-default"
+                                  style={{ background:`${def.color}10`, borderColor:`${def.color}30`, color:def.color }}
+                                  title={def.label}>
+                                  {def.icon} {pfx} <span className="font-black">{cnt}</span>
+                                </span>
+                              );
+                            })
+                          }
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+                  {/* Panel footer */}
+                  <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
+                    <span style={{ color:'#7c3aed' }}>{filteredEquip.length} of {displayItems.length} tags shown</span>
+                    <span>{Object.keys(EQUIP_FAMILIES).length} classification rules · ISA 5.1 prefix catalogue</span>
+                  </div>
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end EQUIPMENT panel ─── */}
 
             {/* ─── CROSS-REF panel ─── */}
             {activePanel === 'cross' && (
@@ -2760,9 +3744,11 @@ const PIDVerification = () => {
               // ── Build data from all drawings — pure derivation, no API calls ──
               const allDrawings = results?.drawings ?? [];
 
-              // 1. Master serial index: every finding across all drawings
+              // 1. Master serial index: every finding across all drawings (INFO excluded)
               const masterIndex = allDrawings.flatMap((d, di) =>
-                (d.issues ?? []).map((f, fi) => ({
+                (d.issues ?? [])
+                  .filter(f => !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()))
+                  .map((f, fi) => ({
                   globalIdx: allDrawings.slice(0, di).reduce((s,x) => s + (x.issues?.length ?? 0), 0) + fi + 1,
                   sl_no:     f.sl_no,
                   drawing:   d.drawing_id,

@@ -7,7 +7,7 @@ import {
   Loader, X, Download, Activity, Shield, GitBranch, Cpu, Clock,
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, ScanLine, Brain,
-  CircleDot, ExternalLink, Tag, Sliders, Ruler,
+  CircleDot, ExternalLink, Tag, Sliders, Ruler, Eye, MapPin,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -308,15 +308,45 @@ const PFDQualityChecker = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   // ── Right-rail panel navigation (soft-coded PANELS defined inline below) ──
-  const [activePanel, setActivePanel] = useState('findings');
+  const [activePanel, setActivePanel] = useState('drawing');
 
   // ── Findings filters ──────────────────────────────────────────────────────
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus,   setFilterStatus]   = useState('all');
 
+  // ── Drawing image overlay ─────────────────────────────────────────────────
+  const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
+  const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  const [focusedFindingId,    setFocusedFindingId]    = useState(null);
+  const [showHeuristic,       setShowHeuristic]       = useState(false);
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
+
+  // ── Drawing image loader — refetch when active drawing changes ────────────
+  useEffect(() => {
+    let objectUrl = null;
+    const docId = documentId || results?.document_id;
+    if (!docId || !results) { setDrawingImageUrl(null); return; }
+    const drawing = results?.drawings?.find(d => d.drawing_id === activeDrawing);
+    if (!drawing) { setDrawingImageUrl(null); return; }
+    const pageIndex = drawing.page_index ?? 0;
+    setDrawingImageLoading(true);
+    setDrawingImageUrl(null);
+    axios.get(
+      `${API_PREFIX}/drawing-image/${docId}/${pageIndex}/`,
+      { headers: authHeader(), responseType: 'blob', timeout: 30000 }
+    ).then(res => {
+      objectUrl = URL.createObjectURL(res.data);
+      setDrawingImageUrl(objectUrl);
+    }).catch(() => {
+      setDrawingImageUrl(null);
+    }).finally(() => {
+      setDrawingImageLoading(false);
+    });
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [documentId, activeDrawing, results?.document_id]);
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -488,6 +518,8 @@ const PFDQualityChecker = () => {
     setError(''); setPolling(false); setActiveDrawing(null);
     setElapsedSec(0);
     setOverrides({}); setOverridesSaved(false);
+    setDrawingImageUrl(null); setFocusedFindingId(null);
+    setActivePanel('drawing');
   };
 
   const handleOverrideChange = (findingId, field, value) => {
@@ -568,6 +600,93 @@ const PFDQualityChecker = () => {
   const totalIssues   = results?.total_issues ?? allIssues.length;
   const criticalCount = allIssues.filter(f => getVal(f, 'severity') === 'critical').length;
   const majorCount    = allIssues.filter(f => getVal(f, 'severity') === 'major').length;
+
+  // ── Overlay node builder — positions finding markers on the drawing ─────
+  // Mirrors PIDVerification.buildOverlayNodes; adapted for PFD tag patterns.
+  //
+  // Priority:
+  //  1. Exact tag match in drawing metadata.tag_positions (real OCR coords)
+  //  2. Equipment/control tag extracted from evidence string (real coords)
+  //  3. Stable FNV-1a hash position (heuristic — shown with dashed border)
+  const buildOverlayNodes = React.useCallback((issues = []) => {
+    const realPositions = activeDrawingData?.metadata?.tag_positions || {};
+
+    // Soft-coded: patterns that extract tags from evidence strings
+    const extractTags = (str) => {
+      const tags = [];
+      const PATTERNS = [
+        /\b([VEPKTRFC]-\d{3,4}[A-Z]?)\b/g,
+        /\b((?:FCV|PCV|HCV|LCV|TCV|XCV)-\d{3,4}[A-Z]?)\b/g,
+        /\b((?:PSV|PRV|SRV|BDV|TSV)-\d{3,4}[A-Z]?)\b/g,
+      ];
+      for (const re of PATTERNS) {
+        const r = new RegExp(re.source, 'g');
+        let m;
+        while ((m = r.exec(str)) !== null) tags.push(m[1]);
+      }
+      return [...new Set(tags)];
+    };
+
+    // FNV-1a hash → stable pseudo-position (same algo as PIDVerification)
+    const stableUnit = (str, salt) => {
+      let h = 2166136261 ^ salt;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return ((h >>> 0) % 10000) / 10000;
+    };
+
+    const bandRank = { low: 1, medium: 2, high: 3 };
+    const severityBand = (sev) =>
+      sev === 'critical' || sev === 'major' ? 'high' : sev === 'minor' ? 'medium' : 'low';
+
+    // Group by evidence key; keep highest severity band per group
+    const grouped = new Map();
+    for (const f of issues) {
+      const rawKey = (f.evidence?.trim() || `${f.rule_id}-${f.sl_no}`);
+      const band   = severityBand(f.severity);
+      const cur    = grouped.get(rawKey);
+      if (!cur || bandRank[band] > bandRank[cur.band]) {
+        grouped.set(rawKey, { finding: f, band, rawKey });
+      }
+    }
+
+    const nodes = [];
+    for (const [rawKey, x] of grouped) {
+      // Try real coords first (exact key, then tags extracted from evidence)
+      let real = realPositions[rawKey] ?? null;
+      if (!real) {
+        for (const tag of extractTags(rawKey)) {
+          real = realPositions[tag] ?? null;
+          if (real) break;
+        }
+      }
+      if (real) {
+        nodes.push({
+          ...x,
+          left:     Math.min(95, Math.max(5, real.x_pct)),
+          top:      Math.min(95, Math.max(5, real.y_pct)),
+          anchored: true,
+        });
+      } else {
+        const seed = `${activeDrawing || 'pfd'}:${rawKey}`;
+        nodes.push({
+          ...x,
+          left:     8  + stableUnit(seed, 11) * 84,
+          top:      10 + stableUnit(seed, 29) * 78,
+          anchored: false,
+        });
+      }
+    }
+    return nodes;
+  }, [activeDrawingData, activeDrawing]);
+
+  const jumpToFinding = (findingId) => {
+    setFocusedFindingId(findingId);
+    setActivePanel('findings');
+    setTimeout(() => {
+      const el = document.getElementById(`pfd-finding-row-${findingId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  };
 
   // Filtered findings for the Findings panel
   const filteredIssues = (activeDrawingData?.issues ?? []).filter(f => {
@@ -900,7 +1019,27 @@ const PFDQualityChecker = () => {
         {results && (() => {
           // ── SOFT-CODED panel definitions ────────────────────────────────────
           // Add a new entry here to create a new panel tab. No other changes needed.
+          const overlayNodes    = buildOverlayNodes(activeDrawingData?.issues ?? []);
+          const visibleNodes     = overlayNodes.filter(n => showHeuristic || n.anchored);
+
+          // Soft-coded: severity → fill colour for overlay dots
+          const SEV_COLOR = {
+            critical: { bg:'#dc2626', border:'#991b1b', glow:'rgba(220,38,38,0.5)' },
+            major:    { bg:'#f97316', border:'#c2410c', glow:'rgba(249,115,22,0.5)' },
+            minor:    { bg:'#fbbf24', border:'#d97706', glow:'rgba(251,191,36,0.4)' },
+            info:     { bg:'#0d9488', border:'#0f766e', glow:'rgba(13,148,136,0.4)' },
+          };
+
           const PANELS = [
+            {
+              id: 'drawing',
+              label: 'Drawing',
+              icon: ({ cls }) => <Eye className={cls} />,
+              badge: visibleNodes.length || null,
+              badgeCls: 'bg-teal-600 text-white',
+              accent: '#0d9488',
+              glow:   'rgba(13,148,136,0.25)',
+            },
             {
               id: 'findings',
               label: 'Findings',
@@ -1043,6 +1182,132 @@ const PFDQualityChecker = () => {
               {/* ═══ PANEL BODIES ═══ */}
               <div key={activePanel} style={{ animation:'panelSlide 0.25s ease-out both' }}>
 
+              {/* ─── DRAWING panel ────────────────────────────────── */}
+              {activePanel === 'drawing' && (
+              <div className="rounded-2xl overflow-hidden" style={T.card}>
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Eye className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">{activeDrawing} — Drawing Overlay</h2>
+                      <p className="text-xs text-slate-500">
+                        {visibleNodes.filter(n => n.anchored).length} anchored · {visibleNodes.filter(n => !n.anchored).length} heuristic
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500">
+                      {[['critical','#dc2626'],['major','#f97316'],['minor','#fbbf24'],['info','#0d9488']].map(([sev, col]) => (
+                        <span key={sev} className="flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background:col }} />
+                          {sev[0].toUpperCase()+sev.slice(1)}
+                        </span>
+                      ))}
+                      <span className="flex items-center gap-1">
+                        <span className="w-3 h-3 rounded-full border-2 border-dashed border-slate-400 flex-shrink-0" />
+                        Heuristic
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+                      <input type="checkbox" checked={showHeuristic} onChange={e => setShowHeuristic(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-teal-500" />
+                      Show heuristic
+                    </label>
+                    <button onClick={() => setActivePanel('findings')}
+                      className="text-xs text-teal-600 hover:text-teal-800 underline underline-offset-2 transition-colors">
+                      View table
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-slate-100">
+                  {drawingImageLoading && (
+                    <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                      <Loader className="w-4 h-4 animate-spin" />Loading drawing…
+                    </div>
+                  )}
+                  {!drawingImageLoading && !drawingImageUrl && (
+                    <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
+                      <AlertTriangle className="w-6 h-6" />
+                      <span className="text-xs">Drawing preview unavailable for this file</span>
+                    </div>
+                  )}
+                  {!drawingImageLoading && drawingImageUrl && (
+                    <div className="overflow-auto" style={{ maxHeight:'72vh' }}>
+                      <div className="relative w-full" style={{ lineHeight:0 }}>
+                        <img src={drawingImageUrl} alt={activeDrawing} draggable={false}
+                          className="w-full block" style={{ height:'auto', userSelect:'none' }} />
+                        <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                          {visibleNodes.map((n) => {
+                            const isFocused = focusedFindingId === n.finding.id;
+                            const sev = (n.finding?.severity || 'info').toLowerCase();
+                            const cat = (n.finding?.category || '').toLowerCase();
+                            const col = SEV_COLOR[sev] || SEV_COLOR.info;
+                            const isDiamond = cat === 'title_block';
+                            const scale = isFocused ? 1.6 : 1;
+                            const shapeStyle = isDiamond
+                              ? { borderRadius:'3px', transform:`translate(-50%,-50%) rotate(45deg) scale(${scale})`, width:'13px', height:'13px' }
+                              : { borderRadius:'50%', transform:`translate(-50%,-50%) scale(${scale})`, width:'16px', height:'16px' };
+                            return (
+                              <button
+                                key={n.rawKey}
+                                onClick={() => jumpToFinding(n.finding.id)}
+                                title={`[${cat}] ${n.finding.issue_observed}`}
+                                className={`absolute border-2 transition-all ${isFocused ? 'z-20' : 'z-10 hover:opacity-90'}`}
+                                style={{
+                                  left: `${n.left}%`,
+                                  top:  `${n.top}%`,
+                                  backgroundColor: col.bg,
+                                  borderColor: col.border,
+                                  boxShadow: isFocused
+                                    ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                    : '0 1px 4px rgba(0,0,0,0.4)',
+                                  pointerEvents: 'all',
+                                  outline: n.anchored ? undefined : '2px dashed rgba(100,116,139,0.7)',
+                                  outlineOffset: n.anchored ? undefined : '3px',
+                                  ...shapeStyle,
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {(activeDrawingData?.issues?.length ?? 0) > 0 && (
+                  <div className="border-t border-slate-100 divide-y divide-slate-50 max-h-48 overflow-y-auto">
+                    {(activeDrawingData?.issues ?? []).slice(0, 20).map(f => {
+                      const sev = (f.severity || 'info').toLowerCase();
+                      const col = SEV_COLOR[sev] || SEV_COLOR.info;
+                      const isFocused = focusedFindingId === f.id;
+                      return (
+                        <button key={f.id} onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
+                          className={`w-full text-left px-4 py-2.5 flex items-start gap-3 transition-colors ${
+                            isFocused ? 'bg-teal-50' : 'hover:bg-slate-50'
+                          }`}>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ background:col.bg }} />
+                          <span className="flex-1 min-w-0">
+                            <span className="text-xs font-semibold text-slate-700">[{f.rule_id}] </span>
+                            <span className="text-xs text-slate-600 line-clamp-1">{f.issue_observed}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 flex-shrink-0">{f.evidence?.split(' ').slice(0,4).join(' ')}</span>
+                        </button>
+                      );
+                    })}
+                    {(activeDrawingData?.issues?.length ?? 0) > 20 && (
+                      <div className="px-4 py-2 text-xs text-slate-400 text-center">
+                        +{(activeDrawingData.issues.length - 20)} more —{' '}
+                        <button onClick={() => setActivePanel('findings')} className="text-teal-600 underline">view all in table</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
+              {/* ─── end DRAWING ──────────────────────────────────────── */}
+
               {/* ─── FINDINGS panel ─────────────────────────────────── */}
               {activePanel === 'findings' && activeDrawingData && (
               <div className="rounded-2xl overflow-hidden" style={T.card}>
@@ -1109,7 +1374,12 @@ const PFDQualityChecker = () => {
                           </div>
                         </td></tr>
                       ) : filteredIssues.map((f, i) => (
-                        <tr key={f.id} className={`transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-teal-50/30`}>
+                        <tr key={f.id} id={`pfd-finding-row-${f.id}`}
+                          onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
+                          className={`transition-colors cursor-pointer ${
+                            focusedFindingId === f.id ? 'bg-teal-50 ring-1 ring-teal-300'
+                            : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                          } hover:bg-teal-50/30`}>
                           <td className="px-4 py-3 text-xs text-slate-400 font-mono">{f.sl_no}</td>
                           <td className="px-4 py-3">
                             <span className="inline-block text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium">
