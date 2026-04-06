@@ -1067,7 +1067,31 @@ const PIDVerification = () => {
   };
 
   const buildOverlayNodes = (issues = []) => {
-    // v4: real coords (exact) > NPS extracted from evidence string > hash fallback.
+    // v5: accurate overlay positioning with smart occurrence selection.
+    // ── Soft-coded calibration constants ────────────────────────────────────
+    // Shift ALL anchored markers by these amounts (% of image dimensions).
+    // Set to 0 to disable. Positive = shift right / down.
+    // Tune these if a run of real-position markers is consistently offset in one
+    // direction across the whole drawing (systematic canvas origin mismatch).
+    const OVERLAY_CALIB_X_PCT = 0;
+    const OVERLAY_CALIB_Y_PCT = 0;
+
+    // Drawing content area bounds (% of page).  Positions outside this band are
+    // likely in the title block / border — exclude them when picking the best
+    // occurrence from an NPS size's 'all' array.
+    // Typical P&ID (landscape A1): title block occupies right ~12% & bottom ~12%.
+    const AREA_X_MIN = 1;
+    const AREA_X_MAX = 96;
+    const AREA_Y_MIN = 1;
+    const AREA_Y_MAX = 87;
+
+    // Drawing main-content centroid — used as the reference point when selecting
+    // the single best occurrence from a tag's 'all' occurrences array. Biased
+    // slightly above & left of page centre as instrument fields cluster there.
+    const CONTENT_CX = 50;
+    const CONTENT_CY = 40;
+    // ────────────────────────────────────────────────────────────────────────
+
     const realPositions = activeDrawingData?.metadata?.tag_positions || {};
 
     // Normalize curly/smart quotes → straight ASCII " for consistent key lookup.
@@ -1110,30 +1134,80 @@ const PIDVerification = () => {
       return [...new Set(tags)];
     };
 
+    // Pick the single best {x_pct, y_pct} from a position-entry (may have 'all').
+    // Strategy: filter to main drawing area first, then pick the occurrence
+    // whose Euclidean distance to the content centroid is smallest.
+    // For position entries WITHOUT an 'all' array (direct tag hits), the entry
+    // itself is returned unchanged — those are already single, precise points.
+    const pickBestOcc = (pos) => {
+      if (!pos) return null;
+      if (!pos.all || pos.all.length === 0) {
+        // Direct tag position (no 'all' array) — use as-is
+        return (pos.x_pct != null && pos.y_pct != null) ? pos : null;
+      }
+      // Filter to drawing content area (excludes title block corners)
+      const inArea = pos.all.filter(o =>
+        o.x_pct >= AREA_X_MIN && o.x_pct <= AREA_X_MAX &&
+        o.y_pct >= AREA_Y_MIN && o.y_pct <= AREA_Y_MAX
+      );
+      const pool = inArea.length > 0 ? inArea : pos.all;
+      // Pick the occurrence nearest the drawing content centroid
+      let best = pool[0];
+      let bestDist = Infinity;
+      for (const o of pool) {
+        const dx = o.x_pct - CONTENT_CX;
+        const dy = o.y_pct - CONTENT_CY;
+        const d  = dx * dx + dy * dy;
+        if (d < bestDist) { bestDist = d; best = o; }
+      }
+      return { x_pct: best.x_pct, y_pct: best.y_pct };
+    };
+
+    // Prefer H-direction occurrence for line_tags (horizontal labels are the
+    // primary pipeline designation text — more precisely rendered than rotated V).
+    const pickBestLineTagOcc = (lt) => {
+      const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+      if (occs.length === 0) return null;
+      const hOcc = occs.find(o => o.direction === 'H');
+      const candidate = hOcc ?? occs[0];
+      return { x_pct: candidate.x_pct, y_pct: candidate.y_pct };
+    };
+
+    // Apply soft-coded calibration offset and clamp to visible canvas.
+    const applyCalib = (xp, yp) => ({
+      left: Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, xp + OVERLAY_CALIB_X_PCT)),
+      top:  Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, yp + OVERLAY_CALIB_Y_PCT)),
+    });
+
     // Resolve the best real position for a finding.
     // Priority 1 : exact normalised key match
     // Priority 2 : NPS size keys extracted from evidence (e.g. "8\"", "3\"")
     // Priority 3 : instrument / equipment tag IDs extracted from evidence (e.g. "PI-3610-16")
-    // Priority 4 : null → hash-based heuristic position
+    // Priority 4 : line_tags fuzzy match (exact → sep-normalised → partial)
+    // Priority 5 : red_annotations text match
+    // Fallback    : null → deterministic hash-based heuristic position
     const resolveReal = (nk, rawKey) => {
       // P1: exact match on normalised key or original raw key
-      let r = realPositions[nk] ?? realPositions[rawKey] ?? null;
-      if (r) return r;
+      //     pickBestOcc selects the nearest-to-centroid occurrence from the
+      //     'all' array so the marker lands on an actual text element, not
+      //     the arithmetic average of all occurrences.
+      const r1 = pickBestOcc(realPositions[nk] ?? realPositions[rawKey] ?? null);
+      if (r1) return r1;
 
       // P2: NPS size keys — try both the normalised key and original raw string
       //     so that smart-quote variants don't slip through normalisation
       for (const src of [nk, rawKey]) {
         for (const nps of extractNpsKeys(src)) {
-          r = realPositions[nps] ?? realPositions[normKey(nps)] ?? null;
-          if (r) return r;
+          const r2 = pickBestOcc(realPositions[nps] ?? realPositions[normKey(nps)] ?? null);
+          if (r2) return r2;
         }
       }
 
       // P3: instrument / equipment tag IDs extracted from evidence text
       for (const src of [nk, rawKey]) {
         for (const tag of extractInstrTags(src)) {
-          r = realPositions[tag] ?? realPositions[normKey(tag)] ?? null;
-          if (r) return r;
+          const r3 = pickBestOcc(realPositions[tag] ?? realPositions[normKey(tag)] ?? null);
+          if (r3) return r3;
         }
       }
 
@@ -1154,15 +1228,14 @@ const PIDVerification = () => {
             const ltText = normKey(lt.text || '');
             if (!ltText) continue;
             if (ltText === cand || cand === ltText) {
-              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
-              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+              const occ = pickBestLineTagOcc(lt);
+              if (occ) return occ;
             }
           }
         }
 
         // P4-norm: separator-normalised comparison — handles OCR reading '_' for '-'
         // or extra spaces introduced when joining splits across font runs.
-        // Soft-coded inline: normalise spaces/underscores to dashes, collapse doubles.
         const normSep = (s) => s.replace(/[\s_]+/g, '-').replace(/-{2,}/g, '-').toUpperCase();
         for (const cand of candidates) {
           const nc = normSep(cand);
@@ -1171,23 +1244,21 @@ const PIDVerification = () => {
             const nltText = normSep(normKey(lt.text || ''));
             if (!nltText) continue;
             if (nltText === nc) {
-              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
-              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+              const occ = pickBestLineTagOcc(lt);
+              if (occ) return occ;
             }
           }
         }
 
         // P4-partial: substring match for fragment evidence (min 8 chars to avoid noise).
-        // Resolves cases where evidence text is a partial designation like '017011-Y'
-        // that is a sub-sequence of a full tag stored in line_tags.
         for (const cand of candidates) {
           if (cand.length < 8) continue;
           for (const lt of lineTagsArr) {
             const ltText = normKey(lt.text || '');
             if (!ltText || ltText.length < 8) continue;
             if (ltText.includes(cand) || cand.includes(ltText)) {
-              const occ = (lt.occurrences || []).find(o => o.x_pct != null && o.y_pct != null);
-              if (occ) return { x_pct: occ.x_pct, y_pct: occ.y_pct };
+              const occ = pickBestLineTagOcc(lt);
+              if (occ) return occ;
             }
           }
         }
@@ -1230,17 +1301,13 @@ const PIDVerification = () => {
       const real = resolveReal(nk, x.rawKey);
 
       // One marker per unique finding group — use primary coord (x_pct/y_pct).
-      // real.all contains every OCR occurrence; we intentionally ignore it here
-      // so that dot count == finding count, not occurrence count.
+      // real.all contains every OCR occurrence; pickBestOcc already selected the
+      // best single point so we read x_pct/y_pct directly here.
       if (real) {
         const xp = real.x_pct ?? real.all?.[0]?.x_pct;
         const yp = real.y_pct ?? real.all?.[0]?.y_pct;
-        nodes.push({
-          ...x,
-          left: Math.min(95, Math.max(5, xp)),
-          top:  Math.min(95, Math.max(5, yp)),
-          anchored: true,
-        });
+        const pos = applyCalib(xp, yp);
+        nodes.push({ ...x, ...pos, anchored: true });
       } else {
         // Deterministic pseudo-position from FNV-1a hash (dashed marker).
         const seed = `${activeDrawing || 'drawing'}:${nk}`;
@@ -2065,10 +2132,13 @@ const PIDVerification = () => {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
                                   for (const occ of (tag.occurrences || [])) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
+                                    // Apply the same calibration used for overlay dots so dup
+                                    // highlight boxes align with their corresponding markers.
+                                    const pos = applyCalib(occ.x_pct, occ.y_pct);
                                     tagHighlights.push({
                                       key: `th-${tag.text}-${occ.direction}-${occ.x_pct}`,
-                                      left: Math.min(93, Math.max(7, occ.x_pct)),
-                                      top:  Math.min(95, Math.max(5, occ.y_pct)),
+                                      left: pos.left,
+                                      top:  pos.top,
                                       sev:  'minor',
                                       isTagOcc: true,
                                       label: tag.text,
