@@ -650,7 +650,8 @@ const PFDQualityChecker = () => {
   const [drawingImageLoading, setDrawingImageLoading] = useState(false);
   const [drawingImageError,   setDrawingImageError]   = useState(null); // null | 'missing' | 'error'
   const [focusedFindingId,    setFocusedFindingId]    = useState(null);
-  const [showHeuristic,       setShowHeuristic]       = useState(false);
+  const [showHeuristic,       setShowHeuristic]       = useState(true);
+  const [reextracting,        setReextracting]        = useState(false);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
@@ -755,6 +756,24 @@ const PFDQualityChecker = () => {
       flash('success', 'Project deleted');
     } catch {
       flash('error', 'Failed to delete project');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Delete the currently-viewed document and return to the upload screen
+  const deleteCurrentDocument = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`${API_PREFIX}/delete/${docId}/`, { headers: authHeader() });
+      resetUpload();
+      setResults(null);
+      if (selectedProject) fetchHistory(selectedProject.project_id);
+      flash('success', 'Document deleted — please re-upload the PFD drawing');
+    } catch {
+      flash('error', 'Failed to delete document');
     } finally {
       setIsDeleting(false);
     }
@@ -936,32 +955,98 @@ const PFDQualityChecker = () => {
   const majorCount    = allIssues.filter(f => getVal(f, 'severity') === 'major').length;
 
   // ── Overlay node builder — positions finding markers on the drawing ─────
-  // Mirrors PIDVerification.buildOverlayNodes; adapted for PFD tag patterns.
   //
-  // Priority:
-  //  1. Exact tag match in drawing metadata.tag_positions (real OCR coords)
-  //  2. Equipment/control tag extracted from evidence string (real coords)
-  //  3. Stable FNV-1a hash position (heuristic — shown with dashed border)
+  // Priority order per finding:
+  //  1. Each individual tag extracted from evidence → real OCR/OCR position
+  //     (creates one marker per tag, capped at MAX_TAGS_PER_FINDING)
+  //  2. Category-specific semantic zone heuristic (predictable, not random)
+  //
+  // "all" array support: when backend stores multiple occurrences per tag,
+  // pickBestOcc filters to the drawing content area and picks the one nearest
+  // the content centroid — avoiding title-block / border / legend hits.
   const buildOverlayNodes = React.useCallback((issues = []) => {
+    // ── Soft-coded calibration constants ─────────────────────────────────
+    // Shift ALL real-position markers by this offset (% of image dimensions).
+    // Tune here if markers are consistently offset in one direction.
+    const OVERLAY_CALIB_X_PCT = 0;
+    const OVERLAY_CALIB_Y_PCT = 0;
+
+    // Drawing content area bounds.  Positions outside this are likely in the
+    // title block / border area — excluded when picking best occurrence.
+    // Typical PFD landscape A1: title block occupies right ~16% & bottom ~12%.
+    const AREA_X_MIN = 2;
+    const AREA_X_MAX = 83;
+    const AREA_Y_MIN = 2;
+    const AREA_Y_MAX = 87;
+
+    // Content centroid — used to pick the nearest-to-centre occurrence from tag's 'all' array.
+    const CONTENT_CX = 45;
+    const CONTENT_CY = 40;
+
+    // Maximum individual-tag markers created per finding (prevents dot clouds)
+    const MAX_TAGS_PER_FINDING = 6;
+
+    // Soft-coded: category → semantic heuristic zone [left%, top%] used when
+    // no real position is available for that finding category.
+    const CATEGORY_ZONES = {
+      equipment:   [45, 38],
+      stream:      [35, 45],
+      control:     [55, 35],
+      safety:      [40, 22],
+      title_block: [87, 88],
+      notes:       [20, 55],
+      utility:     [60, 55],
+    };
+
     const realPositions = activeDrawingData?.metadata?.tag_positions || {};
 
-    // Soft-coded: patterns that extract tags from evidence strings
-    const extractTags = (str) => {
-      const tags = [];
-      const PATTERNS = [
-        /\b([VEPKTRFC]-\d{3,4}[A-Z]?)\b/g,
-        /\b((?:FCV|PCV|HCV|LCV|TCV|XCV)-\d{3,4}[A-Z]?)\b/g,
-        /\b((?:PSV|PRV|SRV|BDV|TSV)-\d{3,4}[A-Z]?)\b/g,
-      ];
-      for (const re of PATTERNS) {
-        const r = new RegExp(re.source, 'g');
-        let m;
-        while ((m = r.exec(str)) !== null) tags.push(m[1]);
+    // Pick best occurrence from a tag_positions entry.
+    // If 'all' array present: filter to content area → pick nearest centroid.
+    // If no 'all' array (legacy format): use direct x_pct/y_pct.
+    const pickBestOcc = (pos) => {
+      if (!pos) return null;
+      if (!pos.all || pos.all.length === 0) {
+        return (pos.x_pct != null && pos.y_pct != null) ? pos : null;
       }
+      const inArea = pos.all.filter(o =>
+        o.x_pct >= AREA_X_MIN && o.x_pct <= AREA_X_MAX &&
+        o.y_pct >= AREA_Y_MIN && o.y_pct <= AREA_Y_MAX
+      );
+      const pool = inArea.length > 0 ? inArea : pos.all;
+      let best = pool[0], bestDist = Infinity;
+      for (const o of pool) {
+        const d = (o.x_pct - CONTENT_CX) ** 2 + (o.y_pct - CONTENT_CY) ** 2;
+        if (d < bestDist) { bestDist = d; best = o; }
+      }
+      return { x_pct: best.x_pct, y_pct: best.y_pct };
+    };
+
+    // Apply calibration and clamp to visible canvas
+    const applyCalib = (xp, yp) => ({
+      left: Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, xp + OVERLAY_CALIB_X_PCT)),
+      top:  Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, yp + OVERLAY_CALIB_Y_PCT)),
+    });
+
+    // Extract individual candidate tags from an evidence string.
+    // Returns list of string tokens to look up in realPositions.
+    const extractTagsFromEvidence = (str) => {
+      const tags = [];
+      // Equipment / vessel tags  (V-101, E-201, P-301, K-401 …)
+      for (const m of str.matchAll(/\b([VEPKTRFC]-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // Control valves  (FCV-101, PCV-201, LCV-301 …)
+      for (const m of str.matchAll(/\b((?:FCV|PCV|HCV|LCV|TCV|PV|XCV)-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // Relief devices  (PSV-101, PRV-201 …)
+      for (const m of str.matchAll(/\b((?:PSV|PRV|SRV|BDV|TSV)-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // HOLD items  (HOLD-001, HOLD A …)
+      for (const m of str.matchAll(/\b(HOLD[-\s]?\w+)\b/gi)) tags.push(m[1].toUpperCase());
+      // Standalone stream numbers (comma-separated digits)
+      for (const m of str.matchAll(/(?:^|,\s*)(\d{1,4})(?=\s*(?:,|$))/g)) tags.push(m[1]);
+      // Utility labels
+      for (const m of str.matchAll(/\b(CW|IA|N2|LP|HP|MW|BFW|COND)\b/g)) tags.push(m[1]);
       return [...new Set(tags)];
     };
 
-    // FNV-1a hash → stable pseudo-position (same algo as PIDVerification)
+    // Stable FNV-1a hash → deterministic fractional offset (same as PIDVerification)
     const stableUnit = (str, salt) => {
       let h = 2166136261 ^ salt;
       for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -972,54 +1057,69 @@ const PFDQualityChecker = () => {
     const severityBand = (sev) =>
       sev === 'critical' || sev === 'major' ? 'high' : sev === 'minor' ? 'medium' : 'low';
 
-    // Group by evidence key; keep highest severity band per group
-    const grouped = new Map();
-    for (const f of issues) {
-      const rawKey = (f.evidence?.trim() || `${f.rule_id}-${f.sl_no}`);
-      const band   = severityBand(f.severity);
-      const cur    = grouped.get(rawKey);
-      if (!cur || bandRank[band] > bandRank[cur.band]) {
-        grouped.set(rawKey, { finding: f, band, rawKey });
-      }
-    }
-
     const nodes = [];
-    for (const [rawKey, x] of grouped) {
-      // Try real coords first (exact key, then tags extracted from evidence)
-      let real = realPositions[rawKey] ?? null;
-      if (!real) {
-        for (const tag of extractTags(rawKey)) {
-          real = realPositions[tag] ?? null;
-          if (real) break;
-        }
+    const usedKeys = new Set(); // deduplicate markers at the same grid cell
+
+    for (const f of issues) {
+      const evidence = f.evidence?.trim() || `${f.rule_id}-${f.sl_no}`;
+      const band = severityBand(f.severity);
+      const tags = extractTagsFromEvidence(evidence);
+
+      let placed = 0;
+      for (const tag of tags.slice(0, MAX_TAGS_PER_FINDING)) {
+        const pos = pickBestOcc(realPositions[tag] ?? null);
+        if (!pos) continue;
+        const { left, top } = applyCalib(pos.x_pct, pos.y_pct);
+        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+        if (usedKeys.has(cellKey)) continue;
+        usedKeys.add(cellKey);
+        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true });
+        placed++;
       }
-      if (real) {
-        nodes.push({
-          ...x,
-          left:     Math.min(95, Math.max(5, real.x_pct)),
-          top:      Math.min(95, Math.max(5, real.y_pct)),
-          anchored: true,
-        });
-      } else {
-        const seed = `${activeDrawing || 'pfd'}:${rawKey}`;
-        nodes.push({
-          ...x,
-          left:     8  + stableUnit(seed, 11) * 84,
-          top:      10 + stableUnit(seed, 29) * 78,
-          anchored: false,
-        });
+
+      // Fallback: use category semantic zone + small hash jitter per finding
+      if (placed === 0) {
+        const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
+        const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
+        // Small jitter (±8%) so multiple findings in the same category don't overlap
+        const jx = (stableUnit(seed, 11) - 0.5) * 16;
+        const jy = (stableUnit(seed, 29) - 0.5) * 16;
+        const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
+        const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
+        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+        if (!usedKeys.has(cellKey)) {
+          usedKeys.add(cellKey);
+          nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false });
+        }
       }
     }
     return nodes;
   }, [activeDrawingData, activeDrawing]);
 
   const jumpToFinding = (findingId) => {
-    setFocusedFindingId(findingId);
-    setActivePanel('findings');
+    setFocusedFindingId(prev => prev === findingId ? null : findingId);
+    // Stay on drawing panel — scroll the mini issues list below the drawing
     setTimeout(() => {
-      const el = document.getElementById(`pfd-finding-row-${findingId}`);
+      const el = document.getElementById(`pfd-drawing-finding-${findingId}`);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 80);
+  };
+
+  // Re-extract tag positions for the current document using the improved OCR pipeline
+  const reextractPositions = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) return;
+    setReextracting(true);
+    try {
+      await axios.post(`${API_PREFIX}/reextract/${docId}/`, {}, { headers: authHeader() });
+      flash('success', 'Marker positions refreshed — reloading results…');
+      // Reload results so new tag_positions come back from the server
+      await fetchResults(docId);
+    } catch {
+      flash('error', 'Re-extraction failed. Try re-uploading the drawing.');
+    } finally {
+      setReextracting(false);
+    }
   };
 
   // Filtered findings for the Findings panel
@@ -1758,7 +1858,7 @@ const PFDQualityChecker = () => {
                   </div>
                 </div>
                 {/* Gradient bar at bottom of hero */}
-                <div className="h-[3px]" style={{ background: T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
+                <div className="h-[3px]" style={{ backgroundImage: T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
               </div>
 
               {/* Drawing tabs */}
@@ -1813,6 +1913,12 @@ const PFDQualityChecker = () => {
                         className="w-3.5 h-3.5 accent-teal-500" />
                       Show heuristic
                     </label>
+                    <button onClick={reextractPositions} disabled={reextracting}
+                      title="Re-run OCR extraction to place markers at exact locations"
+                      className="flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1.5 rounded-lg hover:bg-teal-100 transition-colors disabled:opacity-50">
+                      {reextracting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                      {reextracting ? 'Scanning…' : 'Refresh Markers'}
+                    </button>
                     <button onClick={() => setActivePanel('findings')}
                       className="text-xs text-teal-600 hover:text-teal-800 underline underline-offset-2 transition-colors">
                       View table
@@ -1830,10 +1936,19 @@ const PFDQualityChecker = () => {
                       <AlertTriangle className="w-6 h-6" />
                       {drawingImageError === 'missing' ? (
                         <>
-                          <span className="text-xs font-medium text-amber-400">Original file not found on server</span>
-                          <span className="text-[11px] text-slate-500 text-center max-w-xs">
-                            This drawing was uploaded before the server was rebuilt. Please delete this document and re-upload the PFD drawing to restore the overlay.
+                          <span className="text-xs font-semibold text-amber-400">Original file not found on server</span>
+                          <span className="text-[11px] text-slate-500 text-center max-w-xs leading-relaxed">
+                            This document was processed on a previous server. The PDF file no longer exists on disk.
                           </span>
+                          <button
+                            onClick={deleteCurrentDocument}
+                            disabled={isDeleting}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-60"
+                            style={{ background:'linear-gradient(135deg,#dc2626,#b91c1c)', boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }}>
+                            {isDeleting
+                              ? <><Loader className="w-3.5 h-3.5 animate-spin" />Deleting…</>
+                              : <><Trash2 className="w-3.5 h-3.5" />Delete &amp; Re-upload</>}
+                          </button>
                         </>
                       ) : (
                         <span className="text-xs">Drawing preview unavailable for this file</span>
@@ -1885,14 +2000,15 @@ const PFDQualityChecker = () => {
                 </div>
                 {(activeDrawingData?.issues?.length ?? 0) > 0 && (
                   <div className="border-t border-slate-100 divide-y divide-slate-50 max-h-48 overflow-y-auto">
-                    {(activeDrawingData?.issues ?? []).slice(0, 20).map(f => {
+                    {(activeDrawingData?.issues ?? []).map(f => {
                       const sev = (f.severity || 'info').toLowerCase();
                       const col = SEV_COLOR[sev] || SEV_COLOR.info;
                       const isFocused = focusedFindingId === f.id;
                       return (
-                        <button key={f.id} onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
+                        <button key={f.id} id={`pfd-drawing-finding-${f.id}`}
+                          onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
                           className={`w-full text-left px-4 py-2.5 flex items-start gap-3 transition-colors ${
-                            isFocused ? 'bg-teal-50' : 'hover:bg-slate-50'
+                            isFocused ? 'bg-teal-50 border-l-2 border-teal-400' : 'hover:bg-slate-50'
                           }`}>
                           <span className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ background:col.bg }} />
                           <span className="flex-1 min-w-0">
@@ -1903,12 +2019,6 @@ const PFDQualityChecker = () => {
                         </button>
                       );
                     })}
-                    {(activeDrawingData?.issues?.length ?? 0) > 20 && (
-                      <div className="px-4 py-2 text-xs text-slate-400 text-center">
-                        +{(activeDrawingData.issues.length - 20)} more —{' '}
-                        <button onClick={() => setActivePanel('findings')} className="text-teal-600 underline">view all in table</button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
