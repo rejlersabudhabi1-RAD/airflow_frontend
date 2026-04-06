@@ -2132,13 +2132,10 @@ const PIDVerification = () => {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
                                   for (const occ of (tag.occurrences || [])) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
-                                    // Apply the same calibration used for overlay dots so dup
-                                    // highlight boxes align with their corresponding markers.
-                                    const pos = applyCalib(occ.x_pct, occ.y_pct);
                                     tagHighlights.push({
                                       key: `th-${tag.text}-${occ.direction}-${occ.x_pct}`,
-                                      left: pos.left,
-                                      top:  pos.top,
+                                      left: Math.min(96, Math.max(1, occ.x_pct)),
+                                      top:  Math.min(87, Math.max(1, occ.y_pct)),
                                       sev:  'minor',
                                       isTagOcc: true,
                                       label: tag.text,
