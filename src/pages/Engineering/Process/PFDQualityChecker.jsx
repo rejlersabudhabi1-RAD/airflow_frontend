@@ -648,6 +648,7 @@ const PFDQualityChecker = () => {
   // ── Drawing image overlay ─────────────────────────────────────────────────
   const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
   const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  const [drawingImageError,   setDrawingImageError]   = useState(null); // null | 'missing' | 'error'
   const [focusedFindingId,    setFocusedFindingId]    = useState(null);
   const [showHeuristic,       setShowHeuristic]       = useState(false);
 
@@ -664,14 +665,17 @@ const PFDQualityChecker = () => {
     const pageIndex = drawing.page_index ?? 0;
     setDrawingImageLoading(true);
     setDrawingImageUrl(null);
+    setDrawingImageError(null);
     axios.get(
       `${API_PREFIX}/drawing-image/${docId}/${pageIndex}/`,
       { headers: authHeader(), responseType: 'blob', timeout: 30000 }
     ).then(res => {
       objectUrl = URL.createObjectURL(res.data);
       setDrawingImageUrl(objectUrl);
-    }).catch(() => {
+      setDrawingImageError(null);
+    }).catch(err => {
       setDrawingImageUrl(null);
+      setDrawingImageError(err?.response?.status === 404 ? 'missing' : 'error');
     }).finally(() => {
       setDrawingImageLoading(false);
     });
@@ -1822,9 +1826,18 @@ const PFDQualityChecker = () => {
                     </div>
                   )}
                   {!drawingImageLoading && !drawingImageUrl && (
-                    <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400">
                       <AlertTriangle className="w-6 h-6" />
-                      <span className="text-xs">Drawing preview unavailable for this file</span>
+                      {drawingImageError === 'missing' ? (
+                        <>
+                          <span className="text-xs font-medium text-amber-400">Original file not found on server</span>
+                          <span className="text-[11px] text-slate-500 text-center max-w-xs">
+                            This drawing was uploaded before the server was rebuilt. Please delete this document and re-upload the PFD drawing to restore the overlay.
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs">Drawing preview unavailable for this file</span>
+                      )}
                     </div>
                   )}
                   {!drawingImageLoading && drawingImageUrl && (
