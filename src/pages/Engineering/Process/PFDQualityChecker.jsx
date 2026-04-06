@@ -230,7 +230,7 @@ const DarkBg = ({ children }) => (
 
     {/* Top gradient bar */}
     <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
-      style={{ background:T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
+      style={{ backgroundImage:T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
 
     <div className="relative z-10">{children}</div>
   </div>
@@ -1438,7 +1438,7 @@ const PFDQualityChecker = () => {
               <BarChart2 className="w-4 h-4" />History
             </button>
           </div>
-          <div className="h-0.5" style={{ background:T.gradBar, backgroundSize:'200% auto', animation:'gradShift 4s linear infinite' }} />
+          <div className="h-0.5" style={{ backgroundImage:T.gradBar, backgroundSize:'200% auto', animation:'gradShift 4s linear infinite' }} />
         </div>
 
         <FlashBanner />
