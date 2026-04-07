@@ -350,7 +350,10 @@ const EquipmentList = () => {
           ))}
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto px-6 py-8">
+        <div className="relative z-10 py-8">
+
+          {/* ── Centered content wrapper ── */}
+          <div className="max-w-7xl mx-auto px-6">
 
           {/* ── Header ── */}
           <div className="mb-8 eq-section" style={{ animationDelay: '0s' }}>
@@ -581,8 +584,11 @@ const EquipmentList = () => {
             </div>
           )}
 
-          {/* ── Results Table ── */}
+          </div>{/* end centered wrapper */}
+
+          {/* ── Results Table — full viewport width breakout ── */}
           {results && (
+            <div className="px-4 mt-4">
             <div className="rounded-2xl overflow-hidden eq-section" style={{
               background: 'white',
               border: '1px solid rgba(5,150,105,0.12)',
@@ -696,8 +702,8 @@ const EquipmentList = () => {
                             return (
                               <td
                                 key={col.key}
-                                className={`px-4 py-3 text-sm max-w-xs ${col.key === 'tag' ? 'font-mono font-bold' : ''}`}
-                                style={{ color: col.key === 'tag' ? '#065f46' : '#334155' }}
+                                className={`px-4 py-3 text-sm ${col.key === 'tag' ? 'font-mono font-bold' : ''}`}
+                                style={{ color: col.key === 'tag' ? '#065f46' : '#334155', whiteSpace: 'nowrap' }}
                                 title={Array.isArray(v) ? v.join(', ') : String(v || '')}
                               >
                                 {col.key === 'tag' ? (
@@ -706,7 +712,7 @@ const EquipmentList = () => {
                                     {display}
                                   </span>
                                 ) : (
-                                  <span className="block truncate">{display}</span>
+                                  <span className="block">{display}</span>
                                 )}
                               </td>
                             );
@@ -728,9 +734,11 @@ const EquipmentList = () => {
                 <span className="text-slate-400">↑↓ Click column header to sort</span>
               </div>
             </div>
+            </div>
           )}
 
           {/* ── Info Panel (idle) ── */}
+          <div className="max-w-7xl mx-auto px-6">
           {!results && !isProcessing && (
             <div className="rounded-2xl p-6 mt-4 eq-section" style={{
               background: 'white',
@@ -771,6 +779,7 @@ const EquipmentList = () => {
               </div>
             </div>
           )}
+          </div>{/* end info panel wrapper */}
 
         </div>
       </div>
