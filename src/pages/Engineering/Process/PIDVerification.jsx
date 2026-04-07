@@ -125,6 +125,27 @@ const HIDDEN_CATEGORIES = new Set(['notes', 'connectivity']);
 // to suppress them globally without touching any rule logic.
 const HIDDEN_SEVERITIES = new Set(['info']);
 
+// Soft-coded: when false, the native browser tooltip (recommendation text) that
+// appears on hover over every overlay marker on the drawing is suppressed.
+// Set to true to re-enable tooltips. Core overlay logic is NOT affected.
+const OVERLAY_SHOW_MARKER_TOOLTIP = false;
+
+// Soft-coded: localStorage key for coordinate calibration corrections recorded by
+// engineers during drawing review. Each entry is keyed 'drawingId:findingId' and
+// stores the original resolved % position alongside the corrected % position.
+// Corrections automatically override resolved/heuristic positions on re-render.
+const CALIB_STORAGE_KEY = 'pid_calib_corrections';
+
+// Soft-coded: localStorage key for per-drawing resolution tier statistics.
+// Records P1/P2/P3/P4/P5/FH/CX counts for every drawing viewed — export via the
+// '↓ Export Data' button to build a training corpus for improving OCR extraction.
+const CALIB_STATS_KEY = 'pid_calib_stats';
+
+// Soft-coded: when true, renders the resolution tier (P1/P2/P3/P4/P5/CX/FH) as
+// a tiny label beside each overlay marker so engineers can see exactly which
+// resolution strategy placed it. Set to false (default) for production.
+const SHOW_RESOLUTION_DEBUG = false;
+
 // Soft-coded: all rule IDs that represent duplicate pipeline line designations.
 // Add new duplicate-detection rule IDs here to automatically propagate them to:
 //   • the Duplicate Line Summary Banner above the report table
@@ -641,6 +662,13 @@ const PIDVerification = () => {
   const [comparison,      setComparison]      = useState(null);
   const [showUncertainHighlights, setShowUncertainHighlights] = useState(false);
   const [focusedFindingId, setFocusedFindingId] = useState(null);
+  // Correction mode — when true, clicking the drawing canvas records the clicked
+  // % position as the corrected location for the currently focused finding.
+  // Persists to localStorage and is applied automatically on next render.
+  const [correctionMode, setCorrectionMode] = useState(false);
+  // Stored engineer corrections, keyed 'drawingId:findingId'. Loaded from
+  // localStorage on mount; each entry overrides the resolved marker position.
+  const [calibCorrections, setCalibCorrections] = useState({});
   // ── Tag Naming & Acronym Check ────────────────────────────────────────────
   const [checkingNaming,   setCheckingNaming]   = useState(false);
   const [namingResults,    setNamingResults]    = useState(null);
@@ -684,6 +712,15 @@ const PIDVerification = () => {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [documentId, activeDrawing, results?.document_id]);
 
+  // Load stored calibration corrections from localStorage on component mount.
+  // Corrections are supplementary — they don't affect any backend data.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CALIB_STORAGE_KEY);
+      if (raw) setCalibCorrections(JSON.parse(raw));
+    } catch { /* non-fatal */ }
+  }, []);
+
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -707,6 +744,39 @@ const PIDVerification = () => {
     } finally {
       setLoadingHistory(false);
     }
+  };
+
+  // Atomically persist calibration corrections to state and localStorage.
+  const saveCalibration = (next) => {
+    setCalibCorrections(next);
+    try { localStorage.setItem(CALIB_STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  // Remove all stored corrections for the currently active drawing only.
+  const clearDrawingCorrections = () => {
+    if (!activeDrawing) return;
+    const next = { ...calibCorrections };
+    for (const k of Object.keys(next)) {
+      if (k.startsWith(`${activeDrawing}:`)) delete next[k];
+    }
+    saveCalibration(next);
+  };
+
+  // Export all calibration corrections and tier stats as a downloadable JSON file.
+  // Engineers can share this data to improve coordinate extraction accuracy over time.
+  const exportCalibrationData = () => {
+    try {
+      const corrections = JSON.parse(localStorage.getItem(CALIB_STORAGE_KEY) || '{}');
+      const stats      = JSON.parse(localStorage.getItem(CALIB_STATS_KEY)    || '{}');
+      const payload = { exportedAt: new Date().toISOString(), corrections, stats };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `pid_calibration_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
   };
 
   const fetchLegendKnowledge = async () => {
@@ -1192,14 +1262,14 @@ const PIDVerification = () => {
       //     'all' array so the marker lands on an actual text element, not
       //     the arithmetic average of all occurrences.
       const r1 = pickBestOcc(realPositions[nk] ?? realPositions[rawKey] ?? null);
-      if (r1) return r1;
+      if (r1) return { ...r1, tier: 'P1' };
 
       // P2: NPS size keys — try both the normalised key and original raw string
       //     so that smart-quote variants don't slip through normalisation
       for (const src of [nk, rawKey]) {
         for (const nps of extractNpsKeys(src)) {
           const r2 = pickBestOcc(realPositions[nps] ?? realPositions[normKey(nps)] ?? null);
-          if (r2) return r2;
+          if (r2) return { ...r2, tier: 'P2' };
         }
       }
 
@@ -1207,7 +1277,7 @@ const PIDVerification = () => {
       for (const src of [nk, rawKey]) {
         for (const tag of extractInstrTags(src)) {
           const r3 = pickBestOcc(realPositions[tag] ?? realPositions[normKey(tag)] ?? null);
-          if (r3) return r3;
+          if (r3) return { ...r3, tier: 'P3' };
         }
       }
 
@@ -1229,7 +1299,7 @@ const PIDVerification = () => {
             if (!ltText) continue;
             if (ltText === cand || cand === ltText) {
               const occ = pickBestLineTagOcc(lt);
-              if (occ) return occ;
+              if (occ) return { ...occ, tier: 'P4' };
             }
           }
         }
@@ -1245,7 +1315,7 @@ const PIDVerification = () => {
             if (!nltText) continue;
             if (nltText === nc) {
               const occ = pickBestLineTagOcc(lt);
-              if (occ) return occ;
+              if (occ) return { ...occ, tier: 'P4' };
             }
           }
         }
@@ -1258,7 +1328,7 @@ const PIDVerification = () => {
             if (!ltText || ltText.length < 8) continue;
             if (ltText.includes(cand) || cand.includes(ltText)) {
               const occ = pickBestLineTagOcc(lt);
-              if (occ) return occ;
+              if (occ) return { ...occ, tier: 'P4' };
             }
           }
         }
@@ -1275,7 +1345,7 @@ const PIDVerification = () => {
           if (!raNk) continue;
           if (evNk.includes(raNk) || raNk.includes(evNk)) {
             if (ra.x_pct != null && ra.y_pct != null) {
-              return { x_pct: ra.x_pct, y_pct: ra.y_pct };
+              return { x_pct: ra.x_pct, y_pct: ra.y_pct, tier: 'P5' };
             }
           }
         }
@@ -1300,6 +1370,15 @@ const PIDVerification = () => {
     for (const [nk, x] of grouped) {
       const real = resolveReal(nk, x.rawKey);
 
+      // Apply any stored engineer correction for this finding — always wins over
+      // extracted / heuristic positions. Keyed 'drawingId:findingId'.
+      const corrKey = `${activeDrawing || 'drawing'}:${x.finding.id}`;
+      const storedCorr = calibCorrections[corrKey];
+      if (storedCorr) {
+        nodes.push({ ...x, left: storedCorr.correctedLeft, top: storedCorr.correctedTop, anchored: true, tier: 'CX' });
+        continue;
+      }
+
       // One marker per unique finding group — use primary coord (x_pct/y_pct).
       // real.all contains every OCR occurrence; pickBestOcc already selected the
       // best single point so we read x_pct/y_pct directly here.
@@ -1307,7 +1386,7 @@ const PIDVerification = () => {
         const xp = real.x_pct ?? real.all?.[0]?.x_pct;
         const yp = real.y_pct ?? real.all?.[0]?.y_pct;
         const pos = applyCalib(xp, yp);
-        nodes.push({ ...x, ...pos, anchored: true });
+        nodes.push({ ...x, ...pos, anchored: true, tier: real.tier || 'P?' });
       } else {
         // Deterministic pseudo-position from FNV-1a hash (dashed marker).
         const seed = `${activeDrawing || 'drawing'}:${nk}`;
@@ -1316,6 +1395,7 @@ const PIDVerification = () => {
           left: 8  + (stableUnit(seed, 11) * 84),
           top:  10 + (stableUnit(seed, 29) * 78),
           anchored: false,
+          tier: 'FH',
         });
       }
     }
@@ -1329,6 +1409,26 @@ const PIDVerification = () => {
     )
   );
   const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
+
+  // Auto-record per-drawing resolution tier statistics to localStorage.
+  // Accumulates across all P&IDs tested and can be exported for model training.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!activeDrawing || overlayNodes.length === 0) return;
+    try {
+      const tc = {};
+      for (const n of overlayNodes) { const t = n.tier || 'FH'; tc[t] = (tc[t] || 0) + 1; }
+      const rawStats = localStorage.getItem(CALIB_STATS_KEY);
+      const allStats = rawStats ? JSON.parse(rawStats) : {};
+      allStats[activeDrawing] = {
+        drawingId: activeDrawing, timestamp: new Date().toISOString(),
+        totalFindings: overlayNodes.length, tierCounts: tc,
+        anchoredCount: overlayNodes.filter(n => n.anchored).length,
+        correctedCount: overlayNodes.filter(n => n.tier === 'CX').length,
+      };
+      localStorage.setItem(CALIB_STATS_KEY, JSON.stringify(allStats));
+    } catch { /* non-fatal */ }
+  }, [activeDrawing]); // re-records whenever drawing changes
 
   const jumpToFinding = (findingId) => {
     setFocusedFindingId(findingId);
@@ -2006,6 +2106,41 @@ const PIDVerification = () => {
                         />
                         Show low-confidence
                       </label>
+                      {/* Correction mode controls + calibration data export */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => setCorrectionMode(v => !v)}
+                          disabled={!focusedFindingId}
+                          title={focusedFindingId
+                            ? 'Click the drawing to place the marker at the exact location of the focused finding'
+                            : 'Select (click) a finding in the table first to enable correction mode'}
+                          className={`text-[10px] px-2 py-1 rounded border font-semibold transition-colors ${
+                            correctionMode
+                              ? 'bg-amber-400 text-white border-amber-500'
+                              : focusedFindingId
+                                ? 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                                : 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                          }`}
+                        >
+                          {correctionMode ? '⊕ Click drawing…' : '⊕ Correct Marker'}
+                        </button>
+                        <button
+                          onClick={exportCalibrationData}
+                          title="Export all correction records and resolution tier statistics as JSON for model training"
+                          className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                        >
+                          ↓ Export Data
+                        </button>
+                        {activeDrawing && Object.keys(calibCorrections).some(k => k.startsWith(`${activeDrawing}:`)) && (
+                          <button
+                            onClick={clearDrawingCorrections}
+                            title="Remove all stored corrections for this drawing"
+                            className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-red-400 border-red-200 hover:border-red-400 transition-colors"
+                          >
+                            ✕ Clear Fixes
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* ── Overlay legend ── */}
@@ -2044,7 +2179,33 @@ const PIDVerification = () => {
                       Overlay: {overlayNodes.length} total · {visibleOverlayNodes.length} visible
                       · {visibleOverlayNodes.filter(n => n.anchored).length} anchored
                       · {visibleOverlayNodes.filter(n => !n.anchored).length} heuristic
+                      {visibleOverlayNodes.filter(n => n.tier === 'CX').length > 0 && (
+                        <span className="ml-1 text-amber-600 font-bold">
+                          · {visibleOverlayNodes.filter(n => n.tier === 'CX').length} corrected
+                        </span>
+                      )}
+                      {SHOW_RESOLUTION_DEBUG && ' · ' + (() => {
+                        const tc = {};
+                        for (const n of overlayNodes) { const t = n.tier || 'FH'; tc[t] = (tc[t] || 0) + 1; }
+                        return Object.entries(tc).sort().map(([t, c]) => `${t}:${c}`).join(' ');
+                      })()}
                     </div>
+
+                    {/* Correction mode active banner */}
+                    {correctionMode && focusedFindingId && (
+                      <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 font-semibold">
+                        <span className="text-amber-500 text-base leading-none flex-shrink-0">⊕</span>
+                        <span>
+                          Click the <strong>exact location</strong> on the drawing to pin the marker
+                          for <strong>{visibleOverlayNodes.find(n => n.finding.id === focusedFindingId)?.key ?? 'focused finding'}</strong>.
+                        </span>
+                        <button
+                          onClick={() => setCorrectionMode(false)}
+                          className="ml-auto text-amber-500 hover:text-amber-700 font-bold text-sm leading-none flex-shrink-0"
+                        >✕</button>
+                      </div>
+                    )}
+
                     <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
                       {drawingImageLoading && (
                         <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-xs">
@@ -2060,7 +2221,37 @@ const PIDVerification = () => {
 
                       {!drawingImageLoading && drawingImageUrl && (
                         <div className="overflow-auto" style={{ maxHeight: '72vh' }}>
-                          <div className="relative w-full" style={{ lineHeight: 0 }}>
+                          <div
+                            className="relative w-full"
+                            style={{
+                              lineHeight: 0,
+                              cursor: correctionMode && focusedFindingId ? 'crosshair' : 'default',
+                            }}
+                            onClick={(e) => {
+                              if (!correctionMode || !focusedFindingId) return;
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const clL = Math.min(96, Math.max(1, ((e.clientX - rect.left)  / rect.width)  * 100));
+                              const clT = Math.min(87, Math.max(1, ((e.clientY - rect.top)   / rect.height) * 100));
+                              const corrKey  = `${activeDrawing || 'drawing'}:${focusedFindingId}`;
+                              const existing = overlayNodes.find(n => n.finding.id === focusedFindingId);
+                              saveCalibration({
+                                ...calibCorrections,
+                                [corrKey]: {
+                                  drawingId:     activeDrawing,
+                                  findingId:     focusedFindingId,
+                                  ruleId:        existing?.finding?.rule_id,
+                                  evidenceKey:   existing?.key,
+                                  tier:          existing?.tier,
+                                  originalLeft:  existing?.left  ?? null,
+                                  originalTop:   existing?.top   ?? null,
+                                  correctedLeft: clL,
+                                  correctedTop:  clT,
+                                  timestamp:     new Date().toISOString(),
+                                },
+                              });
+                              setCorrectionMode(false);
+                            }}
+                          >
                             <img
                               src={drawingImageUrl}
                               alt={activeDrawing}
@@ -2103,7 +2294,7 @@ const PIDVerification = () => {
                                   <button
                                     key={n.key}
                                     onClick={() => jumpToFinding(n.finding.id)}
-                                    title={`[${cat}] ${n.key} · ${n.finding.issue_observed}`}
+                                    title={OVERLAY_SHOW_MARKER_TOOLTIP ? `[${cat}] ${n.key} · ${n.finding.issue_observed}` : undefined}
                                     className={`absolute border-2 transition-all ${isFocused ? 'z-20 ring-4 ring-white/80' : 'z-10 hover:opacity-90'}`}
                                     style={{
                                       left: `${n.left}%`,
@@ -2151,7 +2342,7 @@ const PIDVerification = () => {
                                       return (
                                         <div
                                           key={`dh-${n.key}`}
-                                          title={`${n.finding.rule_id}: ${n.finding.issue_observed}`}
+                                          title={OVERLAY_SHOW_MARKER_TOOLTIP ? `${n.finding.rule_id}: ${n.finding.issue_observed}` : undefined}
                                           style={{
                                             position: 'absolute',
                                             left:   `${n.left}%`,
@@ -2175,7 +2366,7 @@ const PIDVerification = () => {
                                     {tagHighlights.map(h => (
                                       <div
                                         key={h.key}
-                                        title={`Duplicate tag: ${h.label}`}
+                                        title={OVERLAY_SHOW_MARKER_TOOLTIP ? `Duplicate tag: ${h.label}` : undefined}
                                         style={{
                                           position: 'absolute',
                                           left:   `${h.left}%`,
@@ -2259,7 +2450,7 @@ const PIDVerification = () => {
                                               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                             }, 150);
                                           }}
-                                          title={`Duplicate: ${n.label} · found in ${n.direction} orientation${n.multi ? ' (H+V confirmed)' : ''}`}
+                                          title={OVERLAY_SHOW_MARKER_TOOLTIP ? `Duplicate: ${n.label} · found in ${n.direction} orientation${n.multi ? ' (H+V confirmed)' : ''}` : undefined}
                                           style={{
                                             position: 'absolute',
                                             left: `${n.left}%`,
