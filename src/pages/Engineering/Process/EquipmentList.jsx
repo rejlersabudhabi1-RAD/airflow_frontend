@@ -46,6 +46,127 @@ const POST_RETRY_BASE_MS = 4000;
 const API_BASE = getApiBaseUrl();
 
 // ---------------------------------------------------------------------------
+// Soft-coded line / nozzle connection rendering config
+// Change LINE_ARROW_SEPARATOR to any symbol (e.g. '⟶', '➜', '▸') to restyle.
+// Extend FLUID_COLOR_MAP with any fluid code and { bg, text, border } theme.
+// ---------------------------------------------------------------------------
+const LINE_ARROW_SEPARATOR = '→';
+
+const FLUID_COLOR_MAP = {
+  // Gases
+  PG:  { bg: 'rgba(59,130,246,0.10)',  text: '#1e3a5f', border: 'rgba(59,130,246,0.30)'  },
+  VG:  { bg: 'rgba(139,92,246,0.10)',  text: '#3b0764', border: 'rgba(139,92,246,0.30)'  },
+  FG:  { bg: 'rgba(14,165,233,0.10)',  text: '#0c4a6e', border: 'rgba(14,165,233,0.30)'  },
+  GC:  { bg: 'rgba(234,179,8,0.10)',   text: '#713f12', border: 'rgba(234,179,8,0.30)'   },
+  NG:  { bg: 'rgba(99,102,241,0.10)',  text: '#312e81', border: 'rgba(99,102,241,0.30)'  },
+  HG:  { bg: 'rgba(99,102,241,0.10)',  text: '#312e81', border: 'rgba(99,102,241,0.30)'  },
+  // Liquid hydrocarbons
+  HO:  { bg: 'rgba(245,158,11,0.10)',  text: '#78350f', border: 'rgba(245,158,11,0.30)'  },
+  LO:  { bg: 'rgba(245,158,11,0.10)',  text: '#78350f', border: 'rgba(245,158,11,0.30)'  },
+  CO:  { bg: 'rgba(245,158,11,0.10)',  text: '#78350f', border: 'rgba(245,158,11,0.30)'  },
+  // Water
+  W:   { bg: 'rgba(6,182,212,0.10)',   text: '#164e63', border: 'rgba(6,182,212,0.30)'   },
+  CW:  { bg: 'rgba(6,182,212,0.10)',   text: '#164e63', border: 'rgba(6,182,212,0.30)'   },
+  SW:  { bg: 'rgba(20,184,166,0.10)',  text: '#134e4a', border: 'rgba(20,184,166,0.30)'  },
+  FW:  { bg: 'rgba(6,182,212,0.10)',   text: '#164e63', border: 'rgba(6,182,212,0.30)'   },
+  WW:  { bg: 'rgba(6,182,212,0.10)',   text: '#164e63', border: 'rgba(6,182,212,0.30)'   },
+  // Steam / condensate
+  ST:  { bg: 'rgba(249,115,22,0.10)',  text: '#7c2d12', border: 'rgba(249,115,22,0.30)'  },
+  SC:  { bg: 'rgba(249,115,22,0.10)',  text: '#7c2d12', border: 'rgba(249,115,22,0.30)'  },
+  // Drain / vent
+  D:   { bg: 'rgba(100,116,139,0.10)', text: '#334155', border: 'rgba(100,116,139,0.30)' },
+  DR:  { bg: 'rgba(100,116,139,0.10)', text: '#334155', border: 'rgba(100,116,139,0.30)' },
+  V:   { bg: 'rgba(167,139,250,0.10)', text: '#4c1d95', border: 'rgba(167,139,250,0.30)' },
+  // Air
+  A:   { bg: 'rgba(132,204,22,0.10)',  text: '#3f6212', border: 'rgba(132,204,22,0.30)'  },
+  IA:  { bg: 'rgba(132,204,22,0.10)',  text: '#3f6212', border: 'rgba(132,204,22,0.30)'  },
+  PA:  { bg: 'rgba(132,204,22,0.10)',  text: '#3f6212', border: 'rgba(132,204,22,0.30)'  },
+  // Chemicals / inhibitors
+  CH:  { bg: 'rgba(239,68,68,0.08)',   text: '#7f1d1d', border: 'rgba(239,68,68,0.25)'   },
+  INH: { bg: 'rgba(239,68,68,0.08)',   text: '#7f1d1d', border: 'rgba(239,68,68,0.25)'   },
+  MEG: { bg: 'rgba(239,68,68,0.08)',   text: '#7f1d1d', border: 'rgba(239,68,68,0.25)'   },
+};
+const FLUID_COLOR_DEFAULT = { bg: 'rgba(148,163,184,0.10)', text: '#475569', border: 'rgba(148,163,184,0.30)' };
+
+/**
+ * Extract fluid code from a line tag.
+ * Format: SIZE"-FLUIDCODE-SEQUENCE-PIPECLASS[-INSULATION]
+ * e.g.  "2"-D-6109-033842-X"  →  "D"
+ *       "16"-PG-5140-031440-X" → "PG"
+ */
+function parseFluidCode(lineTag) {
+  const m = String(lineTag).match(/^[\d½¾¼]+["']?-([A-Z]{1,4})-/);
+  return m ? m[1] : null;
+}
+
+/** Render line connection tags as colour-coded mono badges joined by flow arrows */
+function renderLineBadges(lines) {
+  if (!Array.isArray(lines) || !lines.length) return <span style={{ color: '#94a3b8' }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+      {lines.map((line, i) => {
+        const fluid   = parseFluidCode(line);
+        const colours = (fluid && FLUID_COLOR_MAP[fluid]) || FLUID_COLOR_DEFAULT;
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && (
+              <span style={{ color: '#94a3b8', fontSize: '0.65rem', fontWeight: 700, userSelect: 'none', padding: '0 1px' }}>
+                {LINE_ARROW_SEPARATOR}
+              </span>
+            )}
+            <span
+              title={`${line}${fluid ? ` (${fluid})` : ''}`}
+              style={{
+                background:    colours.bg,
+                color:         colours.text,
+                border:        `1px solid ${colours.border}`,
+                borderRadius:  '4px',
+                padding:       '1px 6px',
+                fontSize:      '0.67rem',
+                fontFamily:    'ui-monospace, SFMono-Regular, monospace',
+                fontWeight:    600,
+                whiteSpace:    'nowrap',
+                letterSpacing: '0.01em',
+              }}
+            >
+              {line}
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Render nozzle connection tags as compact emerald mono badges */
+function renderNozzleBadges(nozzles) {
+  if (!Array.isArray(nozzles) || !nozzles.length) return <span style={{ color: '#94a3b8' }}>—</span>;
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '4px' }}>
+      {nozzles.map((nozzle, i) => (
+        <span
+          key={i}
+          title={nozzle}
+          style={{
+            background:   'rgba(5,150,105,0.07)',
+            color:        '#065f46',
+            border:       '1px solid rgba(5,150,105,0.20)',
+            borderRadius: '4px',
+            padding:      '1px 6px',
+            fontSize:     '0.67rem',
+            fontFamily:   'ui-monospace, SFMono-Regular, monospace',
+            fontWeight:   600,
+            whiteSpace:   'nowrap',
+          }}
+        >
+          {nozzle}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 const EquipmentList = () => {
   const [file,           setFile]           = useState(null);
   const [isProcessing,   setIsProcessing]   = useState(false);
@@ -699,11 +820,16 @@ const EquipmentList = () => {
                             const display = Array.isArray(v)
                               ? (v.length ? v.join(' · ') : '—')
                               : (v || '—');
+                            const isConnectionCol = col.key === 'line_connections' || col.key === 'nozzle_connections';
                             return (
                               <td
                                 key={col.key}
                                 className={`px-4 py-3 text-sm ${col.key === 'tag' ? 'font-mono font-bold' : ''}`}
-                                style={{ color: col.key === 'tag' ? '#065f46' : '#334155', whiteSpace: 'nowrap' }}
+                                style={{
+                                  color:      col.key === 'tag' ? '#065f46' : '#334155',
+                                  whiteSpace: isConnectionCol ? 'normal' : 'nowrap',
+                                  maxWidth:   col.key === 'line_connections' ? '320px' : undefined,
+                                }}
                                 title={Array.isArray(v) ? v.join(', ') : String(v || '')}
                               >
                                 {col.key === 'tag' ? (
@@ -711,6 +837,10 @@ const EquipmentList = () => {
                                     style={{ background: 'rgba(5,150,105,0.08)', color: '#065f46', border: '1px solid rgba(5,150,105,0.15)' }}>
                                     {display}
                                   </span>
+                                ) : col.key === 'line_connections' ? (
+                                  renderLineBadges(v)
+                                ) : col.key === 'nozzle_connections' ? (
+                                  renderNozzleBadges(v)
                                 ) : (
                                   <span className="block">{display}</span>
                                 )}
