@@ -2720,7 +2720,7 @@ const CriticalLineList = () => {
 
                       'Flow Medium', 'Two Phase', 'Surge Flow', 'Flow Max', 'Density', 
 
-                      'Normal Pressure', 'Normal Temp', 'Design Pressure', 'Minimax Design Temp',
+                      'Normal Pressure', 'Normal Temp', 'Design Pressure', 'Min Design Temp (Â°C)', 'Max Design Temp (Â°C)',
 
                       'Design Code', 'Category-M Fluid', 'Schedule / Wall THK', 'Stress Relief', 'PWHT',
 
@@ -2736,7 +2736,7 @@ const CriticalLineList = () => {
 
                     
 
-                    // Add all 36 columns for each row
+                    // Add all 37 columns for each row
 
                     data.forEach(row => {
 
@@ -2776,7 +2776,8 @@ const CriticalLineList = () => {
 
                         row.design_pressure || '',
 
-                        row.minimax_design_temp || '',
+                        row.min_design_temp || '',
+                        row.max_design_temp || '',
 
                         row.design_code || '',
 
@@ -2826,7 +2827,7 @@ const CriticalLineList = () => {
 
                     
 
-                    // Set column widths for all 36 columns
+                    // Set column widths for all 37 columns
 
                     ws['!cols'] = [
 
@@ -2840,7 +2841,7 @@ const CriticalLineList = () => {
 
                       { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 },
 
-                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }
+                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 18 }
 
                     ];
 
@@ -2926,7 +2927,8 @@ const CriticalLineList = () => {
 
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Design Pressure</th>
 
-                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Minimax Design Temp</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Min Design Temp (Â°C)</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Max Design Temp (Â°C)</th>
 
                     <th className="px-4 py-3 text-left text-xs font-medium text-yellow-200 uppercase tracking-wider whitespace-nowrap bg-purple-700">Design Code</th>
 
@@ -3050,7 +3052,8 @@ const CriticalLineList = () => {
 
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.design_pressure || '-'}</td>
 
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.minimax_design_temp || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.min_design_temp || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.max_design_temp || '-'}</td>
 
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 bg-yellow-50">{line.design_code || '-'}</td>
 
