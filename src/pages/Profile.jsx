@@ -278,7 +278,11 @@ const Profile = () => {
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Photo upload failed'); }
       const updated = await res.json();
-      if (updated.profile_photo) setPhotoPreview(updated.profile_photo);
+      if (updated.profile_photo) {
+        setPhotoPreview(updated.profile_photo);
+        // Sync the new photo URL into Redux so the sidebar avatar updates immediately
+        dispatch(updateUser({ profile_photo: updated.profile_photo }));
+      }
       setSelectedFile(null);
       toast.success('Profile photo updated!');
     } catch (err) {

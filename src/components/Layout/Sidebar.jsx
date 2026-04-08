@@ -758,8 +758,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         <div className="border-t border-gray-200 dark:border-gray-700 p-4">
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
             <div className="w-10 h-10 rounded-full flex items-center justify-center relative overflow-hidden ring-2 ring-white dark:ring-gray-700 shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600">
-              {/* Always show initials (profile photos disabled until S3 CORS configured) */}
-              <span className="absolute inset-0 flex items-center justify-center text-white font-semibold text-sm z-10">
+              {/* Show profile photo when available, fall back to initials */}
+              {user?.profile_photo ? (
+                <img
+                  src={user.profile_photo}
+                  alt="Profile"
+                  className="absolute inset-0 w-full h-full object-cover z-10"
+                  onError={e => { e.target.onerror = null; e.target.style.display = 'none'; }}
+                />
+              ) : null}
+              <span className="absolute inset-0 flex items-center justify-center text-white font-semibold text-sm">
                 {USER_DISPLAY_CONFIG.formatting.getUserInitials(userData)}
               </span>
               {isAdmin && isCollapsed && (
