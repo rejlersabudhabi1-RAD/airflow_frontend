@@ -1,691 +1,1104 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { updateUser } from '../store/slices/authSlice';
-import { 
-  User, Mail, Phone, Briefcase, MapPin, FileText, 
-  Camera, Upload, X, Check, AlertCircle, Loader, 
-  Building2, Calendar, Shield, Edit2, Save
+import {
+  User, Mail, Phone, Briefcase, MapPin,
+  Camera, X, Check, Loader,
+  Building2, Shield, Save, Star, Award, Globe, Clock,
+  Plus, Trash2, Calendar, FolderOpen, TrendingUp,
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api.config';
 import { S3_UPLOAD_CONFIG, validateFile, formatFileSize } from '../config/s3Upload.config';
 
-/**
- * Professional Profile Page with Photo Upload
- * Features:
- * - Profile photo upload to AWS S3
- * - Editable user information
- * - Real-time validation
- * - Professional UI/UX
- * - Activity tracking
- * - Security information
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded engineering constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ENGINEERING_DISCIPLINES = [
+  'Process', 'Piping', 'Instrument & Control', 'Electrical',
+  'Civil & Structural', 'Mechanical', 'Safety & HSE', 'Project Controls',
+  'Commissioning', 'Materials & Corrosion', 'Environmental', 'Procurement',
+];
+
+const EXPERTISE_LEVELS = [
+  { value: 'junior',    label: 'Junior Engineer',    years: '0–3 yrs',   colorClass: 'bg-blue-100 text-blue-700 border-blue-300',     dotClass: 'bg-blue-500' },
+  { value: 'mid',       label: 'Mid-Level Engineer', years: '3–7 yrs',   colorClass: 'bg-cyan-100 text-cyan-700 border-cyan-300',      dotClass: 'bg-cyan-500' },
+  { value: 'senior',    label: 'Senior Engineer',    years: '7–15 yrs',  colorClass: 'bg-green-100 text-green-700 border-green-300',   dotClass: 'bg-green-500' },
+  { value: 'lead',      label: 'Lead Engineer',      years: '12–20 yrs', colorClass: 'bg-purple-100 text-purple-700 border-purple-300', dotClass: 'bg-purple-500' },
+  { value: 'principal', label: 'Principal Engineer', years: '18+ yrs',   colorClass: 'bg-orange-100 text-orange-700 border-orange-300', dotClass: 'bg-orange-500' },
+  { value: 'fellow',    label: 'Engineering Fellow', years: '25+ yrs',   colorClass: 'bg-red-100 text-red-700 border-red-300',         dotClass: 'bg-red-500' },
+];
+
+const TECHNICAL_SKILLS_CATALOG = [
+  'HYSYS', 'AspenPlus', 'PDMS', 'AVEVA E3D', 'Smart Plant P&ID',
+  'AutoCAD Plant 3D', 'CAESAR II', 'ETAP', 'AVEVA Instrumentation',
+  'COMOS', 'HTRI', 'FLARENET', 'PIPESIM', 'OLGA', 'Microsoft Project',
+  'Primavera P6', 'SAP PM', 'HAZOP Leadership', 'SIL Assessment',
+  'Risk-Based Inspection', 'Front End Loading (FEL)', 'Rotating Equipment',
+];
+
+const CERTIFICATION_OPTIONS = [
+  'PMP (Project Management Professional)',
+  'Chartered Engineer (CEng)',
+  'Professional Engineer (PE)',
+  'CompEx (Explosive Atmospheres)',
+  'NEBOSH General Certificate',
+  'NEBOSH International Diploma',
+  'ISO 55000 Asset Management',
+  'ISO 9001 Quality MS',
+  'ISO 14001 Environmental MS',
+  'Functional Safety (IEC 61511)',
+  'API 510 Pressure Vessel Inspector',
+  'API 570 Piping Inspector',
+  'API 653 Tank Inspector',
+  'AWS Certified Welding Inspector (CWI)',
+  'CSWIP 3.1 Welding Inspector',
+  'Prince2 Practitioner',
+  'Six Sigma Green Belt',
+  'Six Sigma Black Belt',
+];
+
+const LANGUAGES = [
+  'English', 'Arabic', 'French', 'Spanish', 'German', 'Russian',
+  'Mandarin', 'Hindi', 'Urdu', 'Tagalog', 'Portuguese',
+];
+
+const AVAILABILITY_STATUSES = [
+  { value: 'available', label: 'Available',           badgeClass: 'bg-green-500',  bgClass: 'bg-green-50 border-green-300',   textClass: 'text-green-700',  desc: 'Ready for new assignments' },
+  { value: 'partial',   label: 'Partially Available', badgeClass: 'bg-yellow-500', bgClass: 'bg-yellow-50 border-yellow-300', textClass: 'text-yellow-700', desc: 'Limited bandwidth available' },
+  { value: 'busy',      label: 'Fully Committed',     badgeClass: 'bg-red-500',    bgClass: 'bg-red-50 border-red-300',       textClass: 'text-red-700',    desc: 'At full project capacity' },
+  { value: 'on_leave',  label: 'On Leave',            badgeClass: 'bg-gray-400',   bgClass: 'bg-gray-50 border-gray-300',     textClass: 'text-gray-600',   desc: 'Temporarily unavailable' },
+];
+
+const PROJECT_TYPES = [
+  'Greenfield Development', 'Brownfield Modification', 'Conceptual Study',
+  'Feasibility Study', 'FEED', 'Detailed Engineering', 'EPC',
+  'Construction Support', 'Commissioning & Start-up', 'Maintenance Engineering', 'Decommissioning',
+];
+
+const PROJECT_ROLES = [
+  'Lead Process Engineer', 'Process Engineer', 'Lead Piping Engineer', 'Piping Engineer',
+  'Lead Instrument Engineer', 'Instrument Engineer', 'Lead Electrical Engineer', 'Electrical Engineer',
+  'Lead Mechanical Engineer', 'Mechanical Engineer', 'Civil / Structural Engineer',
+  'Safety / HSE Lead', 'Project Manager', 'Project Engineer', 'Document Controller',
+  'Commissioning Engineer', 'Materials & Corrosion Engineer', 'Cost Estimator',
+];
+
+const PROJECT_ASSIGNMENT_STATUSES = [
+  { value: 'active',      label: 'Active',       bgClass: 'bg-green-100 text-green-700',  dotClass: 'bg-green-500' },
+  { value: 'on_hold',     label: 'On Hold',      bgClass: 'bg-yellow-100 text-yellow-700', dotClass: 'bg-yellow-500' },
+  { value: 'completing',  label: 'Completing',   bgClass: 'bg-blue-100 text-blue-700',    dotClass: 'bg-blue-500' },
+  { value: 'completed',   label: 'Completed',    bgClass: 'bg-gray-100 text-gray-500',    dotClass: 'bg-gray-400' },
+];
+
+const DEFAULT_PROJECT = { name: '', role: '', allocation: 50, start_date: '', end_date: '', status: 'active', client: '', location: '' };
+
+// Completeness weights — must sum to 100
+const COMPLETENESS_FIELDS = [
+  { key: 'first_name',              src: 'basic', w: 6  },
+  { key: 'last_name',               src: 'basic', w: 6  },
+  { key: 'phone',                   src: 'basic', w: 4  },
+  { key: 'location',                src: 'basic', w: 4  },
+  { key: 'department',              src: 'basic', w: 4  },
+  { key: 'job_title',               src: 'basic', w: 6  },
+  { key: 'bio',                     src: 'basic', w: 6  },
+  { key: 'expertise_level',         src: 'eng',   w: 10 },
+  { key: 'years_experience',        src: 'eng',   w: 6  },
+  { key: 'engineering_disciplines', src: 'arr',   w: 12 },
+  { key: 'technical_skills',        src: 'arr',   w: 12 },
+  { key: 'certifications',          src: 'arr',   w: 12 },
+  { key: 'availability_status',     src: 'eng',   w: 6  },
+  { key: 'languages',               src: 'arr',   w: 6  },
+];
+
+const DEFAULT_EP = {
+  expertise_level: '',
+  years_experience: '',
+  engineering_disciplines: [],
+  technical_skills: [],
+  languages: [],
+  certifications: [],
+  availability_status: 'available',
+  availability_percentage: 100,
+  preferred_project_types: [],
+  max_concurrent_projects: 2,
+  next_available_date: '',
+  current_projects: [],
+};
 
 const Profile = () => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
-  
-  // State management
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingProfile, setIsFetchingProfile] = useState(true);
-  const [profileData, setProfileData] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const { user } = useSelector((s) => s.auth);
+
+  const [activeTab, setActiveTab]             = useState('personal');
+  const [isLoading, setIsLoading]             = useState(false);
+  const [isFetching, setIsFetching]           = useState(true);
+  const [profileData, setProfileData]         = useState(null);
+
+  // Photo
+  const [photoPreview, setPhotoPreview]       = useState(null);
+  const [selectedFile, setSelectedFile]       = useState(null);
+  const [isDragging, setIsDragging]           = useState(false);
+  const [uploadProgress, setUploadProgress]   = useState(0);
   const fileInputRef = useRef(null);
-  
-  // Form data
+
+  // Basic form
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    phone: '',
-    bio: '',
-    location: '',
-    department: '',
-    job_title: ''
+    first_name: '', last_name: '', phone: '', bio: '',
+    location: '', department: '', job_title: '',
   });
+
+  // Engineer profile
+  const [ep, setEp]           = useState(DEFAULT_EP);
+
+  // Cert entry
+  const [newCert, setNewCert] = useState({ name: '', issuer: '', year: '', expiry_date: '' });
+  const [showCertForm, setShowCertForm] = useState(false);
+
+  // Skill entry
+  const [selectedSkill, setSelectedSkill]   = useState('');
+  const [skillProficiency, setSkillProficiency] = useState(3);
+
+  // Project assignment entry
+  const [newProject, setNewProject]         = useState(DEFAULT_PROJECT);
+  const [showProjectForm, setShowProjectForm] = useState(false);
+
+  // Completeness
+  const completeness = useMemo(() => {
+    let total = 0;
+    COMPLETENESS_FIELDS.forEach(({ key, src, w }) => {
+      const val = src === 'basic' ? formData[key] : ep[key];
+      if (src === 'arr') {
+        if (Array.isArray(val) && val.length > 0) total += w;
+      } else {
+        if (val && String(val).trim()) total += w;
+      }
+    });
+    return Math.min(100, total);
+  }, [formData, ep]);
   
-  // Fetch full profile data on mount
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-  
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  useEffect(() => { fetchProfile(); }, []);
+
   const fetchProfile = async () => {
     try {
-      setIsFetchingProfile(true);
+      setIsFetching(true);
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
-      
-      // Add timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout
-      
-      const response = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        signal: controller.signal
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 20000);
+      const res  = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
       });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-      
-      const data = await response.json();
-      console.log('[Profile] Fetched profile data successfully');
+      clearTimeout(tid);
+      if (!res.ok) throw new Error('Failed to fetch profile');
+      const data = await res.json();
       setProfileData(data);
-      
-      // Set form data
       setFormData({
         first_name: data.user?.first_name || '',
-        last_name: data.user?.last_name || '',
-        phone: data.phone || '',
-        bio: data.bio || '',
-        location: data.location || '',
-        department: data.department || '',
-        job_title: data.job_title || ''
+        last_name:  data.user?.last_name  || '',
+        phone:      data.phone            || '',
+        bio:        data.bio              || '',
+        location:   data.location         || '',
+        department: data.department       || '',
+        job_title:  data.job_title        || '',
       });
-      
-      // Set photo preview if exists (currently disabled in backend until S3 CORS configured)
-      if (data.profile_photo) {
-        setPhotoPreview(data.profile_photo);
-      }
-      
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.error('[Profile] Request timeout after 20 seconds');
-        toast.error('Profile loading is taking longer than expected. Please check your connection.');
-      } else {
-        console.error('[Profile] Error fetching profile:', error);
-        toast.error('Failed to load profile. Please try again.');
-      }
+      if (data.profile_photo) setPhotoPreview(data.profile_photo);
+      const saved = data.engineer_profile || {};
+      setEp({ ...DEFAULT_EP, ...saved });
+    } catch (err) {
+      toast.error(err.name === 'AbortError' ? 'Profile load timed out' : 'Failed to load profile');
     } finally {
-      setIsFetchingProfile(false);
+      setIsFetching(false);
     }
   };
   
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  const handleFileSelect = (file) => {
-    // Validate file
-    const validation = validateFile(file);
-    
-    if (!validation.isValid) {
-      validation.errors.forEach(error => toast.error(error));
-      return;
-    }
-    
-    setSelectedFile(file);
-    
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPhotoPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
-  
-  const handleFileInputChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  };
-  
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-  
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  };
-  
-  const handleRemovePhoto = () => {
-    setSelectedFile(null);
-    setPhotoPreview(profileData?.profile_photo || null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // ── Save personal (FormData — handles photo) ───────────────────────────────
+  const savePersonalInfo = async () => {
     setIsLoading(true);
     setUploadProgress(0);
-    
     try {
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
-      const formDataToSend = new FormData();
-      
-      // Append all form fields
-      Object.keys(formData).forEach(key => {
-        if (formData[key]) {
-          formDataToSend.append(key, formData[key]);
-        }
-      });
-      
-      // Append photo if selected
-      if (selectedFile) {
-        formDataToSend.append('profile_photo', selectedFile);
-        setUploadProgress(50);
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
+      const fd = new FormData();
+      Object.entries(formData).forEach(([k, v]) => { if (v !== undefined) fd.append(k, v); });
+      if (selectedFile) { fd.append('profile_photo', selectedFile); setUploadProgress(40); }
+      const res = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formDataToSend
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
       });
-      
       setUploadProgress(80);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update profile');
-      }
-      
-      const updatedProfile = await response.json();
-      console.log('[Profile] Upload response:', updatedProfile); // Debug log
-      console.log('[Profile] Updated profile photo:', updatedProfile.profile_photo); // Debug log
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Update failed'); }
+      const updated = await res.json();
       setUploadProgress(100);
-      
-      // Update Redux store
-      dispatch(updateUser(updatedProfile));
-      console.log('[Profile] Redux store updated with:', updatedProfile); // Debug log
-      
-      // Re-fetch profile to get the complete updated data with photo URL
+      dispatch(updateUser(updated));
       await fetchProfile();
-      
       setSelectedFile(null);
-      setIsEditing(false);
-      
-      toast.success('Profile updated successfully!');
-      
-    } catch (error) {
-      console.error('Failed to update profile:', error);
-      toast.error(error.message || 'Failed to update profile');
+      toast.success('Personal information saved!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to save');
     } finally {
       setIsLoading(false);
       setUploadProgress(0);
     }
   };
-  
-  const handleCancel = () => {
-    // Reset form data
-    setFormData({
-      first_name: profileData?.user?.first_name || '',
-      last_name: profileData?.user?.last_name || '',
-      phone: profileData?.phone || '',
-      bio: profileData?.bio || '',
-      location: profileData?.location || '',
-      department: profileData?.department || '',
-      job_title: profileData?.job_title || ''
-    });
-    
-    // Reset photo
-    setSelectedFile(null);
-    setPhotoPreview(profileData?.profile_photo || null);
-    setIsEditing(false);
+
+  // ── Save engineer profile (JSON) ───────────────────────────────────────────
+  const saveEngineerProfile = async (successMsg = 'Engineering profile saved!') => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
+      const res = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engineer_profile: ep }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Update failed'); }
+      toast.success(successMsg);
+    } catch (err) {
+      toast.error(err.message || 'Failed to save');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // ── Photo ─────────────────────────────────────────────────────────────────
+  const handleFileSelect = (file) => {
+    const { isValid, errors } = validateFile(file);
+    if (!isValid) { errors.forEach(e => toast.error(e)); return; }
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setPhotoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  // ── Skills ────────────────────────────────────────────────────────────────
+  const addSkill = () => {
+    if (!selectedSkill) return;
+    if (ep.technical_skills.some(s => s.name === selectedSkill)) { toast.info('Skill already added'); return; }
+    setEp(p => ({ ...p, technical_skills: [...p.technical_skills, { name: selectedSkill, proficiency: skillProficiency }] }));
+    setSelectedSkill(''); setSkillProficiency(3);
+  };
+  const removeSkill = (name) => setEp(p => ({ ...p, technical_skills: p.technical_skills.filter(s => s.name !== name) }));
+
+  // ── Certifications ────────────────────────────────────────────────────────
+  const addCertification = () => {
+    if (!newCert.name) { toast.error('Certification name is required'); return; }
+    setEp(p => ({ ...p, certifications: [...p.certifications, { ...newCert, id: Date.now() }] }));
+    setNewCert({ name: '', issuer: '', year: '', expiry_date: '' });
+    setShowCertForm(false);
+  };
+  const removeCert = (id) => setEp(p => ({ ...p, certifications: p.certifications.filter(c => c.id !== id) }));
+
+  const getCertExpiryStatus = (expiryDate) => {
+    if (!expiryDate) return null;
+    const monthsLeft = (new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24 * 30);
+    if (monthsLeft < 0) return 'expired';
+    if (monthsLeft <= 6) return 'expiring';
+    return 'valid';
+  };
+
+  // ── Toggle helpers ────────────────────────────────────────────────────────
+  const toggleArr = (key, val) =>
+    setEp(p => ({
+      ...p,
+      [key]: p[key].includes(val) ? p[key].filter(x => x !== val) : [...p[key], val],
+    }));
+
+  // ── Project assignments ───────────────────────────────────────────────────
+  const addProject = () => {
+    if (!newProject.name.trim()) { toast.error('Project name is required'); return; }
+    if (!newProject.role)        { toast.error('Your role on the project is required'); return; }
+    setEp(p => ({ ...p, current_projects: [...(p.current_projects || []), { ...newProject, id: Date.now() }] }));
+    setNewProject(DEFAULT_PROJECT);
+    setShowProjectForm(false);
+  };
+  const removeProject = (id) => setEp(p => ({ ...p, current_projects: (p.current_projects || []).filter(pr => pr.id !== id) }));
+  const updateProjectStatus = (id, status) =>
+    setEp(p => ({ ...p, current_projects: (p.current_projects || []).map(pr => pr.id === id ? { ...pr, status } : pr) }));
   
-  // Get user initials for avatar placeholder
+  // ── Derived ───────────────────────────────────────────────────────────────
   const getUserInitials = () => {
-    const firstName = formData.first_name || user?.first_name || '';
-    const lastName = formData.last_name || user?.last_name || '';
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'U';
+    const f = formData.first_name || user?.first_name || '';
+    const l = formData.last_name  || user?.last_name  || '';
+    return `${f.charAt(0)}${l.charAt(0)}`.toUpperCase() || 'U';
   };
-  
-  // Show loading state while fetching profile
-  if (isFetchingProfile) {
+  const currentExpertise  = EXPERTISE_LEVELS.find(e => e.value === ep.expertise_level);
+  const currentAvail      = AVAILABILITY_STATUSES.find(a => a.value === ep.availability_status);
+  const completenessColor = completeness >= 80 ? 'bg-green-500' : completeness >= 50 ? 'bg-blue-500' : 'bg-yellow-400';
+  const completenessText  = completeness >= 80 ? 'text-green-600' : completeness >= 50 ? 'text-blue-600' : 'text-yellow-600';
+
+  // shared classes
+  const inputCls = 'w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all';
+  const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5';
+
+  const TABS = [
+    { id: 'personal',       label: 'Personal',       icon: User       },
+    { id: 'expertise',      label: 'Engineering',    icon: Briefcase  },
+    { id: 'certifications', label: 'Certifications', icon: Award      },
+    { id: 'availability',   label: 'Availability',   icon: Calendar   },
+    { id: 'projects',       label: 'Projects',       icon: FolderOpen },
+  ];
+
+  if (isFetching) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
           <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading profile...</p>
+          <p className="text-gray-600 font-medium">Loading your engineering profile…</p>
         </div>
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            My Profile
-          </h1>
-          <p className="text-gray-600">Manage your personal information and preferences</p>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Photo & Quick Info */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Profile Photo Card */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="text-center">
-                {/* Photo Upload Area */}
-                <div
-                  className={`relative mx-auto w-48 h-48 rounded-full overflow-hidden mb-4 ${
-                    isDragging ? 'ring-4 ring-blue-500 ring-offset-2' : ''
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  {/* Initials are always the base layer — visible when photo is absent or fails */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-5xl font-bold">
-                    {getUserInitials()}
-                  </div>
-                  {/* Photo layer on top — hides itself via onError if URL is broken */}
-                  {photoPreview && (
-                    <img
-                      src={photoPreview}
-                      alt="Profile"
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
+      <div className="max-w-5xl mx-auto space-y-6">
+
+        {/* ── Profile Hero ─────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="h-28 bg-gradient-to-r from-blue-600 via-purple-600 to-teal-500" />
+
+          <div className="px-6 sm:px-8 pb-6">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-5 -mt-14 mb-5">
+              {/* Avatar */}
+              <div
+                className={`relative w-28 h-28 rounded-full overflow-hidden ring-4 ring-white shadow-xl flex-shrink-0 cursor-pointer ${isDragging ? 'ring-blue-400' : ''}`}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
+                onClick={() => fileInputRef.current?.click()}
+                title="Click or drag to change photo"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-4xl font-bold">
+                  {getUserInitials()}
+                </div>
+                {photoPreview && (
+                  <img src={photoPreview} alt="Profile" className="absolute inset-0 w-full h-full object-cover"
+                    onError={e => { e.target.style.display = 'none'; }} />
+                )}
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-full">
+                  <Camera className="w-6 h-6 text-white" />
+                </div>
+                <input ref={fileInputRef} type="file" accept={S3_UPLOAD_CONFIG.allowedFileTypes.join(',')}
+                  onChange={e => { const f = e.target.files[0]; if (f) handleFileSelect(f); }} className="hidden" />
+              </div>
+
+              {/* Name / title */}
+              <div className="flex-1 pb-0.5">
+                <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+                  {(formData.first_name || formData.last_name)
+                    ? `${formData.first_name} ${formData.last_name}`.trim()
+                    : user?.email}
+                </h1>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  {formData.job_title && <span className="text-gray-600 font-medium">{formData.job_title}</span>}
+                  {formData.job_title && formData.department && <span className="text-gray-300">·</span>}
+                  {formData.department && <span className="text-gray-500">{formData.department}</span>}
+                  {currentExpertise && (
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${currentExpertise.colorClass}`}>
+                      {currentExpertise.label}
+                    </span>
                   )}
-                  
-                  {isEditing && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="p-3 bg-white rounded-full hover:bg-gray-100 transition-colors"
-                      >
-                        <Camera className="w-6 h-6 text-gray-800" />
+                </div>
+                {formData.location && (
+                  <p className="text-sm text-gray-400 mt-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />{formData.location}
+                  </p>
+                )}
+              </div>
+
+              {/* Availability badge */}
+              {currentAvail && (
+                <div className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-semibold ${currentAvail.bgClass} ${currentAvail.textClass}`}>
+                  <span className={`w-2 h-2 rounded-full ${currentAvail.badgeClass}`} />
+                  {currentAvail.label}
+                </div>
+              )}
+            </div>
+
+            {/* Discipline chips */}
+            {ep.engineering_disciplines.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {ep.engineering_disciplines.map(d => (
+                  <span key={d} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full font-medium">{d}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Completeness bar */}
+            <div>
+              <div className="flex items-center justify-between text-sm mb-1.5">
+                <span className="text-gray-500 font-medium">Profile Completeness</span>
+                <span className={`font-bold ${completenessText}`}>{completeness}%</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div className={`h-2 rounded-full transition-all duration-700 ${completenessColor}`}
+                  style={{ width: `${completeness}%` }} />
+              </div>
+              {completeness < 80 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Complete engineering expertise &amp; certifications to reach 80% — required for project matching eligibility.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Tabbed Card ───────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-100 bg-gray-50/50">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button key={id} onClick={() => setActiveTab(id)}
+                className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-semibold transition-all ${
+                  activeTab === id
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/70'
+                }`}>
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Tab: Personal ──────────────────────────────────────────────── */}
+          {activeTab === 'personal' && (
+            <div className="p-6 sm:p-8 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className={labelCls}>First Name</label>
+                  <input type="text" value={formData.first_name}
+                    onChange={e => setFormData(p => ({ ...p, first_name: e.target.value }))}
+                    className={inputCls} placeholder="First name" />
+                </div>
+                <div>
+                  <label className={labelCls}>Last Name</label>
+                  <input type="text" value={formData.last_name}
+                    onChange={e => setFormData(p => ({ ...p, last_name: e.target.value }))}
+                    className={inputCls} placeholder="Last name" />
+                </div>
+                <div>
+                  <label className={labelCls}>Email Address</label>
+                  <input type="email" value={user?.email || ''} disabled
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed" />
+                  <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
+                </div>
+                <div>
+                  <label className={labelCls}>Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                    <input type="tel" value={formData.phone}
+                      onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
+                      className={`${inputCls} pl-10`} placeholder="+971 50 123 4567" />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Location</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                    <input type="text" value={formData.location}
+                      onChange={e => setFormData(p => ({ ...p, location: e.target.value }))}
+                      className={`${inputCls} pl-10`} placeholder="Abu Dhabi, UAE" />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Department</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                    <input type="text" value={formData.department}
+                      onChange={e => setFormData(p => ({ ...p, department: e.target.value }))}
+                      className={`${inputCls} pl-10`} placeholder="Process Engineering" />
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Job Title</label>
+                  <input type="text" value={formData.job_title}
+                    onChange={e => setFormData(p => ({ ...p, job_title: e.target.value }))}
+                    className={inputCls} placeholder="Senior Process Engineer" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Professional Bio</label>
+                  <textarea value={formData.bio}
+                    onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
+                    rows={4} maxLength={500}
+                    className={`${inputCls} resize-none`}
+                    placeholder="Brief professional summary — experience, expertise, notable achievements…" />
+                  <p className="text-xs text-gray-400 mt-1 text-right">{formData.bio.length}/500</p>
+                </div>
+              </div>
+
+              {/* Photo selected indicator */}
+              {selectedFile && (
+                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-blue-700 font-medium truncate">{selectedFile.name}</p>
+                    <p className="text-xs text-blue-400">{formatFileSize(selectedFile.size)}</p>
+                  </div>
+                  <button onClick={() => { setSelectedFile(null); setPhotoPreview(profileData?.profile_photo || null); }}
+                    className="text-blue-400 hover:text-red-500 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              {uploadProgress > 0 && (
+                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                  <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
+
+              {/* Account info strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-gray-50">
+                {[
+                  { label: 'Status',       val: profileData?.status || 'Active', pill: true },
+                  { label: 'Organization', val: profileData?.organization_name || '—' },
+                  { label: 'Member Since', val: profileData?.created_at ? new Date(profileData.created_at).toLocaleDateString('en-US',{ month:'short', year:'numeric'}) : '—' },
+                  { label: 'Employee ID',  val: profileData?.employee_id || '—' },
+                ].map(({ label, val, pill }) => (
+                  <div key={label} className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                    {pill
+                      ? <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${profileData?.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{val}</span>
+                      : <p className="text-sm font-semibold text-gray-800 truncate">{val}</p>}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={savePersonalInfo} disabled={isLoading}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold transition-all">
+                  {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Personal Info
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Tab: Engineering Expertise ─────────────────────────────────── */}
+          {activeTab === 'expertise' && (
+            <div className="p-6 sm:p-8 space-y-8">
+              {/* Career level */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Career Level</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                  {EXPERTISE_LEVELS.map(lvl => (
+                    <button key={lvl.value} type="button"
+                      onClick={() => setEp(p => ({ ...p, expertise_level: lvl.value }))}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        ep.expertise_level === lvl.value
+                          ? `${lvl.colorClass} shadow-md`
+                          : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                      }`}>
+                      <div className={`w-2.5 h-2.5 rounded-full mb-2 ${lvl.dotClass}`} />
+                      <p className="text-sm font-bold text-gray-900 leading-tight">{lvl.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{lvl.years}</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="max-w-xs">
+                  <label className={labelCls}>Years of Experience</label>
+                  <input type="number" min="0" max="50" value={ep.years_experience}
+                    onChange={e => setEp(p => ({ ...p, years_experience: e.target.value }))}
+                    className={inputCls} placeholder="e.g. 12" />
+                </div>
+              </div>
+
+              {/* Disciplines */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Engineering Disciplines</h3>
+                <p className="text-xs text-gray-400 mb-3">Select all disciplines you are competent in</p>
+                <div className="flex flex-wrap gap-2">
+                  {ENGINEERING_DISCIPLINES.map(d => (
+                    <button key={d} type="button" onClick={() => toggleArr('engineering_disciplines', d)}
+                      className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        ep.engineering_disciplines.includes(d)
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+                      }`}>
+                      {ep.engineering_disciplines.includes(d) && <Check className="inline w-3.5 h-3.5 mr-1 -mt-0.5" />}
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Technical Skills &amp; Software</h3>
+                <p className="text-xs text-gray-400 mb-3">Add tools and competencies with proficiency level (★)</p>
+                <div className="flex gap-2 mb-4">
+                  <select value={selectedSkill} onChange={e => setSelectedSkill(e.target.value)}
+                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-700">
+                    <option value="">Select a skill…</option>
+                    {TECHNICAL_SKILLS_CATALOG.filter(s => !ep.technical_skills.some(ts => ts.name === s)).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg px-3">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button key={n} type="button" onClick={() => setSkillProficiency(n)}>
+                        <Star className={`w-4 h-4 transition-colors ${n <= skillProficiency ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" onClick={addSkill}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 flex items-center gap-1">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {ep.technical_skills.map(sk => (
+                    <div key={sk.name}
+                      className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-full pl-3 pr-1.5 py-1 text-sm shadow-sm">
+                      <span className="font-medium text-gray-800">{sk.name}</span>
+                      <span className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <Star key={n} className={`w-3 h-3 ${n <= sk.proficiency ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} />
+                        ))}
+                      </span>
+                      <button onClick={() => removeSkill(sk.name)} className="text-gray-300 hover:text-red-500 ml-0.5">
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  ))}
+                  {ep.technical_skills.length === 0 && (
+                    <p className="text-sm text-gray-400 italic">No skills added yet</p>
                   )}
                 </div>
-                
-                {isEditing && (
-                  <div className="space-y-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept={S3_UPLOAD_CONFIG.allowedFileTypes.join(',')}
-                      onChange={handleFileInputChange}
-                      className="hidden"
-                    />
-                    
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>Upload Photo</span>
-                    </button>
-                    
-                    {selectedFile && (
-                      <div className="text-sm text-gray-600 space-y-1">
-                        <p className="flex items-center justify-center space-x-1">
-                          <Check className="w-4 h-4 text-green-500" />
-                          <span>{selectedFile.name}</span>
-                        </p>
-                        <p className="text-xs">{formatFileSize(selectedFile.size)}</p>
-                        <button
-                          type="button"
-                          onClick={handleRemovePhoto}
-                          className="text-red-600 hover:text-red-700 text-xs"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                    
-                    <p className="text-xs text-gray-500">
-                      Max {formatFileSize(S3_UPLOAD_CONFIG.maxFileSize)} • JPG, PNG, GIF, WebP
-                    </p>
-                  </div>
-                )}
-                
-                {uploadProgress > 0 && (
-                  <div className="mt-4">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-1">Uploading... {uploadProgress}%</p>
-                  </div>
-                )}
-                
-                <h3 className="text-xl font-bold text-gray-900 mt-4">
-                  {formData.first_name} {formData.last_name}
+              </div>
+
+              {/* Languages */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-gray-400" /> Languages
                 </h3>
-                <p className="text-gray-600">{formData.job_title || 'No job title'}</p>
-                <p className="text-sm text-gray-500">{user?.email}</p>
+                <div className="flex flex-wrap gap-2">
+                  {LANGUAGES.map(l => (
+                    <button key={l} type="button" onClick={() => toggleArr('languages', l)}
+                      className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        ep.languages.includes(l)
+                          ? 'bg-teal-600 text-white border-teal-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-teal-300'
+                      }`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={() => saveEngineerProfile('Engineering profile saved!')} disabled={isLoading}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold">
+                  {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Engineering Profile
+                </button>
               </div>
             </div>
-            
-            {/* Quick Stats Card */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                <Shield className="w-5 h-5 text-blue-600" />
-                <span>Account Info</span>
-              </h3>
-              
+          )}
+
+          {/* ── Tab: Certifications ────────────────────────────────────────── */}
+          {activeTab === 'certifications' && (
+            <div className="p-6 sm:p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Professional Certifications</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Certifications visible to project managers for team matching</p>
+                </div>
+                <button onClick={() => setShowCertForm(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4" /> Add
+                </button>
+              </div>
+
+              {showCertForm && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
+                  <h4 className="text-sm font-semibold text-blue-800 mb-4">New Certification</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className={labelCls}>Certification Name *</label>
+                      <select value={newCert.name} onChange={e => setNewCert(p => ({ ...p, name: e.target.value }))}
+                        className={`${inputCls} mb-2`}>
+                        <option value="">Choose from catalogue…</option>
+                        {CERTIFICATION_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <input type="text" value={newCert.name} onChange={e => setNewCert(p => ({ ...p, name: e.target.value }))}
+                        className={inputCls} placeholder="Or type a custom certification name" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Issuing Body</label>
+                      <input type="text" value={newCert.issuer} onChange={e => setNewCert(p => ({ ...p, issuer: e.target.value }))}
+                        className={inputCls} placeholder="e.g. PMI, IChemE, ECITB" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Year Obtained</label>
+                      <input type="number" min="1980" max={new Date().getFullYear()} value={newCert.year}
+                        onChange={e => setNewCert(p => ({ ...p, year: e.target.value }))}
+                        className={inputCls} placeholder={String(new Date().getFullYear())} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Expiry Date (if applicable)</label>
+                      <input type="date" value={newCert.expiry_date}
+                        onChange={e => setNewCert(p => ({ ...p, expiry_date: e.target.value }))}
+                        className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <button onClick={() => setShowCertForm(false)}
+                      className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                    <button onClick={addCertification}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">Add</button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Status</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    profileData?.status === 'active' 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {profileData?.status || 'Active'}
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Member Since</span>
-                  <span className="text-gray-900">
-                    {profileData?.created_at 
-                      ? new Date(profileData.created_at).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          year: 'numeric' 
-                        })
-                      : 'N/A'
-                    }
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Organization</span>
-                  <span className="text-gray-900 text-right">
-                    {profileData?.organization_name || 'N/A'}
-                  </span>
-                </div>
-                
-                {profileData?.employee_id && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Employee ID</span>
-                    <span className="text-gray-900">{profileData.employee_id}</span>
+                {ep.certifications.length === 0 ? (
+                  <div className="text-center py-14 text-gray-300">
+                    <Award className="w-14 h-14 mx-auto mb-3" />
+                    <p className="text-sm font-medium">No certifications added yet</p>
+                    <p className="text-xs mt-1 text-gray-400">Add professional certifications to improve project matching eligibility</p>
                   </div>
-                )}
-                
-                {formData.phone && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 flex items-center space-x-1">
-                      <Phone className="w-4 h-4" />
-                      <span>Phone</span>
-                    </span>
-                    <span className="text-gray-900">{formData.phone}</span>
-                  </div>
-                )}
-                
-                {formData.location && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 flex items-center space-x-1">
-                      <MapPin className="w-4 h-4" />
-                      <span>Location</span>
-                    </span>
-                    <span className="text-gray-900 text-right">{formData.location}</span>
-                  </div>
-                )}
+                ) : ep.certifications.map(cert => {
+                  const status = getCertExpiryStatus(cert.expiry_date);
+                  const borderCls = status === 'expired' ? 'border-red-200 bg-red-50' : status === 'expiring' ? 'border-yellow-200 bg-yellow-50' : 'border-gray-100 bg-white hover:border-blue-100';
+                  const iconCls   = status === 'expired' ? 'text-red-500 bg-red-100'  : status === 'expiring' ? 'text-yellow-500 bg-yellow-100' : 'text-blue-500 bg-blue-100';
+                  const expCls    = status === 'expired' ? 'text-red-600' : status === 'expiring' ? 'text-yellow-600' : 'text-green-600';
+                  const expLabel  = status === 'expired' ? '⚠ Expired' : status === 'expiring' ? '⚡ Expiring soon' : '✓ Valid';
+                  return (
+                    <div key={cert.id} className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${borderCls}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${iconCls}`}>
+                        <Award className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm">{cert.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {cert.issuer && <span>{cert.issuer}</span>}
+                          {cert.issuer && cert.year && <span className="mx-1">·</span>}
+                          {cert.year && <span>Obtained {cert.year}</span>}
+                        </p>
+                        {cert.expiry_date && (
+                          <p className={`text-xs mt-1 font-semibold ${expCls}`}>{expLabel} · {cert.expiry_date}</p>
+                        )}
+                      </div>
+                      <button onClick={() => removeCert(cert.id)} className="text-gray-200 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          </div>
-          
-          {/* Right Column - Form */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
-              {/* Form Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Personal Information
-                </h2>
-                
-                {!isEditing ? (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span>Edit Profile</span>
+
+              {ep.certifications.length > 0 && (
+                <div className="flex justify-end">
+                  <button onClick={() => saveEngineerProfile('Certifications saved!')} disabled={isLoading}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold">
+                    {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save Certifications
                   </button>
-                ) : (
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handleCancel}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSubmit}
-                      disabled={isLoading}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader className="w-4 h-4 animate-spin" />
-                          <span>Saving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          <span>Save Changes</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* Form */}
-              <form className="space-y-6">
-                {/* Basic Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                    <User className="w-5 h-5 text-blue-600" />
-                    <span>Basic Information</span>
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="first_name"
-                        value={formData.first_name}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                        }`}
-                        placeholder="John"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="last_name"
-                        value={formData.last_name}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                        }`}
-                        placeholder="Doe"
-                      />
-                    </div>
-                  </div>
                 </div>
-                
-                {/* Contact Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                    <Mail className="w-5 h-5 text-blue-600" />
-                    <span>Contact Information</span>
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={user?.email || ''}
-                        disabled
-                        className="w-full px-4 py-2 border rounded-lg bg-gray-50 cursor-not-allowed text-gray-600"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number
-                      </label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleInputChange}
-                          disabled={!isEditing}
-                          className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                          }`}
-                          placeholder="+1 (555) 123-4567"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Location
-                      </label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-                        <input
-                          type="text"
-                          name="location"
-                          value={formData.location}
-                          onChange={handleInputChange}
-                          disabled={!isEditing}
-                          className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                          }`}
-                          placeholder="Dubai, UAE"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Professional Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                    <Briefcase className="w-5 h-5 text-blue-600" />
-                    <span>Professional Information</span>
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Department
-                      </label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-                        <input
-                          type="text"
-                          name="department"
-                          value={formData.department}
-                          onChange={handleInputChange}
-                          disabled={!isEditing}
-                          className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                            !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                          }`}
-                          placeholder="Engineering"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Job Title
-                      </label>
-                      <input
-                        type="text"
-                        name="job_title"
-                        value={formData.job_title}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                        }`}
-                        placeholder="Senior Developer"
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Bio */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                    <span>About</span>
-                  </h3>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bio
-                    </label>
-                    <textarea
-                      name="bio"
-                      value={formData.bio}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      rows="4"
-                      maxLength="500"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none ${
-                        !isEditing ? 'bg-gray-50 cursor-not-allowed' : ''
-                      }`}
-                      placeholder="Tell us about yourself, your skills, and interests..."
-                    />
-                    <p className="text-xs text-gray-500 mt-1 text-right">
-                      {formData.bio.length}/500 characters
-                    </p>
-                  </div>
-                </div>
-              </form>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* ── Tab: Availability ──────────────────────────────────────────── */}
+          {activeTab === 'availability' && (
+            <div className="p-6 sm:p-8 space-y-8">
+              {/* Status cards */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Current Availability</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {AVAILABILITY_STATUSES.map(a => (
+                    <button key={a.value} type="button" onClick={() => setEp(p => ({ ...p, availability_status: a.value }))}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        ep.availability_status === a.value ? `${a.bgClass} shadow-md` : 'bg-white border-gray-200 hover:border-gray-300'
+                      }`}>
+                      <div className={`w-3 h-3 rounded-full mb-2.5 ${a.badgeClass}`} />
+                      <p className={`text-sm font-bold ${a.textClass}`}>{a.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 leading-tight">{a.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bandwidth slider */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">
+                  Bandwidth Available: <span className="text-blue-600 font-bold">{ep.availability_percentage}%</span>
+                </h3>
+                <p className="text-xs text-gray-400 mb-3">What percentage of your time can be allocated to new projects?</p>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-gray-400 w-5">0%</span>
+                  <input type="range" min="0" max="100" step="5" value={ep.availability_percentage}
+                    onChange={e => setEp(p => ({ ...p, availability_percentage: Number(e.target.value) }))}
+                    className="flex-1 accent-blue-600 cursor-pointer" />
+                  <span className="text-xs text-gray-400 w-8 text-right">100%</span>
+                </div>
+                <div className="mt-2 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-blue-500 h-2 rounded-full transition-all"
+                    style={{ width: `${ep.availability_percentage}%` }} />
+                </div>
+              </div>
+
+              {/* Next available date */}
+              {(ep.availability_status === 'busy' || ep.availability_status === 'on_leave') && (
+                <div className="max-w-xs">
+                  <label className={labelCls}>
+                    <Clock className="inline w-4 h-4 mr-1 text-gray-400" /> Next Available Date
+                  </label>
+                  <input type="date" value={ep.next_available_date}
+                    onChange={e => setEp(p => ({ ...p, next_available_date: e.target.value }))}
+                    className={inputCls} />
+                </div>
+              )}
+
+              {/* Max concurrent projects */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Maximum Concurrent Projects</h3>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setEp(p => ({ ...p, max_concurrent_projects: Math.max(1, p.max_concurrent_projects - 1) }))}
+                    className="w-10 h-10 rounded-full border-2 border-gray-200 bg-white flex items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50 transition-all">−</button>
+                  <span className="text-3xl font-bold text-gray-900 w-10 text-center">{ep.max_concurrent_projects}</span>
+                  <button onClick={() => setEp(p => ({ ...p, max_concurrent_projects: Math.min(10, p.max_concurrent_projects + 1) }))}
+                    className="w-10 h-10 rounded-full border-2 border-gray-200 bg-white flex items-center justify-center text-lg font-bold text-gray-600 hover:bg-gray-50 transition-all">+</button>
+                  <span className="text-sm text-gray-500">projects at once</span>
+                </div>
+              </div>
+
+              {/* Project types */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Preferred Project Types</h3>
+                <div className="flex flex-wrap gap-2">
+                  {PROJECT_TYPES.map(pt => (
+                    <button key={pt} type="button" onClick={() => toggleArr('preferred_project_types', pt)}
+                      className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        ep.preferred_project_types.includes(pt)
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                      }`}>
+                      {pt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={() => saveEngineerProfile('Availability updated!')} disabled={isLoading}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold">
+                  {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Availability
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Projects Tab ──────────────────────────────────────────────── */}
+          {activeTab === 'projects' && (
+            <div className="p-6 sm:p-8 space-y-6">
+
+              {/* Header row */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Current Project Assignments</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Let management know what you are actively working on.</p>
+                </div>
+                <button onClick={() => setShowProjectForm(v => !v)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-all">
+                  <Plus className="w-4 h-4" />
+                  Add Project
+                </button>
+              </div>
+
+              {/* Bandwidth summary */}
+              {(ep.current_projects || []).length > 0 && (() => {
+                const totalAlloc = (ep.current_projects || []).reduce((s, p) => s + Number(p.allocation || 0), 0);
+                const active     = (ep.current_projects || []).filter(p => p.status === 'active').length;
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-extrabold text-blue-600">{active}</p>
+                      <p className="text-xs text-blue-500 font-medium mt-0.5">Active Projects</p>
+                    </div>
+                    <div className={`rounded-xl border p-4 text-center ${totalAlloc > 100 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-100'}`}>
+                      <p className={`text-2xl font-extrabold ${totalAlloc > 100 ? 'text-red-600' : 'text-emerald-600'}`}>{totalAlloc}%</p>
+                      <p className={`text-xs font-medium mt-0.5 ${totalAlloc > 100 ? 'text-red-500' : 'text-emerald-500'}`}>
+                        Total Allocation {totalAlloc > 100 ? '⚠ Over 100%' : ''}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-extrabold text-gray-700">{Math.max(0, 100 - totalAlloc)}%</p>
+                      <p className="text-xs text-gray-500 font-medium mt-0.5">Remaining Bandwidth</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Add project form */}
+              {showProjectForm && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
+                  <h4 className="font-semibold text-blue-800 text-sm">New Project Assignment</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Project Name *</label>
+                      <input value={newProject.name} onChange={e => setNewProject(p => ({ ...p, name: e.target.value }))}
+                        placeholder="e.g. Offshore Platform FEED" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Client / Company</label>
+                      <input value={newProject.client} onChange={e => setNewProject(p => ({ ...p, client: e.target.value }))}
+                        placeholder="e.g. ADNOC, Saudi Aramco" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Your Role *</label>
+                      <select value={newProject.role} onChange={e => setNewProject(p => ({ ...p, role: e.target.value }))} className={inputCls}>
+                        <option value="">— Select role —</option>
+                        {PROJECT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Project Type</label>
+                      <select value={newProject.project_type} onChange={e => setNewProject(p => ({ ...p, project_type: e.target.value }))} className={inputCls}>
+                        <option value="">— Select type —</option>
+                        {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>
+                        Allocation: <span className="text-blue-600 font-bold">{newProject.allocation}%</span>
+                      </label>
+                      <input type="range" min="5" max="100" step="5" value={newProject.allocation}
+                        onChange={e => setNewProject(p => ({ ...p, allocation: Number(e.target.value) }))}
+                        className="w-full accent-blue-600 cursor-pointer mt-2" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Status</label>
+                      <select value={newProject.status} onChange={e => setNewProject(p => ({ ...p, status: e.target.value }))} className={inputCls}>
+                        {PROJECT_ASSIGNMENT_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Start Date</label>
+                      <input type="date" value={newProject.start_date}
+                        onChange={e => setNewProject(p => ({ ...p, start_date: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Expected End Date</label>
+                      <input type="date" value={newProject.end_date}
+                        onChange={e => setNewProject(p => ({ ...p, end_date: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className={labelCls}>Location / Site</label>
+                      <input value={newProject.location} onChange={e => setNewProject(p => ({ ...p, location: e.target.value }))}
+                        placeholder="e.g. Abu Dhabi, Offshore" className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={addProject} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 flex items-center gap-1.5">
+                      <Check className="w-4 h-4" /> Add
+                    </button>
+                    <button onClick={() => { setShowProjectForm(false); setNewProject(DEFAULT_PROJECT); }}
+                      className="px-5 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-1.5">
+                      <X className="w-4 h-4" /> Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Project cards */}
+              {(ep.current_projects || []).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-gray-300">
+                  <FolderOpen className="w-16 h-16 mb-4" />
+                  <p className="text-base font-semibold text-gray-400">No project assignments yet</p>
+                  <p className="text-sm text-gray-300 mt-1">Click "Add Project" to log your current work.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {(ep.current_projects || []).map(pr => {
+                    const si = PROJECT_ASSIGNMENT_STATUSES.find(s => s.value === pr.status) || PROJECT_ASSIGNMENT_STATUSES[0];
+                    return (
+                      <div key={pr.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                        {/* Status colour stripe */}
+                        <div className={`h-1 w-full ${si.dotClass}`} />
+                        <div className="p-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-gray-900 truncate">{pr.name}</h4>
+                              {pr.client && <p className="text-xs text-gray-400 mt-0.5">{pr.client}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${si.bgClass}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${si.dotClass}`} />
+                                {si.label}
+                              </span>
+                              <button onClick={() => removeProject(pr.id)} title="Remove project"
+                                className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-gray-600">
+                            {pr.role && (
+                              <span className="flex items-center gap-1.5">
+                                <Briefcase className="w-3.5 h-3.5 text-gray-400" /> {pr.role}
+                              </span>
+                            )}
+                            {pr.location && (
+                              <span className="flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-gray-400" /> {pr.location}
+                              </span>
+                            )}
+                            {pr.start_date && (
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                                {pr.start_date}{pr.end_date ? ` → ${pr.end_date}` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Allocation bar */}
+                          <div className="mt-4">
+                            <div className="flex justify-between text-xs text-gray-400 mb-1">
+                              <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Allocation</span>
+                              <span className="font-semibold text-gray-700">{pr.allocation || 0}%</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2">
+                              <div className={`h-2 rounded-full transition-all ${Number(pr.allocation) > 80 ? 'bg-orange-500' : 'bg-blue-500'}`}
+                                style={{ width: `${pr.allocation || 0}%` }} />
+                            </div>
+                          </div>
+
+                          {/* Inline status change */}
+                          <div className="mt-3 flex items-center gap-2">
+                            <span className="text-xs text-gray-400">Update status:</span>
+                            {PROJECT_ASSIGNMENT_STATUSES.map(s => (
+                              <button key={s.value} onClick={() => updateProjectStatus(pr.id, s.value)}
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all ${
+                                  pr.status === s.value
+                                    ? `${s.bgClass} border-transparent shadow-sm`
+                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                                }`}>
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button onClick={() => saveEngineerProfile('Project assignments saved!')} disabled={isLoading}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold">
+                  {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Projects
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -693,3 +1106,6 @@ const Profile = () => {
 };
 
 export default Profile;
+
+
+
