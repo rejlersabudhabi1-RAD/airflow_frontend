@@ -264,12 +264,41 @@ const Profile = () => {
   };
 
   // ── Photo ─────────────────────────────────────────────────────────────────
+  // ── Photo upload ─────────────────────────────────────────────────────────
+  const uploadPhotoOnly = async (file) => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
+      const fd = new FormData();
+      fd.append('profile_photo', file);
+      const res = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Photo upload failed'); }
+      const updated = await res.json();
+      if (updated.profile_photo) setPhotoPreview(updated.profile_photo);
+      setSelectedFile(null);
+      toast.success('Profile photo updated!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload photo');
+      setPhotoPreview(null); // revert preview on failure
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleFileSelect = (file) => {
     const { isValid, errors } = validateFile(file);
     if (!isValid) { errors.forEach(e => toast.error(e)); return; }
     setSelectedFile(file);
+    // Show base64 preview immediately, then auto-upload
     const reader = new FileReader();
-    reader.onloadend = () => setPhotoPreview(reader.result);
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result);
+      uploadPhotoOnly(file);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -376,7 +405,7 @@ const Profile = () => {
                 </div>
                 {photoPreview && (
                   <img src={photoPreview} alt="Profile" className="absolute inset-0 w-full h-full object-cover"
-                    onError={e => { e.target.style.display = 'none'; }} />
+                    onError={e => { e.target.onerror = null; setPhotoPreview(null); }} />
                 )}
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-full">
                   <Camera className="w-6 h-6 text-white" />
@@ -529,18 +558,11 @@ const Profile = () => {
                 </div>
               </div>
 
-              {/* Photo selected indicator */}
-              {selectedFile && (
-                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <Camera className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-blue-700 font-medium truncate">{selectedFile.name}</p>
-                    <p className="text-xs text-blue-400">{formatFileSize(selectedFile.size)}</p>
-                  </div>
-                  <button onClick={() => { setSelectedFile(null); setPhotoPreview(profileData?.profile_photo || null); }}
-                    className="text-blue-400 hover:text-red-500 transition-colors">
-                    <X className="w-4 h-4" />
-                  </button>
+              {/* Progress bar for photo upload */}
+              {isLoading && selectedFile && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <Loader className="w-4 h-4 text-blue-500 animate-spin flex-shrink-0" />
+                  <p className="text-sm text-blue-700 font-medium">Uploading photo…</p>
                 </div>
               )}
               {uploadProgress > 0 && (
