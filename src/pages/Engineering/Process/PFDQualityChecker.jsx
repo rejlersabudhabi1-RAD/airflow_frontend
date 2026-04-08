@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+﻿import React, { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/api.config';
 import CrossRecommendationPanel from '../../../components/recommendations/CrossRecommendationPanel';
@@ -6,50 +6,232 @@ import {
   Upload as UploadIcon, FileText, CheckCircle, AlertTriangle,
   Loader, X, Download, Activity, Shield, GitBranch, Cpu, Clock,
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
-  Trash2, ArrowLeft, BarChart2, Save,
+  Trash2, ArrowLeft, BarChart2, Save, Zap, ScanLine, Brain,
+  CircleDot, ExternalLink, Tag, Sliders, Ruler, Eye, MapPin,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Theme constants — teal / cyan palette
+// Animation keyframes — PFD Quality Checker signature animations
+// Reference: P&ID Verification animation style, extended with PFD-specific
+// process-flow, data-stream, pipe-flow, circuit-trace & scan-beam effects.
+// SOFT-CODED: edit durations/distances here; no JSX changes needed.
 // ─────────────────────────────────────────────────────────────────────────────
 const KEYFRAMES = `
+  /* ── Ambient background floats ── */
   @keyframes floatA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.06)} }
   @keyframes floatB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-35px,25px) scale(1.04)} }
   @keyframes floatC { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,35px) scale(1.05)} }
-  @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── Entry & transition ── */
+  @keyframes fadeUp    { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+  @keyframes cardIn    { from{opacity:0;transform:translateY(10px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes panelSlide{ from{opacity:0;transform:translateX(-14px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes railIn    { from{opacity:0;transform:translateX(-24px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes slideRight{ from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+
+  /* ── Gradient bar & shimmer ── */
   @keyframes gradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+  @keyframes shimmer   { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+
+  /* ── Loader stages ── */
+  @keyframes factSlide { 0%{opacity:0;transform:translateY(8px)} 15%,85%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-8px)} }
+  @keyframes checkPop  { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+  @keyframes pulse2    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Orbit electrons (AI brain loader) ── */
+  @keyframes orbitA { 0%{transform:rotate(0deg)   translateX(52px) rotate(0deg)}   100%{transform:rotate(360deg)  translateX(52px) rotate(-360deg)} }
+  @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg)  translateX(52px) rotate(-480deg)} }
+  @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg)  translateX(52px) rotate(-600deg)} }
+
+  /* ── PFD-specific: scan beam sweeps top→bottom over the drawing placeholder ── */
+  @keyframes scanBeam {
+    0%   { top:-4px; opacity:0; }
+    5%   { opacity:1; }
+    95%  { opacity:0.85; }
+    100% { top:100%; opacity:0; }
+  }
+
+  /* ── PFD-specific: circuit trace along upload-zone border ── */
+  @keyframes traceH {
+    0%   { width:0%;  left:0%;   opacity:0; }
+    10%  { opacity:1; }
+    45%  { width:100%; left:0%;  opacity:1; }
+    55%  { width:0%;  left:100%; opacity:0; }
+    100% { width:0%;  left:0%;   opacity:0; }
+  }
+  @keyframes traceV {
+    0%   { height:0%;  top:0%;   opacity:0; }
+    10%  { opacity:1; }
+    45%  { height:100%; top:0%;  opacity:1; }
+    55%  { height:0%;  top:100%; opacity:0; }
+    100% { height:0%;  top:0%;   opacity:0; }
+  }
+
+  /* ── PFD-specific: data-stream dots flowing left→right through pipe ── */
+  @keyframes streamDot {
+    0%   { transform:translateX(-12px); opacity:0; }
+    15%  { opacity:1; }
+    85%  { opacity:1; }
+    100% { transform:translateX(calc(100% + 12px)); opacity:0; }
+  }
+
+  /* ── PFD-specific: pipe flow dash animation on SVG ── */
+  @keyframes pipeFlow {
+    0%   { stroke-dashoffset: 120; }
+    100% { stroke-dashoffset: 0;   }
+  }
+
+  /* ── PFD-specific: node glow pulse for project cards ── */
+  @keyframes nodeGlow {
+    0%,100% { box-shadow: 0 0 0 0 rgba(13,148,136,0); transform:scale(1); }
+    50%     { box-shadow: 0 0 18px 4px rgba(13,148,136,0.35); transform:scale(1.04); }
+  }
+
+  /* ── PFD-specific: progress bar fill wave ── */
+  @keyframes barWave {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  /* ── PFD-specific: stat counter roll-up ── */
+  @keyframes countUp {
+    from { transform: translateY(8px); opacity:0; }
+    to   { transform: translateY(0);   opacity:1; }
+  }
+
+  /* ── PFD-specific: tag badge pop-in for capability chips ── */
+  @keyframes chipPop {
+    0%   { transform:scale(0.7) translateY(6px); opacity:0; }
+    70%  { transform:scale(1.08) translateY(-1px); }
+    100% { transform:scale(1) translateY(0); opacity:1; }
+  }
+
+  /* ── PFD-specific: rotating rule-ring on hero ── */
+  @keyframes spinSlow   { from{transform:rotate(0deg)}   to{transform:rotate(360deg)}  }
+  @keyframes spinSlowRev{ from{transform:rotate(0deg)}   to{transform:rotate(-360deg)} }
 `;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme constants — teal/cyan palette with deep-ocean accent
+// SOFT-CODED: all visual values live here; JSX references T.xxx only.
+// ─────────────────────────────────────────────────────────────────────────────
 const T = {
-  bg:    'linear-gradient(135deg, #f0fdfa 0%, #ecfeff 45%, #f0f9ff 75%, #f0fdfa 100%)',
+  // Page background — subtle deep-sea gradient
+  bg: 'linear-gradient(145deg, #f0fdfa 0%, #ecfeff 30%, #f0f9ff 65%, #f0fdfa 100%)',
+
+  // Ambient blob colours & positions
   blobs: [
-    { color:'rgba(20,184,166,0.09)',  size:'520px', top:'-80px',    left:'18%',    anim:'floatA 14s ease-in-out infinite'    },
-    { color:'rgba(6,182,212,0.07)',   size:'430px', top:'28%',      right:'-60px', anim:'floatB 17s ease-in-out infinite'    },
-    { color:'rgba(16,185,129,0.07)',  size:'380px', bottom:'-60px', left:'32%',    anim:'floatC 12s ease-in-out infinite'    },
-    { color:'rgba(14,165,233,0.06)',  size:'300px', top:'62%',      left:'-40px',  anim:'floatA 10s ease-in-out infinite 3s' },
+    { color:'rgba(20,184,166,0.10)',  size:'580px', top:'-100px',   left:'15%',    anim:'floatA 14s ease-in-out infinite'    },
+    { color:'rgba(6,182,212,0.08)',   size:'460px', top:'25%',      right:'-80px', anim:'floatB 17s ease-in-out infinite'    },
+    { color:'rgba(16,185,129,0.08)',  size:'400px', bottom:'-80px', left:'30%',    anim:'floatC 12s ease-in-out infinite'    },
+    { color:'rgba(14,165,233,0.07)',  size:'320px', top:'60%',      left:'-60px',  anim:'floatA 10s ease-in-out infinite 3s' },
+    { color:'rgba(20,184,166,0.05)',  size:'260px', top:'40%',      right:'20%',   anim:'floatB  9s ease-in-out infinite 2s' },
   ],
-  card:  { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06),0 4px 12px rgba(0,0,0,0.04)' },
-  cardH: { boxShadow:'0 10px 30px rgba(0,0,0,0.10),0 2px 8px rgba(0,0,0,0.05)', borderColor:'#5eead4' },
-  panel: { background:'rgba(255,255,255,0.85)', border:'1px solid #d1fae5', backdropFilter:'blur(12px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' },
-  modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' },
+
+  // Card & panel surfaces
+  card:  { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)' },
+  cardH: { boxShadow:'0 12px 40px rgba(13,148,136,0.14),0 2px 8px rgba(0,0,0,0.05)', borderColor:'#5eead4', transform:'translateY(-2px)' },
+  panel: { background:'rgba(255,255,255,0.90)', border:'1px solid #ccfbf1', backdropFilter:'blur(16px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' },
+  modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 24px 70px rgba(0,0,0,0.16)' },
   input: { background:'#f8fafc', border:'1px solid #e2e8f0' },
-  accent: 'linear-gradient(135deg,#0d9488,#0891b2)',
-  accentShadow: '0 4px 14px rgba(8,145,178,0.35)',
-  gradBar: 'linear-gradient(90deg,#14b8a6,#0891b2,#10b981,#14b8a6)',
+
+  // Accent colours
+  accent:       'linear-gradient(135deg,#0d9488,#0891b2)',
+  accentDeep:   'linear-gradient(135deg,#0f766e,#0e7490)',
+  accentHex:    '#0d9488',
+  accentShadow: '0 4px 18px rgba(8,145,178,0.38)',
+  accentShadowLg:'0 8px 28px rgba(8,145,178,0.42)',
+
+  // Top gradient bar (animated)
+  gradBar: 'linear-gradient(90deg,#14b8a6,#0891b2,#06b6d4,#10b981,#14b8a6)',
+
+  // Grid dot overlay
+  gridDot: 'radial-gradient(circle, rgba(20,184,166,0.07) 1px, transparent 1px)',
+
+  // Scan beam sweep colour
+  scanBeam: 'linear-gradient(180deg,transparent,rgba(20,184,166,0.18),rgba(6,182,212,0.22),rgba(20,184,166,0.18),transparent)',
+
+  // Circuit trace colour
+  trace: 'rgba(20,184,166,0.6)',
+
+  // Stream dot colours for the pipe‑flow illustration
+  streamColors: ['#14b8a6','#0891b2','#06b6d4','#10b981'],
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DarkBg — full-page animated background
+// Contains: grid dots, ambient blobs, gradient top-bar, animated SVG pipe-flow
+// ribbon, and three data-stream tokens sweeping across a pipe illustration.
+// SOFT-CODED: all visual values come from T; JSX structure is stable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Soft-coded stream dot positions and delays for background pipe decoration
+const STREAM_DOTS = [
+  { top:'23%', delay:'0s',    dur:'3.2s', color:'#14b8a6' },
+  { top:'23%', delay:'1.1s',  dur:'3.2s', color:'#0891b2' },
+  { top:'23%', delay:'2.2s',  dur:'3.2s', color:'#06b6d4' },
+  { top:'67%', delay:'0.4s',  dur:'2.8s', color:'#10b981' },
+  { top:'67%', delay:'1.6s',  dur:'2.8s', color:'#14b8a6' },
+  { top:'67%', delay:'2.4s',  dur:'2.8s', color:'#0891b2' },
+];
 
 const DarkBg = ({ children }) => (
   <div className="min-h-screen relative overflow-hidden" style={{ background: T.bg }}>
     <style>{KEYFRAMES}</style>
+
+    {/* Fine dot grid */}
     <div className="absolute inset-0 pointer-events-none"
-      style={{ backgroundImage:'radial-gradient(circle, rgba(20,184,166,0.055) 1px, transparent 1px)', backgroundSize:'40px 40px' }} />
+      style={{ backgroundImage: T.gridDot, backgroundSize:'44px 44px' }} />
+
+    {/* Ambient gradient blobs */}
     {T.blobs.map((b, i) => (
       <div key={i} className="absolute rounded-full pointer-events-none"
         style={{ width:b.size, height:b.size, top:b.top, bottom:b.bottom, left:b.left, right:b.right,
           background:`radial-gradient(circle, ${b.color} 0%, transparent 70%)`, animation:b.anim }} />
     ))}
-    <div className="absolute inset-x-0 top-0 h-1 pointer-events-none"
-      style={{ background:T.gradBar, backgroundSize:'200% auto', animation:'gradShift 4s linear infinite' }} />
+
+    {/* ── Animated SVG pipe-flow ribbon (decorative, right-side) ── */}
+    <div className="absolute right-0 top-0 bottom-0 w-64 pointer-events-none overflow-hidden opacity-30 hidden xl:block">
+      <svg width="256" height="100%" viewBox="0 0 256 800" preserveAspectRatio="none"
+        fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Horizontal pipe at 23% */}
+        <line x1="0" y1="184" x2="256" y2="184" stroke="#14b8a6" strokeWidth="2.5"
+          strokeDasharray="12 8" style={{ animation:'pipeFlow 2.4s linear infinite' }} />
+        {/* Horizontal pipe at 67% */}
+        <line x1="0" y1="536" x2="256" y2="536" stroke="#0891b2" strokeWidth="2.5"
+          strokeDasharray="12 8" style={{ animation:'pipeFlow 2.8s linear infinite 0.4s' }} />
+        {/* Vertical connector */}
+        <line x1="128" y1="184" x2="128" y2="536" stroke="#06b6d4" strokeWidth="1.5"
+          strokeDasharray="8 10" style={{ animation:'pipeFlow 3.2s linear infinite 0.8s' }} />
+        {/* Equipment boxes */}
+        <rect x="44"  y="162" width="40" height="44" rx="5" fill="rgba(20,184,166,0.14)" stroke="#14b8a6" strokeWidth="1.5"/>
+        <rect x="172" y="162" width="40" height="44" rx="5" fill="rgba(8,145,178,0.12)"  stroke="#0891b2" strokeWidth="1.5"/>
+        <rect x="108" y="514" width="40" height="44" rx="5" fill="rgba(6,182,212,0.12)"  stroke="#06b6d4" strokeWidth="1.5"/>
+        {/* Stream number labels */}
+        <text x="58"  y="190" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">E-101</text>
+        <text x="184" y="190" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">V-201</text>
+        <text x="118" y="542" fill="#0d9488" fontSize="9" fontFamily="monospace" fontWeight="700">P-301</text>
+        {/* Stream numbers */}
+        <text x="6"   y="178" fill="#0891b2" fontSize="8" fontFamily="monospace" opacity="0.7">S-01</text>
+        <text x="6"   y="530" fill="#0891b2" fontSize="8" fontFamily="monospace" opacity="0.7">S-03</text>
+      </svg>
+      {/* Flowing data dots on pipe lines */}
+      {STREAM_DOTS.map((d, i) => (
+        <div key={i} className="absolute w-2 h-2 rounded-full pointer-events-none"
+          style={{
+            top: d.top, left:0,
+            background: d.color,
+            boxShadow: `0 0 6px ${d.color}`,
+            animation: `streamDot ${d.dur} linear infinite ${d.delay}`,
+          }} />
+      ))}
+    </div>
+
+    {/* Top gradient bar */}
+    <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
+      style={{ backgroundImage:T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
+
     <div className="relative z-10">{children}</div>
   </div>
 );
@@ -88,6 +270,8 @@ const SEVERITY_STYLES = {
   info:     'bg-teal-100 text-teal-800 border-teal-300',
 };
 
+// Soft-coded: category display labels
+// Add new categories here to extend without touching table render logic
 const CATEGORY_LABELS = {
   equipment:   'Equipment Tagging',
   stream:      'Stream Numbers',
@@ -98,9 +282,309 @@ const CATEGORY_LABELS = {
   notes:       'Notes & HOLDs',
 };
 
+// Soft-coded: categories hidden from the findings table
+const HIDDEN_CATEGORIES = new Set([]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: VIEW 1 hero capability badges
+// Extend this array to add new capability chips — no JSX changes needed.
+// ─────────────────────────────────────────────────────────────────────────────
+const HERO_BADGES = [
+  { icon:'🔧', label:'Equipment Tagging',  cls:'bg-teal-50 border-teal-200 text-teal-700'          },
+  { icon:'🌊', label:'Stream Numbers',      cls:'bg-cyan-50 border-cyan-200 text-cyan-700'          },
+  { icon:'📋', label:'Title Block',         cls:'bg-sky-50 border-sky-200 text-sky-700'             },
+  { icon:'🛡️', label:'Safety Devices',     cls:'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  { icon:'⚙️', label:'Control Elements',   cls:'bg-teal-50 border-teal-200 text-teal-700'          },
+  { icon:'📌', label:'ISO 10628',           cls:'bg-indigo-50 border-indigo-200 text-indigo-700'    },
+];
+
+// Tick-mark angles for the animated rule-ring decoration (12 rules → 30° apart)
+const RULE_RING_TICKS = Array.from({ length: 12 }, (_, i) => i * 30);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: "How It Works" 3-step workflow shown below the project grid
+// ─────────────────────────────────────────────────────────────────────────────
+const HOW_IT_WORKS = [
+  {
+    step: '01',
+    title: 'Upload PFD Drawing',
+    desc: 'Drop a PDF, PNG or TIFF of your Process Flow Diagram. Multi-page documents supported.',
+    icon: UploadIcon,
+    accent: '#0d9488',
+    glow: 'rgba(13,148,136,0.20)',
+    bg: 'linear-gradient(135deg,#f0fdfa,#ccfbf1)',
+    border: '#99f6e4',
+  },
+  {
+    step: '02',
+    title: 'AI + Rule Engine Scan',
+    desc: '12 deterministic rules run against OCR text, equipment tags, stream numbers, title block and safety devices.',
+    icon: Brain,
+    accent: '#0891b2',
+    glow: 'rgba(8,145,178,0.20)',
+    bg: 'linear-gradient(135deg,#ecfeff,#cffafe)',
+    border: '#a5f3fc',
+  },
+  {
+    step: '03',
+    title: 'Quality Report',
+    desc: 'Receive a ranked findings list with severity, rule reference and one-click overlay markers on the drawing.',
+    icon: CheckCircle,
+    accent: '#10b981',
+    glow: 'rgba(16,185,129,0.20)',
+    bg: 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
+    border: '#86efac',
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: Rule coverage grid shown below "How It Works" (8 categories)
+// ─────────────────────────────────────────────────────────────────────────────
+const RULE_COVERAGE = [
+  { icon:'🔧', label:'Equipment Tags',   sub:'Naming & sequence',          color:'#0d9488' },
+  { icon:'🌊', label:'Stream Numbers',   sub:'Continuity & coverage',       color:'#0891b2' },
+  { icon:'📋', label:'Title Block',      sub:'Rev, scale, approval',        color:'#0284c7' },
+  { icon:'🛡️', label:'Safety Devices',  sub:'PRV, BDV placement',          color:'#dc2626' },
+  { icon:'⚙️', label:'Control Elements',sub:'Valves, instruments',          color:'#7c3aed' },
+  { icon:'🔁', label:'Utility Lines',    sub:'Utility & service headers',   color:'#0891b2' },
+  { icon:'📌', label:'HOLD Notations',   sub:'Pending decisions flagged',   color:'#d97706' },
+  { icon:'⚡', label:'ISO 10628',        sub:'Standard compliance check',   color:'#0d9488' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: "What Gets Checked" compact tiles shown below upload area
+// This is a subset — shown inside a project before uploading a file
+// ─────────────────────────────────────────────────────────────────────────────
+const CHECKS_PREVIEW = [
+  { icon: Tag,      label: 'Equipment Tagging', desc: 'Tag format & sequence'   },
+  { icon: Ruler,    label: 'Stream Numbers',    desc: 'Continuity validation'   },
+  { icon: FileText, label: 'Title Block',       desc: 'Rev, scale, sign-off'    },
+  { icon: Shield,   label: 'Safety Devices',    desc: 'PRV/BDV coverage'        },
+  { icon: Sliders,  label: 'Control Elements',  desc: 'Valve & loop checks'     },
+  { icon: Brain,    label: 'AI Rule Engine',    desc: '12-rule deterministic'   },
+];
+
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
   return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOFT-CODED: PFD analysis stages shown in the processing loader
+// Edit here to add/remove/reorder stages. No other code changes needed.
+// durationMs: cumulative elapsed time at which the stage is marked "done"
+// ─────────────────────────────────────────────────────────────────────────────
+const PFD_STAGES = [
+  { id: 'ocr',       label: 'OCR text extraction',        icon: ScanLine,  durationMs: 4000  },
+  { id: 'equipment', label: 'Equipment tag detection',    icon: Tag,       durationMs: 7000  },
+  { id: 'streams',   label: 'Stream number validation',   icon: Ruler,     durationMs: 9000  },
+  { id: 'title',     label: 'Title block verification',   icon: FileText,  durationMs: 11000 },
+  { id: 'safety',    label: 'Safety device checks',       icon: Shield,    durationMs: 14000 },
+  { id: 'control',   label: 'Control element audit',      icon: Sliders,   durationMs: 17000 },
+  { id: 'rules',     label: 'Deterministic rule engine',  icon: Brain,     durationMs: 20000 },
+  { id: 'report',    label: 'Building findings report',   icon: FileText,  durationMs: 24000 },
+];
+
+// Soft-coded: rotating engineering facts shown during processing
+const PFD_FACTS = [
+  'A PFD represents the primary flow path, major equipment and stream data — not individual control loops.',
+  'ISO 10628-1 defines PFDs as schematic representations of a process and the relationship between its main production units.',
+  'Stream tables on PFDs include temperature, pressure, flow rate and composition for each numbered stream.',
+  'A well-drawn PFD is the foundation for P&ID development — all mass and heat balances must close.',
+  'Equipment tags on PFDs follow ISA-S5.1: E-xxx for exchangers, P-xxx for pumps, V-xxx for vessels, C-xxx for compressors.',
+  'Title blocks must include revision tracking — missing revisions are among the most common PFD quality violations.',
+  'Safety devices on PFDs (PRVs, BDVs) represent critical safeguards that define emergency depressurisation sequences.',
+  'HOLD notations on PFDs signal pending engineering decisions — every HOLD should have a defined owner and deadline.',
+  'Stream numbers must be consistent from PFD to P&ID — a mismatch here causes expensive downstream rework.',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AnalysisLoader — shown while backend processes the PFD
+// Design: scan beam + circular stage-dial + shimmer progress bar + fact card
+// SOFT-CODED: stage list comes from PFD_STAGES; facts from PFD_FACTS.
+// ─────────────────────────────────────────────────────────────────────────────
+const AnalysisLoader = ({ elapsedSec, fileName }) => {
+  const [factIdx, setFactIdx] = React.useState(0);
+  const [factKey, setFactKey] = React.useState(0);
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      setFactIdx(i => (i + 1) % PFD_FACTS.length);
+      setFactKey(k => k + 1);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const completedStages = PFD_STAGES.filter(s => elapsedSec * 1000 >= s.durationMs);
+  const activeIdx       = Math.min(completedStages.length, PFD_STAGES.length - 1);
+  const progressPct     = Math.min(98, Math.round((completedStages.length / PFD_STAGES.length) * 100) + 2);
+  const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+  const secs = String(elapsedSec % 60).padStart(2, '0');
+
+  return (
+    <div className="mt-5 rounded-2xl overflow-hidden"
+      style={{ border:'1px solid #99f6e4', background:'linear-gradient(145deg,#f0fdfa,#ecfeff 50%,#f0f9ff)', animation:'fadeUp 0.45s ease-out both' }}>
+
+      {/* ── Header bar ── */}
+      <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ borderBottom:'1px solid rgba(153,246,228,0.5)' }}>
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-5 h-5">
+            <div className="absolute inset-0 rounded-full border-2 border-teal-200" />
+            <div className="absolute inset-0 rounded-full border-2 border-teal-500 border-t-transparent"
+              style={{ animation:'spinSlow 1s linear infinite' }} />
+          </div>
+          <span className="text-sm font-bold text-slate-800">Analysing PFD Drawing</span>
+          {fileName && (
+            <span className="hidden sm:inline text-xs text-slate-400 truncate max-w-[200px] font-mono">· {fileName}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono tabular-nums"
+          style={{ background:'rgba(255,255,255,0.8)', border:'1px solid #99f6e4' }}>
+          <Clock className="w-3.5 h-3.5 text-teal-500" />
+          <span className="text-sm font-bold text-teal-700">{mins}:{secs}</span>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* ── LEFT: scan-beam illustration + progress ── */}
+        <div className="flex flex-col items-center gap-4">
+
+          {/* Scan-beam box — mimics a drawing being scanned */}
+          <div className="relative w-full rounded-xl overflow-hidden flex items-center justify-center"
+            style={{ background:'rgba(255,255,255,0.6)', border:'1px solid #99f6e4',
+                     height:'140px', boxShadow:'inset 0 2px 8px rgba(13,148,136,0.06)' }}>
+
+            {/* Faint PFD grid lines */}
+            <div className="absolute inset-0 pointer-events-none opacity-20"
+              style={{ backgroundImage:'linear-gradient(rgba(13,148,136,0.4) 1px,transparent 1px),linear-gradient(90deg,rgba(13,148,136,0.4) 1px,transparent 1px)',
+                       backgroundSize:'28px 28px' }} />
+
+            {/* Tiny equipment boxes decoration */}
+            {[
+              { left:'12%', top:'28%', w:32, h:22, label:'V-101' },
+              { left:'42%', top:'18%', w:28, h:22, label:'E-201' },
+              { left:'68%', top:'32%', w:30, h:22, label:'P-301' },
+            ].map((b, i) => (
+              <div key={i} className="absolute rounded flex items-center justify-center"
+                style={{ left:b.left, top:b.top, width:b.w, height:b.h,
+                         background:'rgba(13,148,136,0.08)', border:'1px solid rgba(13,148,136,0.3)' }}>
+                <span style={{ fontSize:7, color:'#0d9488', fontFamily:'monospace', fontWeight:700 }}>{b.label}</span>
+              </div>
+            ))}
+
+            {/* AI brain orb */}
+            <div className="relative w-14 h-14 z-10">
+              <div className="absolute inset-0 rounded-full flex items-center justify-center"
+                style={{ background:'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 0 28px rgba(13,148,136,0.5)' }}>
+                <Cpu className="w-6 h-6 text-white" />
+              </div>
+              {[
+                { color:'#14b8a6', anim:'orbitA 2.2s linear infinite' },
+                { color:'#0891b2', anim:'orbitB 2.2s linear infinite' },
+                { color:'#10b981', anim:'orbitC 2.2s linear infinite' },
+              ].map((o, i) => (
+                <span key={i} className="absolute w-2.5 h-2.5 rounded-full"
+                  style={{ background:o.color, animation:o.anim, boxShadow:`0 0 6px ${o.color}`,
+                    top:'50%', left:'50%', marginTop:'-5px', marginLeft:'-5px' }} />
+              ))}
+            </div>
+
+            {/* Scan beam sweeping downward */}
+            <div className="absolute left-0 right-0 h-[3px] pointer-events-none"
+              style={{ background:T.scanBeam, animation:'scanBeam 2.2s ease-in-out infinite', zIndex:20 }} />
+
+            {/* Corner brackets */}
+            {[
+              'top-2 left-2   border-t-2 border-l-2',
+              'top-2 right-2  border-t-2 border-r-2',
+              'bottom-2 left-2  border-b-2 border-l-2',
+              'bottom-2 right-2 border-b-2 border-r-2',
+            ].map((cls, i) => (
+              <div key={i} className={`absolute w-5 h-5 pointer-events-none ${cls}`}
+                style={{ borderColor:'rgba(13,148,136,0.5)', borderRadius:2 }} />
+            ))}
+          </div>
+
+          {/* Progress bar with shimmer wave */}
+          <div className="w-full">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-slate-600">
+                {PFD_STAGES[activeIdx]?.label || 'Processing…'}
+              </span>
+              <span className="text-xs font-bold text-teal-600 tabular-nums">{progressPct}%</span>
+            </div>
+            <div className="relative w-full h-3 rounded-full overflow-hidden"
+              style={{ background:'rgba(255,255,255,0.7)', border:'1px solid #99f6e4' }}>
+              <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-[2000ms] ease-out overflow-hidden"
+                style={{
+                  width:`${progressPct}%`,
+                  background:'linear-gradient(90deg,#0d9488,#0891b2,#06b6d4)',
+                  boxShadow:'0 0 10px rgba(13,148,136,0.5)',
+                }}>
+                {/* Shimmer wave overlay */}
+                <div className="absolute inset-0"
+                  style={{
+                    background:'linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.5) 50%,transparent 100%)',
+                    backgroundSize:'200% 100%',
+                    animation:'barWave 1.8s linear infinite',
+                  }} />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 text-right">
+              {completedStages.length} / {PFD_STAGES.length} stages complete
+            </p>
+          </div>
+        </div>
+
+        {/* ── RIGHT: stage checklist ── */}
+        <div className="space-y-1">
+          {PFD_STAGES.map((stage, i) => {
+            const done    = elapsedSec * 1000 >= stage.durationMs;
+            const running = i === activeIdx && !done;
+            const Icon    = stage.icon;
+            return (
+              <div key={stage.id}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-500"
+                style={
+                  done    ? { background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.2)'  }
+                : running ? { background:'rgba(13,148,136,0.09)', border:'1px solid rgba(13,148,136,0.3)', boxShadow:'0 0 10px rgba(13,148,136,0.1)' }
+                :           { background:'transparent',           border:'1px solid transparent' }
+                }>
+                {done
+                  ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" style={{ animation:'checkPop 0.35s ease-out both' }} />
+                  : running
+                    ? <Loader className="w-4 h-4 text-teal-500 flex-shrink-0 animate-spin" />
+                    : <Icon className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                <span className={`text-xs font-medium flex-1 ${done ? 'text-emerald-700' : running ? 'text-teal-700 font-semibold' : 'text-slate-400'}`}>
+                  {stage.label}
+                </span>
+                {done    && <span className="text-[10px] text-emerald-500 font-bold">✓</span>}
+                {running && (
+                  <span className="text-[10px] text-teal-500 font-bold tabular-nums"
+                    style={{ animation:'pulse2 1s ease-in-out infinite' }}>running</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Fact card ── */}
+      <div className="px-5 pb-5">
+        <div className="rounded-xl px-4 py-3 min-h-[52px] flex items-start gap-2.5"
+          style={{ background:'rgba(255,255,255,0.65)', border:'1px solid #99f6e4' }}>
+          <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
+          <p key={factKey} className="text-xs text-slate-600 leading-relaxed"
+            style={{ animation:'factSlide 5s ease-in-out forwards' }}>
+            <span className="font-bold text-amber-600">Did you know? </span>
+            {PFD_FACTS[factIdx]}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,6 +622,10 @@ const PFDQualityChecker = () => {
   const [activeDrawing, setActiveDrawing] = useState(null);
   const pollRef = useRef(null);
 
+  // ── Elapsed-time timer (mirrors PIDVerification) ──────────────────────────
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const timerRef = useRef(null);
+
   // ── Engineer review overrides ─────────────────────────────────────────────
   const [overrides,       setOverrides]       = useState({});
   const [savingOverrides, setSavingOverrides] = useState(false);
@@ -145,12 +633,55 @@ const PFDQualityChecker = () => {
   const [downloadingXlsx, setDownloadingXlsx] = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
 
-  // ── History (documents in project) ───────────────────────────────────────
+  // ── History ────────────────────────────────────────────────────────────────
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // ── Right-rail panel navigation (soft-coded PANELS defined inline below) ──
+  const [activePanel, setActivePanel] = useState('drawing');
+
+  // ── Findings filters ──────────────────────────────────────────────────────
+  const [filterSeverity, setFilterSeverity] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus,   setFilterStatus]   = useState('all');
+
+  // ── Drawing image overlay ─────────────────────────────────────────────────
+  const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
+  const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  const [drawingImageError,   setDrawingImageError]   = useState(null); // null | 'missing' | 'error'
+  const [focusedFindingId,    setFocusedFindingId]    = useState(null);
+  const [showHeuristic,       setShowHeuristic]       = useState(true);
+  const [reextracting,        setReextracting]        = useState(false);
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
+
+  // ── Drawing image loader — refetch when active drawing changes ────────────
+  useEffect(() => {
+    let objectUrl = null;
+    const docId = documentId || results?.document_id;
+    if (!docId || !results) { setDrawingImageUrl(null); return; }
+    const drawing = results?.drawings?.find(d => d.drawing_id === activeDrawing);
+    if (!drawing) { setDrawingImageUrl(null); return; }
+    const pageIndex = drawing.page_index ?? 0;
+    setDrawingImageLoading(true);
+    setDrawingImageUrl(null);
+    setDrawingImageError(null);
+    axios.get(
+      `${API_PREFIX}/drawing-image/${docId}/${pageIndex}/`,
+      { headers: authHeader(), responseType: 'blob', timeout: 30000 }
+    ).then(res => {
+      objectUrl = URL.createObjectURL(res.data);
+      setDrawingImageUrl(objectUrl);
+      setDrawingImageError(null);
+    }).catch(err => {
+      setDrawingImageUrl(null);
+      setDrawingImageError(err?.response?.status === 404 ? 'missing' : 'error');
+    }).finally(() => {
+      setDrawingImageLoading(false);
+    });
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [documentId, activeDrawing, results?.document_id]);
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -230,6 +761,24 @@ const PFDQualityChecker = () => {
     }
   };
 
+  // Delete the currently-viewed document and return to the upload screen
+  const deleteCurrentDocument = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`${API_PREFIX}/delete/${docId}/`, { headers: authHeader() });
+      resetUpload();
+      setResults(null);
+      if (selectedProject) fetchHistory(selectedProject.project_id);
+      flash('success', 'Document deleted — please re-upload the PFD drawing');
+    } catch {
+      flash('error', 'Failed to delete document');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleSelectProject = (p) => {
     setSelectedProject(p);
     resetUpload();
@@ -239,6 +788,7 @@ const PFDQualityChecker = () => {
 
   const handleBackToProjects = () => {
     clearInterval(pollRef.current);
+    clearInterval(timerRef.current);
     setSelectedProject(null);
     setHistory([]);
     resetUpload();
@@ -285,17 +835,19 @@ const PFDQualityChecker = () => {
 
   const startPolling = (docId) => {
     setPolling(true);
+    setElapsedSec(0);
+    timerRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
     pollRef.current = setInterval(async () => {
       try {
         const res = await axios.get(`${API_PREFIX}/status/${docId}/`, { headers: authHeader(), timeout: 15000 });
         const s = res.data.status;
         setDocStatus(s);
         if (s === 'completed') {
-          clearInterval(pollRef.current); setPolling(false);
+          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
           await fetchResults(docId);
           if (selectedProject) fetchHistory(selectedProject.project_id);
         } else if (s === 'failed') {
-          clearInterval(pollRef.current); setPolling(false);
+          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
           setError(res.data.error_message || 'Processing failed.');
         }
       } catch (_) {}
@@ -314,9 +866,13 @@ const PFDQualityChecker = () => {
 
   const resetUpload = () => {
     clearInterval(pollRef.current);
+    clearInterval(timerRef.current);
     setFile(null); setDocumentId(null); setDocStatus(null);
     setError(''); setPolling(false); setActiveDrawing(null);
+    setElapsedSec(0);
     setOverrides({}); setOverridesSaved(false);
+    setDrawingImageUrl(null); setFocusedFindingId(null);
+    setActivePanel('drawing');
   };
 
   const handleOverrideChange = (findingId, field, value) => {
@@ -336,7 +892,7 @@ const PFDQualityChecker = () => {
       setOverridesSaved(true);
       setOverrides({});
       await fetchResults(documentId);
-      flash('success', `${count} finding${count !== 1 ? 's' : ''} updated — exports will reflect your review`);
+      flash('success', `${count} finding${count !== 1 ? 's' : ''} updated`);
     } catch {
       flash('error', 'Failed to save overrides');
     } finally {
@@ -349,18 +905,13 @@ const PFDQualityChecker = () => {
     setDownloadingXlsx(true);
     try {
       const res = await axios.get(`${API_PREFIX}/export/excel/${documentId}/`, {
-        headers: { ...authHeader() },
-        responseType: 'blob',
-        timeout: 120000,
+        headers: authHeader(), responseType: 'blob', timeout: 120000,
       });
       const url = URL.createObjectURL(res.data);
       const a   = document.createElement('a');
       const safeName = (results?.file_name || documentId).replace(/\.[^.]+$/, '').replace(/\s+/g, '_');
-      a.href     = url;
-      a.download = `pfdq_findings_${safeName}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = `pfdq_findings_${safeName}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
       flash('error', 'Excel export failed — ' + (e.response?.data?.error || e.message));
@@ -374,18 +925,13 @@ const PFDQualityChecker = () => {
     setDownloadingPdf(true);
     try {
       const res = await axios.get(`${API_PREFIX}/export/pdf/${documentId}/`, {
-        headers: { ...authHeader() },
-        responseType: 'blob',
-        timeout: 120000,
+        headers: authHeader(), responseType: 'blob', timeout: 120000,
       });
       const url = URL.createObjectURL(res.data);
       const a   = document.createElement('a');
       const safeName = (results?.file_name || documentId).replace(/\.[^.]+$/, '').replace(/\s+/g, '_');
-      a.href     = url;
-      a.download = `pfdq_report_${safeName}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = `pfdq_report_${safeName}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
       flash('error', 'PDF export failed — ' + (e.response?.data?.error || e.message));
@@ -408,6 +954,183 @@ const PFDQualityChecker = () => {
   const criticalCount = allIssues.filter(f => getVal(f, 'severity') === 'critical').length;
   const majorCount    = allIssues.filter(f => getVal(f, 'severity') === 'major').length;
 
+  // ── Overlay node builder — positions finding markers on the drawing ─────
+  //
+  // Priority order per finding:
+  //  1. Each individual tag extracted from evidence → real OCR/OCR position
+  //     (creates one marker per tag, capped at MAX_TAGS_PER_FINDING)
+  //  2. Category-specific semantic zone heuristic (predictable, not random)
+  //
+  // "all" array support: when backend stores multiple occurrences per tag,
+  // pickBestOcc filters to the drawing content area and picks the one nearest
+  // the content centroid — avoiding title-block / border / legend hits.
+  const buildOverlayNodes = React.useCallback((issues = []) => {
+    // ── Soft-coded calibration constants ─────────────────────────────────
+    // Shift ALL real-position markers by this offset (% of image dimensions).
+    // Tune here if markers are consistently offset in one direction.
+    const OVERLAY_CALIB_X_PCT = 0;
+    const OVERLAY_CALIB_Y_PCT = 0;
+
+    // Drawing content area bounds.  Positions outside this are likely in the
+    // title block / border area — excluded when picking best occurrence.
+    // Typical PFD landscape A1: title block occupies right ~16% & bottom ~12%.
+    const AREA_X_MIN = 2;
+    const AREA_X_MAX = 83;
+    const AREA_Y_MIN = 2;
+    const AREA_Y_MAX = 87;
+
+    // Content centroid — used to pick the nearest-to-centre occurrence from tag's 'all' array.
+    const CONTENT_CX = 45;
+    const CONTENT_CY = 40;
+
+    // Maximum individual-tag markers created per finding (prevents dot clouds)
+    const MAX_TAGS_PER_FINDING = 6;
+
+    // Soft-coded: category → semantic heuristic zone [left%, top%] used when
+    // no real position is available for that finding category.
+    const CATEGORY_ZONES = {
+      equipment:   [45, 38],
+      stream:      [35, 45],
+      control:     [55, 35],
+      safety:      [40, 22],
+      title_block: [87, 88],
+      notes:       [20, 55],
+      utility:     [60, 55],
+    };
+
+    const realPositions = activeDrawingData?.metadata?.tag_positions || {};
+
+    // Pick best occurrence from a tag_positions entry.
+    // If 'all' array present: filter to content area → pick nearest centroid.
+    // If no 'all' array (legacy format): use direct x_pct/y_pct.
+    const pickBestOcc = (pos) => {
+      if (!pos) return null;
+      if (!pos.all || pos.all.length === 0) {
+        return (pos.x_pct != null && pos.y_pct != null) ? pos : null;
+      }
+      const inArea = pos.all.filter(o =>
+        o.x_pct >= AREA_X_MIN && o.x_pct <= AREA_X_MAX &&
+        o.y_pct >= AREA_Y_MIN && o.y_pct <= AREA_Y_MAX
+      );
+      const pool = inArea.length > 0 ? inArea : pos.all;
+      let best = pool[0], bestDist = Infinity;
+      for (const o of pool) {
+        const d = (o.x_pct - CONTENT_CX) ** 2 + (o.y_pct - CONTENT_CY) ** 2;
+        if (d < bestDist) { bestDist = d; best = o; }
+      }
+      return { x_pct: best.x_pct, y_pct: best.y_pct };
+    };
+
+    // Apply calibration and clamp to visible canvas
+    const applyCalib = (xp, yp) => ({
+      left: Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, xp + OVERLAY_CALIB_X_PCT)),
+      top:  Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, yp + OVERLAY_CALIB_Y_PCT)),
+    });
+
+    // Extract individual candidate tags from an evidence string.
+    // Returns list of string tokens to look up in realPositions.
+    const extractTagsFromEvidence = (str) => {
+      const tags = [];
+      // Equipment / vessel tags  (V-101, E-201, P-301, K-401 …)
+      for (const m of str.matchAll(/\b([VEPKTRFC]-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // Control valves  (FCV-101, PCV-201, LCV-301 …)
+      for (const m of str.matchAll(/\b((?:FCV|PCV|HCV|LCV|TCV|PV|XCV)-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // Relief devices  (PSV-101, PRV-201 …)
+      for (const m of str.matchAll(/\b((?:PSV|PRV|SRV|BDV|TSV)-\d{3,4}[A-Z]?)\b/g)) tags.push(m[1]);
+      // HOLD items  (HOLD-001, HOLD A …)
+      for (const m of str.matchAll(/\b(HOLD[-\s]?\w+)\b/gi)) tags.push(m[1].toUpperCase());
+      // Standalone stream numbers (comma-separated digits)
+      for (const m of str.matchAll(/(?:^|,\s*)(\d{1,4})(?=\s*(?:,|$))/g)) tags.push(m[1]);
+      // Utility labels
+      for (const m of str.matchAll(/\b(CW|IA|N2|LP|HP|MW|BFW|COND)\b/g)) tags.push(m[1]);
+      return [...new Set(tags)];
+    };
+
+    // Stable FNV-1a hash → deterministic fractional offset (same as PIDVerification)
+    const stableUnit = (str, salt) => {
+      let h = 2166136261 ^ salt;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return ((h >>> 0) % 10000) / 10000;
+    };
+
+    const bandRank = { low: 1, medium: 2, high: 3 };
+    const severityBand = (sev) =>
+      sev === 'critical' || sev === 'major' ? 'high' : sev === 'minor' ? 'medium' : 'low';
+
+    const nodes = [];
+    const usedKeys = new Set(); // deduplicate markers at the same grid cell
+
+    for (const f of issues) {
+      const evidence = f.evidence?.trim() || `${f.rule_id}-${f.sl_no}`;
+      const band = severityBand(f.severity);
+      const tags = extractTagsFromEvidence(evidence);
+
+      let placed = 0;
+      for (const tag of tags.slice(0, MAX_TAGS_PER_FINDING)) {
+        const pos = pickBestOcc(realPositions[tag] ?? null);
+        if (!pos) continue;
+        const { left, top } = applyCalib(pos.x_pct, pos.y_pct);
+        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+        if (usedKeys.has(cellKey)) continue;
+        usedKeys.add(cellKey);
+        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true });
+        placed++;
+      }
+
+      // Fallback: use category semantic zone + small hash jitter per finding
+      if (placed === 0) {
+        const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
+        const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
+        // Small jitter (±8%) so multiple findings in the same category don't overlap
+        const jx = (stableUnit(seed, 11) - 0.5) * 16;
+        const jy = (stableUnit(seed, 29) - 0.5) * 16;
+        const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
+        const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
+        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+        if (!usedKeys.has(cellKey)) {
+          usedKeys.add(cellKey);
+          nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false });
+        }
+      }
+    }
+    return nodes;
+  }, [activeDrawingData, activeDrawing]);
+
+  const jumpToFinding = (findingId) => {
+    setFocusedFindingId(prev => prev === findingId ? null : findingId);
+    // Stay on drawing panel — scroll the mini issues list below the drawing
+    setTimeout(() => {
+      const el = document.getElementById(`pfd-drawing-finding-${findingId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  };
+
+  // Re-extract tag positions for the current document using the improved OCR pipeline
+  const reextractPositions = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) return;
+    setReextracting(true);
+    try {
+      await axios.post(`${API_PREFIX}/reextract/${docId}/`, {}, { headers: authHeader() });
+      flash('success', 'Marker positions refreshed — reloading results…');
+      // Reload results so new tag_positions come back from the server
+      await fetchResults(docId);
+    } catch {
+      flash('error', 'Re-extraction failed. Try re-uploading the drawing.');
+    } finally {
+      setReextracting(false);
+    }
+  };
+
+  // Filtered findings for the Findings panel
+  const filteredIssues = (activeDrawingData?.issues ?? []).filter(f => {
+    if (HIDDEN_CATEGORIES.has(f.category)) return false;
+    if (filterSeverity !== 'all' && getVal(f, 'severity') !== filterSeverity) return false;
+    if (filterCategory !== 'all' && f.category          !== filterCategory)   return false;
+    if (filterStatus   !== 'all' && (getVal(f, 'status') ?? 'open') !== filterStatus) return false;
+    return true;
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // Flash banner
   // ─────────────────────────────────────────────────────────────────────────
@@ -428,35 +1151,80 @@ const PFDQualityChecker = () => {
   if (!selectedProject) {
     return (
       <DarkBg>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-          {/* Page header */}
-          <div className="mb-10" style={{ animation:'fadeUp 0.6s ease-out both' }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-1 h-7 rounded-full" style={{ background:'linear-gradient(180deg,#0d9488,#0891b2)' }} />
-              <span className="text-teal-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
-              PFD QC {/* SOFT-CODED: renamed from 'PFD Quality Checker' */}
-              <span className="block" style={{ background:'linear-gradient(90deg,#0d9488,#0891b2)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-                Rule Engine
-              </span>
-            </h1>
-            <p className="text-slate-500 max-w-xl text-sm sm:text-base">
-              Deterministic 12-rule PFD quality checks — equipment tags, stream numbers, title block, safety devices &amp; more.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-5">
-              {[
-                { icon:'🔧', label:'Equipment Tagging',  cls:'bg-teal-50 border-teal-200 text-teal-700'   },
-                { icon:'🌊', label:'Stream Numbers',      cls:'bg-cyan-50 border-cyan-200 text-cyan-700'   },
-                { icon:'📋', label:'Title Block',         cls:'bg-sky-50 border-sky-200 text-sky-700'      },
-                { icon:'🛡️', label:'Safety Devices',     cls:'bg-emerald-50 border-emerald-200 text-emerald-700' },
-                { icon:'⚙️', label:'Control Elements',   cls:'bg-teal-50 border-teal-200 text-teal-700'   },
-              ].map(b => (
-                <span key={b.label} className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}>
-                  <span>{b.icon}</span>{b.label}
+          {/* ── VIEW 1 hero ── */}
+          <div className="mb-10 flex flex-col lg:flex-row lg:items-center gap-8" style={{ animation:'fadeUp 0.6s ease-out both' }}>
+
+            {/* Left: text + badges */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-7 rounded-full" style={{ background:'linear-gradient(180deg,#0d9488,#0891b2)' }} />
+                <span className="text-teal-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
+              </div>
+              <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
+                PFD Quality
+                <span className="block" style={{ background:'linear-gradient(90deg,#0d9488,#0891b2)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                  Rule Engine
                 </span>
-              ))}
+              </h1>
+              <p className="text-slate-500 max-w-xl text-sm sm:text-base mb-4">
+                Deterministic 12-rule PFD quality checks — equipment tags, stream numbers, title block, safety devices &amp; more.
+              </p>
+
+              {/* ── Animated capability badges (chipPop stagger) ── */}
+              <div className="flex flex-wrap gap-2">
+                {HERO_BADGES.map((b, i) => (
+                  <span key={b.label}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}
+                    style={{ animation:`chipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both`, animationDelay:`${0.08 + i * 0.07}s` }}>
+                    <span>{b.icon}</span>{b.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* ── Cross-tool link ── */}
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
+                style={{ animation:'chipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' }}>
+                <Activity className="w-3.5 h-3.5" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
+                Cross-linked with
+                <a href="/engineering/process/pid-verification"
+                  className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
+                  P&amp;ID Verification <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+
+            {/* Right: animated rule-ring SVG decoration */}
+            <div className="flex-none hidden lg:flex items-center justify-center w-44 h-44 relative">
+              {/* Outer ring — slow CW */}
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation:'spinSlow 22s linear infinite' }}>
+                <circle cx="88" cy="88" r="80" fill="none" stroke="rgba(20,184,166,0.18)" strokeWidth="1.5" strokeDasharray="4 6" />
+                {RULE_RING_TICKS.map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 80 * Math.cos(rad), y1 = 88 + 80 * Math.sin(rad);
+                  const x2 = 88 + 72 * Math.cos(rad), y2 = 88 + 72 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0d9488" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              {/* Inner ring — slow CCW */}
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation:'spinSlowRev 16s linear infinite' }}>
+                <circle cx="88" cy="88" r="58" fill="none" stroke="rgba(8,145,178,0.20)" strokeWidth="1.5" strokeDasharray="3 9" />
+                {RULE_RING_TICKS.filter((_, j) => j % 3 === 0).map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 58 * Math.cos(rad), y1 = 88 + 58 * Math.sin(rad);
+                  const x2 = 88 + 50 * Math.cos(rad), y2 = 88 + 50 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              {/* Centre badge */}
+              <div className="relative z-10 w-20 h-20 rounded-2xl flex flex-col items-center justify-center"
+                style={{ background: T.accent, boxShadow: T.accentShadowLg }}>
+                <span className="text-2xl font-black text-white leading-none" style={{ animation:'countUp 0.6s ease-out 0.4s both' }}>12</span>
+                <span className="text-[10px] font-semibold text-teal-100 tracking-wider uppercase mt-0.5">Rules</span>
+              </div>
             </div>
           </div>
 
@@ -497,21 +1265,29 @@ const PFDQualityChecker = () => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {projects.map((p, idx) => (
                 <div key={p.project_id} onClick={() => handleSelectProject(p)}
                   className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 overflow-hidden"
-                  style={{ ...T.card, animation:`fadeUp 0.5s ease-out ${idx * 0.07}s both` }}
+                  style={{ ...T.card, animation:`cardIn 0.55s ease-out ${0.05 + idx * 0.07}s both` }}
                   onMouseEnter={e => Object.assign(e.currentTarget.style, T.cardH)}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = T.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
-                  <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    style={{ background: T.accent }} />
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = T.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = ''; }}>
+
+                  {/* Animated accent bar — slides in on hover via CSS transition */}
+                  <div className="absolute top-0 left-0 right-0 rounded-t-2xl overflow-hidden h-[3px]">
+                    <div className="h-full w-0 group-hover:w-full transition-all duration-500 ease-out rounded-t-2xl"
+                      style={{ background: T.accent }} />
+                  </div>
+
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-11 h-11 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                    {/* nodeGlow icon — pulses gently on hover */}
+                    <div className="w-11 h-11 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center transition-colors group-hover:bg-teal-100"
+                      style={{ animation:'nodeGlow 3s ease-in-out infinite' }}>
                       <Layers className="w-5 h-5 text-teal-600" />
                     </div>
                     <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-teal-500 group-hover:translate-x-1 transition-all duration-300" />
                   </div>
+
                   <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors line-clamp-1">{p.project_name}</h3>
                   {p.description && <p className="text-xs text-slate-400 line-clamp-2 mb-4">{p.description}</p>}
                   <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100 mb-4">
@@ -533,7 +1309,120 @@ const PFDQualityChecker = () => {
             </div>
           )}
 
-          {/* Create modal */}
+          {/* ══════════════════════════════════════════════════════════════════
+              BOTTOM SECTION — fills the page so it never looks empty
+          ══════════════════════════════════════════════════════════════════ */}
+
+          {/* Divider with centred label */}
+          <div className="relative flex items-center my-12">
+            <div className="flex-1 h-px" style={{ background:'linear-gradient(90deg,transparent,#99f6e4,transparent)' }} />
+            <span className="mx-4 text-xs font-bold text-teal-600 tracking-[0.25em] uppercase px-3 py-1.5 rounded-full"
+              style={{ background:'rgba(240,253,250,0.9)', border:'1px solid #99f6e4' }}>
+              How the Engine Works
+            </span>
+            <div className="flex-1 h-px" style={{ background:'linear-gradient(90deg,transparent,#99f6e4,transparent)' }} />
+          </div>
+
+          {/* ── How It Works — 3 animated step cards ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+            {HOW_IT_WORKS.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.step} className="relative rounded-2xl p-6 overflow-hidden"
+                  style={{ background: step.bg, border:`1px solid ${step.border}`,
+                    animation:`cardIn 0.55s ease-out ${0.1 + i * 0.12}s both` }}>
+
+                  {/* Large ghost step number */}
+                  <span className="absolute -top-2 -right-1 text-[80px] font-black leading-none select-none pointer-events-none"
+                    style={{ color: step.accent, opacity: 0.07 }}>{step.step}</span>
+
+                  {/* Animated accent bar top */}
+                  <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
+                    style={{ background:`linear-gradient(90deg,${step.accent},${step.accent}80)`,
+                      backgroundSize:'200% auto', animation:'gradShift 3s linear infinite' }} />
+
+                  {/* Icon */}
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                    style={{ background:'rgba(255,255,255,0.7)', border:`1px solid ${step.border}`,
+                      boxShadow:`0 4px 14px ${step.glow}`, animation:'nodeGlow 4s ease-in-out infinite' }}>
+                    <Icon className="w-6 h-6" style={{ color: step.accent }} />
+                  </div>
+
+                  {/* Step pill */}
+                  <span className="inline-block text-[10px] font-black tracking-[0.2em] uppercase px-2 py-0.5 rounded-full mb-2"
+                    style={{ background: step.accent, color:'#fff', opacity:0.9 }}>Step {step.step}</span>
+
+                  <h3 className="text-sm font-black text-slate-900 mb-1.5">{step.title}</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+
+                  {/* Connector arrow (not on last) */}
+                  {i < HOW_IT_WORKS.length - 1 && (
+                    <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 hidden md:flex items-center justify-center z-10">
+                      <ChevronRight className="w-5 h-5 text-teal-500" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Rule Coverage Grid ── */}
+          <div className="rounded-2xl overflow-hidden mb-4"
+            style={{ background:'rgba(255,255,255,0.80)', border:'1px solid #e2e8f0',
+              backdropFilter:'blur(12px)', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.28)' }}>
+                <Shield className="w-4 h-4 text-white" />
+              </div>
+              <h2 className="text-sm font-black text-slate-900">Quality Rules Coverage</h2>
+              <span className="ml-auto text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                12 Rules · ISO 10628
+              </span>
+            </div>
+
+            {/* 4-col tile grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-slate-100">
+              {RULE_COVERAGE.map((rule, i) => (
+                <div key={rule.label}
+                  className="flex items-start gap-3 px-4 py-4 hover:bg-teal-50/40 transition-colors"
+                  style={{ animation:`fadeUp 0.45s ease-out ${0.05 + i * 0.06}s both` }}>
+                  <span className="text-xl flex-shrink-0 mt-0.5">{rule.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 leading-tight">{rule.label}</p>
+                    <p className="text-[10px] text-slate-400 leading-snug mt-0.5">{rule.sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Bottom standards strip ── */}
+          <div className="rounded-2xl px-6 py-4 flex flex-wrap items-center justify-between gap-3 mb-2"
+            style={{ background:'linear-gradient(135deg,rgba(240,253,250,0.8),rgba(236,254,255,0.8))',
+              border:'1px solid #99f6e4' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.30)' }}>
+                <Activity className="w-4 h-4 text-white" style={{ animation:'pulse2 2s ease-in-out infinite' }} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-900">AI-Powered · Standards-Compliant</p>
+                <p className="text-[10px] text-slate-500">ISO 10628-1 &amp; -2 · ISA-S5.1 · IEC 61511</p>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {['PDF Export','Excel Export','Drawing Overlay','Cross-Ref P&ID'].map((tag, i) => (
+                <span key={tag} className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full"
+                  style={{ animation:`chipPop 0.4s ease-out ${0.1 + i * 0.07}s both` }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <DarkModal show={showCreateModal} onClose={() => { setShowCreateModal(false); setNewProjectName(''); setNewProjectDesc(''); }}
             title="Create New Project" subtitle="Set up a folder for your PFD quality drawings"
             iconEl={<div className="w-9 h-9 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center"><FolderPlus className="w-4 h-4 text-teal-600" /></div>}>
@@ -560,7 +1449,6 @@ const PFDQualityChecker = () => {
             </form>
           </DarkModal>
 
-          {/* Edit modal */}
           <DarkModal show={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Project"
             iconEl={<div className="w-9 h-9 bg-cyan-50 border border-cyan-200 rounded-lg flex items-center justify-center"><Edit className="w-4 h-4 text-cyan-600" /></div>}>
             <form onSubmit={handleUpdateProject} className="space-y-4 flex-1">
@@ -586,13 +1474,12 @@ const PFDQualityChecker = () => {
             </form>
           </DarkModal>
 
-          {/* Delete confirm */}
           <DarkModal show={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} title="Delete Project"
             iconEl={<div className="w-9 h-9 bg-red-50 border border-red-200 rounded-lg flex items-center justify-center"><Trash2 className="w-4 h-4 text-red-500" /></div>}>
             <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-5">
               <p className="text-sm text-slate-600 mb-1">Permanently deleting:</p>
               <p className="font-bold text-slate-900">{deletingProject?.project_name}</p>
-              <p className="text-xs text-red-500 mt-2">All drawings in this project will become unassigned. This cannot be undone.</p>
+              <p className="text-xs text-red-500 mt-2">All drawings will become unassigned. This cannot be undone.</p>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}
@@ -614,61 +1501,118 @@ const PFDQualityChecker = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <DarkBg>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-14 pt-6">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-14 pt-6">
 
-        {/* Top nav */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3" style={{ animation:'fadeUp 0.4s ease-out both' }}>
-          <button onClick={handleBackToProjects}
-            className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all text-sm shadow-sm">
-            <ArrowLeft className="w-4 h-4" />Projects
-          </button>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl border"
-            style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff)', borderColor:'#99f6e4' }}>
-            <Layers className="w-4 h-4 text-teal-600" />
-            <span className="text-teal-700 font-semibold text-sm truncate max-w-[200px]">{selectedProject.project_name}</span>
+        {/* ── Dashboard hero header (aligned with PIDVerification) ────────── */}
+        <div className="rounded-2xl mb-6 overflow-hidden"
+          style={{ background:'linear-gradient(135deg,rgba(240,253,250,0.98),rgba(236,254,255,0.98))',
+                   border:'1px solid #99f6e4', backdropFilter:'blur(16px)',
+                   boxShadow:'0 1px 3px rgba(0,0,0,0.04)', animation:'fadeUp 0.4s ease-out both' }}>
+          <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
+            <button onClick={handleBackToProjects}
+              className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all text-sm shadow-sm flex-shrink-0">
+              <ArrowLeft className="w-4 h-4" />Projects
+            </button>
+            <div className="w-px h-8 bg-teal-200 flex-shrink-0 hidden sm:block" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: T.accent, boxShadow:'0 4px 12px rgba(13,148,136,0.3)' }}>
+              <Layers className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-teal-600 font-bold tracking-widest uppercase leading-none mb-0.5">PFD Quality Review · Engineering Suite</p>
+              <h1 className="text-xl font-black text-slate-900 truncate leading-tight">{selectedProject.project_name}</h1>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
+              {[
+                { label:'12 Rules',   cls:'text-teal-700 bg-teal-50 border-teal-200'           },
+                { label:'ISO 10628',  cls:'text-cyan-700 bg-cyan-50 border-cyan-200'           },
+                { label:'AI Engine',  cls:'text-emerald-700 bg-emerald-50 border-emerald-200'  },
+              ].map(p => (
+                <span key={p.label} className={`text-xs font-semibold border px-2.5 py-1 rounded-full ${p.cls}`}>{p.label}</span>
+              ))}
+            </div>
+            {/* Interconnect — jump to matching P&ID verification */}
+            <a href="/engineering/process/pid-verification"
+              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition-all text-xs font-semibold flex-shrink-0">
+              <Activity className="w-3.5 h-3.5" />P&amp;ID Verify
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <button onClick={() => { fetchHistory(selectedProject.project_id); setActivePanel('history'); }}
+              className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all text-sm shadow-sm flex-shrink-0">
+              <BarChart2 className="w-4 h-4" />History
+            </button>
           </div>
-          <button onClick={() => fetchHistory(selectedProject.project_id)}
-            className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all text-sm shadow-sm">
-            <BarChart2 className="w-4 h-4" />History
-          </button>
-        </div>
-
-        {/* Sub-header */}
-        <div className="mb-6" style={{ animation:'fadeUp 0.5s ease-out 0.1s both' }}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-1 h-5 rounded-full" style={{ background: T.accent }} />
-            <span className="text-teal-600 text-xs font-bold tracking-widest uppercase">PFD Quality Review</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">PFD QC</h1> {/* SOFT-CODED: renamed from 'PFD Quality Checker' */}
-          <p className="text-slate-500 text-sm mt-1">Upload your PFD PDF — deterministic rule engine performs 12 engineering compliance checks</p>
+          <div className="h-0.5" style={{ backgroundImage:T.gradBar, backgroundSize:'200% auto', animation:'gradShift 4s linear infinite' }} />
         </div>
 
         <FlashBanner />
 
-        {/* Upload card */}
+        {/* ── Upload card ──────────────────────────────────────────────────── */}
         {!results && (
           <div className="rounded-2xl p-5 sm:p-6 mb-5" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.2s both' }}>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">PFD Drawing (PDF) *</label>
-            <div
+
+            {/* ── Drop zone with circuit-trace border animation ── */}
+            <div className="relative"
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
-              onClick={() => document.getElementById('pfdq-file-input').click()}
-              className={`border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 cursor-pointer ${
+              onClick={() => document.getElementById('pfdq-file-input').click()}>
+
+              {/* Circuit trace lines — only visible when not dragging */}
+              {!dragOver && !file && (<>
+                <div className="absolute top-0 left-0 right-0 h-[2px] pointer-events-none overflow-hidden rounded-t-xl">
+                  <div className="absolute h-full rounded-full"
+                    style={{ background: T.trace, width:'40%', animation:'traceH 3.5s ease-in-out infinite' }} />
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] pointer-events-none overflow-hidden rounded-b-xl">
+                  <div className="absolute h-full rounded-full"
+                    style={{ background: T.trace, width:'40%', animation:'traceH 3.5s ease-in-out infinite 1.75s' }} />
+                </div>
+                <div className="absolute top-0 bottom-0 left-0 w-[2px] pointer-events-none overflow-hidden rounded-l-xl">
+                  <div className="absolute w-full rounded-full"
+                    style={{ background: T.trace, height:'35%', animation:'traceV 3.5s ease-in-out infinite 0.5s' }} />
+                </div>
+                <div className="absolute top-0 bottom-0 right-0 w-[2px] pointer-events-none overflow-hidden rounded-r-xl">
+                  <div className="absolute w-full rounded-full"
+                    style={{ background: T.trace, height:'35%', animation:'traceV 3.5s ease-in-out infinite 2.25s' }} />
+                </div>
+              </>)}
+
+              {/* Corner brackets */}
+              {(['top-0 left-0','top-0 right-0','bottom-0 left-0','bottom-0 right-0']).map((pos, i) => (
+                <div key={i} className={`absolute ${pos} w-4 h-4 pointer-events-none`}>
+                  <div className="absolute top-0 left-0 w-full h-[2px] rounded-full" style={{ background: T.accentHex, opacity: 0.5 }} />
+                  <div className="absolute top-0 left-0 h-full w-[2px] rounded-full" style={{ background: T.accentHex, opacity: 0.5 }} />
+                </div>
+              ))}
+
+              <div className={`border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 cursor-pointer ${
                 dragOver ? 'border-cyan-400 bg-cyan-50 shadow-lg shadow-cyan-200/60'
                 : file    ? 'border-teal-400 bg-teal-50'
-                :            'border-slate-300 hover:border-teal-400 bg-white hover:bg-teal-50/40'
+                :           'border-slate-300 hover:border-teal-400 bg-white hover:bg-teal-50/40'
               }`}>
-              <div className={`w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center transition-all ${
-                dragOver ? 'bg-cyan-100 animate-bounce' : file ? 'bg-teal-50 border border-teal-200' : 'bg-teal-50 border border-teal-200'
-              }`}>
-                {file ? <FileText className="w-7 h-7 text-teal-500" /> : <UploadIcon className={`w-7 h-7 ${dragOver ? 'text-cyan-500' : 'text-teal-500'}`} />}
+                {/* Scan beam overlay when file is loaded */}
+                {file && (
+                  <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
+                    <div className="absolute inset-x-0 h-16 pointer-events-none"
+                      style={{ background: T.scanBeam, animation:'scanBeam 2.5s ease-in-out infinite' }} />
+                  </div>
+                )}
+
+                <div className={`w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center transition-all ${
+                  dragOver ? 'bg-cyan-100 animate-bounce' : file ? 'bg-teal-50 border border-teal-200' : 'bg-teal-50 border border-teal-200'
+                }`}>
+                  {file
+                    ? <FileText className="w-7 h-7 text-teal-500" />
+                    : <UploadIcon className={`w-7 h-7 ${dragOver ? 'text-cyan-500' : 'text-teal-500'}`} />}
+                </div>
+                <p className="text-sm font-semibold text-slate-700 mb-1">
+                  {file ? file.name : dragOver ? 'Drop your PFD here' : 'Drag & drop or click to upload'}
+                </p>
+                <p className="text-xs text-slate-400">{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'PDF, PNG, JPG, TIFF · Max 50 MB'}</p>
+                <input id="pfdq-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={handleFileChange} />
               </div>
-              <p className="text-sm font-semibold text-slate-700 mb-1">
-                {file ? file.name : dragOver ? 'Drop your PFD here' : 'Drag & drop or click to upload'}
-              </p>
-              <p className="text-xs text-slate-400">{file ? `${(file.size/1024/1024).toFixed(2)} MB` : 'PDF, PNG, JPG, TIFF · Max 50 MB'}</p>
-              <input id="pfdq-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={handleFileChange} />
             </div>
 
             {file && (
@@ -697,92 +1641,393 @@ const PFDQualityChecker = () => {
               {uploading ? <><Loader className="w-4 h-4 animate-spin" />Uploading…</> : <><Cpu className="w-4 h-4" />Run PFD Quality Check</>}
             </button>
 
-            {polling && (
-              <div className="mt-5 rounded-2xl p-5 space-y-3 border border-teal-200" style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff)' }}>
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-teal-500 animate-pulse" />
-                  <span className="text-sm font-bold text-slate-800">Analysing PFD drawing…</span>
-                </div>
-                <div className="w-full bg-white rounded-full h-2 overflow-hidden border border-teal-100">
-                  <div className="h-full rounded-full animate-pulse"
-                    style={{ width:'60%', background: T.accent, boxShadow:'0 0 8px rgba(13,148,136,0.5)' }} />
-                </div>
-                <p className="text-xs text-slate-400 text-center">Checking equipment tags, streams, title block &amp; safety — polling every 3 s</p>
-              </div>
-            )}
-            {docStatus === 'processing' && !polling && (
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-teal-600 p-3 bg-teal-50 border border-teal-200 rounded-xl">
-                <Clock className="w-4 h-4" />Still processing — please wait…
-              </div>
+            {/* Rich AnalysisLoader — mirrors PIDVerification's processing state UI */}
+            {(polling || docStatus === 'processing') && (
+              <AnalysisLoader elapsedSec={elapsedSec} fileName={file?.name} />
             )}
           </div>
         )}
 
-        {/* Results panel */}
-        {results && (
-          <div className="space-y-5">
-            {/* Summary */}
-            <div className="rounded-2xl p-5" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.1s both' }}>
-              <div className="flex flex-wrap items-center gap-6">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: totalIssues > 0 ? 'linear-gradient(135deg,#fef2f2,#fee2e2)' : 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
-                           border: `1px solid ${totalIssues > 0 ? '#fca5a5' : '#86efac'}` }}>
-                  {totalIssues > 0 ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <CheckCircle className="w-5 h-5 text-green-500" />}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">File</p>
-                  <p className="text-sm font-semibold text-slate-800 truncate max-w-[160px]">{results.file_name}</p>
-                </div>
-                <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Drawings</p><p className="font-bold text-2xl text-teal-600">{results.drawings?.length ?? 0}</p></div>
-                <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Issues</p><p className={`font-bold text-2xl ${totalIssues > 0 ? 'text-red-600' : 'text-green-600'}`}>{totalIssues}</p></div>
-                <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Critical</p><p className="font-bold text-2xl text-red-700">{criticalCount}</p></div>
-                <div><p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Major</p><p className="font-bold text-2xl text-orange-600">{majorCount}</p></div>
-                <div className="ml-auto flex gap-2 flex-wrap">
-                  <button onClick={downloadExcel} disabled={downloadingXlsx}
-                    className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 4px 14px rgba(16,185,129,0.35)' }}>
-                    {downloadingXlsx ? <Loader className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {downloadingXlsx ? 'Generating…' : 'Excel'}
-                  </button>
-                  <button onClick={downloadPDF} disabled={downloadingPdf}
-                    className="flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 4px 14px rgba(239,68,68,0.35)' }}>
-                    {downloadingPdf ? <Loader className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    {downloadingPdf ? 'Generating…' : 'PDF'}
-                  </button>
-                  <button onClick={() => { resetUpload(); setResults(null); }}
-                    className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
-                    <RefreshCw className="w-4 h-4" />New Upload
-                  </button>
-                </div>
+        {/* ── "What Gets Checked" info panel — shown only before results load ── */}
+        {!results && !polling && docStatus !== 'processing' && (
+          <div className="rounded-2xl overflow-hidden mb-5"
+            style={{ background:'rgba(255,255,255,0.80)', border:'1px solid #e2e8f0',
+              backdropFilter:'blur(12px)', animation:'fadeUp 0.5s ease-out 0.35s both' }}>
+
+            {/* Header row */}
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: T.accent, boxShadow:'0 3px 10px rgba(13,148,136,0.28)' }}>
+                <Shield className="w-3.5 h-3.5 text-white" />
               </div>
+              <h2 className="text-xs font-black text-slate-700 uppercase tracking-wider">What Gets Checked</h2>
+              <span className="ml-auto text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                12 Deterministic Rules
+              </span>
             </div>
 
-            <CrossRecommendationPanel
-              sourceType="pfd"
-              documentId={documentId || results?.document_id}
-              projectId={selectedProject?.project_id || results?.project_id}
-              fileName={results?.file_name}
-            />
+            {/* 3-col checks grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+              {CHECKS_PREVIEW.map((check, i) => {
+                const Icon = check.icon;
+                return (
+                  <div key={check.label} className="flex items-center gap-3 px-4 py-3.5 hover:bg-teal-50/30 transition-colors"
+                    style={{ animation:`fadeUp 0.4s ease-out ${0.05 + i * 0.07}s both` }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background:'rgba(240,253,250,0.9)', border:'1px solid #ccfbf1' }}>
+                      <Icon className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 leading-none">{check.label}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{check.desc}</p>
+                    </div>
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: T.accentHex, animation:'pulse2 2s ease-in-out infinite', animationDelay:`${i * 0.25}s` }} />
+                  </div>
+                );
+              })}
+            </div>
 
-            {/* Drawing tabs */}
-            {results.drawings?.length > 1 && (
-              <div className="flex gap-2 flex-wrap" style={{ animation:'fadeUp 0.5s ease-out 0.15s both' }}>
-                {results.drawings.map(d => (
-                  <button key={d.drawing_id} onClick={() => setActiveDrawing(d.drawing_id)}
-                    className={`text-sm px-4 py-1.5 rounded-full border font-medium transition-all ${
-                      activeDrawing === d.drawing_id ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-400'
+            {/* Mini standards strip */}
+            <div className="px-5 py-2.5 border-t border-slate-100 flex items-center gap-2 flex-wrap"
+              style={{ background:'rgba(240,253,250,0.5)' }}>
+              <span className="text-[10px] text-slate-500 font-medium">Standards:</span>
+              {['ISO 10628-1','ISO 10628-2','ISA-S5.1','IEC 61511'].map(s => (
+                <span key={s} className="text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Results section — icon-rail panel navigation ─────────────────── */}
+        {results && (() => {
+          // ── SOFT-CODED panel definitions ────────────────────────────────────
+          // Add a new entry here to create a new panel tab. No other changes needed.
+          const overlayNodes    = buildOverlayNodes(activeDrawingData?.issues ?? []);
+          const visibleNodes     = overlayNodes.filter(n => showHeuristic || n.anchored);
+
+          // Soft-coded: severity → fill colour for overlay dots
+          const SEV_COLOR = {
+            critical: { bg:'#dc2626', border:'#991b1b', glow:'rgba(220,38,38,0.5)' },
+            major:    { bg:'#f97316', border:'#c2410c', glow:'rgba(249,115,22,0.5)' },
+            minor:    { bg:'#fbbf24', border:'#d97706', glow:'rgba(251,191,36,0.4)' },
+            info:     { bg:'#0d9488', border:'#0f766e', glow:'rgba(13,148,136,0.4)' },
+          };
+
+          const PANELS = [
+            {
+              id: 'drawing',
+              label: 'Drawing',
+              icon: ({ cls }) => <Eye className={cls} />,
+              badge: visibleNodes.length || null,
+              badgeCls: 'bg-teal-600 text-white',
+              accent: '#0d9488',
+              glow:   'rgba(13,148,136,0.25)',
+            },
+            {
+              id: 'findings',
+              label: 'Findings',
+              icon: ({ cls }) => <GitBranch className={cls} />,
+              badge: totalIssues || null,
+              badgeCls: totalIssues > 0 ? 'bg-red-500 text-white' : 'bg-green-500 text-white',
+              accent: '#ef4444',
+              glow:   'rgba(239,68,68,0.25)',
+            },
+            {
+              id: 'summary',
+              label: 'Summary',
+              icon: ({ cls }) => <BarChart2 className={cls} />,
+              badge: results.drawings?.length || null,
+              badgeCls: 'bg-teal-500 text-white',
+              accent: '#0d9488',
+              glow:   'rgba(13,148,136,0.25)',
+            },
+            {
+              id: 'cross',
+              label: 'Cross-Ref',
+              icon: ({ cls }) => <Activity className={cls} />,
+              badge: null,
+              accent: '#f59e0b',
+              glow:   'rgba(245,158,11,0.25)',
+            },
+            {
+              id: 'history',
+              label: 'History',
+              icon: ({ cls }) => <Clock className={cls} />,
+              badge: history.length || null,
+              badgeCls: 'bg-slate-500 text-white',
+              accent: '#64748b',
+              glow:   'rgba(100,116,139,0.25)',
+            },
+          ];
+
+          return (
+          <div className="flex gap-4 items-start" style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
+
+            {/* ── ICON RAIL — left sidebar navigation ──────────────────────── */}
+            <div className="flex flex-col items-center gap-1 py-4 px-2 rounded-2xl sticky top-6 flex-shrink-0"
+              style={{ background:'rgba(255,255,255,0.9)', border:'1px solid #d1fae5',
+                       backdropFilter:'blur(12px)', boxShadow:'0 2px 12px rgba(13,148,136,0.08)',
+                       animation:'railIn 0.3s ease-out both', minWidth:'64px' }}>
+              {PANELS.map((p) => {
+                const Icon     = p.icon;
+                const isActive = activePanel === p.id;
+                return (
+                  <button key={p.id} onClick={() => setActivePanel(p.id)} title={p.label}
+                    className={`relative flex flex-col items-center gap-1 px-2 py-3 rounded-xl w-full transition-all duration-200 ${
+                      isActive ? 'text-white' : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'
                     }`}
-                    style={activeDrawing === d.drawing_id ? { background: T.accent } : undefined}>
-                    {d.drawing_id}<span className={`ml-1.5 text-xs font-semibold ${activeDrawing === d.drawing_id ? 'text-teal-100' : 'text-slate-400'}`}>({d.issue_count})</span>
+                    style={isActive
+                      ? { background:`linear-gradient(135deg,${p.accent},${p.accent}cc)`, boxShadow:`0 4px 14px ${p.glow}` }
+                      : undefined}>
+                    <Icon cls={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : ''}`} />
+                    <span className={`text-[9px] font-bold uppercase tracking-wide leading-none ${isActive ? 'text-white/90' : ''}`}>
+                      {p.label}
+                    </span>
+                    {p.badge !== null && p.badge !== undefined && (
+                      <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-black px-1 ${
+                        isActive ? 'bg-white text-slate-700' : (p.badgeCls || 'bg-teal-500 text-white')
+                      }`}>
+                        {p.badge}
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {/* Findings table */}
-            {activeDrawingData && (
-              <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'fadeUp 0.5s ease-out 0.2s both' }}>
+            {/* ── CONTENT AREA ────────────────────────────────────────────── */}
+            <div className="flex-1 min-w-0 space-y-4">
+
+              {/* ── Results hero banner ── */}
+              <div className="relative rounded-2xl overflow-hidden" style={{ animation:'fadeUp 0.35s ease-out both' }}>
+                <div className="px-5 py-4 flex items-center gap-4 flex-wrap"
+                  style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff,#f0f9ff)', border:'1px solid #99f6e4' }}>
+                  {/* Status icon */}
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: totalIssues > 0 ? 'linear-gradient(135deg,#fef2f2,#fee2e2)' : 'linear-gradient(135deg,#f0fdf4,#dcfce7)',
+                             border:`1px solid ${totalIssues > 0 ? '#fca5a5' : '#86efac'}` }}>
+                    {totalIssues > 0 ? <AlertTriangle className="w-5 h-5 text-red-500" /> : <CheckCircle className="w-5 h-5 text-green-500" style={{ animation:'checkPop 0.4s ease-out both' }} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Analysis Complete</p>
+                    <p className="text-sm font-bold text-slate-800 truncate max-w-[260px]" title={results.file_name}>{results.file_name}</p>
+                  </div>
+                  {/* Stat chips with countUp animation */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { v: results.drawings?.length ?? 0, label:'Drawings',
+                        color:'text-teal-700', bg:'rgba(20,184,166,0.10)', border:'rgba(20,184,166,0.22)', glow:'' },
+                      { v: totalIssues, label:'Issues',
+                        color: totalIssues > 0 ? 'text-red-700' : 'text-green-700',
+                        bg: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
+                        border: totalIssues > 0 ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)',
+                        glow: totalIssues > 0 ? '0 0 10px rgba(239,68,68,0.15)' : '' },
+                      { v: criticalCount, label:'Critical',
+                        color:'text-red-800', bg:'rgba(220,38,38,0.09)', border:'rgba(220,38,38,0.20)',
+                        glow: criticalCount > 0 ? '0 0 12px rgba(220,38,38,0.22)' : '' },
+                      { v: majorCount, label:'Major',
+                        color:'text-orange-700', bg:'rgba(234,88,12,0.08)', border:'rgba(234,88,12,0.18)',
+                        glow: majorCount > 0 ? '0 0 12px rgba(234,88,12,0.18)' : '' },
+                    ].map((chip, ci) => (
+                      <div key={chip.label} className="rounded-xl px-3 py-2 text-center flex-shrink-0 transition-all"
+                        style={{ background:chip.bg, border:`1px solid ${chip.border}`, minWidth:'62px',
+                          boxShadow: chip.glow || undefined,
+                          animation:`countUp 0.5s ease-out ${0.1 + ci * 0.08}s both` }}>
+                        <p className={`font-black text-lg leading-none ${chip.color}`}>{chip.v}</p>
+                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">{chip.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 flex-wrap ml-auto">
+                    <button onClick={downloadExcel} disabled={downloadingXlsx}
+                      className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
+                      style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
+                      {downloadingXlsx ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}Excel
+                    </button>
+                    <button onClick={downloadPDF} disabled={downloadingPdf}
+                      className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
+                      style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 3px 10px rgba(239,68,68,0.25)' }}>
+                      {downloadingPdf ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}PDF
+                    </button>
+                    <button onClick={() => { resetUpload(); setResults(null); setActivePanel('findings'); }}
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
+                      <RefreshCw className="w-3.5 h-3.5" />New
+                    </button>
+                  </div>
+                </div>
+                {/* Gradient bar at bottom of hero */}
+                <div className="h-[3px]" style={{ backgroundImage: T.gradBar, backgroundSize:'300% auto', animation:'gradShift 3s linear infinite' }} />
+              </div>
+
+              {/* Drawing tabs */}
+              {results.drawings?.length > 1 && (
+                <div className="flex gap-2 flex-wrap">
+                  {results.drawings.map(d => (
+                    <button key={d.drawing_id} onClick={() => setActiveDrawing(d.drawing_id)}
+                      className={`text-sm px-4 py-1.5 rounded-full border font-medium transition-all ${
+                        activeDrawing === d.drawing_id ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-400'
+                      }`}
+                      style={activeDrawing === d.drawing_id ? { background: T.accent } : undefined}>
+                      {d.drawing_id}
+                      <span className={`ml-1.5 text-xs font-semibold ${activeDrawing === d.drawing_id ? 'text-teal-100' : 'text-slate-400'}`}>({d.issue_count})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* ═══ PANEL BODIES ═══ */}
+              <div key={activePanel} style={{ animation:'panelSlide 0.25s ease-out both' }}>
+
+              {/* ─── DRAWING panel ────────────────────────────────── */}
+              {activePanel === 'drawing' && (
+              <div className="rounded-2xl overflow-hidden" style={T.card}>
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Eye className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">{activeDrawing} — Drawing Overlay</h2>
+                      <p className="text-xs text-slate-500">
+                        {visibleNodes.filter(n => n.anchored).length} anchored · {visibleNodes.filter(n => !n.anchored).length} heuristic
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-3 text-[10px] text-slate-500">
+                      {[['critical','#dc2626'],['major','#f97316'],['minor','#fbbf24'],['info','#0d9488']].map(([sev, col]) => (
+                        <span key={sev} className="flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background:col }} />
+                          {sev[0].toUpperCase()+sev.slice(1)}
+                        </span>
+                      ))}
+                      <span className="flex items-center gap-1">
+                        <span className="w-3 h-3 rounded-full border-2 border-dashed border-slate-400 flex-shrink-0" />
+                        Heuristic
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+                      <input type="checkbox" checked={showHeuristic} onChange={e => setShowHeuristic(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-teal-500" />
+                      Show heuristic
+                    </label>
+                    <button onClick={reextractPositions} disabled={reextracting}
+                      title="Re-run OCR extraction to place markers at exact locations"
+                      className="flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1.5 rounded-lg hover:bg-teal-100 transition-colors disabled:opacity-50">
+                      {reextracting ? <Loader className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                      {reextracting ? 'Scanning…' : 'Refresh Markers'}
+                    </button>
+                    <button onClick={() => setActivePanel('findings')}
+                      className="text-xs text-teal-600 hover:text-teal-800 underline underline-offset-2 transition-colors">
+                      View table
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-slate-100">
+                  {drawingImageLoading && (
+                    <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                      <Loader className="w-4 h-4 animate-spin" />Loading drawing…
+                    </div>
+                  )}
+                  {!drawingImageLoading && !drawingImageUrl && (
+                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400">
+                      <AlertTriangle className="w-6 h-6" />
+                      {drawingImageError === 'missing' ? (
+                        <>
+                          <span className="text-xs font-semibold text-amber-400">Original file not found on server</span>
+                          <span className="text-[11px] text-slate-500 text-center max-w-xs leading-relaxed">
+                            This document was processed on a previous server. The PDF file no longer exists on disk.
+                          </span>
+                          <button
+                            onClick={deleteCurrentDocument}
+                            disabled={isDeleting}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-60"
+                            style={{ background:'linear-gradient(135deg,#dc2626,#b91c1c)', boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }}>
+                            {isDeleting
+                              ? <><Loader className="w-3.5 h-3.5 animate-spin" />Deleting…</>
+                              : <><Trash2 className="w-3.5 h-3.5" />Delete &amp; Re-upload</>}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs">Drawing preview unavailable for this file</span>
+                      )}
+                    </div>
+                  )}
+                  {!drawingImageLoading && drawingImageUrl && (
+                    <div className="overflow-auto" style={{ maxHeight:'72vh' }}>
+                      <div className="relative w-full" style={{ lineHeight:0 }}>
+                        <img src={drawingImageUrl} alt={activeDrawing} draggable={false}
+                          className="w-full block" style={{ height:'auto', userSelect:'none' }} />
+                        <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                          {visibleNodes.map((n) => {
+                            const isFocused = focusedFindingId === n.finding.id;
+                            const sev = (n.finding?.severity || 'info').toLowerCase();
+                            const cat = (n.finding?.category || '').toLowerCase();
+                            const col = SEV_COLOR[sev] || SEV_COLOR.info;
+                            const isDiamond = cat === 'title_block';
+                            const scale = isFocused ? 1.6 : 1;
+                            const shapeStyle = isDiamond
+                              ? { borderRadius:'3px', transform:`translate(-50%,-50%) rotate(45deg) scale(${scale})`, width:'13px', height:'13px' }
+                              : { borderRadius:'50%', transform:`translate(-50%,-50%) scale(${scale})`, width:'16px', height:'16px' };
+                            return (
+                              <button
+                                key={n.rawKey}
+                                onClick={() => jumpToFinding(n.finding.id)}
+                                title={`[${cat}] ${n.finding.issue_observed}`}
+                                className={`absolute border-2 transition-all ${isFocused ? 'z-20' : 'z-10 hover:opacity-90'}`}
+                                style={{
+                                  left: `${n.left}%`,
+                                  top:  `${n.top}%`,
+                                  backgroundColor: col.bg,
+                                  borderColor: col.border,
+                                  boxShadow: isFocused
+                                    ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                    : '0 1px 4px rgba(0,0,0,0.4)',
+                                  pointerEvents: 'all',
+                                  outline: n.anchored ? undefined : '2px dashed rgba(100,116,139,0.7)',
+                                  outlineOffset: n.anchored ? undefined : '3px',
+                                  ...shapeStyle,
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {(activeDrawingData?.issues?.length ?? 0) > 0 && (
+                  <div className="border-t border-slate-100 divide-y divide-slate-50 max-h-48 overflow-y-auto">
+                    {(activeDrawingData?.issues ?? []).map(f => {
+                      const sev = (f.severity || 'info').toLowerCase();
+                      const col = SEV_COLOR[sev] || SEV_COLOR.info;
+                      const isFocused = focusedFindingId === f.id;
+                      return (
+                        <button key={f.id} id={`pfd-drawing-finding-${f.id}`}
+                          onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
+                          className={`w-full text-left px-4 py-2.5 flex items-start gap-3 transition-colors ${
+                            isFocused ? 'bg-teal-50 border-l-2 border-teal-400' : 'hover:bg-slate-50'
+                          }`}>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ background:col.bg }} />
+                          <span className="flex-1 min-w-0">
+                            <span className="text-xs font-semibold text-slate-700">[{f.rule_id}] </span>
+                            <span className="text-xs text-slate-600 line-clamp-1">{f.issue_observed}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 flex-shrink-0">{f.evidence?.split(' ').slice(0,4).join(' ')}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              )}
+              {/* ─── end DRAWING ──────────────────────────────────────── */}
+
+              {/* ─── FINDINGS panel ─────────────────────────────────── */}
+              {activePanel === 'findings' && activeDrawingData && (
+              <div className="rounded-2xl overflow-hidden" style={T.card}>
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -790,65 +2035,75 @@ const PFDQualityChecker = () => {
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-slate-900">{activeDrawing}</h2>
-                      <p className="text-xs text-slate-500">{activeDrawingData.issues?.length ?? 0} findings</p>
+                      <p className="text-xs text-slate-500">{filteredIssues.length} of {activeDrawingData.issues?.length ?? 0} findings</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-400">
+                      <option value="all">All Severity</option>
+                      {['critical','major','minor','info'].map(s => <option key={s} value={s}>{s[0].toUpperCase()+s.slice(1)}</option>)}
+                    </select>
+                    <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-400">
+                      <option value="all">All Categories</option>
+                      {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-400">
+                      <option value="all">All Status</option>
+                      {['open','in_review','resolved','wont_fix'].map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
+                    </select>
                     {overridesSaved && pendingCount === 0 && (
-                      <span className="text-xs text-teal-600 flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5" />Review saved
-                      </span>
+                      <span className="text-xs text-teal-600 flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" />Saved</span>
                     )}
                     {pendingCount > 0 && (
                       <>
                         <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                          {pendingCount} unsaved change{pendingCount !== 1 ? 's' : ''}
+                          {pendingCount} unsaved
                         </span>
                         <button onClick={handleSaveOverrides} disabled={savingOverrides}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50 transition-all hover:-translate-y-px"
                           style={{ background: T.accent }}>
-                          {savingOverrides ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          {savingOverrides ? 'Saving…' : 'Save Review'}
+                          {savingOverrides ? <><Loader className="w-3.5 h-3.5 animate-spin" />Saving…</> : <><Save className="w-3.5 h-3.5" />Save</>}
                         </button>
                       </>
                     )}
                   </div>
                 </div>
-
-                {/* Table */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100">
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide w-12">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide w-24">Category</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide w-20">Rule</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Issue Observed</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">Action Required</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide w-28">Severity</th>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide w-28">Status</th>
+                        {['#','Category','Rule','Issue Observed','Action Required','Severity','Status'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {(activeDrawingData.issues ?? []).length === 0 ? (
-                        <tr>
-                          <td colSpan="7" className="px-4 py-10 text-center">
-                            <div className="flex flex-col items-center gap-2">
-                              <CheckCircle className="w-8 h-8 text-teal-400" />
-                              <p className="text-sm font-semibold text-slate-700">No issues detected</p>
-                              <p className="text-xs text-slate-400">This drawing passed all 12 PFD quality rules</p>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (activeDrawingData.issues ?? []).map((f, i) => (
-                        <tr key={f.id} className={`transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-teal-50/30`}>
+                      {filteredIssues.length === 0 ? (
+                        <tr><td colSpan="7" className="px-4 py-10 text-center">
+                          <div className="flex flex-col items-center gap-2">
+                            <CheckCircle className="w-8 h-8 text-teal-400" />
+                            <p className="text-sm font-semibold text-slate-700">
+                              {(activeDrawingData.issues?.length ?? 0) === 0 ? 'No issues detected' : 'No issues match filters'}
+                            </p>
+                          </div>
+                        </td></tr>
+                      ) : filteredIssues.map((f, i) => (
+                        <tr key={f.id} id={`pfd-finding-row-${f.id}`}
+                          onClick={() => setFocusedFindingId(prev => prev === f.id ? null : f.id)}
+                          className={`transition-colors cursor-pointer ${
+                            focusedFindingId === f.id ? 'bg-teal-50 ring-1 ring-teal-300'
+                            : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                          } hover:bg-teal-50/30`}>
                           <td className="px-4 py-3 text-xs text-slate-400 font-mono">{f.sl_no}</td>
                           <td className="px-4 py-3">
-                            <span className="inline-block text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium capitalize">
+                            <span className="inline-block text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium">
                               {CATEGORY_LABELS[f.category] ?? f.category}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs font-mono text-slate-500">{f.rule_id}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-slate-500 whitespace-nowrap">{f.rule_id}</td>
                           <td className="px-4 py-3 text-xs text-slate-700 max-w-[220px]">
                             <p className="line-clamp-3">{f.issue_observed}</p>
                             {f.evidence && <p className="text-slate-400 mt-1 italic text-[11px] line-clamp-2">{f.evidence}</p>}
@@ -857,10 +2112,8 @@ const PFDQualityChecker = () => {
                             <p className="line-clamp-3">{f.action_required}</p>
                           </td>
                           <td className="px-4 py-3">
-                            <select
-                              value={getVal(f, 'severity')}
-                              onChange={e => handleOverrideChange(f.id, 'severity', e.target.value)}
-                              className={`text-xs px-2.5 py-1 rounded-full border font-semibold cursor-pointer focus:outline-none ${SEVERITY_STYLES[getVal(f, 'severity')]}`}>
+                            <select value={getVal(f,'severity')} onChange={e => handleOverrideChange(f.id,'severity',e.target.value)}
+                              className={`text-xs px-2.5 py-1 rounded-full border font-semibold cursor-pointer focus:outline-none ${SEVERITY_STYLES[getVal(f,'severity')]}`}>
                               <option value="critical">Critical</option>
                               <option value="major">Major</option>
                               <option value="minor">Minor</option>
@@ -868,13 +2121,12 @@ const PFDQualityChecker = () => {
                             </select>
                           </td>
                           <td className="px-4 py-3">
-                            <select
-                              value={getVal(f, 'status')}
-                              onChange={e => handleOverrideChange(f.id, 'status', e.target.value)}
-                              className="text-xs px-2.5 py-1 rounded-full border font-semibold cursor-pointer focus:outline-none bg-slate-50 text-slate-700 border-slate-200">
+                            <select value={getVal(f,'status') ?? 'open'} onChange={e => handleOverrideChange(f.id,'status',e.target.value)}
+                              className="text-xs px-2.5 py-1 rounded-full border bg-slate-50 text-slate-700 border-slate-200 font-medium cursor-pointer focus:outline-none">
                               <option value="open">Open</option>
-                              <option value="reviewed">Reviewed</option>
+                              <option value="in_review">In Review</option>
                               <option value="resolved">Resolved</option>
+                              <option value="wont_fix">Won&apos;t Fix</option>
                             </select>
                           </td>
                         </tr>
@@ -883,47 +2135,184 @@ const PFDQualityChecker = () => {
                   </table>
                 </div>
               </div>
-            )}
+              )}
+              {/* ─── end FINDINGS ─────────────────────────────────────── */}
 
-            {/* Recent history */}
-            {history.length > 0 && (
-              <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'fadeUp 0.5s ease-out 0.25s both' }}>
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                  <div className="w-7 h-7 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center">
-                    <BarChart2 className="w-3.5 h-3.5 text-teal-600" />
+              {/* ─── SUMMARY panel ────────────────────────────────────── */}
+              {activePanel === 'summary' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl overflow-hidden" style={T.card}>
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center">
+                      <BarChart2 className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">Category Breakdown</h2>
+                      <p className="text-xs text-slate-500">{allIssues.length} total findings across all drawings</p>
+                    </div>
                   </div>
-                  <h3 className="text-sm font-bold text-slate-900">Recent Uploads</h3>
-                  {loadingHistory && <Loader className="w-3.5 h-3.5 text-slate-400 animate-spin ml-auto" />}
+                  <div className="p-5 space-y-3">
+                    {(() => {
+                      const catCounts = {};
+                      allIssues.forEach(f => {
+                        const c = f.category || 'other';
+                        if (!catCounts[c]) catCounts[c] = { total:0, critical:0, major:0 };
+                        catCounts[c].total++;
+                        if (f.severity === 'critical') catCounts[c].critical++;
+                        if (f.severity === 'major')    catCounts[c].major++;
+                      });
+                      const sorted = Object.entries(catCounts).sort((a,b) => b[1].total - a[1].total);
+                      const maxCount = sorted[0]?.[1]?.total || 1;
+                      if (sorted.length === 0) return (
+                        <div className="py-8 text-center text-slate-400 text-sm">No findings to summarise.</div>
+                      );
+                      return sorted.map(([cat, counts]) => (
+                        <div key={cat}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold text-slate-700">{CATEGORY_LABELS[cat] ?? cat}</span>
+                            <div className="flex items-center gap-2">
+                              {counts.critical > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">{counts.critical} crit</span>}
+                              {counts.major    > 0 && <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">{counts.major} maj</span>}
+                              <span className="text-xs font-bold text-slate-600">{counts.total}</span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700"
+                              style={{
+                                width:`${(counts.total / maxCount) * 100}%`,
+                                background: counts.critical > 0
+                                  ? 'linear-gradient(90deg,#ef4444,#f97316)'
+                                  : counts.major > 0
+                                    ? 'linear-gradient(90deg,#f97316,#fbbf24)'
+                                    : 'linear-gradient(90deg,#14b8a6,#0891b2)',
+                              }} />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
-                <div className="divide-y divide-slate-50">
-                  {history.slice(0, 5).map(doc => (
-                    <div key={doc.document_id}
-                      className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => { setDocumentId(doc.document_id); fetchResults(doc.document_id); }}>
-                      <div className="flex items-center gap-3 min-w-0">
+
+                {results.drawings?.length > 0 && (
+                  <div className="rounded-2xl overflow-hidden" style={T.card}>
+                    <div className="px-5 py-4 border-b border-slate-100">
+                      <h2 className="text-sm font-bold text-slate-900">Drawings</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">{results.drawings.length} page{results.drawings.length !== 1 ? 's' : ''} — click to inspect</p>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {results.drawings.map(d => (
+                        <div key={d.drawing_id}
+                          className="px-5 py-3 flex items-center gap-4 hover:bg-teal-50/30 transition-colors cursor-pointer"
+                          onClick={() => { setActiveDrawing(d.drawing_id); setActivePanel('findings'); }}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${(d.issue_count ?? 0) > 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                            {(d.issue_count ?? 0) > 0 ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{d.drawing_id}</p>
+                            <p className="text-xs text-slate-500">{d.issue_count ?? 0} issues</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-300" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              )}
+              {/* ─── end SUMMARY ──────────────────────────────────────── */}
+
+              {/* ─── CROSS-REF panel ─────────────────────────────────── */}
+              {activePanel === 'cross' && (
+              <div className="rounded-2xl overflow-hidden" style={T.card}>
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap"
+                  style={{ background:'linear-gradient(135deg,#fffbeb,#fef3c7)' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+                      <Activity className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">Cross-Reference</h2>
+                      <p className="text-xs text-slate-500">Link this PFD to its matching P&amp;ID verification</p>
+                    </div>
+                  </div>
+                  <a href="/engineering/process/pid-verification"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-xl transition-all hover:-translate-y-px"
+                    style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow:'0 3px 10px rgba(99,102,241,0.25)' }}>
+                    Open P&amp;ID Verify <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="p-4">
+                  <CrossRecommendationPanel
+                    sourceType="pfd"
+                    documentId={documentId || results?.document_id}
+                    projectId={selectedProject?.project_id || results?.project_id}
+                    fileName={results?.file_name}
+                  />
+                </div>
+              </div>
+              )}
+              {/* ─── end CROSS-REF ───────────────────────────────────── */}
+
+              {/* ─── HISTORY panel ───────────────────────────────────── */}
+              {activePanel === 'history' && (
+              <div className="rounded-2xl overflow-hidden" style={T.card}>
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">Document History</h2>
+                      <p className="text-xs text-slate-500">Previous analyses in this project</p>
+                    </div>
+                  </div>
+                  <button onClick={() => fetchHistory(selectedProject.project_id)} disabled={loadingHistory}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-lg transition-colors disabled:opacity-50">
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin' : ''}`} />Refresh
+                  </button>
+                </div>
+                {loadingHistory ? (
+                  <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-sm">
+                    <Loader className="w-4 h-4 animate-spin" />Loading…
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
+                    <FileText className="w-10 h-10 opacity-30" />
+                    <p className="text-sm font-medium">No documents yet</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-50">
+                    {history.map(doc => (
+                      <div key={doc.document_id} className="px-5 py-3 flex items-center gap-3 hover:bg-teal-50/30 transition-colors">
                         <FileText className="w-4 h-4 text-red-400 flex-shrink-0" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-800 truncate">{doc.file_name}</p>
                           <p className="text-xs text-slate-400">{new Date(doc.created_at).toLocaleString()}</p>
                         </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                            doc.status === 'completed' ? 'bg-teal-50 text-teal-700 border-teal-200'
+                            : doc.status === 'failed'  ? 'bg-red-50 text-red-600 border-red-200'
+                            : 'bg-amber-50 text-amber-600 border-amber-200'
+                          }`}>{doc.status}</span>
+                          {doc.total_issues !== undefined && (
+                            <span className="text-xs text-slate-400">{doc.total_issues} issues</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          doc.status === 'completed' ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                          : doc.status === 'failed'  ? 'bg-red-50 text-red-600 border border-red-200'
-                          : 'bg-amber-50 text-amber-600 border border-amber-200'
-                        }`}>{doc.status}</span>
-                        {doc.total_issues !== undefined && (
-                          <span className="text-xs text-slate-400">{doc.total_issues} issues</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+              )}
+              {/* ─── end HISTORY ─────────────────────────────────────── */}
+
+              </div>
+            </div>
           </div>
-        )}
+          );
+        })()}
 
       </div>
     </DarkBg>

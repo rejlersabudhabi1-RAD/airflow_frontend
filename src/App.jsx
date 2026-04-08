@@ -92,6 +92,7 @@ import MOVEquipmentPage from './pages/ProcessDatasheet/MOVEquipmentPage'
 import SmartDatasheetPage from './pages/ProcessDatasheet/SmartDatasheetPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 import LineList from './pages/Engineering/Process/LineList'
+import EquipmentList from './pages/Engineering/Process/EquipmentList'
 import PIDVerification from './pages/Engineering/Process/PIDVerification'
 import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
@@ -778,6 +779,15 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <LineList />
+            </ModuleProtectedRoute>
+          }
+        />
+        {/* Equipment List - P&ID Equipment Extraction */}
+        <Route
+          path="engineering/process/equipment-list"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <EquipmentList />
             </ModuleProtectedRoute>
           }
         />

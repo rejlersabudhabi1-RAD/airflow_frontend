@@ -75,6 +75,69 @@ console.log('[LineList] Config loaded:', {
   UPLOAD_TIMEOUT_MS, POLL_INTERVAL_MS, MAX_POST_RETRIES, POST_RETRY_BASE_MS, API_BASE,
 });
 
+// ---------------------------------------------------------------------------
+// Soft-coded format options — add/remove formats here only, no JSX changes needed.
+// ---------------------------------------------------------------------------
+const FORMAT_OPTIONS = [
+  { value: 'onshore',  label: 'Onshore',               hint: 'SIZE-FLUID-SEQ-CLASS'         },
+  { value: 'offshore', label: 'Offshore',               hint: 'AREA-FLUID-SIZE-CLASS-SEQ'    },
+  { value: 'general',  label: 'General',                hint: 'Auto-detect'                  },
+  { value: 'adnoc',    label: 'SIZE\"-FLUID-CLASS-SEQ', hint: 'ADNOC / compact format'       },
+];
+
+// Soft-coded table columns — key maps directly to row fields.
+const COLUMNS = [
+  { key: 'original_detection', label: 'Original Detection', width: 36 },
+  { key: 'fluid_code',         label: 'Fluid Code',         width: 12 },
+  { key: 'size',               label: 'Size',               width: 8  },
+  { key: 'sequence_no',        label: 'Sequence No',        width: 14 },
+  { key: 'pipr_class',         label: 'PIPR Class',         width: 14 },
+  { key: 'insulation',         label: 'Insulation',         width: 12 },
+  { key: 'from',               label: 'From',               width: 20 },
+  { key: 'to',                 label: 'To',                 width: 20 },
+];
+
+// Soft-coded format reference examples shown in the info card.
+const FORMAT_EXAMPLES = [
+  {
+    group: 'Offshore',
+    color: '#1d4ed8',
+    bg: 'rgba(29,78,216,0.06)',
+    border: 'rgba(29,78,216,0.18)',
+    examples: ['604-LFG-3-AC2GA0-2012', '604-PW-2\"-AE2LOD-FA-2779'],
+  },
+  {
+    group: 'General',
+    color: '#7c3aed',
+    bg: 'rgba(124,58,237,0.06)',
+    border: 'rgba(124,58,237,0.2)',
+    examples: ['4\"-41-SWR-64313-A2AU16-V', '16\"-41-SWS-65324-A2AU16-V'],
+    note: 'Tick "Include Area Code" for General only',
+  },
+  {
+    group: 'Onshore',
+    color: '#0369a1',
+    bg: 'rgba(3,105,161,0.06)',
+    border: 'rgba(3,105,161,0.18)',
+    examples: ['16\"-PG-4667-031441-X', '6\"-VG-4952-011503-X'],
+  },
+  {
+    group: 'SIZE\"-FLUID-CLASS-SEQ',
+    color: '#0f766e',
+    bg: 'rgba(15,118,110,0.06)',
+    border: 'rgba(15,118,110,0.18)',
+    examples: ['6\"-CD-AC3N-8256', '8\"-HO-BD2A-1023'],
+  },
+];
+
+// Helper — returns patience message based on elapsed time.
+const getPatienceMsg = (secs) => {
+  if (secs < 60)  return 'OCR extraction running in the background — usually 2–10 min for standard P&IDs.';
+  if (secs < 180) return 'Still working… multi-page or high-density P&IDs take longer. Please keep this tab open.';
+  if (secs < 600) return `Running for ${Math.floor(secs/60)}m ${secs%60}s — complex drawings can take 10–30 min on the server. You can safely leave this tab open.`;
+  return `Running for ${Math.floor(secs/60)}m ${secs%60}s — still processing. For very large files consider splitting into single-sheet P&IDs.`;
+};
+
 const LineList = () => {
   // State management
   const [pidDocument, setPidDocument] = useState(null);
@@ -315,37 +378,30 @@ const LineList = () => {
   const handleExport = () => {
     if (!extractedData?.data) return;
 
-    const headers = ['Original Detection', 'Fluid Code', 'Size', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To'];
+    // Derive headers + row values from the soft-coded COLUMNS array for easy extensibility.
+    const headers = COLUMNS.map(c => c.label);
 
     const wsData = [
       headers,
-      ...extractedData.data.map(item => [
-        item.original_detection || '',
-        item.fluid_code || '',
-        item.size || '',
-        item.sequence_no || '',
-        item.pipr_class || '',
-        item.insulation || '',
-        item.from || '',
-        item.to || '',
-      ]),
+      ...extractedData.data.map(item =>
+        COLUMNS.map(c => item[c.key] || '')
+      ),
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    const colWidths = headers.map((header, colIndex) => {
-      let maxWidth = header.length;
+    const colWidths = COLUMNS.map((col, colIndex) => {
+      let maxWidth = col.label.length;
       for (let rowIndex = 1; rowIndex < wsData.length; rowIndex++) {
         const cellValue = wsData[rowIndex][colIndex];
         if (cellValue) maxWidth = Math.max(maxWidth, String(cellValue).length);
       }
-      return { wch: Math.min(Math.max(maxWidth + 2, 12), 50) };
+      return { wch: Math.min(Math.max(maxWidth + 2, col.width ?? 12), 60) };
     });
     ws['!cols'] = colWidths;
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Line List');
-    // SOFT-CODED: filename from environments.json api.version if needed
     XLSX.writeFile(wb, 'line_list_base_extraction.xlsx');
   };
 
@@ -353,313 +409,553 @@ const LineList = () => {
   // Render
   // -------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
+    <>
+      <style>{`
+        @keyframes ll-scan-line {
+          0%   { top: 0%;   opacity: 0; }
+          5%   { opacity: 1; }
+          95%  { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        @keyframes ll-float {
+          0%, 100% { transform: translateY(0)    scale(1);   opacity: 0.15; }
+          50%       { transform: translateY(-20px) scale(1.2); opacity: 0.38; }
+        }
+        @keyframes ll-glow {
+          0%, 100% { box-shadow: 0 0 7px  rgba(37,99,235,0.2); }
+          50%       { box-shadow: 0 0 20px rgba(37,99,235,0.42), 0 0 40px rgba(37,99,235,0.1); }
+        }
+        @keyframes ll-shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(300%); }
+        }
+        @keyframes ll-row-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ll-fade-up {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ll-bar-glow {
+          0%, 100% { filter: brightness(1); }
+          50%       { filter: brightness(1.2) drop-shadow(0 0 5px rgba(37,99,235,0.5)); }
+        }
+        @keyframes ll-dot-wave {
+          0%, 100% { transform: scaleY(0.5); opacity: 0.4; }
+          50%       { transform: scaleY(1.5); opacity: 1; }
+        }
+        @keyframes ll-spin-slow {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes ll-pulse-badge {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.55; }
+        }
+        .ll-scan-line {
+          position: absolute; left: 0; right: 0; height: 2px;
+          background: linear-gradient(90deg, transparent, rgba(37,99,235,0.4), transparent);
+          animation: ll-scan-line 3.2s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .ll-particle {
+          position: absolute; border-radius: 50%;
+          background: rgba(37,99,235,0.28);
+          animation: ll-float ease-in-out infinite;
+        }
+        .ll-row-animate {
+          animation: ll-row-in 0.3s ease forwards;
+          opacity: 0;
+        }
+        .ll-section { animation: ll-fade-up 0.5s ease both; }
+      `}</style>
 
-        {/* Page Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <DocumentTextIcon className="h-8 w-8 text-blue-600" />
-            Line List - Base Extraction
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Extract 8 base columns from P&ID (P&ID-only, no enrichment)
-          </p>
+      {/* Light blue/indigo gradient page */}
+      <div className="min-h-screen relative overflow-x-hidden"
+        style={{ background: 'linear-gradient(145deg, #eff6ff 0%, #eef2ff 45%, #f0f9ff 100%)' }}>
+
+        {/* Subtle dot grid */}
+        <div className="fixed inset-0 pointer-events-none" style={{
+          backgroundImage: 'linear-gradient(rgba(37,99,235,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.04) 1px, transparent 1px)',
+          backgroundSize: '52px 52px',
+        }} />
+
+        {/* Ambient particles */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          {[
+            { l: '5%',  t: '16%', s: 4, d: '0s',   dur: '3.5s' },
+            { l: '14%', t: '70%', s: 5, d: '0.8s', dur: '4.3s' },
+            { l: '65%', t: '11%', s: 3, d: '1.2s', dur: '4.0s' },
+            { l: '82%', t: '55%', s: 6, d: '0.4s', dur: '4.8s' },
+            { l: '48%', t: '80%', s: 4, d: '1.9s', dur: '3.7s' },
+            { l: '90%', t: '30%', s: 3, d: '2.1s', dur: '5.0s' },
+          ].map((p, i) => (
+            <div key={i} className="ll-particle" style={{
+              left: p.l, top: p.t, width: p.s, height: p.s,
+              animationDelay: p.d, animationDuration: p.dur,
+            }} />
+          ))}
         </div>
 
-        {/* Important Note - Supported Line Number Formats */}
-        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-amber-600 text-xl flex-shrink-0"></span>
-            <div className="text-sm">
-              <h3 className="font-semibold text-amber-800 mb-2">Important Note: Supported Line Number Formats</h3>
-              <p className="text-amber-700 mb-3 text-xs italic">Please stick to these formats only and upload accordingly.</p>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-amber-700">
-                <div>
-                  <span className="font-medium text-amber-800">Offshore:</span>
-                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
-                    <li>604-LFG-3-AC2GA0-2012</li>
-                    <li>604-PW-2"-AE2LOD-FA-2779</li>
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-medium text-amber-800">General:</span>
-                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
-                    <li>4"-41-SWR-64313-A2AU16-V</li>
-                    <li>16"-41-SWS-65324-A2AU16-V</li>
-                  </ul>
-                  <p className="mt-1 text-[10px] text-amber-600 italic"> Tick "Include Area Code" checkbox for General only</p>
-                </div>
-                <div>
-                  <span className="font-medium text-amber-800">Onshore:</span>
-                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
-                    <li>16"-PG-4667-031441-X</li>
-                    <li>6"-VG-4952-011503-X</li>
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-medium text-amber-800">SIZE"-FLUID-CLASS-SEQ:</span>
-                  <ul className="mt-1 space-y-0.5 font-mono text-xs">
-                    <li>6"-CD-AC3N-8256</li>
-                    <li>8"-HO-BD2A-1023</li>
-                  </ul>
-                </div>
+        <div className="relative z-10 max-w-5xl mx-auto px-6 py-8">
+
+          {/* ── Page Header ── */}
+          <div className="mb-8 ll-section" style={{ animationDelay: '0s' }}>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-4" style={{
+              background: 'rgba(37,99,235,0.08)',
+              border: '1px solid rgba(37,99,235,0.2)',
+            }}>
+              <span className="w-2 h-2 rounded-full bg-blue-500"
+                style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
+              <span className="text-blue-700 text-xs font-semibold tracking-widest uppercase">AI-Powered · P&amp;ID Analysis</span>
+            </div>
+            <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
+              <div className="p-2.5 rounded-xl" style={{
+                background: 'rgba(37,99,235,0.09)',
+                border: '1px solid rgba(37,99,235,0.2)',
+                animation: 'll-glow 3s ease infinite',
+              }}>
+                <DocumentTextIcon className="h-7 w-7 text-blue-600" />
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Upload Section */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">1. Upload P&ID Document</h2>
-          
-          {/* P&ID Upload */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors">
-            <input
-              ref={pidRef}
-              type="file"
-              accept=".pdf"
-              onChange={handlePIDSelect}
-              className="hidden"
-            />
-            <button
-              onClick={() => pidRef.current?.click()}
-              className="w-full flex flex-col items-center justify-center gap-3"
-              disabled={isProcessing}
-            >
-              {pidDocument ? (
-                <>
-                  <CheckCircleIcon className="h-12 w-12 text-green-500" />
-                  <span className="text-sm font-medium text-gray-700">{pidDocument.name}</span>
-                  <span className="text-xs text-gray-500">
-                    {(pidDocument.size / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </>
-              ) : (
-                <>
-                  <CloudArrowUpIcon className="h-12 w-12 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-700">
-                    Click to select P&ID (PDF only)
-                  </span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Format Options */}
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Line Number Format
-              </label>
-              <select
-                value={formatType}
-                onChange={(e) => setFormatType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                disabled={isProcessing}
-              >
-                <option value="onshore">Onshore (SIZE-FLUID-SEQ-CLASS)</option>
-                <option value="offshore">Offshore (AREA-FLUID-SIZE-CLASS-SEQ)</option>
-                <option value="general">General (Auto-detect)</option>
-                <option value="adnoc">SIZE"-FLUID-CLASS-SEQ</option>
-              </select>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="includeArea"
-                checked={includeArea}
-                onChange={(e) => setIncludeArea(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                disabled={isProcessing}
-              />
-              <label htmlFor="includeArea" className="ml-2 text-sm text-gray-700">
-                Include Area Code in line number (SIZE"-AREA-FLUID-SEQ-CLASS)
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={handleExtract}
-            disabled={!pidDocument || isProcessing}
-            className={`flex-1 py-3 px-6 rounded-lg font-semibold text-white transition-all ${
-              !pidDocument || isProcessing
-                ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl'
-            }`}
-          >
-            {isProcessing ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Processing…
-              </span>
-            ) : (
-              'Extract Base Columns'
-            )}
-          </button>
-
-          {extractedData && (
-            <button
-              onClick={handleExport}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Download Excel
-            </button>
-          )}
-        </div>
-
-        {/* Progress Bar (shown while processing) */}
-        {isProcessing && (
-          <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700">{statusMessage || 'Processing…'}</span>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
-                <span className="text-sm font-medium text-blue-600">{progress}%</span>
-              </div>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-blue-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${Math.max(5, progress)}%` }}
-              />
-            </div>
-            {/* Dynamic patience message — changes tone after 3 min */}
-            <p className="text-xs text-gray-500 mt-2">
-              {elapsedSeconds < 60
-                ? 'OCR extraction running in the background — usually 2–10 min for standard P&IDs.'
-                : elapsedSeconds < 180
-                ? 'Still working… multi-page or high-density P&IDs take longer. Please keep this tab open.'
-                : elapsedSeconds < 600
-                ? `Running for ${formatElapsed(elapsedSeconds)} — complex drawings with many lines can take 10–30 min on the server. You can safely leave this tab open.`
-                : `Running for ${formatElapsed(elapsedSeconds)} — still processing. For very large files consider splitting into single-sheet P&IDs to speed things up.`
-              }
+              Line <span className="text-blue-600 ml-2">List</span>
+            </h1>
+            <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
+              Extract {COLUMNS.length} base piping columns from P&amp;ID drawings using AI OCR —{' '}
+              {COLUMNS.map(c => c.label).join(', ')}
             </p>
           </div>
-        )}
 
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-red-800 font-medium">Error: {error}</p>
-          </div>
-        )}
-
-        {/* Results Table */}
-        {extractedData && (
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-800">
-                Extracted {extractedData.total_lines} Lines ({extractedData.columns} Columns)
-              </h2>
+          {/* ── Supported Formats Reference card ── */}
+          <div className="rounded-2xl p-5 mb-4 ll-section" style={{
+            background: 'rgba(254,243,199,0.65)',
+            border: '1px solid rgba(217,119,6,0.2)',
+            boxShadow: '0 2px 12px rgba(217,119,6,0.06)',
+            animationDelay: '0.06s',
+          }}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="text-lg">⚠️</span>
+              <h3 className="text-sm font-semibold text-amber-800 tracking-wide">Supported Line Number Formats</h3>
+              <span className="text-xs text-amber-600 italic ml-1">Upload drawings matching one of these formats only</span>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      #
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Original Detection
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Fluid Code
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Size
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Sequence No
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      PIPR Class
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Insulation
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      From
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      To
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {extractedData.data.map((line, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {line.original_detection || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.fluid_code || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.size || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.sequence_no || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.pipr_class || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.insulation || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.from || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {line.to || '-'}
-                      </td>
-                    </tr>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {FORMAT_EXAMPLES.map(f => (
+                <div key={f.group} className="rounded-xl p-3" style={{
+                  background: f.bg,
+                  border: `1px solid ${f.border}`,
+                }}>
+                  <p className="text-xs font-bold mb-2" style={{ color: f.color }}>{f.group}</p>
+                  {f.examples.map(ex => (
+                    <p key={ex} className="font-mono text-xs text-slate-600 leading-relaxed">{ex}</p>
                   ))}
-                </tbody>
-              </table>
+                  {f.note && (
+                    <p className="text-[10px] mt-1.5 italic" style={{ color: f.color }}>{f.note}</p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        )}
 
-        {/* Info Panel */}
-        {!extractedData && !isProcessing && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-3">ℹ️ About Base Extraction</h3>
-            <ul className="space-y-2 text-blue-800">
-              <li className="flex items-start gap-2">
-                <span className="font-bold">•</span>
-                <span><strong>P&ID Only:</strong> Upload P&ID document (PDF format)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-bold">•</span>
-                <span><strong>8 Columns:</strong> Original Detection, Fluid Code, Size, Sequence No, PIPR Class, Insulation, From, To</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-bold">•</span>
-                <span><strong>Background Processing:</strong> Job runs asynchronously — no browser timeout. Progress updates every few seconds.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-bold">•</span>
-                <span><strong>No Enrichment:</strong> This page does not include HMB, PMS, NACE, or Stress Criticality documents</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="font-bold">•</span>
-                <span><strong>AI-Powered FROM-TO:</strong> Uses Computer Vision + OpenAI to detect flow direction</span>
-              </li>
-            </ul>
+          {/* ── Upload + Options Card ── */}
+          <div className="rounded-2xl p-6 mb-4 ll-section" style={{
+            background: 'white',
+            border: '1px solid rgba(37,99,235,0.13)',
+            boxShadow: '0 2px 16px rgba(37,99,235,0.07)',
+            animationDelay: '0.12s',
+          }}>
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+              }}>1</div>
+              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
+            </div>
+
+            {/* Drop zone */}
+            <div
+              className="relative rounded-xl cursor-pointer overflow-hidden mb-5"
+              style={{
+                border: pidDocument ? '2px solid rgba(37,99,235,0.45)' : '2px dashed rgba(37,99,235,0.22)',
+                background: pidDocument ? 'rgba(37,99,235,0.04)' : 'rgba(37,99,235,0.015)',
+                minHeight: 136,
+                transition: 'border-color 0.3s, background 0.3s',
+              }}
+              onClick={() => !isProcessing && pidRef.current?.click()}
+            >
+              {/* Corner brackets */}
+              {['top-0 left-0 border-t-2 border-l-2', 'top-0 right-0 border-t-2 border-r-2',
+                'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2',
+              ].map((cls, i) => (
+                <div key={i} className={`absolute ${cls} w-5 h-5 pointer-events-none`}
+                  style={{ borderColor: 'rgba(37,99,235,0.32)' }} />
+              ))}
+              {!pidDocument && !isProcessing && <div className="ll-scan-line" />}
+              <input ref={pidRef} type="file" accept=".pdf" onChange={handlePIDSelect} className="hidden" />
+              <div className="flex flex-col items-center justify-center gap-3 py-8 px-6">
+                {pidDocument ? (
+                  <>
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{
+                      background: 'rgba(37,99,235,0.09)',
+                      border: '2px solid rgba(37,99,235,0.32)',
+                      animation: 'll-glow 2.2s ease infinite',
+                    }}>
+                      <CheckCircleIcon className="h-7 w-7 text-blue-600" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-800 font-medium text-sm">{pidDocument.name}</p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        {(pidDocument.size / 1024 / 1024).toFixed(2)} MB · Ready for extraction
+                      </p>
+                    </div>
+                    <div className="px-3 py-1 rounded-full text-xs font-semibold text-blue-700" style={{
+                      background: 'rgba(37,99,235,0.08)', border: '1px solid rgba(37,99,235,0.18)',
+                    }}>✓ PDF Loaded</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{
+                      background: 'rgba(37,99,235,0.05)',
+                      border: '1px solid rgba(37,99,235,0.13)',
+                    }}>
+                      <CloudArrowUpIcon className="h-8 w-8 text-blue-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-600 font-medium text-sm">Drop a P&amp;ID PDF or click to browse</p>
+                      <p className="text-slate-400 text-xs mt-1">PDF only · Multi-page drawings supported</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Format options */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+                  Line Number Format
+                </label>
+                <select
+                  value={formatType}
+                  onChange={(e) => setFormatType(e.target.value)}
+                  disabled={isProcessing}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl outline-none"
+                  style={{
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    color: '#334155',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
+                  onFocus={e  => { e.target.style.borderColor = 'rgba(37,99,235,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)'; }}
+                  onBlur={e   => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
+                >
+                  {FORMAT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label} — {opt.hint}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center">
+                <div
+                  className="flex items-center gap-3 p-3.5 rounded-xl cursor-pointer w-full"
+                  style={{
+                    background: includeArea ? 'rgba(37,99,235,0.06)' : '#f8fafc',
+                    border: includeArea ? '1px solid rgba(37,99,235,0.25)' : '1px solid #e2e8f0',
+                    transition: 'all 0.2s',
+                    opacity: isProcessing ? 0.5 : 1,
+                    pointerEvents: isProcessing ? 'none' : 'auto',
+                  }}
+                  onClick={() => setIncludeArea(a => !a)}
+                >
+                  <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0" style={{
+                    background: includeArea ? '#2563eb' : 'white',
+                    border: includeArea ? 'none' : '2px solid #cbd5e1',
+                    transition: 'all 0.2s',
+                  }}>
+                    {includeArea && (
+                      <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3">
+                        <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">Include Area Code</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">SIZE&quot;-AREA-FLUID-SEQ-CLASS · General format only</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* ── Action Buttons ── */}
+          <div className="flex gap-3 mb-4 ll-section" style={{ animationDelay: '0.2s' }}>
+            <button
+              onClick={handleExtract}
+              disabled={!pidDocument || isProcessing}
+              className="flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
+              style={!pidDocument || isProcessing ? {
+                background: '#f1f5f9', color: '#94a3b8',
+                cursor: 'not-allowed', border: '1px solid #e2e8f0',
+              } : {
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                color: 'white', border: 'none',
+                boxShadow: '0 4px 18px rgba(37,99,235,0.32)',
+              }}
+            >
+              {isProcessing ? (
+                <span className="flex items-center justify-center gap-2.5">
+                  <svg className="h-5 w-5 text-blue-400" viewBox="0 0 24 24"
+                    style={{ animation: 'll-spin-slow 1.2s linear infinite' }}>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="text-slate-400">Processing…</span>
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">⚡ Extract Base Columns</span>
+              )}
+            </button>
+
+            {extractedData && (
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm"
+                style={{
+                  background: 'rgba(37,99,235,0.07)',
+                  color: '#1e40af',
+                  border: '1px solid rgba(37,99,235,0.2)',
+                  boxShadow: '0 2px 8px rgba(37,99,235,0.08)',
+                }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Download Excel
+              </button>
+            )}
+          </div>
+
+          {/* ── Progress ── */}
+          {isProcessing && (
+            <div className="rounded-2xl p-5 mb-4 ll-section" style={{
+              background: 'white',
+              border: '1px solid rgba(37,99,235,0.16)',
+              boxShadow: '0 2px 12px rgba(37,99,235,0.07)',
+              animationDelay: '0s',
+            }}>
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center" style={{
+                  background: 'rgba(37,99,235,0.07)',
+                  border: '2px solid rgba(37,99,235,0.2)',
+                  animation: 'll-glow 1.7s ease infinite',
+                }}>
+                  <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="1.5"
+                    style={{ animation: 'll-spin-slow 3s linear infinite' }}>
+                    <path d="M12 2a10 10 0 1 0 10 10" strokeLinecap="round" />
+                    <path d="M12 6v6l3 3" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-slate-700">{statusMessage || 'Processing…'}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
+                      <span className="text-sm font-bold text-blue-600">{progress}%</span>
+                    </div>
+                  </div>
+                  <div className="relative w-full rounded-full h-2.5 overflow-hidden bg-slate-100">
+                    <div className="h-full rounded-full relative overflow-hidden" style={{
+                      width: `${Math.max(5, progress)}%`,
+                      background: 'linear-gradient(90deg, #1d4ed8, #2563eb, #60a5fa)',
+                      animation: 'll-bar-glow 1.6s ease infinite',
+                      transition: 'width 0.7s ease',
+                    }}>
+                      <div className="absolute inset-0" style={{
+                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%)',
+                        animation: 'll-shimmer 2s linear infinite',
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400">AI scanning document</span>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="w-1.5 h-4 rounded-full bg-blue-400" style={{
+                      animation: 'll-dot-wave 1.1s ease infinite',
+                      animationDelay: `${i * 0.18}s`,
+                    }} />
+                  ))}
+                </div>
+                <span className="text-xs text-slate-400 max-w-sm text-right leading-relaxed">
+                  {getPatienceMsg(elapsedSeconds)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Error ── */}
+          {error && (
+            <div className="rounded-xl p-4 mb-4 flex items-start gap-3" style={{
+              background: '#fef2f2',
+              border: '1px solid rgba(239,68,68,0.2)',
+              animation: 'll-fade-up 0.3s ease forwards',
+            }}>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: 'rgba(239,68,68,0.12)' }}>
+                <span className="text-red-500 text-xs font-bold">✕</span>
+              </div>
+              <p className="text-red-600 text-sm font-medium">{error}</p>
+            </div>
+          )}
+
+          {/* ── Results Table ── */}
+          {extractedData && (
+            <div className="rounded-2xl overflow-hidden ll-section" style={{
+              background: 'white',
+              border: '1px solid rgba(37,99,235,0.1)',
+              boxShadow: '0 4px 24px rgba(37,99,235,0.07)',
+              animationDelay: '0s',
+            }}>
+              {/* Header bar */}
+              <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3" style={{
+                background: 'linear-gradient(90deg, rgba(37,99,235,0.05), rgba(37,99,235,0.02))',
+                borderBottom: '1px solid rgba(37,99,235,0.09)',
+              }}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg" style={{
+                    background: 'rgba(37,99,235,0.08)',
+                    border: '1px solid rgba(37,99,235,0.16)',
+                  }}>
+                    <DocumentTextIcon className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-slate-800 font-semibold text-base">
+                      <span className="text-blue-600 text-xl font-bold">{extractedData.total_lines}</span>
+                      {' '}Lines ·{' '}
+                      <span className="text-blue-600">{extractedData.columns}</span> Columns Extracted
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-0.5">
+                      Format: {FORMAT_OPTIONS.find(f => f.value === formatType)?.label || formatType}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: 'Lines',   val: extractedData.total_lines },
+                    { label: 'Columns', val: extractedData.columns },
+                  ].map(c => (
+                    <div key={c.label} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{
+                      background: 'rgba(37,99,235,0.07)',
+                      border: '1px solid rgba(37,99,235,0.16)',
+                      color: '#1e40af',
+                    }}>
+                      {c.val} {c.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr style={{ background: 'linear-gradient(90deg, #1e3a8a, #1d4ed8)' }}>
+                      <th className="px-3 py-3.5 text-left text-xs font-medium text-blue-200 uppercase tracking-wider w-10">#</th>
+                      {COLUMNS.map(col => (
+                        <th key={col.key}
+                          className="px-4 py-3.5 text-left text-xs font-semibold text-white uppercase tracking-wider"
+                          style={{ whiteSpace: 'nowrap' }}>
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {extractedData.data.map((line, idx) => (
+                      <tr
+                        key={idx}
+                        className="ll-row-animate"
+                        style={{
+                          animationDelay: `${Math.min(idx * 0.032, 0.5)}s`,
+                          background: idx % 2 === 0 ? 'white' : '#f0f7ff',
+                          borderBottom: '1px solid #f1f5f9',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.04)'}
+                        onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#f0f7ff'}
+                      >
+                        <td className="px-3 py-3 text-xs text-slate-400">{idx + 1}</td>
+                        {COLUMNS.map(col => {
+                          const val = line[col.key];
+                          const display = val || '—';
+                          return (
+                            <td key={col.key} className="px-4 py-3 text-sm">
+                              {col.key === 'original_detection' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-semibold"
+                                  style={{ background: 'rgba(37,99,235,0.07)', color: '#1e40af', border: '1px solid rgba(37,99,235,0.14)' }}>
+                                  {display}
+                                </span>
+                              ) : (col.key === 'from' || col.key === 'to') ? (
+                                <span className="text-xs text-slate-500 block truncate max-w-[11rem]" title={display}>{display}</span>
+                              ) : (
+                                <span className="text-slate-700">{display}</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-6 py-3 flex items-center justify-between text-xs" style={{
+                borderTop: '1px solid #f1f5f9', background: '#f8fafc',
+              }}>
+                <span className="text-slate-400">{extractedData.total_lines} total lines extracted</span>
+                <span className="text-slate-400">AI-powered OCR · Computer Vision FROM-TO detection</span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Info Panel (idle) ── */}
+          {!extractedData && !isProcessing && (
+            <div className="rounded-2xl p-6 mt-4 ll-section" style={{
+              background: 'white',
+              border: '1px solid rgba(37,99,235,0.1)',
+              boxShadow: '0 2px 12px rgba(37,99,235,0.05)',
+              animationDelay: '0.3s',
+            }}>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-blue-500"
+                  style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
+                <h3 className="text-sm font-semibold text-slate-700 tracking-wide">What Gets Extracted</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  ['📄', 'P&ID Only',            'Upload a single P&ID PDF — no HMB, PMS, NACE or Stress docs needed'],
+                  ['📊', `${COLUMNS.length} Base Columns`, COLUMNS.map(c => c.label).join(', ')],
+                  ['🔄', 'Background Processing', 'Job runs async on the server — no browser timeout. Progress polling every 3 s.'],
+                  ['🧠', 'AI FROM-TO',            'Computer Vision + OpenAI detects flow direction for every line'],
+                  ['⚡', 'Multi-Format Support',  FORMAT_OPTIONS.map(f => f.label).join(', ')],
+                  ['📥', 'Excel Export',           'Download all extracted rows as a formatted XLSX workbook'],
+                ].map(([icon, title, desc]) => (
+                  <div key={title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{
+                    background: '#f8fafc', border: '1px solid #e2e8f0',
+                  }}>
+                    <span className="text-lg flex-shrink-0 leading-none mt-0.5">{icon}</span>
+                    <div>
+                      <p className="text-xs font-semibold text-blue-700 mb-0.5">{title}</p>
+                      <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
