@@ -285,6 +285,20 @@ const CATEGORY_LABELS = {
 // Soft-coded: categories hidden from the findings table
 const HIDDEN_CATEGORIES = new Set([]);
 
+// Soft-coded: when false, suppresses the native browser tooltip that appears on
+// hover over every overlay marker on the PFD drawing. Core marker logic unchanged.
+const PFD_OVERLAY_SHOW_MARKER_TOOLTIP = false;
+
+// Soft-coded: localStorage keys for the engineer correction + stats system.
+// Corrections key format: 'drawingId:findingId' → { correctedLeft, correctedTop, … }
+// Stats key format: 'drawingId' → { tierCounts: { TAG:n, ZONE:n, CX:n }, timestamp }
+const PFD_CALIB_STORAGE_KEY = 'pfd_calib_corrections';
+const PFD_CALIB_STATS_KEY   = 'pfd_calib_stats';
+
+// Soft-coded: flip to true to render a tiny tier label (TAG / ZONE / CX) beside
+// each overlay marker for diagnosis. Default false for production.
+const PFD_SHOW_RESOLUTION_DEBUG = false;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SOFT-CODED: VIEW 1 hero capability badges
 // Extend this array to add new capability chips — no JSX changes needed.
@@ -652,6 +666,11 @@ const PFDQualityChecker = () => {
   const [focusedFindingId,    setFocusedFindingId]    = useState(null);
   const [showHeuristic,       setShowHeuristic]       = useState(true);
   const [reextracting,        setReextracting]        = useState(false);
+  // Engineer correction mode — click a finding row to focus it, then click
+  // ⊹ Correct Marker to enter crosshair mode and pin the exact drawing location.
+  const [correctionMode,     setCorrectionMode]     = useState(false);
+  // Stored engineer corrections keyed 'drawingId:findingId' from localStorage.
+  const [calibCorrections,   setCalibCorrections]   = useState({});
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
@@ -683,7 +702,42 @@ const PFDQualityChecker = () => {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [documentId, activeDrawing, results?.document_id]);
 
+  // Load stored calibration corrections from localStorage on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PFD_CALIB_STORAGE_KEY);
+      if (raw) setCalibCorrections(JSON.parse(raw));
+    } catch { /* non-fatal */ }
+  }, []);
+
   // ── Project API ───────────────────────────────────────────────────────────
+  const saveCalibration = (next) => {
+    setCalibCorrections(next);
+    try { localStorage.setItem(PFD_CALIB_STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const clearDrawingCorrections = () => {
+    if (!activeDrawing) return;
+    const next = { ...calibCorrections };
+    for (const k of Object.keys(next)) {
+      if (k.startsWith(`${activeDrawing}:`)) delete next[k];
+    }
+    saveCalibration(next);
+  };
+
+  const exportCalibrationData = () => {
+    try {
+      const corrections = JSON.parse(localStorage.getItem(PFD_CALIB_STORAGE_KEY) || '{}');
+      const stats      = JSON.parse(localStorage.getItem(PFD_CALIB_STATS_KEY)    || '{}');
+      const payload = { exportedAt: new Date().toISOString(), corrections, stats };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `pfd_calibration_${Date.now()}.json`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch {}
+  };
+
   const fetchProjects = async () => {
     setLoadingProjects(true);
     try {
@@ -1073,28 +1127,41 @@ const PFDQualityChecker = () => {
         const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
         if (usedKeys.has(cellKey)) continue;
         usedKeys.add(cellKey);
-        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true });
+        // Check for stored engineer correction (always wins)
+        const corrKey = `${activeDrawing || 'pfd'}:${f.id}`;
+        const storedCorr = calibCorrections[corrKey];
+        if (storedCorr) {
+          nodes.push({ finding: f, band, rawKey: tag, left: storedCorr.correctedLeft, top: storedCorr.correctedTop, anchored: true, tier: 'CX' });
+          placed++; break;
+        }
+        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true, tier: 'TAG' });
         placed++;
       }
 
       // Fallback: use category semantic zone + small hash jitter per finding
       if (placed === 0) {
-        const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
-        const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
-        // Small jitter (±8%) so multiple findings in the same category don't overlap
-        const jx = (stableUnit(seed, 11) - 0.5) * 16;
-        const jy = (stableUnit(seed, 29) - 0.5) * 16;
-        const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
-        const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
-        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
-        if (!usedKeys.has(cellKey)) {
-          usedKeys.add(cellKey);
-          nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false });
+        // Check engineer correction first
+        const corrKey = `${activeDrawing || 'pfd'}:${f.id}`;
+        const storedCorr = calibCorrections[corrKey];
+        if (storedCorr) {
+          nodes.push({ finding: f, band, rawKey: evidence, left: storedCorr.correctedLeft, top: storedCorr.correctedTop, anchored: true, tier: 'CX' });
+        } else {
+          const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
+          const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
+          const jx = (stableUnit(seed, 11) - 0.5) * 16;
+          const jy = (stableUnit(seed, 29) - 0.5) * 16;
+          const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
+          const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
+          const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+          if (!usedKeys.has(cellKey)) {
+            usedKeys.add(cellKey);
+            nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false, tier: 'ZONE' });
+          }
         }
       }
     }
     return nodes;
-  }, [activeDrawingData, activeDrawing]);
+  }, [activeDrawingData, activeDrawing, calibCorrections]);
 
   const jumpToFinding = (findingId) => {
     setFocusedFindingId(prev => prev === findingId ? null : findingId);
@@ -1706,6 +1773,21 @@ const PFDQualityChecker = () => {
           const overlayNodes    = buildOverlayNodes(activeDrawingData?.issues ?? []);
           const visibleNodes     = overlayNodes.filter(n => showHeuristic || n.anchored);
 
+          // Auto-record per-drawing tier stats to localStorage (runs on first render per drawing)
+          (() => {
+            if (!activeDrawing || overlayNodes.length === 0) return;
+            try {
+              const tc = {};
+              for (const n of overlayNodes) { const t = n.tier || 'ZONE'; tc[t] = (tc[t] || 0) + 1; }
+              const raw = localStorage.getItem(PFD_CALIB_STATS_KEY);
+              const all = raw ? JSON.parse(raw) : {};
+              if (!all[activeDrawing]) {
+                all[activeDrawing] = { drawingId: activeDrawing, timestamp: new Date().toISOString(), totalFindings: overlayNodes.length, tierCounts: tc, anchoredCount: overlayNodes.filter(n => n.anchored).length, correctedCount: overlayNodes.filter(n => n.tier === 'CX').length };
+                localStorage.setItem(PFD_CALIB_STATS_KEY, JSON.stringify(all));
+              }
+            } catch {}
+          })();
+
           // Soft-coded: severity → fill colour for overlay dots
           const SEV_COLOR = {
             critical: { bg:'#dc2626', border:'#991b1b', glow:'rgba(220,38,38,0.5)' },
@@ -1923,9 +2005,48 @@ const PFDQualityChecker = () => {
                       className="text-xs text-teal-600 hover:text-teal-800 underline underline-offset-2 transition-colors">
                       View table
                     </button>
+                    {/* Correction mode — pin exact marker location */}
+                    <button
+                      onClick={() => setCorrectionMode(v => !v)}
+                      disabled={!focusedFindingId}
+                      title={focusedFindingId ? 'Click drawing to pin marker at exact location' : 'Click a finding below first'}
+                      className={`text-[10px] px-2 py-1 rounded border font-semibold transition-colors ${
+                        correctionMode
+                          ? 'bg-amber-400 text-white border-amber-500'
+                          : focusedFindingId
+                            ? 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                            : 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                      }`}
+                    >
+                      {correctionMode ? '⊕ Click drawing…' : '⊕ Correct Marker'}
+                    </button>
+                    <button
+                      onClick={exportCalibrationData}
+                      title="Export correction records and tier stats as JSON"
+                      className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-slate-600 border-slate-300 hover:border-teal-400 hover:text-teal-600 transition-colors"
+                    >
+                      ↓ Export Data
+                    </button>
+                    {activeDrawing && Object.keys(calibCorrections).some(k => k.startsWith(`${activeDrawing}:`)) && (
+                      <button
+                        onClick={clearDrawingCorrections}
+                        title="Remove all stored corrections for this drawing"
+                        className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-red-400 border-red-200 hover:border-red-400 transition-colors"
+                      >
+                        ✕ Clear Fixes
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="bg-slate-100">
+                  {/* Correction mode active banner */}
+                  {correctionMode && focusedFindingId && (
+                    <div className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 font-semibold">
+                      <span className="text-amber-500 text-base leading-none flex-shrink-0">⊕</span>
+                      <span>Click the <strong>exact location</strong> on the drawing to pin the marker for <strong>{visibleNodes.find(n => n.finding.id === focusedFindingId)?.rawKey ?? 'focused finding'}</strong>.</span>
+                      <button onClick={() => setCorrectionMode(false)} className="ml-auto text-amber-500 hover:text-amber-700 font-bold text-sm leading-none flex-shrink-0">✕</button>
+                    </div>
+                  )}
                   {drawingImageLoading && (
                     <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
                       <Loader className="w-4 h-4 animate-spin" />Loading drawing…
@@ -1957,7 +2078,30 @@ const PFDQualityChecker = () => {
                   )}
                   {!drawingImageLoading && drawingImageUrl && (
                     <div className="overflow-auto" style={{ maxHeight:'72vh' }}>
-                      <div className="relative w-full" style={{ lineHeight:0 }}>
+                      <div
+                        className="relative w-full"
+                        style={{ lineHeight:0, cursor: correctionMode && focusedFindingId ? 'crosshair' : 'default' }}
+                        onClick={(e) => {
+                          if (!correctionMode || !focusedFindingId) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const clL = Math.min(83, Math.max(2, ((e.clientX - rect.left)  / rect.width)  * 100));
+                          const clT = Math.min(87, Math.max(2, ((e.clientY - rect.top)   / rect.height) * 100));
+                          const corrKey  = `${activeDrawing || 'pfd'}:${focusedFindingId}`;
+                          const existing = overlayNodes.find(n => n.finding.id === focusedFindingId);
+                          saveCalibration({
+                            ...calibCorrections,
+                            [corrKey]: {
+                              drawingId: activeDrawing, findingId: focusedFindingId,
+                              ruleId: existing?.finding?.rule_id,
+                              evidenceKey: existing?.rawKey, tier: existing?.tier,
+                              originalLeft: existing?.left ?? null, originalTop: existing?.top ?? null,
+                              correctedLeft: clL, correctedTop: clT,
+                              timestamp: new Date().toISOString(),
+                            },
+                          });
+                          setCorrectionMode(false);
+                        }}
+                      >
                         <img src={drawingImageUrl} alt={activeDrawing} draggable={false}
                           className="w-full block" style={{ height:'auto', userSelect:'none' }} />
                         <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
@@ -1975,7 +2119,7 @@ const PFDQualityChecker = () => {
                               <button
                                 key={n.rawKey}
                                 onClick={() => jumpToFinding(n.finding.id)}
-                                title={`[${cat}] ${n.finding.issue_observed}`}
+                                title={PFD_OVERLAY_SHOW_MARKER_TOOLTIP ? `[${cat}] ${n.finding.issue_observed}` : undefined}
                                 className={`absolute border-2 transition-all ${isFocused ? 'z-20' : 'z-10 hover:opacity-90'}`}
                                 style={{
                                   left: `${n.left}%`,
