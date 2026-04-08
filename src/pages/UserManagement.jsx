@@ -59,6 +59,8 @@ const UserManagement = ({ pageControls }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [showAccessToAllModal, setShowAccessToAllModal] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Local state - Data
@@ -87,6 +89,15 @@ const UserManagement = ({ pageControls }) => {
       '(Optional) Select an organization for all users',
       'Upload the completed CSV file'
     ]
+  };
+
+  // Soft-coded configuration for user export
+  const EXPORT_CONFIG = {
+    formats: [
+      { label: 'Export as CSV', value: 'csv', ext: 'csv' },
+      { label: 'Export as Excel', value: 'xlsx', ext: 'xlsx' },
+    ],
+    filenamePrefix: 'users_export',
   };
   
   // Local state - Forms
@@ -328,6 +339,18 @@ const UserManagement = ({ pageControls }) => {
   };
 
   // ========== LIFECYCLE: AUTHENTICATION & DATA LOADING ==========
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    if (!showExportDropdown) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-export-dropdown]')) {
+        setShowExportDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportDropdown]);
+
   useEffect(() => {
     let isMounted = true;
     
@@ -1149,6 +1172,30 @@ const UserManagement = ({ pageControls }) => {
       });
     }
   };
+
+  const handleExportUsers = async (format) => {
+    setShowExportDropdown(false);
+    setIsExporting(true);
+    try {
+      const response = await rbacService.exportUsers(format);
+      const ext = EXPORT_CONFIG.formats.find(f => f.value === format)?.ext || format;
+      const filename = `${EXPORT_CONFIG.filenamePrefix}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setNotification({ show: true, type: 'success', message: `${users.length} users exported as ${ext.toUpperCase()} successfully!` });
+    } catch (error) {
+      console.error('[Export] Export error:', error);
+      setNotification({ show: true, type: 'error', message: 'Export failed. Please try again.' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
   
   // ========== RENDER: LOADING STATE ==========
   if (!isAuthenticated || !isDataLoaded) {
@@ -1298,6 +1345,43 @@ const UserManagement = ({ pageControls }) => {
               </svg>
               Bulk Upload
             </button>
+
+            {/* Export Users Dropdown */}
+            <div className="relative" data-export-dropdown>
+              <button
+                onClick={() => setShowExportDropdown(prev => !prev)}
+                disabled={isExporting}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+              >
+                {isExporting ? (
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+                {isExporting ? 'Exporting...' : 'Export Users'}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showExportDropdown && (
+                <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  {EXPORT_CONFIG.formats.map(({ label, value }) => (
+                    <button
+                      key={value}
+                      onClick={() => handleExportUsers(value)}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 first:rounded-t-lg last:rounded-b-lg transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => setShowAccessToAllModal(true)}

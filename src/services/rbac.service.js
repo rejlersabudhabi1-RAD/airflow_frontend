@@ -100,6 +100,13 @@ class RBACService {
     });
   }
 
+  async exportUsers(format = 'csv') {
+    return apiService.get(`${RBAC_BASE_URL}/users/export/`, {
+      params: { format },
+      responseType: 'blob'
+    });
+  }
+
   // ==================== Roles ====================
   async getRoles() {
     return apiService.get(`${RBAC_BASE_URL}/roles/`);
