@@ -68,14 +68,13 @@ import DataGovernanceService from './pages/DataGovernanceService'
 import SecurityService from './pages/SecurityService'
 import About from './pages/About'
 import NotFound from './pages/NotFound'
-// DesignIQ Components
-import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
-import DesignIQLists from './pages/DesignIQ/DesignIQLists'
-import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
-// SOFT-CODED: PFD Verification disabled — import kept for reference
+// DesignIQ Components — SOFT-DISABLED: routes and sidebar hidden; source files untouched
+// import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
+// import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+// import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
 // import PFDVerification from './pages/DesignIQ/PFDVerification'
-import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
-import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
+// import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
+// import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
@@ -579,57 +578,15 @@ function App() {
           }
         />
 
-        {/* DesignIQ Routes */}
-        <Route
-          path="designiq"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQDashboard />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/new"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQNewProject />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/lists"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQLists />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/stress-critical-line-list"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <StressCriticalLineList />
-            </ModuleProtectedRoute>
-          }
-        />
-        {/* SOFT-CODED: PFD Verification route disabled — source files preserved
-        <Route
-          path="designiq/pfd-verification"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <PFDVerification />
-            </ModuleProtectedRoute>
-          }
-        />
+        {/* DesignIQ Routes — SOFT-DISABLED: all DesignIQ routes commented out;
+             source files in pages/DesignIQ/ are untouched and can be re-enabled here.
+        <Route path="designiq" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQDashboard /></ModuleProtectedRoute>} />
+        <Route path="designiq/new" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQNewProject /></ModuleProtectedRoute>} />
+        <Route path="designiq/lists" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQLists /></ModuleProtectedRoute>} />
+        <Route path="designiq/stress-critical-line-list" element={<ModuleProtectedRoute moduleCode="designiq"><StressCriticalLineList /></ModuleProtectedRoute>} />
+        <Route path="designiq/pfd-verification" element={<ModuleProtectedRoute moduleCode="designiq"><PFDVerification /></ModuleProtectedRoute>} />
+        <Route path="designiq/projects/:id" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQProjectDetail /></ModuleProtectedRoute>} />
         */}
-        <Route
-          path="designiq/projects/:id"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQProjectDetail />
-            </ModuleProtectedRoute>
-          }
-        />
 
         {/* Procurement Routes */}
         <Route

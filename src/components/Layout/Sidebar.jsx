@@ -207,18 +207,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         // SOFT-CODED REMOVAL: P&ID Checker duplicate removed from COMMON section
         // P&ID functionality is available in Process Engineering section (1.1 Process -> P&ID)
         // This avoids menu confusion and maintains single source of truth
-        {
-          id: 'designiq',
-          title: '2.3 DesignIQ',
-          icon: BeakerIcon,
-          path: '/designiq',
-          description: 'AI-powered design optimization',
-          moduleCode: 'designiq',
-          badge: 'AI'
-        },
+        // SOFT-DISABLED: DesignIQ nav entry hidden — re-enable by uncommenting
+        // { id: 'designiq', title: '2.3 DesignIQ', icon: BeakerIcon, path: '/designiq', description: 'AI-powered design optimization', moduleCode: 'designiq', badge: 'AI' },
         {
           id: 'pfd',
-          title: '2.4 PFD to P&ID',
+          title: '2.3 PFD to P&ID',
           icon: DocumentTextIcon,
           path: '/pfd/upload',
           description: 'Intelligent PFD conversion',

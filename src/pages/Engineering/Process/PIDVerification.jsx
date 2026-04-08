@@ -67,7 +67,7 @@ const KEYFRAMES = `
 const NAV_RAIL_ENTRY_DELAY_MS    = 55;
 const NAV_RAIL_ENTRY_DURATION_MS = 320;
 const NAV_RAIL_ACTIVE_BAR_W      = 3;    // px — the left accent bar on active tab
-const NAV_RAIL_WIDTH             = 110;  // px — total rail column width
+const NAV_RAIL_WIDTH             = 152;  // px — total rail column width
 
 const T = {
   bg:    'linear-gradient(135deg, #f8faff 0%, #eef2ff 45%, #f0f9ff 75%, #fffbeb 100%)',
@@ -832,6 +832,20 @@ const PIDVerification = () => {
       if (raw) setCalibCorrections(JSON.parse(raw));
     } catch { /* non-fatal */ }
   }, []);
+
+  // ── Auto-run naming check when results arrive ─────────────────────────────
+  // Fires automatically after verification completes so the user never needs
+  // to press "Run Check" manually. Guards: only if results exist, no prior
+  // namingResults, and not already running.
+  useEffect(() => {
+    const docId = documentId || results?.document_id;
+    if (!docId || !results || namingResults || checkingNaming) return;
+    // Soft-coded delay (ms) — gives the UI time to settle before the API call.
+    const AUTO_NAMING_DELAY_MS = 800;
+    const t = setTimeout(() => { runNamingCheck(); }, AUTO_NAMING_DELAY_MS);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results?.document_id, documentId]);
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -2528,10 +2542,10 @@ const PIDVerification = () => {
                                 const tagHighlights = [];
                                 for (const tag of ltags) {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
-                                  for (const occ of (tag.occurrences || [])) {
+                                  for (const [occIdx, occ] of (tag.occurrences || []).entries()) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
                                     tagHighlights.push({
-                                      key: `th-${tag.text}-${occ.direction}-${occ.x_pct}`,
+                                      key: `th-${occIdx}-${tag.text}-${occ.direction}-${occ.x_pct}-${occ.y_pct}`,
                                       left: Math.min(96, Math.max(1, occ.x_pct)),
                                       top:  Math.min(87, Math.max(1, occ.y_pct)),
                                       sev:  'minor',
@@ -3566,49 +3580,63 @@ const PIDVerification = () => {
               const uniqueNamingRules = [...new Set(issues.map(i => i.rule_id).filter(Boolean))];
               return (
                 <div>
-                  {/* ── Header + Run button ── */}
+                  {/* ── Header (auto-run — no manual button) ── */}
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
-                        <Type className="w-4 h-4 text-white" />
+                        {checkingNaming
+                          ? <Loader className="w-4 h-4 text-white animate-spin" />
+                          : <Type className="w-4 h-4 text-white" />}
                       </div>
                       <div>
                         <h2 className="text-sm font-bold text-slate-900">Tag Naming &amp; Acronym QC</h2>
-                        {namingResults
-                          ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} · page {(namingResults.page_index ?? 0) + 1} · {namingResults.ai_used ? 'AI + Rules' : 'Rules only'}</p>
-                          : <p className="text-xs text-slate-400">Not yet run — checks ISA 5.1 tag naming conventions</p>}
+                        {checkingNaming
+                          ? <p className="text-xs text-violet-500 animate-pulse">Running check — analysing tags against ISA 5.1…</p>
+                          : namingResults
+                            ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} · page {(namingResults.page_index ?? 0) + 1} · {namingResults.ai_used ? 'AI + Rules' : 'Rules only'}</p>
+                            : <p className="text-xs text-slate-400">Awaiting analysis completion…</p>}
                       </div>
                     </div>
-                    <button
-                      onClick={runNamingCheck}
-                      disabled={checkingNaming}
-                      className="flex items-center gap-2 text-xs font-bold text-white px-4 py-2 rounded-xl disabled:opacity-60 transition-all hover:-translate-y-px"
-                      style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow:'0 4px 14px rgba(109,40,217,0.3)' }}
-                    >
-                      {checkingNaming ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Type className="w-3.5 h-3.5" />}
-                      {checkingNaming ? 'Checking…' : namingResults ? 'Re-run' : 'Run Check'}
-                    </button>
+                    {/* Auto-run status chip */}
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full flex-shrink-0"
+                      style={{
+                        background: checkingNaming ? 'rgba(124,58,237,0.10)' : namingResults ? 'rgba(16,185,129,0.10)' : 'rgba(100,116,139,0.08)',
+                        color:      checkingNaming ? '#7c3aed' : namingResults ? '#059669' : '#64748b',
+                        border:     `1px solid ${checkingNaming ? 'rgba(124,58,237,0.22)' : namingResults ? 'rgba(16,185,129,0.22)' : 'rgba(100,116,139,0.14)'}`,
+                      }}>
+                      {checkingNaming
+                        ? <><span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-ping" />Scanning…</>
+                        : namingResults
+                          ? <><CheckCircle className="w-3 h-3" />Auto-completed</>
+                          : <><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Queued</>}
+                    </span>
                   </div>
 
                   {!namingResults ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
                       <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
-                        <Type className="w-8 h-8 text-violet-400" />
+                        {checkingNaming
+                          ? <Loader className="w-8 h-8 text-violet-500 animate-spin" />
+                          : <Type className="w-8 h-8 text-violet-400" />}
                       </div>
-                      <p className="text-sm font-bold text-slate-700">Tag Naming &amp; Acronym Check</p>
+                      <p className="text-sm font-bold text-slate-700">
+                        {checkingNaming ? 'Analysing tag naming conventions…' : 'Tag Naming & Acronym Check'}
+                      </p>
                       <p className="text-xs text-slate-400 text-center max-w-xs">
-                        Validates P&amp;ID tag names against ISA 5.1 conventions — checks
-                        separators, acronym registries, completeness, and format consistency.
-                        {namingResults?.ai_used !== false && ' AI vision can also be included.'}
+                        {checkingNaming
+                          ? 'Running ISA 5.1 rule engine and AI vision — this may take a few seconds.'
+                          : 'Check runs automatically once verification is complete. Validates P&ID tag names against ISA 5.1 conventions — separators, acronym registries, completeness, and format consistency.'}
                       </p>
                       {/* Soft-coded: show which checks will run */}
-                      <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
-                        {Object.entries(NAMING_QC_RULES).map(([rid, def]) => (
-                          <span key={rid} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-violet-50 text-violet-600 border border-violet-200">
-                            {def.icon} {def.checkName}
-                          </span>
-                        ))}
-                      </div>
+                      {!checkingNaming && (
+                        <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+                          {Object.entries(NAMING_QC_RULES).map(([rid, def]) => (
+                            <span key={rid} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-violet-50 text-violet-600 border border-violet-200">
+                              {def.icon} {def.checkName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : namingResults.total === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-2">
@@ -5034,7 +5062,7 @@ const PIDVerification = () => {
                       key={tab.id}
                       onClick={() => setActivePanel(tab.id)}
                       title={tab.label}
-                      className="relative w-full flex flex-row items-center gap-2.5 group overflow-hidden"
+                      className="relative w-full flex flex-row items-center gap-2.5 group"
                       style={{
                         borderRadius: '12px',
                         padding: '9px 10px 9px 12px',
@@ -5087,26 +5115,27 @@ const PIDVerification = () => {
                       {/* Label + badge */}
                       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
                         <span style={{
-                          fontSize: '9px', fontWeight: 800,
-                          letterSpacing: '0.05em', textTransform: 'uppercase',
-                          lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          fontSize: '10px', fontWeight: 800,
+                          letterSpacing: '0.04em', textTransform: 'uppercase',
+                          lineHeight: 1.2, whiteSpace: 'nowrap',
                           color: isActive ? '#ffffff' : '#475569',
                           transition: 'color 0.18s',
                         }}>
                           {tab.label}
                         </span>
-                        {tab.badge != null && (
-                          <span
-                            className={`text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none self-start ${tab.badgeCls || 'bg-slate-200 text-slate-600'}`}
-                            style={{
-                              background: isActive ? 'rgba(255,255,255,0.25)' : undefined,
-                              color:      isActive ? '#ffffff' : undefined,
-                            }}
-                          >
-                            {tab.badge}
-                          </span>
-                        )}
                       </span>
+                      {tab.badge != null && (
+                        <span
+                          className={`absolute -top-1.5 -right-1.5 text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none ${tab.badgeCls || 'bg-slate-200 text-slate-600'}`}
+                          style={{
+                            background: isActive ? 'rgba(255,255,255,0.28)' : undefined,
+                            color:      isActive ? '#ffffff' : undefined,
+                            boxShadow:  '0 1px 4px rgba(0,0,0,0.15)',
+                          }}
+                        >
+                          {tab.badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
