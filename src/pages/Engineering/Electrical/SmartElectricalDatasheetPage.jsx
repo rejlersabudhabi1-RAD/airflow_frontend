@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   DocumentArrowUpIcon,
@@ -197,6 +197,92 @@ const SmartElectricalDatasheetPage = () => {
           setAnalysisStage('');
         }
 
+      } else if (selectedEquipmentType === 'transformer') {
+        // ── TRANSFORMER: generate datasheet from sizing calculation PDF ──
+        const sizingFile = uploadedFiles['Transformer Sizing Calculation (Power and Distribution)'];
+        if (!sizingFile) {
+          setError('Please upload the Transformer Sizing Calculation document');
+          setUploading(false);
+          return;
+        }
+
+        formData.append('sizing_calc_file', sizingFile);
+        formData.append('project_name', '');
+        formData.append('drawing_number', '');
+        formData.append('area', '');
+
+        setAnalysisStage('Extracting transformer datasheet from sizing calculation using AI...');
+
+        const response = await apiClient.post(
+          '/electrical-datasheet/datasheets/generate-transformer-datasheet/',
+          formData,
+          {
+            timeout: API_TIMEOUT_UPLOAD,
+            onUploadProgress: (progressEvent) => {
+              const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(progress);
+            },
+            headers: { 'Content-Type': 'multipart/form-data' }
+          }
+        );
+
+        if (response.data.success) {
+          setAnalysisStage('Processing complete!');
+          setResults({
+            success: true,
+            equipment_type: 'transformer',
+            datasheet_rows: response.data.datasheet_rows,
+            summary: response.data.summary,
+            extraction_metadata: response.data.extraction_metadata
+          });
+        } else {
+          setError(response.data.error || 'Failed to generate transformer datasheet');
+          setAnalysisStage('');
+        }
+
+      } else if (selectedEquipmentType === 'dg_set') {
+          // DG SET: generate datasheet from EDG sizing calculation PDF
+          const edgFile = uploadedFiles['Emergency Diesel Generator (EDG) Sizing Calculation'];
+          if (!edgFile) {
+            setError('Please upload the Emergency Diesel Generator (EDG) Sizing Calculation document');
+            setUploading(false);
+            return;
+          }
+
+          formData.append('edg_sizing_file', edgFile);
+          formData.append('project_name', '');
+          formData.append('drawing_number', '');
+          formData.append('area', '');
+
+          setAnalysisStage('Extracting DG set datasheet from sizing calculation using AI...');
+
+          const response = await apiClient.post(
+            '/electrical-datasheet/datasheets/generate-dg-datasheet/',
+            formData,
+            {
+              timeout: API_TIMEOUT_UPLOAD,
+              onUploadProgress: (progressEvent) => {
+                const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                setUploadProgress(progress);
+              },
+              headers: { 'Content-Type': 'multipart/form-data' }
+            }
+          );
+
+          if (response.data.success) {
+            setAnalysisStage('Processing complete!');
+            setResults({
+              success: true,
+              equipment_type: 'dg_set',
+              datasheet_rows: response.data.datasheet_rows,
+              summary: response.data.summary,
+              extraction_metadata: response.data.extraction_metadata
+            });
+          } else {
+            setError(response.data.error || 'Failed to generate DG set datasheet');
+            setAnalysisStage('');
+          }
+
       } else {
         // Original logic for other equipment types
         formData.append('equipment_type', selectedEquipmentType);
@@ -287,6 +373,56 @@ const SmartElectricalDatasheetPage = () => {
     } catch (error) {
       console.error('Download error:', error);
       setError('Failed to download Excel file');
+    }
+  };
+
+  const handleDownloadTransformerExcel = async () => {
+    if (!results?.datasheet_rows) return;
+    try {
+      const response = await apiClient.post(
+        '/electrical-datasheet/datasheets/export-transformer-datasheet/',
+        {
+          datasheet_rows: results.datasheet_rows,
+          project_info: { project_name: '', drawing_number: '', area: '' }
+        },
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Transformer_Datasheet_${Date.now()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Transformer download error:', error);
+      setError('Failed to download transformer Excel file');
+    }
+  };
+
+  const handleDownloadDGExcel = async () => {
+    if (!results?.datasheet_rows) return;
+    try {
+      const response = await apiClient.post(
+        '/electrical-datasheet/datasheets/export-dg-datasheet/',
+        {
+          datasheet_rows: results.datasheet_rows,
+          project_info: { project_name: '', drawing_number: '', area: '' }
+        },
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `DGSet_Datasheet_${Date.now()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('DG Set download error:', error);
+      setError('Failed to download DG set Excel file');
     }
   };
 
@@ -579,8 +715,8 @@ const SmartElectricalDatasheetPage = () => {
             </div>
 
 
-            {/* Switchgear Datasheet Table Preview */}
-            {results.datasheet_rows && results.datasheet_rows.length > 0 && (
+            {/* ── MV Switchgear Datasheet Table Preview ── */}
+            {results.equipment_type === 'mv_switchgear' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
               <div className="mb-6">
                 <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4 rounded-t-lg flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -597,11 +733,12 @@ const SmartElectricalDatasheetPage = () => {
                     <table className="w-full">
                       <thead className="bg-blue-600 text-white sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-20">SR NO</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-16">SR NO</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold w-1/3">DESCRIPTION</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">UNIT</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">REQUIRED DATA</th>
                           <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">VENDOR DATA</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-24">Rem</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">Rev</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -618,11 +755,12 @@ const SmartElectricalDatasheetPage = () => {
                             >
                               <td className="px-4 py-3 text-sm text-gray-900">{row.sr_no}</td>
                               <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-500">{row.unit || ''}</td>
                               <td className="px-4 py-3 text-sm text-gray-700">{row.required_data}</td>
                               <td className={`px-4 py-3 text-sm ${row.vendor_data ? 'text-green-700 font-medium' : 'text-gray-400'}`}>
                                 {row.vendor_data || ''}
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">{row.remarks}</td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-600">{row.rev || row.remarks || ''}</td>
                             </tr>
                           );
                         })}
@@ -632,6 +770,113 @@ const SmartElectricalDatasheetPage = () => {
                 </div>
               </div>
             )}
+            {/* ── Transformer Datasheet Table Preview ── */}
+            {results.equipment_type === 'transformer' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
+              <div className="mb-6">
+                <div className="bg-gradient-to-r from-blue-700 to-indigo-700 px-6 py-4 rounded-t-lg flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <TableCellsIcon className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Power / Distribution Transformer Datasheet Preview</h3>
+                  </div>
+                  <button onClick={handleDownloadTransformerExcel} className="flex items-center gap-2 bg-white text-blue-700 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors">
+                    <ArrowDownTrayIcon className="w-5 h-5" />
+                    Download Excel
+                  </button>
+                </div>
+                <div className="border-2 border-gray-200 rounded-b-lg overflow-hidden">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <table className="w-full">
+                      <thead className="bg-blue-700 text-white sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-16">SI NO.</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/3">DESCRIPTION</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">UNIT</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">SPECIFIED DESIGN DATA</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">VENDOR DATA</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">Rev</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.datasheet_rows.map((row, index) => {
+                          const isSectionHeader = !row.sr_no && row.description && !row.required_data && !row.vendor_data;
+                          return (
+                            <tr
+                              key={index}
+                              className={`
+                                ${isSectionHeader ? 'bg-blue-50 font-bold' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                                hover:bg-blue-100 transition-colors border-b border-gray-200
+                              `}
+                            >
+                              <td className="px-4 py-3 text-sm text-gray-900">{row.sr_no}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-500">{row.unit || ''}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{row.required_data}</td>
+                              <td className={`px-4 py-3 text-sm ${row.vendor_data ? 'text-green-700 font-medium' : 'text-gray-400'}`}>
+                                {row.vendor_data || ''}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-600">{row.rev || ''}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DG Set Datasheet Table Preview */}
+            {results.equipment_type === 'dg_set' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
+              <div className="mb-6">
+                <div className="bg-gradient-to-r from-green-700 to-emerald-700 px-6 py-4 rounded-t-lg flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <TableCellsIcon className="w-6 h-6 text-white" />
+                    <h3 className="text-xl font-bold text-white">Emergency Diesel Generator Set Datasheet Preview</h3>
+                  </div>
+                  <button onClick={handleDownloadDGExcel} className="flex items-center gap-2 bg-white text-green-700 px-4 py-2 rounded-lg font-semibold hover:bg-green-50 transition-colors">
+                    <ArrowDownTrayIcon className="w-5 h-5" />
+                    Download Excel
+                  </button>
+                </div>
+                <div className="border-2 border-gray-200 rounded-b-lg overflow-hidden">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <table className="w-full">
+                      <thead className="bg-green-700 text-white sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-16">SI NO.</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/3">DESCRIPTION</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">UNIT</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">SPECIFIED DESIGN DATA</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold w-1/4">VENDOR DATA</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">Rev</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.datasheet_rows.map((row, index) => {
+                          const isSectionHeader = !row.sr_no && row.description && !row.required_data && !row.vendor_data;
+                          return (
+                            <tr
+                              key={index}
+                              className={`${isSectionHeader ? 'bg-green-50 font-bold' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-green-100 transition-colors border-b border-gray-200`}
+                            >
+                              <td className="px-4 py-3 text-sm text-gray-900">{row.sr_no}</td>
+                              <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-500">{row.unit || ''}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{row.required_data}</td>
+                              <td className={`px-4 py-3 text-sm ${row.vendor_data ? 'text-green-700 font-medium' : 'text-gray-400'}`}>
+                                {row.vendor_data || ''}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-600">{row.rev || ''}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Download Button */}
             <div className="flex gap-4">
               {excelBlob && (
@@ -700,3 +945,4 @@ const SmartElectricalDatasheetPage = () => {
 };
 
 export default SmartElectricalDatasheetPage;
+
