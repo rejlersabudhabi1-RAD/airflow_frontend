@@ -91,7 +91,7 @@ const COLUMNS = [
   { key: 'fluid_code',         label: 'Fluid Code',         width: 12 },
   { key: 'size',               label: 'Size',               width: 8  },
   { key: 'sequence_no',        label: 'Sequence No',        width: 14 },
-  { key: 'pipr_class',         label: 'PIPR Class',         width: 14 },
+  { key: 'pipr_class',         label: 'Pipe Class',         width: 14 },
   { key: 'insulation',         label: 'Insulation',         width: 12 },
   { key: 'from',               label: 'From',               width: 20 },
   { key: 'to',                 label: 'To',                 width: 20 },
