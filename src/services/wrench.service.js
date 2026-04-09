@@ -56,6 +56,30 @@ const wrenchService = {
    * Returns { total, documents: [{DOC_NO, DOC_DESCRIPTION, ORDER_NO, ...}] }
    */
   searchDocuments: (filters = {}) => apiService.post(`${BASE}/sync/search-documents/`, filters),
+
+  /**
+   * List transmittals from Wrench via the REST WebAPI.
+   * @param {number} page
+   * @param {number} pageSize
+   */
+  listTransmittals: (page = 1, pageSize = 100) =>
+    apiService.get(`${BASE}/sync/list-transmittals/`, { params: { page, page_size: pageSize } }),
+
+  // ── S3 Export ─────────────────────────────────────────────────────────────
+  /** List S3 export jobs (last 50) */
+  getS3Jobs: () => apiService.get(`${BASE}/s3-sync/`),
+
+  /** Get a single S3 job */
+  getS3Job: (id) => apiService.get(`${BASE}/s3-sync/${id}/`),
+
+  /**
+   * Start a Wrench → S3 export job.
+   * @param {object} payload – { mode: 'batch'|'realtime', entity_type: 'transmittals'|'documents'|'all', s3_prefix?: string }
+   */
+  startS3Sync: (payload) => apiService.post(`${BASE}/s3-sync/start/`, payload),
+
+  /** Stop a running real-time S3 export job */
+  stopS3Job: (id) => apiService.post(`${BASE}/s3-sync/${id}/stop/`),
 }
 
 export default wrenchService

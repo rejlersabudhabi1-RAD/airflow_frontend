@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import { isUserAdmin } from '../utils/rbac.utils'
 import wrenchService from '../services/wrench.service'
@@ -26,6 +26,8 @@ import {
   ServerIcon,
   UserCircleIcon,
   Cog6ToothIcon,
+  CloudArrowUpIcon,
+  StopCircleIcon,
 } from '@heroicons/react/24/outline'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -42,6 +44,12 @@ const SYNC_DIRECTIONS = [
     label: 'RADAI → Wrench',
     description: 'Push RADAI analysis results to Wrench',
     icon: '⬆️',
+  },
+  {
+    value: 'wrench_to_s3',
+    label: 'Wrench → AWS S3',
+    description: 'Export Wrench data to your S3 bucket (batch or real-time)',
+    icon: '☁️',
   },
 ]
 
@@ -451,14 +459,25 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
 
 // ─── Sync Panel ───────────────────────────────────────────────────────────────
 
-const SyncPanel = ({ logs, onTrigger }) => {
+// Direction value that maps to the dedicated S3 Export tab — kept soft-coded so a
+// rename here is the only change needed if the value ever changes.
+const _S3_SYNC_DIRECTION = 'wrench_to_s3'
+
+const SyncPanel = ({ logs, onTrigger, onGoToS3Tab }) => {
   const [direction, setDirection] = useState('wrench_to_radai')
   const [entityType, setEntityType] = useState('all')
   const [syncing, setSyncing] = useState(false)
   const [alert, setAlert] = useState(null)
   const [showDetails, setShowDetails] = useState(null)
 
+  const isS3Direction = direction === _S3_SYNC_DIRECTION
+
   const handleSync = async () => {
+    // S3 export is handled by the dedicated S3 Export tab, not this sync endpoint
+    if (isS3Direction) {
+      onGoToS3Tab?.()
+      return
+    }
     setSyncing(true)
     setAlert(null)
     try {
@@ -536,18 +555,35 @@ const SyncPanel = ({ logs, onTrigger }) => {
             </div>
           </div>
 
+          {/* S3 direction info banner */}
+          {isS3Direction && (
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-orange-50 border border-orange-200 text-sm">
+              <CloudArrowUpIcon className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-orange-800">Use the S3 Export tab for this direction</p>
+                <p className="text-orange-700 mt-0.5">Wrench → AWS S3 supports both batch and real-time export with dedicated controls. Click below to go there.</p>
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+            className={`flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition ${
+              isS3Direction
+                ? 'bg-orange-500 hover:bg-orange-600'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             {syncing ? (
               <ArrowPathIcon className="w-4 h-4 animate-spin" />
+            ) : isS3Direction ? (
+              <CloudArrowUpIcon className="w-4 h-4" />
             ) : (
               <ArrowsRightLeftIcon className="w-4 h-4" />
             )}
-            {syncing ? 'Syncing…' : 'Run Sync'}
+            {syncing ? 'Syncing…' : isS3Direction ? 'Go to S3 Export →' : 'Run Sync'}
           </button>
         </div>
       </div>
@@ -626,19 +662,255 @@ const SyncPanel = ({ logs, onTrigger }) => {
   )
 }
 
-// ─── Document Search Panel ────────────────────────────────────────────────────
+// ─── Documents & Transmittals Panel ──────────────────────────────────────────
 
-const DOC_COLUMNS = [
-  { key: 'DOC_NO', label: 'Doc No.' },
-  { key: 'DOC_DESCRIPTION', label: 'Description' },
-  { key: 'ORDER_NO', label: 'Order' },
-  { key: 'GENEALOGY_STRING', label: 'Path / Genealogy' },
-  { key: 'CREATED_BY_USER', label: 'Created By' },
-  { key: 'WF_TEAM_NAME', label: 'WF Team' },
-  { key: 'IDOC_ID', label: 'IDOC' },
+// Soft-coded column priority list — matched against whatever fields the Wrench API returns.
+// First keys found in the data win; remaining slots are filled from any extra fields.
+const TRANSMITTAL_COL_PRIORITY = [
+  // ── Fields confirmed from this Wrench instance (highest priority) ──
+  { key: 'TRANS_REF_NO',       label: 'Trans. Ref No.' },
+  { key: 'TRANS_ID',           label: 'Trans. ID' },
+  { key: 'ORDER_NO',           label: 'Order No.' },
+  { key: 'ORDER_DESCRIPTION',  label: 'Order Description' },
+  { key: 'TRANS_DESC',         label: 'Description' },
+  { key: 'DIST_LIST_DESC',     label: 'Distribution List' },
+  { key: 'PROJECT_ID',         label: 'Project ID' },
+  // ── Generic fallbacks for other Wrench instances ──
+  { key: 'TRANS_NO',           label: 'Trans. No.' },
+  { key: 'TRANSMITTAL_NO',     label: 'Trans. No.' },
+  { key: 'NO',                 label: 'No.' },
+  { key: 'TRANS_TITLE',        label: 'Title' },
+  { key: 'TITLE',              label: 'Title' },
+  { key: 'DESCRIPTION',        label: 'Description' },
+  { key: 'TRANS_DATE',         label: 'Date' },
+  { key: 'ISSUED_DATE',        label: 'Date' },
+  { key: 'DATE',               label: 'Date' },
+  { key: 'SENDER',             label: 'Sender' },
+  { key: 'FROM',               label: 'From' },
+  { key: 'RECIPIENT',          label: 'Recipient' },
+  { key: 'TO',                 label: 'To' },
+  { key: 'STATUS',             label: 'Status' },
+  { key: 'TRANS_STATUS',       label: 'Status' },
+  { key: 'DOC_COUNT',          label: 'Docs' },
+  { key: 'DOCUMENT_COUNT',     label: 'Docs' },
+  { key: 'PROJECT',            label: 'Project' },
+  { key: 'PROJECT_NAME',       label: 'Project' },
 ]
 
-const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
+// Soft-coded limits
+const MAX_TABLE_COLS = 7
+const TRANSMITTAL_PAGE_SIZE = 100
+
+// Soft-coded document columns for the SearchObject API result
+const DOC_COLUMNS = [
+  { key: 'DOC_NO',           label: 'Doc No.' },
+  { key: 'DOC_DESCRIPTION',  label: 'Description' },
+  { key: 'ORDER_NO',         label: 'Order' },
+  { key: 'GENEALOGY_STRING', label: 'Path / Genealogy' },
+  { key: 'CREATED_BY_USER',  label: 'Created By' },
+  { key: 'WF_TEAM_NAME',     label: 'WF Team' },
+  { key: 'IDOC_ID',          label: 'IDOC' },
+]
+
+// Derive display columns from the first data row using the priority list
+function deriveColumns(rows, priorityList, maxCols) {
+  if (!rows || rows.length === 0) return []
+  const available = new Set(Object.keys(rows[0]))
+  const cols = []
+  for (const c of priorityList) {
+    if (available.has(c.key) && !cols.find((x) => x.key === c.key)) {
+      cols.push(c)
+      if (cols.length >= maxCols) break
+    }
+  }
+  if (cols.length < maxCols) {
+    for (const key of available) {
+      if (!cols.find((c) => c.key === key)) {
+        cols.push({ key, label: key.replace(/_/g, ' ') })
+        if (cols.length >= maxCols) break
+      }
+    }
+  }
+  return cols
+}
+
+// ─── Transmittals browser ─────────────────────────────────────────────────────
+
+const TransmittalsSection = ({ configured, onGoToConfig }) => {
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState(null)
+  const [loadingTrans, setLoadingTrans] = useState(false)
+  const [transError, setTransError] = useState(null)
+  const [filterText, setFilterText] = useState('')
+  const [derivedCols, setDerivedCols] = useState([])
+
+  const load = useCallback(async (targetPage = 1) => {
+    setLoadingTrans(true)
+    setTransError(null)
+    try {
+      const res = await wrenchService.listTransmittals(targetPage, TRANSMITTAL_PAGE_SIZE)
+      setData(res.data)
+      setPage(targetPage)
+      if (res.data?.transmittals?.length > 0) {
+        setDerivedCols(deriveColumns(res.data.transmittals, TRANSMITTAL_COL_PRIORITY, MAX_TABLE_COLS))
+      }
+    } catch (err) {
+      setTransError(err.response?.data?.detail || 'Failed to load transmittals from Wrench.')
+    } finally {
+      setLoadingTrans(false)
+    }
+  }, [])
+
+  useEffect(() => { if (configured) load(1) }, [configured, load])
+
+  const filtered = useMemo(() => {
+    if (!data?.transmittals) return []
+    if (!filterText.trim()) return data.transmittals
+    const q = filterText.toLowerCase()
+    return data.transmittals.filter((row) =>
+      Object.values(row).some((v) => String(v ?? '').toLowerCase().includes(q))
+    )
+  }, [data, filterText])
+
+  if (!configured) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-4">
+        <Cog6ToothIcon className="w-12 h-12 text-gray-300" />
+        <p className="text-sm text-gray-500">Configure Wrench first to browse transmittals.</p>
+        <button
+          onClick={onGoToConfig}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition"
+        >
+          <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Filter loaded results…"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => load(1)}
+          disabled={loadingTrans}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+        >
+          <ArrowPathIcon className={`w-4 h-4 ${loadingTrans ? 'animate-spin' : ''}`} />
+          {loadingTrans ? 'Loading…' : 'Reload'}
+        </button>
+      </div>
+
+      {transError && <Alert type="error" message={transError} />}
+
+      {/* Spinner on first load */}
+      {loadingTrans && !data && (
+        <div className="flex items-center justify-center h-32">
+          <ArrowPathIcon className="w-8 h-8 text-blue-400 animate-spin" />
+        </div>
+      )}
+
+      {/* Table */}
+      {!loadingTrans && data && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <TableCellsIcon className="w-4 h-4 text-gray-400" />
+              {filterText.trim()
+                ? `${filtered.length} match${filtered.length !== 1 ? 'es' : ''} (page ${page} of ${data.total})`
+                : `Showing ${data.transmittals?.length ?? 0} of ${data.total?.toLocaleString()} total`}
+            </span>
+            {data.total > TRANSMITTAL_PAGE_SIZE && (
+              <span className="text-xs text-gray-400">Page {page}</span>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-400">
+              {filterText.trim()
+                ? 'No transmittals match your filter.'
+                : 'No transmittals returned from Wrench.'}
+            </div>
+          ) : derivedCols.length === 0 ? (
+            <div className="p-10 text-center text-sm text-gray-400">
+              Data received but field structure is unexpected. Check sync logs for details.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    {derivedCols.map((col) => (
+                      <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">
+                        {col.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-blue-50 transition">
+                      {derivedCols.map((col) => (
+                        <td
+                          key={col.key}
+                          className="px-4 py-2.5 text-gray-700 max-w-[220px] truncate"
+                          title={String(row[col.key] ?? '')}
+                        >
+                          {row[col.key] != null && row[col.key] !== ''
+                            ? String(row[col.key])
+                            : <span className="text-gray-300">&mdash;</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {data.total > TRANSMITTAL_PAGE_SIZE && (
+            <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => load(page - 1)}
+                disabled={page === 1 || loadingTrans}
+                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
+              >
+                ← Previous
+              </button>
+              <span className="text-xs text-gray-500">Page {page}</span>
+              <button
+                type="button"
+                onClick={() => load(page + 1)}
+                disabled={(data.transmittals?.length ?? 0) < TRANSMITTAL_PAGE_SIZE || loadingTrans}
+                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Document Search section (requires SVC URL) ────────────────────────────────
+
+const DocumentSearchSection = ({ config }) => {
+  const hasSvcUrl = Boolean(config?.svc_url)
   const [filters, setFilters] = useState({
     discipline: '',
     doc_no: '',
@@ -647,7 +919,7 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
     page_size: 50,
   })
   const [page, setPage] = useState(1)
-  const [results, setResults] = useState(null)  // { total, documents }
+  const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
   const [alert, setAlert] = useState(null)
 
@@ -658,16 +930,13 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
     setSearching(true)
     setAlert(null)
     try {
-      const res = await wrenchService.searchDocuments({
-        ...filters,
-        page: targetPage,
-      })
+      const res = await wrenchService.searchDocuments({ ...filters, page: targetPage })
       setResults(res.data)
       setPage(targetPage)
     } catch (err) {
       setAlert({
         type: 'error',
-        message: err.response?.data?.detail || 'Document search failed. Check the server logs.',
+        message: err.response?.data?.detail || 'Document search failed. Check server logs.',
       })
     } finally {
       setSearching(false)
@@ -676,33 +945,26 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
 
   const totalPages = results ? Math.ceil(results.total / filters.page_size) : 0
 
-  if (!configured) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
-          <Cog6ToothIcon className="w-9 h-9 text-amber-500" />
-        </div>
-        <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-800 mb-1">Wrench Not Configured</h3>
-          <p className="text-sm text-gray-500 max-w-sm">
-            Set up your Wrench SmartProject credentials in the Configuration tab to start searching documents.
-          </p>
-        </div>
-        <button
-          onClick={onGoToConfig}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
-        >
-          <Cog6ToothIcon className="w-4 h-4" />
-          Go to Configuration
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-5">
+      {/* SVC URL notice */}
+      {!hasSvcUrl && (
+        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold text-amber-800">Document Search Service URL not configured</p>
+            <p className="mt-1 text-amber-700">
+              This feature uses Wrench's <em>DocumentSearch / SearchObject</em> WCF API, which runs on a
+              separate service host. Ask your Wrench administrator for the SVC URL and add it in the{' '}
+              <strong>Configuration tab</strong> under "Document Search Service URL".
+              <br />The <strong>Transmittals</strong> tab works without it.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Filter card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${!hasSvcUrl ? 'opacity-60 pointer-events-none select-none' : ''}`}>
         <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -710,76 +972,53 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Document Search</h3>
-              <p className="text-xs text-gray-500">Query the Wrench SmartProject document repository</p>
+              <p className="text-xs text-gray-500">Query the Wrench document repository via SearchObject API</p>
             </div>
           </div>
         </div>
+
         <div className="p-6 space-y-4">
           {alert && <Alert type={alert.type} message={alert.message} />}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Discipline</label>
-              <input
-                type="text"
-                value={filters.discipline}
+              <input type="text" value={filters.discipline}
                 onChange={(e) => setFilters((f) => ({ ...f, discipline: e.target.value }))}
-                placeholder="e.g. INST, PIPING, ELEC"
-                className={inputClass}
-              />
+                placeholder="e.g. INST, PIPING, ELEC" className={inputClass} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Document No.</label>
-              <input
-                type="text"
-                value={filters.doc_no}
+              <input type="text" value={filters.doc_no}
                 onChange={(e) => setFilters((f) => ({ ...f, doc_no: e.target.value }))}
-                placeholder="Exact DOC_NO match"
-                className={inputClass}
-              />
+                placeholder="Exact DOC_NO match" className={inputClass} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Approved From</label>
-              <input
-                type="text"
-                value={filters.date_from}
+              <input type="text" value={filters.date_from}
                 onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-                placeholder="YYYY/MM/DD HH:MM"
-                className={inputClass}
-              />
+                placeholder="YYYY/MM/DD HH:MM" className={inputClass} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Approved To</label>
-              <input
-                type="text"
-                value={filters.date_to}
+              <input type="text" value={filters.date_to}
                 onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-                placeholder="YYYY/MM/DD HH:MM"
-                className={inputClass}
-              />
+                placeholder="YYYY/MM/DD HH:MM" className={inputClass} />
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
               <label className="text-xs font-medium text-gray-600">Rows per page:</label>
-              <select
-                value={filters.page_size}
+              <select value={filters.page_size}
                 onChange={(e) => setFilters((f) => ({ ...f, page_size: Number(e.target.value) }))}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none"
-              >
+                className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none">
                 {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={() => handleSearch(1)}
-              disabled={searching}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
-            >
-              {searching
-                ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                : <MagnifyingGlassIcon className="w-4 h-4" />}
+            <button type="button" onClick={() => handleSearch(1)} disabled={searching || !hasSvcUrl}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
+              {searching ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <MagnifyingGlassIcon className="w-4 h-4" />}
               {searching ? 'Searching…' : 'Search Documents'}
             </button>
           </div>
@@ -794,26 +1033,18 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
               <TableCellsIcon className="w-4 h-4 text-gray-400" />
               {results.total.toLocaleString()} document{results.total !== 1 ? 's' : ''} found
             </span>
-            {totalPages > 1 && (
-              <span className="text-xs text-gray-400">Page {page} of {totalPages}</span>
-            )}
+            {totalPages > 1 && <span className="text-xs text-gray-400">Page {page} of {totalPages}</span>}
           </div>
 
           {results.documents.length === 0 ? (
-            <div className="p-10 text-center text-sm text-gray-400">
-              No documents match the selected filters.
-            </div>
+            <div className="p-10 text-center text-sm text-gray-400">No documents match the selected filters.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-xs">
                 <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    {DOC_COLUMNS.map((col) => (
-                      <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
+                  <tr>{DOC_COLUMNS.map((col) => (
+                    <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
+                  ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {results.documents.map((doc, idx) => (
@@ -830,28 +1061,72 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
             </div>
           )}
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => handleSearch(page - 1)}
-                disabled={page === 1 || searching}
-                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-              >
-                ← Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSearch(page + 1)}
-                disabled={page >= totalPages || searching}
-                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-              >
-                Next →
-              </button>
+              <button type="button" onClick={() => handleSearch(page - 1)} disabled={page === 1 || searching}
+                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">← Previous</button>
+              <button type="button" onClick={() => handleSearch(page + 1)} disabled={page >= totalPages || searching}
+                className="px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">Next →</button>
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Combined Documents Panel (inner tabs) ────────────────────────────────────
+
+const DOC_INNER_TABS = [
+  { id: 'transmittals', label: 'Transmittals', icon: ArrowsRightLeftIcon },
+  { id: 'doc_search',   label: 'Document Search', icon: MagnifyingGlassIcon },
+]
+
+const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
+  const [innerTab, setInnerTab] = useState('transmittals')
+
+  if (!configured) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
+          <Cog6ToothIcon className="w-9 h-9 text-amber-500" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-800 mb-1">Wrench Not Configured</h3>
+          <p className="text-sm text-gray-500 max-w-sm">
+            Set up your Wrench SmartProject credentials in the Configuration tab to start browsing documents.
+          </p>
+        </div>
+        <button onClick={onGoToConfig}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition">
+          <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Inner tab bar */}
+      <div className="flex items-center gap-1 border-b border-gray-200">
+        {DOC_INNER_TABS.map((t) => (
+          <button key={t.id} onClick={() => setInnerTab(t.id)}
+            className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium border-b-2 transition ${
+              innerTab === t.id
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}>
+            <t.icon className="w-4 h-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {innerTab === 'transmittals' && (
+        <TransmittalsSection configured={configured} onGoToConfig={onGoToConfig} />
+      )}
+      {innerTab === 'doc_search' && (
+        <DocumentSearchSection config={config} />
       )}
     </div>
   )
@@ -888,13 +1163,344 @@ const OverviewStats = ({ config, logs }) => {
   )
 }
 
+// ─── S3 Export Panel ─────────────────────────────────────────────────────────
+
+const S3_MODES = [
+  {
+    value: 'batch',
+    label: 'Batch Export',
+    icon: '📦',
+    description: 'Full one-off export of all Wrench data to S3. Processes all pages then completes.',
+  },
+  {
+    value: 'realtime',
+    label: 'Real-time',
+    icon: '🔄',
+    description: 'Continuous polling — exports new pages to S3 every 30 s until you stop it.',
+  },
+]
+
+const S3_ENTITY_TYPES = [
+  { value: 'transmittals', label: 'Transmittals' },
+  { value: 'documents',    label: 'Documents' },
+  { value: 'all',          label: 'All Entities' },
+]
+
+const S3_STATUS_STYLES = {
+  pending:     'bg-yellow-100 text-yellow-800 border border-yellow-200',
+  in_progress: 'bg-blue-100  text-blue-800  border border-blue-200',
+  success:     'bg-green-100 text-green-800 border border-green-200',
+  failed:      'bg-red-100   text-red-800   border border-red-200',
+  stopped:     'bg-gray-100  text-gray-700  border border-gray-200',
+}
+
+const DEFAULT_S3_PREFIX    = 'wrench/'
+const S3_BUCKET_DISPLAY    = 'wrench-radai'  // cosmetic label only
+const S3_POLL_INTERVAL_MS  = 5000            // auto-refresh when a job is in_progress
+
+const S3SyncPanel = ({ configured, onGoToConfig }) => {
+  const [jobs, setJobs]                   = useState([])
+  const [loadingJobs, setLoadingJobs]     = useState(false)
+  const [starting, setStarting]           = useState(false)
+  const [alert, setAlert]                 = useState(null)
+  const [mode, setMode]                   = useState('batch')
+  const [entityType, setEntityType]       = useState('transmittals')
+  const [s3Prefix, setS3Prefix]           = useState(DEFAULT_S3_PREFIX)
+  const [showAdvanced, setShowAdvanced]   = useState(false)
+
+  const loadJobs = useCallback(async () => {
+    try {
+      const res = await wrenchService.getS3Jobs()
+      setJobs(res.data || [])
+    } catch {
+      // silent — don't overwrite user-facing alerts during background polls
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!configured) return
+    setLoadingJobs(true)
+    loadJobs().finally(() => setLoadingJobs(false))
+  }, [configured, loadJobs])
+
+  // Auto-refresh while any job is pending / in_progress
+  useEffect(() => {
+    if (!configured) return
+    const hasActive = jobs.some((j) => j.status === 'in_progress' || j.status === 'pending')
+    if (!hasActive) return
+    const timer = setInterval(loadJobs, S3_POLL_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [jobs, configured, loadJobs])
+
+  const handleStart = async () => {
+    setStarting(true)
+    setAlert(null)
+    try {
+      await wrenchService.startS3Sync({ mode, entity_type: entityType, s3_prefix: s3Prefix })
+      setAlert({ type: 'success', message: `${mode === 'batch' ? 'Batch' : 'Real-time'} export job started successfully.` })
+      await loadJobs()
+    } catch (err) {
+      setAlert({ type: 'error', message: err.response?.data?.detail || 'Failed to start the export job.' })
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const handleStop = async (jobId) => {
+    setAlert(null)
+    try {
+      await wrenchService.stopS3Job(jobId)
+      setAlert({ type: 'info', message: `Job #${jobId} stop signal sent.` })
+      await loadJobs()
+    } catch (err) {
+      setAlert({ type: 'error', message: err.response?.data?.detail || 'Failed to stop the job.' })
+    }
+  }
+
+  const activeRealtimeJob = jobs.find(
+    (j) => j.mode === 'realtime' && (j.status === 'in_progress' || j.status === 'pending'),
+  )
+
+  if (!configured) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
+          <Cog6ToothIcon className="w-9 h-9 text-amber-500" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-800 mb-1">Wrench Not Configured</h3>
+          <p className="text-sm text-gray-500 max-w-sm">
+            Configure and verify your Wrench credentials before exporting data to S3.
+          </p>
+        </div>
+        <button
+          onClick={onGoToConfig}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+        >
+          <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Control card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
+                <CloudArrowUpIcon className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Export to AWS S3</h3>
+                <p className="text-xs text-gray-500">Wrench → RADAI → S3 pipeline</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-orange-50 text-orange-700 border border-orange-200">
+              s3://{S3_BUCKET_DISPLAY}/
+            </span>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {alert && <Alert type={alert.type} message={alert.message} />}
+
+          {/* Mode selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Export Mode</label>
+            <div className="grid grid-cols-2 gap-3">
+              {S3_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMode(m.value)}
+                  className={`p-4 rounded-lg border-2 text-left transition ${
+                    mode === m.value
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="text-xl mb-1">{m.icon}</div>
+                  <div className="text-sm font-semibold text-gray-900">{m.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{m.description}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Entity type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data to Export</label>
+            <div className="flex flex-wrap gap-2">
+              {S3_ENTITY_TYPES.map((e) => (
+                <button
+                  key={e.value}
+                  type="button"
+                  onClick={() => setEntityType(e.value)}
+                  className={`px-4 py-1.5 rounded-full text-sm border transition ${
+                    entityType === e.value
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-slate-400'
+                  }`}
+                >
+                  {e.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Advanced: S3 prefix */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition"
+            >
+              {showAdvanced
+                ? <ChevronUpIcon className="w-3.5 h-3.5" />
+                : <ChevronDownIcon className="w-3.5 h-3.5" />}
+              Advanced settings
+            </button>
+            {showAdvanced && (
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  S3 Key Prefix
+                  <span className="ml-1 font-normal text-gray-400">(e.g. wrench/ or project-x/wrench/)</span>
+                </label>
+                <input
+                  type="text"
+                  value={s3Prefix}
+                  onChange={(e) => setS3Prefix(e.target.value)}
+                  placeholder="wrench/"
+                  className="w-full max-w-xs px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  S3 path:{' '}
+                  <span className="font-mono">
+                    s3://{S3_BUCKET_DISPLAY}/{s3Prefix || DEFAULT_S3_PREFIX}{entityType}/year=…/
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Conflict warning */}
+          {mode === 'realtime' && activeRealtimeJob && (
+            <Alert
+              type="warning"
+              message={`A real-time job (ID #${activeRealtimeJob.id}) is already running. Stop it before starting a new one.`}
+            />
+          )}
+
+          {/* Start button */}
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={starting || (mode === 'realtime' && Boolean(activeRealtimeJob))}
+            className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+          >
+            {starting
+              ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              : <CloudArrowUpIcon className="w-4 h-4" />}
+            {starting ? 'Starting…' : `Start ${mode === 'batch' ? 'Batch Export' : 'Real-time Export'}`}
+          </button>
+        </div>
+      </div>
+
+      {/* Jobs table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <ClockIcon className="w-5 h-5 text-gray-400" />
+            Export Jobs
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">{jobs.length} recent jobs</span>
+            <button
+              type="button"
+              onClick={loadJobs}
+              disabled={loadingJobs}
+              className="text-gray-400 hover:text-gray-600 transition"
+              title="Refresh"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${loadingJobs ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {jobs.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-400">
+            No export jobs yet. Configure the mode above and click Start.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  {['ID', 'Mode', 'Entity', 'Status', 'Exported', 'Pages', 'Started', 'Duration', ''].map((h) => (
+                    <th key={h} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {jobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-gray-50 transition">
+                    <td className="px-4 py-2.5 text-gray-500 font-mono">#{job.id}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="capitalize font-medium text-gray-700">
+                        {job.mode === 'realtime' ? '🔄 Real-time' : '📦 Batch'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-600 capitalize">{job.entity_type}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${S3_STATUS_STYLES[job.status] || ''}`}>
+                        {job.status === 'in_progress' && <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />}
+                        {job.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700 font-mono">
+                      {job.records_exported != null ? job.records_exported.toLocaleString() : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700 font-mono">{job.pages_processed ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+                      {job.started_at ? new Date(job.started_at).toLocaleString() : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-500">
+                      {job.duration_seconds != null ? `${Number(job.duration_seconds).toFixed(1)}s` : '—'}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {(job.status === 'in_progress' || job.status === 'pending') && job.mode === 'realtime' && (
+                        <button
+                          type="button"
+                          onClick={() => handleStop(job.id)}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition"
+                        >
+                          <StopCircleIcon className="w-3.5 h-3.5" />
+                          Stop
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: InformationCircleIcon },
-  { id: 'config', label: 'Configuration', icon: WrenchScrewdriverIcon },
-  { id: 'sync', label: 'Sync', icon: ArrowsRightLeftIcon },
-  { id: 'documents', label: 'Documents', icon: DocumentTextIcon },
+  { id: 'overview',   label: 'Overview',       icon: InformationCircleIcon },
+  { id: 'config',     label: 'Configuration',  icon: WrenchScrewdriverIcon },
+  { id: 'sync',       label: 'Sync',           icon: ArrowsRightLeftIcon },
+  { id: 's3_export',  label: 'S3 Export',      icon: CloudArrowUpIcon },
+  { id: 'documents',  label: 'Documents',      icon: DocumentTextIcon },
 ]
 
 const WrenchIntegration = () => {
@@ -1151,13 +1757,17 @@ const WrenchIntegration = () => {
 
           {activeTab === 'sync' && (
             configured ? (
-              <SyncPanel logs={syncLogs} onTrigger={handleSyncTrigger} />
+              <SyncPanel logs={syncLogs} onTrigger={handleSyncTrigger} onGoToS3Tab={() => setActiveTab('s3_export')} />
             ) : (
               <Alert
                 type="warning"
                 message="Please configure and verify the Wrench connection in the Configuration tab before running a sync."
               />
             )
+          )}
+
+          {activeTab === 's3_export' && (
+            <S3SyncPanel configured={configured} onGoToConfig={() => setActiveTab('config')} />
           )}
 
           {activeTab === 'documents' && (
