@@ -1351,32 +1351,51 @@ const UserManagement = ({ pageControls }) => {
               <button
                 onClick={() => setShowExportDropdown(prev => !prev)}
                 disabled={isExporting}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+                className={`group relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white overflow-hidden shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed
+                  ${isExporting
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-400/30 hover:shadow-emerald-400/50 hover:-translate-y-0.5'}`}
               >
+                {/* animated shine */}
+                <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-500 bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12 pointer-events-none" />
                 {isExporting ? (
-                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
                 )}
-                {isExporting ? 'Exporting...' : 'Export Users'}
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span>{isExporting ? 'Exporting…' : 'Export Users'}</span>
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${showExportDropdown ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
+
               {showExportDropdown && (
-                <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                  {EXPORT_CONFIG.formats.map(({ label, value }) => (
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-[fadeDown_0.15s_ease-out]">
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Choose Format</p>
+                  </div>
+                  {EXPORT_CONFIG.formats.map(({ label, value, ext }) => (
                     <button
                       key={value}
                       onClick={() => handleExportUsers(value)}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 first:rounded-t-lg last:rounded-b-lg transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 transition-colors group"
                     >
-                      {label}
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-transform duration-150 group-hover:scale-110
+                        ${ext === 'csv' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                        {ext?.toUpperCase()}
+                      </span>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-800 group-hover:text-emerald-700 transition-colors">{label}</p>
+                        <p className="text-xs text-gray-400">{ext === 'csv' ? 'Comma-separated values' : 'Excel workbook (.xlsx)'}</p>
+                      </div>
                     </button>
                   ))}
                 </div>

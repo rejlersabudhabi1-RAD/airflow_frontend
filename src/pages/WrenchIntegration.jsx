@@ -34,22 +34,50 @@ import {
 
 const SYNC_DIRECTIONS = [
   {
-    value: 'wrench_to_radai',
-    label: 'Wrench → RADAI',
-    description: 'Pull projects and documents from Wrench into RADAI',
-    icon: '⬇️',
+    value:       'wrench_to_radai',
+    label:       'Wrench → RADAI',
+    shortLabel:  'Pull',
+    description: 'Pull projects and documents from Wrench into RADAI.',
+    icon:        '⬇️',
+    badge:       'Import',
+    // Visual tokens — change here to restyle, never hardcode below
+    gradient:    'from-blue-500 to-indigo-600',
+    ring:        'ring-blue-400/50',
+    activeBg:    'bg-blue-50 border-blue-400',
+    activeText:  'text-blue-700',
+    activeBadge: 'bg-blue-100 text-blue-700',
+    iconBg:      'bg-gradient-to-br from-blue-500 to-indigo-600',
+    checkColor:  'text-blue-500',
   },
   {
-    value: 'radai_to_wrench',
-    label: 'RADAI → Wrench',
-    description: 'Push RADAI analysis results to Wrench',
-    icon: '⬆️',
+    value:       'radai_to_wrench',
+    label:       'RADAI → Wrench',
+    shortLabel:  'Push',
+    description: 'Push RADAI analysis results back to Wrench.',
+    icon:        '⬆️',
+    badge:       'Export',
+    gradient:    'from-emerald-500 to-teal-600',
+    ring:        'ring-emerald-400/50',
+    activeBg:    'bg-emerald-50 border-emerald-400',
+    activeText:  'text-emerald-700',
+    activeBadge: 'bg-emerald-100 text-emerald-700',
+    iconBg:      'bg-gradient-to-br from-emerald-500 to-teal-600',
+    checkColor:  'text-emerald-500',
   },
   {
-    value: 'wrench_to_s3',
-    label: 'Wrench → AWS S3',
-    description: 'Export Wrench data to your S3 bucket (batch or real-time)',
-    icon: '☁️',
+    value:       'wrench_to_s3',
+    label:       'Wrench → S3',
+    shortLabel:  'S3 Export',
+    description: 'Export Wrench data to your AWS S3 bucket (batch or real-time).',
+    icon:        '☁️',
+    badge:       'AWS S3',
+    gradient:    'from-orange-500 to-amber-500',
+    ring:        'ring-orange-400/50',
+    activeBg:    'bg-orange-50 border-orange-400',
+    activeText:  'text-orange-700',
+    activeBadge: 'bg-orange-100 text-orange-700',
+    iconBg:      'bg-gradient-to-br from-orange-500 to-amber-500',
+    checkColor:  'text-orange-500',
   },
 ]
 
@@ -82,8 +110,8 @@ const STATUS_ICONS = {
 const StatusBadge = ({ status }) => {
   const Icon = STATUS_ICONS[status] || ClockIcon
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status] || ''}`}>
-      <Icon className="w-3 h-3" />
+    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[status] || ''}`}>
+      <Icon className={`w-3 h-3 ${status === 'in_progress' ? 'animate-spin' : ''}`} />
       {status?.replace('_', ' ')}
     </span>
   )
@@ -172,26 +200,27 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
     'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition'
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-200/80 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+      <div className="flex items-center justify-between px-6 py-5 bg-gradient-to-r from-slate-800 via-slate-700 to-indigo-800">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
             <WrenchScrewdriverIcon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Connection Settings</h3>
-            <p className="text-xs text-gray-500">Wrench REST API endpoint &amp; credentials</p>
+            <h3 className="font-semibold text-white">Connection Settings</h3>
+            <p className="text-xs text-slate-300/80">Wrench REST API endpoint &amp; credentials</p>
           </div>
         </div>
         {config?.connection_verified && (
-          <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-900/30 border border-emerald-500/30 px-3 py-1.5 rounded-full">
             <CheckCircleIcon className="w-4 h-4" /> Verified
           </span>
         )}
       </div>
 
-      {/* Security notice */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-700/5 to-blue-600/5 rounded-2xl pointer-events-none" />
+        {/* Security notice */}
       <div className="mx-6 mt-5">
         <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <ShieldCheckIcon className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
@@ -426,7 +455,7 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-slate-400/20 transition-all duration-200"
           >
             {saving ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4" />}
             {saving ? 'Saving…' : 'Save Configuration'}
@@ -437,7 +466,7 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
               type="button"
               onClick={handleVerify}
               disabled={verifying}
-              className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-green-400/20 transition-all duration-200"
             >
               {verifying ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <CheckCircleIcon className="w-4 h-4" />}
               {verifying ? 'Testing…' : 'Test Connection'}
@@ -494,15 +523,15 @@ const SyncPanel = ({ logs, onTrigger, onGoToS3Tab }) => {
   return (
     <div className="space-y-5">
       {/* Trigger card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+      <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200/80 overflow-hidden">
+        <div className="px-6 py-5 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
               <ArrowsRightLeftIcon className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Data Synchronisation</h3>
-              <p className="text-xs text-gray-500">Pull or push data between RADAI and Wrench</p>
+              <h3 className="font-semibold text-white">Data Synchronisation</h3>
+              <p className="text-xs text-blue-100/80">Pull or push data between RADAI and Wrench</p>
             </div>
           </div>
         </div>
@@ -510,26 +539,67 @@ const SyncPanel = ({ logs, onTrigger, onGoToS3Tab }) => {
         <div className="p-6 space-y-5">
           {alert && <Alert type={alert.type} message={alert.message} />}
 
-          {/* Direction selector */}
+          {/* Direction selector — 3-column card grid */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Sync Direction</label>
-            <div className="grid grid-cols-2 gap-3">
-              {SYNC_DIRECTIONS.map((d) => (
-                <button
-                  key={d.value}
-                  type="button"
-                  onClick={() => setDirection(d.value)}
-                  className={`p-4 rounded-lg border-2 text-left transition ${
-                    direction === d.value
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300 bg-white'
-                  }`}
-                >
-                  <div className="text-lg mb-1">{d.icon}</div>
-                  <div className="text-sm font-medium text-gray-900">{d.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{d.description}</div>
-                </button>
-              ))}
+            <label className="block text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
+              <span className="w-1 h-4 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 inline-block" />
+              Sync Direction
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {SYNC_DIRECTIONS.map((d) => {
+                const isActive = direction === d.value
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => setDirection(d.value)}
+                    className={`relative group p-5 rounded-2xl border-2 text-left transition-all duration-200 overflow-hidden focus:outline-none focus-visible:ring-4 ${
+                      isActive
+                        ? `${d.activeBg} shadow-md ${d.ring} ring-2`
+                        : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-md hover:-translate-y-0.5'
+                    }`}
+                  >
+                    {/* Background shimmer on active */}
+                    {isActive && (
+                      <div className={`absolute inset-0 bg-gradient-to-br ${d.gradient} opacity-[0.06] pointer-events-none`} />
+                    )}
+
+                    {/* Icon orb */}
+                    <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center text-base shadow-sm transition-transform duration-200 group-hover:scale-110 ${
+                      isActive ? d.iconBg : 'bg-gray-100'
+                    }`}>
+                      <span>{d.icon}</span>
+                    </div>
+
+                    {/* Label row */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-sm font-bold transition-colors duration-150 ${
+                        isActive ? d.activeText : 'text-gray-800'
+                      }`}>{d.label}</span>
+                      {isActive && (
+                        <CheckCircleIcon className={`w-4 h-4 shrink-0 ${d.checkColor}`} />
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-xs text-gray-500 leading-relaxed group-hover:text-gray-600 transition-colors duration-150">
+                      {d.description}
+                    </p>
+
+                    {/* Badge */}
+                    <span className={`inline-block mt-3 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full transition-colors duration-150 ${
+                      isActive ? d.activeBadge : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      {d.badge}
+                    </span>
+
+                    {/* Bottom accent bar */}
+                    <div className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r ${d.gradient} transition-all duration-300 ${
+                      isActive ? 'w-full' : 'w-0 group-hover:w-full'
+                    }`} />
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -570,10 +640,10 @@ const SyncPanel = ({ logs, onTrigger, onGoToS3Tab }) => {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className={`flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition ${
+            className={`flex items-center gap-2 px-6 py-2.5 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md transition-all duration-200 ${
               isS3Direction
-                ? 'bg-orange-500 hover:bg-orange-600'
-                : 'bg-blue-600 hover:bg-blue-700'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-orange-400/25'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-400/25'
             }`}
           >
             {syncing ? (
@@ -589,13 +659,13 @@ const SyncPanel = ({ logs, onTrigger, onGoToS3Tab }) => {
       </div>
 
       {/* Sync log table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <ClockIcon className="w-5 h-5 text-gray-400" />
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <ClockIcon className="w-5 h-5 text-indigo-400" />
             Sync History
           </h3>
-          <span className="text-xs text-gray-400">{logs.length} recent logs</span>
+          <span className="text-xs font-medium text-gray-400 bg-gray-100/80 px-2.5 py-0.5 rounded-full">{logs.length} logs</span>
         </div>
 
         {logs.length === 0 ? (
@@ -828,12 +898,14 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
 
   if (!configured) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 space-y-4">
-        <Cog6ToothIcon className="w-12 h-12 text-gray-300" />
+      <div className="flex flex-col items-center justify-center py-16 space-y-5">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center shadow-lg shadow-amber-200/30">
+          <Cog6ToothIcon className="w-8 h-8 text-amber-400" />
+        </div>
         <p className="text-sm text-gray-500">Configure Wrench first to browse transmittals.</p>
         <button
           onClick={onGoToConfig}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition"
+          className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium rounded-xl shadow-md shadow-blue-400/20 transition-all duration-200"
         >
           <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
         </button>
@@ -903,7 +975,7 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-xs">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-gray-200">
                   <tr>
                     {/* Expand toggle column header */}
                     <th className="px-3 py-2.5 w-8" />
@@ -922,7 +994,7 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
                     return (
                       <React.Fragment key={idx}>
                         <tr
-                          className={`transition cursor-pointer ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                          className={`transition-colors duration-150 cursor-pointer ${isExpanded ? 'bg-blue-50/70' : 'hover:bg-slate-50/80'}`}
                           onClick={() => handleRowClick(orderNo, row)}
                         >
                           {/* Chevron toggle */}
@@ -1174,16 +1246,16 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
       )}
 
       {/* Filter card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+      <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200/80 overflow-hidden">
+        <div className="px-6 py-5 bg-gradient-to-r from-indigo-700 via-blue-600 to-cyan-600">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
                 <MagnifyingGlassIcon className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Document Search</h3>
-                <p className="text-xs text-gray-500">
+                <h3 className="font-semibold text-white">Document Search</h3>
+                <p className="text-xs text-blue-100/80">
                   {choicesLoading
                     ? 'Connecting to Wrench…'
                     : choices.disciplines.length > 0
@@ -1193,7 +1265,7 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
               </div>
             </div>
             {choicesLoading && (
-              <ArrowPathIcon className="w-4 h-4 text-gray-400 animate-spin" />
+              <ArrowPathIcon className="w-4 h-4 text-white/70 animate-spin" />
             )}
           </div>
         </div>
@@ -1317,7 +1389,7 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
               type="button"
               onClick={() => handleSearch(1)}
               disabled={searching}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-400/25 transition-all duration-200"
             >
               {searching
                 ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -1344,14 +1416,14 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-xs">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-gray-200">
                   <tr>{DOC_COLUMNS.map((col) => (
                     <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
                   ))}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {results.documents.map((doc, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition">
+                    <tr key={idx} className="hover:bg-blue-50/40 transition-colors duration-150">
                       {DOC_COLUMNS.map((col) => (
                         <td key={col.key} className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" title={doc[col.key] || ''}>
                           {doc[col.key] || <span className="text-gray-300">&mdash;</span>}
@@ -1391,17 +1463,17 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
   if (!configured) {
     return (
       <div className="flex flex-col items-center justify-center py-16 space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
-          <Cog6ToothIcon className="w-9 h-9 text-amber-500" />
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center shadow-xl shadow-amber-200/40 ring-4 ring-amber-100/50">
+          <Cog6ToothIcon className="w-10 h-10 text-amber-500" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-800 mb-1">Wrench Not Configured</h3>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Wrench Not Configured</h3>
           <p className="text-sm text-gray-500 max-w-sm">
             Set up your Wrench SmartProject credentials in the Configuration tab to start browsing documents.
           </p>
         </div>
         <button onClick={onGoToConfig}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition">
+          className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-400/25 transition-all duration-200">
           <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
         </button>
       </div>
@@ -1441,25 +1513,37 @@ const OverviewStats = ({ config, logs }) => {
   const total = logs.length
   const success = logs.filter((l) => l.status === 'success').length
   const failed = logs.filter((l) => l.status === 'failed').length
-  const lastSync = logs[0]
+  const isVerified = config?.connection_verified
 
   const stats = [
-    { label: 'Total Syncs', value: total, color: 'text-gray-900' },
-    { label: 'Successful', value: success, color: 'text-green-700' },
-    { label: 'Failed', value: failed, color: 'text-red-700' },
+    { label: 'Total Syncs',  value: total,   color: 'text-slate-800', icon: ArrowsRightLeftIcon, bg: 'bg-blue-50',   iconColor: 'text-blue-500',   bar: 'from-blue-400 to-blue-600' },
+    { label: 'Successful',   value: success, color: 'text-green-700', icon: CheckCircleIcon,      bg: 'bg-green-50',  iconColor: 'text-green-500',  bar: 'from-green-400 to-emerald-500' },
+    { label: 'Failed',       value: failed,  color: 'text-red-600',   icon: XCircleIcon,          bg: 'bg-red-50',    iconColor: 'text-red-400',    bar: 'from-red-400 to-red-600' },
     {
-      label: 'Integration Status',
-      value: config?.connection_verified ? 'Active' : config ? 'Unverified' : 'Not Configured',
-      color: config?.connection_verified ? 'text-green-700' : 'text-orange-600',
+      label: 'Status',
+      value: isVerified ? 'Active' : config ? 'Unverified' : 'Not Set',
+      color: isVerified ? 'text-green-700' : 'text-orange-600',
+      icon: isVerified ? ShieldCheckIcon : Cog6ToothIcon,
+      bg: isVerified ? 'bg-green-50' : 'bg-orange-50',
+      iconColor: isVerified ? 'text-green-500' : 'text-orange-400',
+      bar: isVerified ? 'from-green-400 to-emerald-500' : 'from-orange-300 to-orange-500',
     },
   ]
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map((s) => (
-        <div key={s.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{s.label}</p>
-          <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+      {stats.map((s, i) => (
+        <div key={s.label} className="wrench-fade-up bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:border-gray-200 transition-all duration-300 p-5 group overflow-hidden relative" style={{ animationDelay: `${i * 90}ms` }}>
+          {/* decorative corner highlight */}
+          <div className="absolute top-0 right-0 w-28 h-28 rounded-full bg-gradient-to-br from-slate-50 to-transparent -translate-y-10 translate-x-10 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+          <div className="flex items-start justify-between mb-3 relative z-10">
+            <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">{s.label}</p>
+            <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-sm`}>
+              <s.icon className={`w-5 h-5 ${s.iconColor}`} />
+            </div>
+          </div>
+          <p className={`text-3xl font-extrabold ${s.color} relative z-10`}>{s.value}</p>
+          <div className={`mt-3 h-1.5 w-10 rounded-full bg-gradient-to-r ${s.bar} group-hover:w-full transition-all duration-700 ease-out`} />
         </div>
       ))}
     </div>
@@ -1567,18 +1651,18 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
   if (!configured) {
     return (
       <div className="flex flex-col items-center justify-center py-16 space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center">
-          <Cog6ToothIcon className="w-9 h-9 text-amber-500" />
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center shadow-xl shadow-amber-200/40 ring-4 ring-amber-100/50">
+          <Cog6ToothIcon className="w-10 h-10 text-amber-500" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-800 mb-1">Wrench Not Configured</h3>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Wrench Not Configured</h3>
           <p className="text-sm text-gray-500 max-w-sm">
             Configure and verify your Wrench credentials before exporting data to S3.
           </p>
         </div>
         <button
           onClick={onGoToConfig}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+          className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-400/25 transition-all duration-200"
         >
           <Cog6ToothIcon className="w-4 h-4" /> Go to Configuration
         </button>
@@ -1589,19 +1673,19 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
   return (
     <div className="space-y-5">
       {/* Control card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+      <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200/80 overflow-hidden">
+        <div className="px-6 py-5 bg-gradient-to-r from-orange-600 via-amber-500 to-yellow-500">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
                 <CloudArrowUpIcon className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Export to AWS S3</h3>
-                <p className="text-xs text-gray-500">Wrench → RADAI → S3 pipeline</p>
+                <h3 className="font-semibold text-white">Export to AWS S3</h3>
+                <p className="text-xs text-orange-100/80">Wrench → RADAI → S3 pipeline</p>
               </div>
             </div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-orange-50 text-orange-700 border border-orange-200">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-white/20 text-white border border-white/30 backdrop-blur-sm">
               s3://{S3_BUCKET_DISPLAY}/
             </span>
           </div>
@@ -1702,7 +1786,7 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
             type="button"
             onClick={handleStart}
             disabled={starting || (mode === 'realtime' && Boolean(activeRealtimeJob))}
-            className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-orange-400/25 transition-all duration-200"
           >
             {starting
               ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -1713,10 +1797,10 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
       </div>
 
       {/* Jobs table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-            <ClockIcon className="w-5 h-5 text-gray-400" />
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between bg-gray-50">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <ClockIcon className="w-5 h-5 text-indigo-400" />
             Export Jobs
           </h3>
           <div className="flex items-center gap-3">
@@ -1883,31 +1967,76 @@ const WrenchIntegration = () => {
 
   if (!admin) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <ShieldCheckIcon className="w-16 h-16 text-gray-300" />
-        <h2 className="text-lg font-semibold text-gray-600">Admin Access Required</h2>
-        <p className="text-sm text-gray-400">Only administrators can access the Wrench Integration settings.</p>
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 text-center">
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-rose-100 to-red-100 flex items-center justify-center shadow-xl shadow-rose-200/40 ring-4 ring-rose-100/50">
+          <ShieldCheckIcon className="w-10 h-10 text-rose-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-gray-700">Admin Access Required</h2>
+          <p className="text-sm text-gray-400 mt-1">Only administrators can access the Wrench Integration settings.</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 px-4 pt-8 pb-16 lg:px-10 xl:px-16 relative">
+      <style>{`
+        @keyframes wrench-fade-up {
+          from { opacity: 0; transform: translateY(22px); }
+          to   { opacity: 1; transform: translateY(0);    }
+        }
+        @keyframes wrench-float {
+          0%, 100% { transform: translateY(0);    }
+          50%       { transform: translateY(-14px); }
+        }
+        @keyframes wrench-float-slow {
+          0%, 100% { transform: translateY(0) scale(1);     }
+          33%       { transform: translateY(-10px) scale(1.01); }
+          66%       { transform: translateY(6px)  scale(0.99);  }
+        }
+        @keyframes wrench-shimmer {
+          0%   { background-position: -250% center; }
+          100% { background-position:  250% center; }
+        }
+        .wrench-fade-up   { animation: wrench-fade-up   0.55s cubic-bezier(0.16,1,0.3,1) both; }
+        .wrench-float     { animation: wrench-float     7s ease-in-out infinite; }
+        .wrench-float-slow{ animation: wrench-float-slow 11s ease-in-out infinite; }
+        .wrench-title {
+          background: linear-gradient(110deg, #0f172a 25%, #818cf8 50%, #1e40af 75%);
+          background-size: 250% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: wrench-shimmer 6s linear infinite;
+        }
+      `}</style>
+
+      {/* Decorative background orbs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden -z-10" aria-hidden="true">
+        <div className="wrench-float-slow absolute -top-40 -right-40 w-[560px] h-[560px] rounded-full bg-gradient-to-br from-blue-400/10 to-indigo-500/8 blur-3xl" />
+        <div className="wrench-float absolute -bottom-40 -left-32 w-[480px] h-[480px] rounded-full bg-gradient-to-tr from-slate-300/10 to-cyan-300/7 blur-3xl" style={{animationDelay:'3s'}} />
+        <div className="wrench-float-slow absolute top-1/3 right-1/4 w-[600px] h-[200px] rounded-full bg-gradient-to-r from-indigo-200/6 to-blue-200/4 blur-3xl" style={{animationDelay:'6s'}} />
+      </div>
+
       {/* Page header */}
       <div className="mb-8">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow">
-            <WrenchScrewdriverIcon className="w-7 h-7 text-white" />
+        <div className="flex items-center gap-5">
+          <div className="relative wrench-float">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-700 to-slate-800 flex items-center justify-center shadow-2xl shadow-blue-500/30 ring-4 ring-blue-500/15 relative z-10">
+              <WrenchScrewdriverIcon className="w-9 h-9 text-white" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 blur-xl opacity-40 scale-125 -z-10" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">Wrench Integration</h1>
-              <span className="text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+            <div className="flex items-center gap-3">
+              <h1 className="wrench-title text-3xl font-extrabold tracking-tight">Wrench Integration</h1>
+              <span className="text-xs font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-2.5 py-0.5 rounded-full shadow-md">
                 Beta
               </span>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Connect RADAI with the Wrench Project Management Platform
+            <p className="text-sm text-gray-400 mt-1">
+              Connect RADAI with the Wrench SmartProject Platform
             </p>
           </div>
         </div>
@@ -1924,8 +2053,8 @@ const WrenchIntegration = () => {
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
-                config?.connection_verified ? 'bg-green-500' : configured ? 'bg-yellow-400' : 'bg-gray-400'
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                config?.connection_verified ? 'bg-green-500 animate-pulse' : configured ? 'bg-yellow-400' : 'bg-gray-400'
               }`}
             />
             {config?.connection_verified
@@ -1962,43 +2091,54 @@ const WrenchIntegration = () => {
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex gap-1">
+      <div className="mb-8">
+        <div className="inline-flex items-center gap-1 bg-white/80 backdrop-blur-sm p-1.5 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200/50 flex-wrap">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-slate-800 text-slate-900'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg shadow-slate-400/30'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-slate-100/70'
               }`}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className={`w-4 h-4 transition-colors duration-200 ${activeTab === tab.id ? 'text-blue-300' : ''}`} />
               {tab.label}
             </button>
           ))}
-        </nav>
+        </div>
       </div>
 
       {/* Tab content */}
       {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <ArrowPathIcon className="w-8 h-8 text-gray-400 animate-spin" />
+        <div className="flex flex-col items-center justify-center h-48 gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <ArrowPathIcon className="w-6 h-6 text-white animate-spin" />
+          </div>
+          <p className="text-sm text-gray-400 font-medium">Loading Wrench data…</p>
         </div>
       ) : (
-        <div className="max-w-4xl">
+        <div>
           {activeTab === 'overview' && (
             <div className="space-y-6">
               <OverviewStats config={config} logs={syncLogs} />
 
+              {/* Two-col grid: guide + activity */}
+              <div className="grid lg:grid-cols-2 gap-6 items-start">
+
               {/* Integration guide */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <InformationCircleIcon className="w-5 h-5 text-blue-500" />
-                  Integration Guide
-                </h3>
-                <ol className="space-y-3 text-sm text-gray-600">
+              <div className="wrench-fade-up bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5" style={{ animationDelay: '180ms' }}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm shrink-0">
+                      <InformationCircleIcon className="w-4 h-4 text-white" />
+                    </span>
+                    Integration Guide
+                  </h3>
+                  <span className="text-xs text-gray-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">6 steps</span>
+                </div>
+                <ol className="relative text-sm text-gray-600">
                   {[
                     'Go to the Configuration tab and enter the Wrench WebAPI Server URL, Server ID, login name, and password.',
                     'Optionally enter the DocumentSearch Service URL if it runs on a different host than the WebAPI.',
@@ -2007,39 +2147,65 @@ const WrenchIntegration = () => {
                     'Use the Documents tab to search and browse the Wrench document repository directly.',
                     'All activity is recorded in the Sync History and in the RBAC Audit Log.',
                   ].map((step, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    <li key={i} className="relative flex items-start gap-4 pb-5 last:pb-0 group">
+                      {i < 5 && <div className="absolute left-4 top-8 w-0.5 h-full bg-gradient-to-b from-slate-200 to-transparent pointer-events-none" />}
+                      <span
+                        className={`wrench-fade-up w-8 h-8 rounded-xl text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-md group-hover:scale-110 group-hover:rotate-3 transition-transform duration-200 z-10 bg-gradient-to-br ${['from-blue-500 to-indigo-600','from-indigo-500 to-violet-600','from-violet-500 to-purple-600','from-purple-500 to-pink-600','from-pink-500 to-rose-600','from-rose-500 to-orange-500'][i]}`}
+                        style={{ animationDelay: `${280 + i * 80}ms` }}
+                      >
                         {i + 1}
                       </span>
-                      {step}
+                      <div className="pt-1.5 flex-1">
+                        <p className="group-hover:text-gray-800 transition-colors duration-200 leading-relaxed">{step}</p>
+                        <span className="inline-block mt-1.5 text-xs font-medium text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full">{['Setup','Optional','Verify','Sync','Browse','Audit'][i]}</span>
+                      </div>
                     </li>
                   ))}
                 </ol>
               </div>
 
               {/* Recent activity */}
-              {syncLogs.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-100">
-                    <h3 className="font-semibold text-gray-900">Recent Sync Activity</h3>
+              {syncLogs.length > 0 ? (
+                <div className="wrench-fade-up bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" style={{ animationDelay: '260ms' }}>
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Recent Sync Activity
+                    </h3>
+                    <span className="text-xs text-gray-400 bg-slate-50 px-2.5 py-1 rounded-full border border-gray-100">
+                      Last {Math.min(syncLogs.length, 5)} of {syncLogs.length}
+                    </span>
                   </div>
-                  <div className="divide-y divide-gray-100">
-                    {syncLogs.slice(0, 5).map((log) => (
-                      <div key={log.id} className="px-6 py-3 flex items-center justify-between">
+                  <div className="divide-y divide-gray-50">
+                    {syncLogs.slice(0, 5).map((log, idx) => (
+                      <div key={log.id} className="wrench-fade-up px-6 py-3.5 flex items-center justify-between hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-transparent transition-all duration-200 group" style={{ animationDelay: `${360 + idx * 55}ms` }}>
                         <div className="flex items-center gap-3">
                           <StatusBadge status={log.status} />
-                          <span className="text-sm text-gray-700">
-                            {log.direction.replace(/_/g, ' → ')} · {log.entity_type}
-                          </span>
+                          <div>
+                            <span className="text-sm text-gray-700 font-medium group-hover:text-gray-900 transition-colors duration-150">
+                              {log.direction.replace(/_/g, ' → ')}
+                            </span>
+                            <span className="mx-1.5 text-gray-300">·</span>
+                            <span className="text-xs text-gray-500 capitalize">{log.entity_type}</span>
+                          </div>
                         </div>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-400 tabular-nums">
                           {new Date(log.started_at).toLocaleString()}
                         </span>
                       </div>
                     ))}
                   </div>
                 </div>
+              ) : (
+                <div className="wrench-fade-up hidden lg:flex items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 p-8 min-h-[200px]" style={{ animationDelay: '260ms' }}>
+                  <div className="text-center">
+                    <ArrowsRightLeftIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No sync activity yet</p>
+                  </div>
+                </div>
               )}
+
+              </div>{/* /two-col grid */}
 
               {!configured && (
                 <Alert
