@@ -701,6 +701,27 @@ const TRANSMITTAL_COL_PRIORITY = [
 const MAX_TABLE_COLS = 7
 const TRANSMITTAL_PAGE_SIZE = 100
 
+// Soft-coded: the field in a transmittal row that links it to its documents in Wrench.
+// Wrench uses ORDER_NO as the common join key between GetTransmittalList and GetDocumentList.
+const TRANS_DOC_LINK_FIELD = 'ORDER_NO'
+
+// Soft-coded column priority for the per-transmittal document sub-table.
+// First keys found in the returned data win; remaining slots fill from any extra fields.
+const TRANS_DOC_COL_PRIORITY = [
+  { key: 'DOC_NO',            label: 'Doc No.' },
+  { key: 'DOCUMENT_NO',       label: 'Doc No.' },       // alias used by some instances
+  { key: 'DOC_DESCRIPTION',   label: 'Description' },
+  { key: 'DISCIPLINE',        label: 'Discipline' },
+  { key: 'REVISION',          label: 'Rev.' },
+  { key: 'REVISION_NO',       label: 'Rev.' },
+  { key: 'STATUS',            label: 'Status' },
+  { key: 'DOC_STATUS',        label: 'Status' },
+  { key: 'WF_TEAM_NAME',      label: 'WF Team' },
+  { key: 'CREATED_BY_USER',   label: 'Created By' },
+]
+// Soft-coded: max document columns shown in the sub-table
+const TRANS_DOC_MAX_COLS = 5
+
 // Soft-coded document columns for the SearchObject API result
 const DOC_COLUMNS = [
   { key: 'DOC_NO',           label: 'Doc No.' },
@@ -743,6 +764,39 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
   const [transError, setTransError] = useState(null)
   const [filterText, setFilterText] = useState('')
   const [derivedCols, setDerivedCols] = useState([])
+
+  // Expand / collapse: keyed by the ORDER_NO of the expanded row (null = none)
+  const [expandedOrderNo, setExpandedOrderNo] = useState(null)
+  // Per-transmittal document cache: { [orderNo]: { loading, error, documents, cols } }
+  const [docCache, setDocCache] = useState({})
+
+  const fetchDocs = useCallback(async (orderNo, row = {}) => {
+    if (!orderNo) return
+    // Soft-coded: candidate field names for the transmittal ID — backend tries all of them
+    const transId = row['TRANS_ID'] || row['TRANS_REF_NO'] || row['TRANSMITTAL_ID'] || ''
+    setDocCache((prev) => ({ ...prev, [orderNo]: { loading: true, error: null, documents: null, cols: [] } }))
+    try {
+      const res = await wrenchService.getTransmittalDocuments(orderNo, transId)
+      const docs = res.data?.documents ?? []
+      const cols = deriveColumns(docs, TRANS_DOC_COL_PRIORITY, TRANS_DOC_MAX_COLS)
+      setDocCache((prev) => ({ ...prev, [orderNo]: { loading: false, error: null, documents: docs, cols } }))
+    } catch (err) {
+      setDocCache((prev) => ({
+        ...prev,
+        [orderNo]: { loading: false, error: err.response?.data?.detail || 'Failed to load documents.', documents: [], cols: [] },
+      }))
+    }
+  }, [])
+
+  const handleRowClick = useCallback((orderNo, row) => {
+    if (!orderNo) return
+    setExpandedOrderNo((prev) => {
+      const next = prev === orderNo ? null : orderNo
+      // Fetch only if not yet cached, passing the full row so TRANS_ID can be extracted
+      if (next && !docCache[next]) fetchDocs(next, row)
+      return next
+    })
+  }, [docCache, fetchDocs])
 
   const load = useCallback(async (targetPage = 1) => {
     setLoadingTrans(true)
@@ -851,6 +905,8 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
               <table className="min-w-full text-xs">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
+                    {/* Expand toggle column header */}
+                    <th className="px-3 py-2.5 w-8" />
                     {derivedCols.map((col) => (
                       <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">
                         {col.label}
@@ -859,21 +915,113 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filtered.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-blue-50 transition">
-                      {derivedCols.map((col) => (
-                        <td
-                          key={col.key}
-                          className="px-4 py-2.5 text-gray-700 max-w-[220px] truncate"
-                          title={String(row[col.key] ?? '')}
+                  {filtered.map((row, idx) => {
+                    const orderNo = row[TRANS_DOC_LINK_FIELD]
+                    const isExpanded = expandedOrderNo === orderNo
+                    const cache = docCache[orderNo] || {}
+                    return (
+                      <React.Fragment key={idx}>
+                        <tr
+                          className={`transition cursor-pointer ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                          onClick={() => handleRowClick(orderNo, row)}
                         >
-                          {row[col.key] != null && row[col.key] !== ''
-                            ? String(row[col.key])
-                            : <span className="text-gray-300">&mdash;</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                          {/* Chevron toggle */}
+                          <td className="px-3 py-2.5 text-gray-400">
+                            <ChevronDownIcon
+                              className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180 text-blue-500' : ''}`}
+                            />
+                          </td>
+                          {derivedCols.map((col) => (
+                            <td
+                              key={col.key}
+                              className="px-4 py-2.5 text-gray-700 max-w-[220px] truncate"
+                              title={String(row[col.key] ?? '')}
+                            >
+                              {row[col.key] != null && row[col.key] !== ''
+                                ? String(row[col.key])
+                                : <span className="text-gray-300">&mdash;</span>}
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* ── Expanded document sub-table ─────────────────── */}
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={derivedCols.length + 1} className="px-0 py-0 bg-blue-50">
+                              <div className="mx-6 my-3 border border-blue-200 rounded-lg overflow-hidden">
+                                {/* Sub-table header */}
+                                <div className="px-4 py-2 bg-blue-100 border-b border-blue-200 flex items-center justify-between">
+                                  <span className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
+                                    <DocumentTextIcon className="w-3.5 h-3.5" />
+                                    Documents for {orderNo}
+                                    {cache.documents != null && (
+                                      <span className="ml-1 font-normal text-blue-600">
+                                        ({cache.documents.length} doc{cache.documents.length !== 1 ? 's' : ''})
+                                      </span>
+                                    )}
+                                  </span>
+                                  {cache.loading && (
+                                    <ArrowPathIcon className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                                  )}
+                                </div>
+
+                                {/* Loading */}
+                                {cache.loading && (
+                                  <div className="px-4 py-4 text-xs text-gray-400">Loading documents…</div>
+                                )}
+
+                                {/* Error */}
+                                {cache.error && !cache.loading && (
+                                  <div className="px-4 py-3 text-xs text-red-600">{cache.error}</div>
+                                )}
+
+                                {/* Empty */}
+                                {!cache.loading && !cache.error && cache.documents?.length === 0 && (
+                                  <div className="px-4 py-3 text-xs text-gray-400">
+                                    No documents found for this transmittal via ORDER_NO filter.
+                                  </div>
+                                )}
+
+                                {/* Document rows */}
+                                {!cache.loading && cache.documents?.length > 0 && (
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                      <thead className="bg-blue-50 border-b border-blue-200">
+                                        <tr>
+                                          {cache.cols.map((c) => (
+                                            <th key={c.key} className="px-3 py-2 text-left font-semibold text-blue-700 whitespace-nowrap">
+                                              {c.label}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-blue-100 bg-white">
+                                        {cache.documents.map((doc, di) => (
+                                          <tr key={di} className="hover:bg-blue-50 transition">
+                                            {cache.cols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="px-3 py-2 text-gray-700 max-w-[200px] truncate"
+                                                title={String(doc[c.key] ?? '')}
+                                              >
+                                                {doc[c.key] != null && doc[c.key] !== ''
+                                                  ? <span className={c.key === 'DOC_NO' || c.key === 'DOCUMENT_NO' ? 'font-mono font-semibold text-blue-700' : ''}>{String(doc[c.key])}</span>
+                                                  : <span className="text-gray-300">&mdash;</span>}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -907,30 +1055,79 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
   )
 }
 
-// ─── Document Search section (requires SVC URL) ────────────────────────────────
+// ─── Document Search section ──────────────────────────────────────────────────
 
-const DocumentSearchSection = ({ config }) => {
+// Soft-coded: page size options offered in the rows-per-page selector
+const DOC_PAGE_SIZE_OPTIONS = [25, 50, 100, 200]
+
+// Soft-coded fallback discipline list — used when DocumentSearch API is unreachable.
+// These cover the standard O&G engineering disciplines. Edit here to add project-specific ones.
+const _FALLBACK_DISCIPLINES = [
+  'ARCH', 'CIVIL', 'COMM', 'CONTROL', 'ELEC', 'FIRE',
+  'HVAC', 'INST', 'MECH', 'PIPING', 'PROCESS', 'SAFETY',
+  'STRUCTURAL', 'TELECOM', 'GENERAL',
+]
+
+// Convert a native date-input value ('YYYY-MM-DD') to Wrench format ('YYYY/MM/DD HH:MM')
+const _toWrenchDate = (isoDate, endOfDay = false) => {
+  if (!isoDate) return ''
+  return isoDate.replace(/-/g, '/') + (endOfDay ? ' 23:59' : ' 00:00')
+}
+
+const DocumentSearchSection = ({ config, onGoToConfig }) => {
   const hasSvcUrl = Boolean(config?.svc_url)
-  const [filters, setFilters] = useState({
-    discipline: '',
-    doc_no: '',
-    date_from: '',
-    date_to: '',
-    page_size: 50,
-  })
-  const [page, setPage] = useState(1)
-  const [results, setResults] = useState(null)
+
+  // Choices loaded once on mount from the backend sample endpoint
+  const [choices, setChoices] = useState({ disciplines: [], doc_numbers: [], svc_url_required: false })
+  const [choicesLoading, setChoicesLoading] = useState(false)
+
+  // Filter state — discipline/doc_no hold the display value; dates are ISO 'YYYY-MM-DD'
+  const [discipline, setDiscipline]   = useState('')
+  const [docNoInput, setDocNoInput]   = useState('')
+  const [dateFrom, setDateFrom]       = useState('')
+  const [dateTo, setDateTo]           = useState('')
+  const [pageSize, setPageSize]       = useState(50)
+
+  const [page, setPage]         = useState(1)
+  const [results, setResults]   = useState(null)
   const [searching, setSearching] = useState(false)
-  const [alert, setAlert] = useState(null)
+  const [alert, setAlert]       = useState(null)
 
-  const inputClass =
-    'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition'
+  // Derived: doc numbers shown in datalist — filtered by what user has typed
+  const filteredDocNumbers = docNoInput.length >= 1
+    ? choices.doc_numbers.filter((d) => d.toLowerCase().includes(docNoInput.toLowerCase())).slice(0, 100)
+    : choices.doc_numbers.slice(0, 100)
 
+  // Effective disciplines: real Wrench data when available, fallback list otherwise
+  const effectiveDisciplines = choices.disciplines.length > 0
+    ? choices.disciplines
+    : _FALLBACK_DISCIPLINES
+
+  // needsSvcUrl is only true when the backend explicitly reports both REST and DocumentSearch failed
+  const needsSvcUrl = Boolean(choices.svc_url_required)
+
+  // ── Load choices on mount ────────────────────────────────────────────────
+  useEffect(() => {
+    setChoicesLoading(true)
+    wrenchService.getDocumentChoices()
+      .then((res) => setChoices(res.data || { disciplines: [], doc_numbers: [], svc_url_required: false }))
+      .catch(() => {/* silent — form still works with fallback list */})
+      .finally(() => setChoicesLoading(false))
+  }, [])
+
+  // ── Search handler ───────────────────────────────────────────────────────
   const handleSearch = async (targetPage = 1) => {
     setSearching(true)
     setAlert(null)
     try {
-      const res = await wrenchService.searchDocuments({ ...filters, page: targetPage })
+      const res = await wrenchService.searchDocuments({
+        discipline: discipline || undefined,
+        doc_no:     docNoInput || undefined,
+        date_from:  _toWrenchDate(dateFrom, false) || undefined,
+        date_to:    _toWrenchDate(dateTo,   true)  || undefined,
+        page:       targetPage,
+        page_size:  pageSize,
+      })
       setResults(res.data)
       setPage(targetPage)
     } catch (err) {
@@ -943,37 +1140,61 @@ const DocumentSearchSection = ({ config }) => {
     }
   }
 
-  const totalPages = results ? Math.ceil(results.total / filters.page_size) : 0
+  const handleClear = () => {
+    setDiscipline('')
+    setDocNoInput('')
+    setDateFrom('')
+    setDateTo('')
+    setResults(null)
+    setAlert(null)
+    setPage(1)
+  }
+
+  const totalPages = results ? Math.ceil(results.total / pageSize) : 0
+
+  const inputClass =
+    'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white'
+  const selectClass =
+    'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white appearance-none'
 
   return (
     <div className="space-y-5">
-      {/* SVC URL notice */}
-      {!hasSvcUrl && (
-        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="font-semibold text-amber-800">Document Search Service URL not configured</p>
-            <p className="mt-1 text-amber-700">
-              This feature uses Wrench's <em>DocumentSearch / SearchObject</em> WCF API, which runs on a
-              separate service host. Ask your Wrench administrator for the SVC URL and add it in the{' '}
-              <strong>Configuration tab</strong> under "Document Search Service URL".
-              <br />The <strong>Transmittals</strong> tab works without it.
+      {/* Both REST and DocumentSearch failed — show a soft info note */}
+      {needsSvcUrl && (
+        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <InformationCircleIcon className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+          <div className="text-sm flex-1">
+            <p className="font-semibold text-blue-800">Could not reach the Wrench document API</p>
+            <p className="mt-1 text-blue-700">
+              Using the standard O&G discipline list. You can still type any Document Number manually.
+              If your Wrench instance uses a dedicated DocumentSearch server, add its URL in Configuration.
             </p>
           </div>
         </div>
       )}
 
       {/* Filter card */}
-      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${!hasSvcUrl ? 'opacity-60 pointer-events-none select-none' : ''}`}>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
-              <MagnifyingGlassIcon className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
+                <MagnifyingGlassIcon className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Document Search</h3>
+                <p className="text-xs text-gray-500">
+                  {choicesLoading
+                    ? 'Connecting to Wrench…'
+                    : choices.disciplines.length > 0
+                      ? `${choices.disciplines.length} disciplines · ${choices.doc_numbers.length} docs loaded from Wrench`
+                      : 'Query the Wrench document repository'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Document Search</h3>
-              <p className="text-xs text-gray-500">Query the Wrench document repository via SearchObject API</p>
-            </div>
+            {choicesLoading && (
+              <ArrowPathIcon className="w-4 h-4 text-gray-400 animate-spin" />
+            )}
           </div>
         </div>
 
@@ -981,44 +1202,126 @@ const DocumentSearchSection = ({ config }) => {
           {alert && <Alert type={alert.type} message={alert.message} />}
 
           <div className="grid grid-cols-2 gap-4">
+
+            {/* ── Discipline dropdown ──────────────────────────────────── */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Discipline</label>
-              <input type="text" value={filters.discipline}
-                onChange={(e) => setFilters((f) => ({ ...f, discipline: e.target.value }))}
-                placeholder="e.g. INST, PIPING, ELEC" className={inputClass} />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Discipline
+                <span className="ml-1 text-gray-400 font-normal">
+                  {choices.disciplines.length > 0
+                    ? `(${choices.disciplines.length} from Wrench)`
+                    : `(${_FALLBACK_DISCIPLINES.length} standard)`}
+                </span>
+              </label>
+              <div className="relative">
+                <select
+                  value={discipline}
+                  onChange={(e) => setDiscipline(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">— All Disciplines —</option>
+                  {effectiveDisciplines.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                  {/* Allow free-typed value even if not in list */}
+                  {discipline && !effectiveDisciplines.includes(discipline) && (
+                    <option value={discipline}>{discipline} (custom)</option>
+                  )}
+                </select>
+                <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
             </div>
+
+            {/* ── Document No. combobox (datalist) ────────────────────── */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Document No.</label>
-              <input type="text" value={filters.doc_no}
-                onChange={(e) => setFilters((f) => ({ ...f, doc_no: e.target.value }))}
-                placeholder="Exact DOC_NO match" className={inputClass} />
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Document No.
+                {choices.doc_numbers.length > 0 && (
+                  <span className="ml-1 text-gray-400 font-normal">({choices.doc_numbers.length} available)</span>
+                )}
+              </label>
+              <input
+                list="wrench-doc-numbers"
+                type="text"
+                value={docNoInput}
+                onChange={(e) => setDocNoInput(e.target.value)}
+                placeholder={
+                  choices.doc_numbers.length > 0
+                    ? 'Type or select a Doc No.'
+                    : needsSvcUrl
+                      ? 'Type a Doc No. (live list available after SVC URL is set)'
+                      : 'e.g. P16093-30-76-08'
+                }
+                className={inputClass}
+              />
+              <datalist id="wrench-doc-numbers">
+                {filteredDocNumbers.map((d) => (
+                  <option key={d} value={d} />
+                ))}
+              </datalist>
             </div>
+
+            {/* ── Approved From (date picker) ──────────────────────────── */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Approved From</label>
-              <input type="text" value={filters.date_from}
-                onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-                placeholder="YYYY/MM/DD HH:MM" className={inputClass} />
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className={inputClass}
+              />
+              {dateFrom && (
+                <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateFrom, false)}</p>
+              )}
             </div>
+
+            {/* ── Approved To (date picker) ─────────────────────────────── */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Approved To</label>
-              <input type="text" value={filters.date_to}
-                onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-                placeholder="YYYY/MM/DD HH:MM" className={inputClass} />
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
+                className={inputClass}
+              />
+              {dateTo && (
+                <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateTo, true)}</p>
+              )}
             </div>
           </div>
 
+          {/* Controls row */}
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <label className="text-xs font-medium text-gray-600">Rows per page:</label>
-              <select value={filters.page_size}
-                onChange={(e) => setFilters((f) => ({ ...f, page_size: Number(e.target.value) }))}
-                className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none">
-                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                {DOC_PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
+              {(discipline || docNoInput || dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline transition"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
-            <button type="button" onClick={() => handleSearch(1)} disabled={searching || !hasSvcUrl}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">
-              {searching ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <MagnifyingGlassIcon className="w-4 h-4" />}
+            <button
+              type="button"
+              onClick={() => handleSearch(1)}
+              disabled={searching}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+            >
+              {searching
+                ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                : <MagnifyingGlassIcon className="w-4 h-4" />}
               {searching ? 'Searching…' : 'Search Documents'}
             </button>
           </div>
@@ -1126,7 +1429,7 @@ const DocumentSearchPanel = ({ config, configured, onGoToConfig }) => {
         <TransmittalsSection configured={configured} onGoToConfig={onGoToConfig} />
       )}
       {innerTab === 'doc_search' && (
-        <DocumentSearchSection config={config} />
+        <DocumentSearchSection config={config} onGoToConfig={onGoToConfig} />
       )}
     </div>
   )

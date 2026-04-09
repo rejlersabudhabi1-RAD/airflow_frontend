@@ -58,12 +58,38 @@ const wrenchService = {
   searchDocuments: (filters = {}) => apiService.post(`${BASE}/sync/search-documents/`, filters),
 
   /**
+   * Fetch unique discipline codes and document numbers from a sample search.
+   * Used to populate dropdowns in the Document Search UI.
+   * Returns { disciplines: string[], doc_numbers: string[] }
+   */
+  getDocumentChoices: () => apiService.get(`${BASE}/sync/document-choices/`),
+
+  /**
    * List transmittals from Wrench via the REST WebAPI.
    * @param {number} page
    * @param {number} pageSize
    */
   listTransmittals: (page = 1, pageSize = 100) =>
     apiService.get(`${BASE}/sync/list-transmittals/`, { params: { page, page_size: pageSize } }),
+
+  /**
+   * Fetch documents linked to a transmittal via its ORDER_NO (and optionally TRANS_ID).
+   * Backend tries transmittal-specific REST paths first, then GenericDocumentList, then DocumentSearch.
+   * No SVC URL required for the first two strategies.
+   * @param {string} orderNo   – the ORDER_NO field from the transmittal row
+   * @param {string} [transId] – the TRANS_ID field (sent as fallback identifier)
+   * @param {number} page
+   * @param {number} pageSize
+   */
+  getTransmittalDocuments: (orderNo, transId = '', page = 1, pageSize = 200) =>
+    apiService.get(`${BASE}/sync/trans-documents/`, {
+      params: {
+        order_no:  orderNo,
+        ...(transId ? { trans_id: transId } : {}),
+        page,
+        page_size: pageSize,
+      },
+    }),
 
   // ── S3 Export ─────────────────────────────────────────────────────────────
   /** List S3 export jobs (last 50) */
