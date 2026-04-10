@@ -24,16 +24,26 @@ import { STORAGE_KEYS } from '../../../config/app.config';
 // key must match the backend response field name.
 // ---------------------------------------------------------------------------
 const COLUMNS = [
-  { key: 'tag',                label: 'Tag Number',          width: 14 },
-  { key: 'type_label',         label: 'Equipment Type',      width: 22 },
-  { key: 'description',        label: 'Description',         width: 30 },
-  { key: 'area',               label: 'Area / Unit',         width: 15 },
-  { key: 'drawing_ref',        label: 'Drawing Reference',   width: 22 },
-  { key: 'line_connections',   label: 'Line Connections',    width: 30, isArray: true },
-  { key: 'nozzle_connections', label: 'Nozzle Connections',  width: 18, isArray: true },
-  { key: 'service_fluid',      label: 'Service / Fluid',     width: 20 },
-  { key: 'material_class',     label: 'Material / Spec',     width: 16 },
-  { key: 'process_notes',      label: 'Notes / Refs',        width: 20 },
+  { key: 'sl_no',               label: 'SL No.',                   width: 6  },
+  { key: 'revision',            label: 'Rev.',                      width: 7  },
+  { key: 'tag',                 label: 'Equipment Tag No.',          width: 16 },
+  { key: 'description',         label: 'Description',               width: 28 },
+  { key: 'design_flowrate',     label: 'Design Flowrate / Duty',    width: 22 },
+  { key: 'oper_pressure',       label: 'Oper. Pressure (PSIG)',     width: 18 },
+  { key: 'oper_temperature',    label: 'Oper. Temp. (°F)',          width: 16 },
+  { key: 'design_pressure_min', label: 'Des./Set Press. Min (PSIG)', width: 20 },
+  { key: 'design_pressure_max', label: 'Des./Set Press. Max (PSIG)', width: 20 },
+  { key: 'design_temp_min',     label: 'Des. Temp. Min (°F)',       width: 16 },
+  { key: 'design_temp_max',     label: 'Des. Temp. Max (°F)',       width: 16 },
+  { key: 'moc',                 label: 'MOC',                       width: 16 },
+  { key: 'insulation',          label: 'Insulation',                width: 14 },
+  { key: 'dimension_length',    label: 'Length / Height (mm)',      width: 18 },
+  { key: 'dimension_diameter',  label: 'Diameter / Width (mm)',     width: 18 },
+  { key: 'motor_rating',        label: 'Motor Rating (kW)',         width: 14 },
+  { key: 'pid_no',              label: 'P&ID No.',                  width: 16 },
+  { key: 'quality_required',    label: 'Quality Required',          width: 16 },
+  { key: 'phase',               label: 'Phase',                     width: 12 },
+  { key: 'remarks',             label: 'Remarks',                   width: 24 },
 ];
 
 const UPLOAD_TIMEOUT_MS  = 600000;  // 10 min
@@ -173,6 +183,7 @@ const EquipmentList = () => {
   const [progress,       setProgress]       = useState(0);
   const [statusMessage,  setStatusMessage]  = useState('');
   const [results,        setResults]        = useState(null);
+  const [debugInfo,      setDebugInfo]      = useState(null);
   const [error,          setError]          = useState(null);
   const [sortCol,        setSortCol]        = useState('tag');
   const [sortAsc,        setSortAsc]        = useState(true);
@@ -253,6 +264,7 @@ const EquipmentList = () => {
     setIsProcessing(true);
     setError(null);
     setResults(null);
+    setDebugInfo(null);
     setProgress(0);
     setStatusMessage('Uploading P&ID…');
 
@@ -294,6 +306,7 @@ const EquipmentList = () => {
         // Synchronous result (HTTP 200)
         if (data.success && data.equipment !== undefined) {
           setResults({ equipment: data.equipment, total: data.total, drawing_ref: data.drawing_ref, upload_id: data.upload_id });
+          if (data.debug_info) setDebugInfo(data.debug_info);
           setProgress(100);
           setStatusMessage('Extraction complete!');
           setIsProcessing(false);
@@ -497,7 +510,7 @@ const EquipmentList = () => {
               Equipment <span className="text-emerald-600 ml-2">List</span>
             </h1>
             <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
-              Automatically extract and classify equipment tags — Vessels, Pumps, Heat Exchangers, Reactors and more — from P&amp;ID drawings using AI vision
+              Extract 18 engineering fields from Equipment List registers or P&amp;ID drawings using AI — Tag No., Description, Operating &amp; Design Conditions, MOC, Insulation, Dimensions, Motor Rating, P&amp;ID Ref and more
             </p>
           </div>
 
@@ -571,7 +584,7 @@ const EquipmentList = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-slate-600 font-medium text-sm">Drop a P&amp;ID PDF or click to browse</p>
-                      <p className="text-slate-400 text-xs mt-1">Supports vector PDFs and scanned drawings · Multi-angle text extraction</p>
+                      <p className="text-slate-400 text-xs mt-1">Equipment List registers and P&amp;ID drawings · Auto-detects table vs drawing mode · Multi-angle OCR</p>
                     </div>
                   </>
                 )}
@@ -679,7 +692,9 @@ const EquipmentList = () => {
               </div>
 
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-xs text-slate-400">AI scanning document</span>
+                <span className="text-xs text-slate-400">
+                  {elapsedSeconds > 20 ? 'OCR scanning P&ID drawing — large drawings may take 1–3 min' : 'AI scanning document'}
+                </span>
                 {[0, 1, 2].map(i => (
                   <div key={i} className="w-1.5 h-4 rounded-full bg-emerald-400" style={{
                     animation: 'eq-dot-wave 1.1s ease infinite',
@@ -702,6 +717,70 @@ const EquipmentList = () => {
                 <span className="text-red-500 text-xs font-bold">✕</span>
               </div>
               <p className="text-red-600 text-sm font-medium">{error}</p>
+            </div>
+          )}
+
+          {/* ── Diagnostic Panel (when 0 items extracted) ── */}
+          {debugInfo && results && results.total === 0 && (
+            <div className="rounded-2xl p-5 mb-4 eq-section" style={{
+              background: '#fffbeb',
+              border: '1px solid rgba(245,158,11,0.35)',
+              boxShadow: '0 2px 12px rgba(245,158,11,0.08)',
+              animationDelay: '0.1s',
+            }}>
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                }}>
+                  <span className="text-amber-600 text-sm font-bold">!</span>
+                </div>
+                <h3 className="text-sm font-semibold text-amber-800">No Equipment Found — Extraction Diagnostics</h3>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                {[
+                  { label: 'Mode', value: debugInfo.extraction_mode || '—' },
+                  { label: 'Text Extracted', value: debugInfo.text_len != null ? `${debugInfo.text_len.toLocaleString()} chars` : '—' },
+                  { label: 'Raw Tag Matches', value: debugInfo.raw_items_count != null ? String(debugInfo.raw_items_count) : '—' },
+                  { label: 'After Dedup', value: debugInfo.after_dedup_count != null ? String(debugInfo.after_dedup_count) : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5" style={{
+                    background: 'white',
+                    border: '1px solid rgba(245,158,11,0.2)',
+                  }}>
+                    <p className="text-xs text-amber-600 font-medium mb-0.5">{label}</p>
+                    <p className="text-sm font-bold text-slate-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {debugInfo.text_preview ? (
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 mb-1.5">PDF Text Preview (first 400 chars extracted by backend):</p>
+                  <pre className="text-xs text-slate-600 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all" style={{
+                    background: '#fefce8',
+                    border: '1px solid rgba(245,158,11,0.18)',
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                  }}>
+                    {debugInfo.text_preview}
+                  </pre>
+                  <p className="text-xs text-amber-600 mt-2 leading-relaxed">
+                    {debugInfo.text_len === 0
+                      ? '⚠ No text was extracted from the PDF. The drawing may be a scanned image — try enabling Force OCR in a future version.'
+                      : debugInfo.raw_items_count === 0
+                        ? '⚠ Text was extracted but no equipment tags (e.g. V-308, P-101A) were found in it. Check that the preview above contains recognisable tag numbers.'
+                        : '⚠ Tags were found but removed during deduplication. The tag pattern may be too strict — contact support.'}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-600">
+                  {debugInfo.extraction_mode === 'register'
+                    ? 'Register mode ran but found no matching table structure in the document.'
+                    : 'No text preview available — extraction may have encountered an error before reaching the text stage.'}
+                </p>
+              )}
             </div>
           )}
 
@@ -879,20 +958,28 @@ const EquipmentList = () => {
               <div className="flex items-center gap-2 mb-4">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"
                   style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
-                <h3 className="text-sm font-semibold text-slate-700 tracking-wide">What Gets Extracted</h3>
+                <h3 className="text-sm font-semibold text-slate-700 tracking-wide">What Gets Extracted (18-Field Register)</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
-                  ['🏷️', 'Tag Number',          'ISA-style tags (V-101, P-201A, E-302…) extracted by regex'],
-                  ['⚙️', 'Equipment Type',      'Classified by tag prefix via soft-coded lookup (Vessel, Pump, HE…)'],
-                  ['📝', 'Description',         'Token-based description from context window around each tag'],
-                  ['📍', 'Area / Unit',          'AREA / UNIT / TRAIN labels near the equipment tag'],
-                  ['🔗', 'Line Connections',     'Pipeline designation tokens adjacent to the tag'],
-                  ['🔩', 'Nozzle Connections',   'Nozzle tags (N1/N2/N3) referenced near equipment'],
-                  ['💧', 'Service / Fluid',      'Fluid/service keywords (crude, gas, water…) in surrounding text'],
-                  ['🧱', 'Material / Spec',      'Piping spec class codes (A1A, CS, SS, DSS…) visible on the drawing'],
-                  ['📋', 'Notes / Refs',         'NOTE 1 / SEE NOTE 2 cross-references adjacent to the tag'],
-                  ['🔄', 'Multi-Angle OCR',      'Extracts text at 0°, 90°, 180°, 270° — catches vertical pipe labels'],
+                  ['🔢', 'SL No. & Revision',           'Row serial number and document revision extracted from the register table'],
+                  ['🏷️', 'Equipment Tag No.',            'ISA/project-style tag (V-101, P-201A, E-302…) from tag column'],
+                  ['📝', 'Description',                  'Equipment description as listed in the register'],
+                  ['💧', 'Design Flowrate / Duty',       'Design flow rate, duty, or volume capacity from the process column'],
+                  ['🌡️', 'Operating Pressure (PSIG)',    'Normal operating pressure extracted from oper. press. column'],
+                  ['🔥', 'Operating Temperature (°F)',   'Normal operating temperature from oper. temp. column'],
+                  ['⬆️', 'Design/Set Press. Min & Max',  'Minimum and maximum design or set pressure from the two PSIG columns'],
+                  ['⬆️', 'Design Temp. Min & Max (°F)',  'Minimum and maximum design temperature from the two Deg F columns'],
+                  ['🧱', 'MOC',                          'Material of Construction — shell, body or wetted-parts material'],
+                  ['🧊', 'Insulation',                   'Insulation type or code (PERS, PITS, ICS, CONS, HOT, COLD…)'],
+                  ['📐', 'Length / Height (mm)',          'Tangent-to-tangent length or overall height from the dimension column'],
+                  ['⭕', 'Diameter / Width (mm)',         'Outside diameter or width from the dimension column (NOTE 1)'],
+                  ['⚡', 'Motor Rating (kW)',             'Installed motor or driver power rating from the KW column'],
+                  ['📋', 'P&ID No.',                     'P&ID reference number cross-linked to this equipment item'],
+                  ['✅', 'Quality Required',              'Quality inspection / testing requirement code'],
+                  ['🔄', 'Phase',                        'Process fluid phase (Gas, Liquid, Mixed, Vapour…)'],
+                  ['💬', 'Remarks',                      'Notes, holds, TBD items or other remarks from the last column'],
+                  ['🔀', 'Multi-Angle OCR',              'Extracts text at 0°, 90°, 180°, 270° — handles landscape CAD title blocks'],
                 ].map(([icon, title, desc]) => (
                   <div key={title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{
                     background: '#f8fafc',
