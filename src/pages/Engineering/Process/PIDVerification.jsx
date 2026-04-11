@@ -780,6 +780,9 @@ const PIDVerification = () => {
   const [equipTagSearch, setEquipTagSearch] = useState('');
   const [selectedEquipTag, setSelectedEquipTag] = useState(null); // detail drawer
   const [equipViewMode,  setEquipViewMode]  = useState('grid');   // 'grid' | 'list'
+  // Equipment panel — view tab (top-level navigation) + sort
+  const [equipViewTab,  setEquipViewTab]   = useState('register'); // 'insights'|'register'|'analytics'
+  const [equipSortBy,   setEquipSortBy]    = useState('issues');   // 'issues'|'name'|'type'|'family'
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -4451,8 +4454,7 @@ const PIDVerification = () => {
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
               // ── Soft-coded: ISA 5.1 instrument / valve / equipment families ──────────
-              // Add or edit entries here to extend classification without changing any
-              // render logic.  All columns/chips/tables derive from this object.
+              // Add or edit entries here to extend classification without changing any render logic.
               const EQUIP_FAMILIES = {
                 // Instruments
                 PT:  { label:'Pressure Transmitter',   type:'instrument', icon:'🔵', color:'#3b82f6' },
@@ -4566,92 +4568,239 @@ const PIDVerification = () => {
                 return (SEV_RANK[f.severity] || 0) > (SEV_RANK[best] || 0) ? f.severity : best;
               }, null);
 
+              // ── Soft-coded: Equipment QC rule catalogue ─────────────────────────────
+              // Each entry maps a rule_id prefix to a short description and an AI fix hint.
+              // Extend this list to add coverage for new rule families without changing render logic.
+              const EQUIP_QC_RULES = {
+                'TAG': { short: 'Tag naming / format',   icon: '🏷️', fix: 'Verify the tag conforms to the project ISA 5.1 naming convention and update the instrument index.' },
+                'VLV': { short: 'Valve designation',     icon: '🔧', fix: 'Confirm the valve tag and bore size against the instrument index and P&ID spec sheet.' },
+                'CON': { short: 'Connection issue',      icon: '🔗', fix: 'Check the connecting pipe class, spec break notation, and update the line list accordingly.' },
+                'NTS': { short: 'Note / annotation',     icon: '📝', fix: 'Review the note text against applicable project standards and revise the drawing note.' },
+                'LSZ': { short: 'Line size',             icon: '📏', fix: 'See Lines panel — verify NPS, spec-break symbols, and update the line designation.' },
+                'ANN': { short: 'Annotation quality',    icon: '🔍', fix: 'Re-check OCR extraction; re-issue drawing at higher scan resolution if text is illegible.' },
+                'RED': { short: 'Redline / revision',    icon: '☁️', fix: 'Ensure revision cloud does not obscure any tag; move the cloud boundary if required.' },
+              };
+              const rulePrefix = (ruleId) => (ruleId || '').replace(/-?\d.*$/, '');
+
+              // ── Soft-coded: AI insight generators for equipment ──────────────────────
+              // Each entry is a pure function: (inventory, findings) → insight | null.
+              // Returns null when the condition is not met.
+              const EQUIP_AI_GENERATORS = [
+                // High QC failure rate
+                (inv, _f) => {
+                  if (inv.length < 3) return null;
+                  const failRate = Math.round(inv.filter(t => t.findings.length > 0).length / inv.length * 100);
+                  if (failRate < 20) return null;
+                  return { level: 'warning', icon: '⚠️', title: `${failRate}% of tags have QC findings`,
+                    detail: `${inv.filter(t=>t.findings.length>0).length} of ${inv.length} equipment tags carry at least one quality finding. Review before issuing the document.` };
+                },
+                // Critical findings present
+                (inv, _f) => {
+                  const crit = inv.filter(t => t.findings.some(f => f.severity === 'critical'));
+                  if (crit.length === 0) return null;
+                  return { level: 'critical', icon: '🚨', title: `${crit.length} tag${crit.length!==1?'s':''} with critical findings`,
+                    detail: `Critical issues require resolution before drawing issue: ${crit.slice(0,5).map(t=>t.id).join(', ')}${crit.length>5?' …':''}` };
+                },
+                // Safety valve coverage
+                (inv, _f) => {
+                  const SAFETY_PREFIXES = new Set(['PSV','PSE','SDV','BDV','SV']); // soft-coded
+                  const safetyTags = inv.filter(t => SAFETY_PREFIXES.has(Object.keys(EQUIP_FAMILIES).find(p => t.id.toUpperCase().startsWith(p)) || ''));
+                  if (safetyTags.length === 0) return null;
+                  const withIssues = safetyTags.filter(t => t.findings.length > 0);
+                  if (withIssues.length === 0) return { level:'success', icon:'🛡️', title:`${safetyTags.length} safety valve/element tag${safetyTags.length!==1?'s':''} — all pass QC`,
+                    detail:`PSV, PSE, SDV, BDV, SV tags are verified. No QC issues on safety-critical items.` };
+                  return { level:'critical', icon:'🛡️', title:`${withIssues.length} safety tag${withIssues.length!==1?'s':''} have QC issues`,
+                    detail:`Safety-critical tags with issues: ${withIssues.map(t=>t.id).join(', ')}. These must be resolved before P&ID issue.` };
+                },
+                // Duplicate tag occurrences
+                (inv, _f) => {
+                  const MULTI_OCC_MIN = 2; // soft-coded minimum occurrences to flag
+                  const multiOcc = inv.filter(t => (t.pos?.all || []).length >= MULTI_OCC_MIN);
+                  if (multiOcc.length === 0) return null;
+                  return { level:'info', icon:'🔁', title:`${multiOcc.length} tag${multiOcc.length!==1?'s':''} appear ≥${MULTI_OCC_MIN}× on drawing`,
+                    detail:`Multiple occurrences may indicate a tag bubble repeated intentionally (e.g. continuation) or a copy-paste error. Review each: ${multiOcc.slice(0,5).map(t=>t.id).join(', ')}${multiOcc.length>5?' …':''}` };
+                },
+                // All clear
+                (inv, _f) => {
+                  if (inv.filter(t => t.findings.length > 0).length > 0) return null;
+                  return { level:'success', icon:'✅', title:'All equipment tags pass QC',
+                    detail:`${inv.length} tags extracted and verified — no quality findings raised by the rule engine.` };
+                },
+              ];
+
+              // ── Soft-coded: AI insight level styles ─────────────────────────────────
+              const INSIGHT_LEVEL_STYLE = {
+                critical: { bg:'#fef2f2', border:'#fca5a5', titleColor:'#991b1b', bar:'#dc2626' },
+                warning:  { bg:'#fffbeb', border:'#fcd34d', titleColor:'#92400e', bar:'#f59e0b' },
+                info:     { bg:'#eff6ff', border:'#93c5fd', titleColor:'#1e40af', bar:'#3b82f6' },
+                success:  { bg:'#f0fdf4', border:'#86efac', titleColor:'#166534', bar:'#22c55e' },
+              };
+
+              // ── Soft-coded: sort options for Register sub-tab ────────────────────────
+              const EQUIP_SORT_OPTIONS = [
+                { v:'issues', label:'⚡ Issues first' },
+                { v:'name',   label:'A–Z Tag ID'     },
+                { v:'type',   label:'Type'            },
+                { v:'family', label:'Family'          },
+              ];
+
+              // ── Sorted + filtered display items ──────────────────────────────────────
+              const sortedItems = [...displayItems].sort((a, b) => {
+                if (equipSortBy === 'issues') {
+                  const aHas = a.findings.length > 0 ? 1 : 0;
+                  const bHas = b.findings.length > 0 ? 1 : 0;
+                  if (aHas !== bHas) return bHas - aHas;
+                  return (SEV_RANK[topSev(b.findings)] || 0) - (SEV_RANK[topSev(a.findings)] || 0);
+                }
+                if (equipSortBy === 'type')   return a.cls.type.localeCompare(b.cls.type);
+                if (equipSortBy === 'family') return a.cls.label.localeCompare(b.cls.label);
+                return a.id.localeCompare(b.id); // 'name'
+              });
+              const sortedFiltered = eqQuery ? sortedItems.filter(t =>
+                t.id.toLowerCase().includes(eqQuery) ||
+                t.cls.label.toLowerCase().includes(eqQuery)
+              ) : sortedItems;
+
+              // ── AI insights ───────────────────────────────────────────────────────────
+              const allFindings = activeDrawingData?.issues || [];
+              const aiInsights = EQUIP_AI_GENERATORS
+                .map(gen => { try { return gen(tagInventory, allFindings); } catch { return null; } })
+                .filter(Boolean);
+
+              // ── Analytics distributions ───────────────────────────────────────────────
+              const typeDist = [
+                { label:'Instruments', count:instrItems.length, color:'#3b82f6' },
+                { label:'Valves',      count:valveItems.length, color:'#ef4444' },
+                { label:'Equipment',   count:equpItems.length,  color:'#0d9488' },
+              ].filter(d => d.count > 0);
+              const maxTypeCnt = Math.max(1, ...typeDist.map(d => d.count));
+
+              // Family distribution (top 10)
+              const familyDist = Object.entries(
+                tagInventory.reduce((acc, t) => { acc[t.cls.label] = (acc[t.cls.label]||0)+1; return acc; }, {})
+              ).map(([label, count]) => ({ label, count, color: tagInventory.find(t=>t.cls.label===label)?.cls?.color || '#94a3b8' }))
+               .sort((a,b) => b.count-a.count)
+               .slice(0, 10);
+              const maxFamCnt = Math.max(1, ...familyDist.map(d => d.count));
+
+              // QC findings by rule prefix
+              const ruleDistMap = {};
+              for (const t of tagInventory) {
+                for (const f of t.findings) {
+                  const pfx = rulePrefix(f.rule_id) || 'OTHER';
+                  ruleDistMap[pfx] = (ruleDistMap[pfx] || 0) + 1;
+                }
+              }
+              const ruleDist = Object.entries(ruleDistMap).sort((a,b)=>b[1]-a[1]);
+              const maxRuleCnt = Math.max(1, ...ruleDist.map(([,c])=>c));
+
+              // ── QC score ─────────────────────────────────────────────────────────────
+              const cleanCount  = tagInventory.length - issueCount;
+              const qcScore     = tagInventory.length > 0 ? Math.round(cleanCount / tagInventory.length * 100) : 100;
+              const QC_SCORE_EXCELLENT = 90;
+              const QC_SCORE_GOOD      = 70;
+              const QC_SCORE_FAIR      = 50;
+              const qcScoreColor = qcScore >= QC_SCORE_EXCELLENT ? '#22c55e'
+                                 : qcScore >= QC_SCORE_GOOD      ? '#7c3aed'
+                                 : qcScore >= QC_SCORE_FAIR      ? '#f59e0b'
+                                 : '#dc2626';
+
+              // ── Top-level view tabs (mirrors LINES panel design) ─────────────────────
+              const EQUIP_VIEW_TABS = [
+                { id:'insights',  label:'AI Insights', icon: Brain,    color:'#7c3aed', cnt: aiInsights.length },
+                { id:'register',  label:'Register',    icon: Cpu,      color:'#6366f1', cnt: tagInventory.length },
+                { id:'analytics', label:'Analytics',   icon: BarChart2, color:'#0891b2', cnt: null },
+              ];
+
+              const critIssues = tagInventory.filter(t => t.findings.some(f=>f.severity==='critical')).length;
+              const majIssues  = tagInventory.filter(t => t.findings.some(f=>f.severity==='major')).length;
+
               return (
                 <div className="flex flex-col" style={{ minHeight: 0 }}>
 
-                  {/* ── Header ─────────────────────────────────────────────────── */}
+                  {/* ══ Panel header ══ */}
                   <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
-                    style={{ background:'linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%)' }}>
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background:'linear-gradient(135deg,#7c3aed,#9333ea)', boxShadow:'0 4px 12px rgba(124,58,237,0.35)' }}>
-                      <Cpu className="w-4 h-4 text-white" />
+                    style={{ background:'linear-gradient(to right, rgba(124,58,237,0.05), rgba(99,102,241,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#7c3aed,#6366f1)', boxShadow:'0 4px 14px rgba(124,58,237,0.35)' }}>
+                      <Cpu className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-sm font-bold text-slate-900">Equipment &amp; Instrument Register</h2>
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Equipment &amp; Instrument Register
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#7c3aed,#6366f1)' }}>AI</span>
+                      </h2>
                       <p className="text-xs text-slate-500">
                         {tagInventory.length} tags · {instrItems.length} instruments · {valveItems.length} valves · {equpItems.length} equipment
                         {issueCount > 0 && <span className="text-orange-500 font-semibold"> · {issueCount} with QC issues</span>}
                       </p>
                     </div>
-                    {/* View toggle */}
-                    <div className="flex items-center gap-1 bg-white/70 border border-violet-200 rounded-lg p-0.5 flex-shrink-0">
-                      {[{ v:'grid', icon:'⊞' }, { v:'list', icon:'☰' }].map(({ v, icon }) => (
-                        <button key={v} onClick={() => setEquipViewMode(v)}
-                          className="text-xs px-2 py-1 rounded-md font-bold transition-all"
-                          style={{
-                            background: equipViewMode === v ? '#7c3aed' : 'transparent',
-                            color:      equipViewMode === v ? '#fff' : '#7c3aed',
-                          }}>
-                          {icon}
-                        </button>
-                      ))}
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:qcScoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">QC Score</span>
+                    </div>
+                    {/* traffic-light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {critIssues > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{critIssues} CRIT</span>}
+                      {majIssues  > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{majIssues} MAJ</span>}
+                      {issueCount === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Pass</span>}
                     </div>
                   </div>
 
-                  {/* ── Stat chips ─────────────────────────────────────────────── */}
-                  <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/50">
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                     {[
-                      { v:tagInventory.length, label:'Total Tags',  c:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe' },
-                      { v:instrItems.length,   label:'Instruments', c:'#3b82f6', bg:'#eff6ff', border:'#bfdbfe' },
-                      { v:valveItems.length,   label:'Valves',      c:'#ef4444', bg:'#fef2f2', border:'#fecaca' },
-                      { v:issueCount,          label:'QC Issues',   c:'#f97316', bg:'#fff7ed', border:'#fed7aa' },
-                    ].map(s => (
-                      <div key={s.label} className="rounded-xl px-3 py-2 text-center"
-                        style={{ background:s.bg, border:`1px solid ${s.border}` }}>
-                        <p className="text-lg font-black leading-none" style={{ color:s.c }}>{s.v}</p>
-                        <p className="text-[9px] font-semibold text-slate-500 mt-0.5 uppercase tracking-wide">{s.label}</p>
+                      { v:tagInventory.length, label:'Total Tags',   color:'#7c3aed', bg:'rgba(124,58,237,0.07)',  border:'rgba(124,58,237,0.2)'  },
+                      { v:instrItems.length,   label:'Instruments',  color:'#3b82f6', bg:'rgba(59,130,246,0.07)',  border:'rgba(59,130,246,0.2)'  },
+                      { v:valveItems.length,   label:'Valves',       color:'#ef4444', bg:'rgba(239,68,68,0.07)',   border:'rgba(239,68,68,0.2)'   },
+                      { v:equpItems.length,    label:'Equipment',    color:'#0d9488', bg:'rgba(13,148,136,0.07)',  border:'rgba(13,148,136,0.2)'  },
+                      { v:issueCount,          label:'QC Issues',    color:'#f97316', bg:'rgba(249,115,22,0.07)',  border:'rgba(249,115,22,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {tagInventory.length > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/tagInventory.length*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* ── Sub-tabs + search ──────────────────────────────────────── */}
-                  <div className="flex items-center gap-2 px-5 py-2.5 border-b border-slate-100 bg-white/60">
-                    <div className="flex flex-1 gap-0.5">
-                      {EQUIP_SUBTABS.map(tab => {
-                        const cnt = tab.id === 'all' ? tagInventory.length
-                          : tab.id === 'instrument' ? instrItems.length
-                          : tab.id === 'valve' ? valveItems.length
-                          : equpItems.length;
-                        const active = equipSubTab === tab.id;
-                        return (
-                          <button key={tab.id}
-                            onClick={() => { setEquipSubTab(tab.id); setSelectedEquipTag(null); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
-                            style={{
-                              background: active ? '#7c3aed' : '#f8fafc',
-                              color:      active ? '#fff' : '#64748b',
-                              border:     active ? '1px solid #7c3aed' : '1px solid #e2e8f0',
-                            }}>
-                            {tab.label}
-                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none"
-                              style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#64748b' }}>
-                              {cnt}
+                  {/* ══ View tab switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {EQUIP_VIEW_TABS.map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = equipViewTab === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setEquipViewTab(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:tab.color, borderColor:tab.color } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:tab.color } : undefined}>
+                              {tab.cnt}
                             </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {/* Search */}
-                    <div className="relative flex-shrink-0" style={{ width:'180px' }}>
-                      <input type="text" value={equipTagSearch}
-                        onChange={e => { setEquipTagSearch(e.target.value); setSelectedEquipTag(null); }}
-                        placeholder="Search tags…"
-                        className="w-full text-[11px] pl-7 pr-6 py-1.5 rounded-lg border border-violet-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-violet-300/50" />
-                      <Cpu className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-violet-400 pointer-events-none" />
-                      {equipTagSearch && <button onClick={() => setEquipTagSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                        <X className="w-3 h-3" /></button>}
-                    </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {tagInventory.length === 0 ? (
@@ -4667,302 +4816,519 @@ const PIDVerification = () => {
                       </p>
                     </div>
                   ) : (
-                    /* ── Master / Detail split ─────────────────────────────── */
-                    <div className="flex overflow-hidden" style={{ minHeight:0 }}>
+                    <>
+                    {/* ════════════════════════════════════
+                        AI INSIGHTS view
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'insights' && (
+                      <div className="p-5 flex flex-col gap-3 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                        {/* Intro banner */}
+                        <div className="flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.06),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                          <Brain className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                          <div>
+                            <p className="text-xs font-bold text-violet-800">AI Equipment Analysis</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Automated pattern recognition across {tagInventory.length} extracted tags and {allFindings.length} rule-engine findings.
+                              Insights are generated by soft-coded heuristic detectors — no LLM call required.
+                            </p>
+                          </div>
+                        </div>
 
-                      {/* LEFT — tag list / grid */}
-                      <div className="flex-1 overflow-y-auto border-r border-slate-100"
-                        style={{ maxHeight:'68vh', minWidth:0 }}>
-                        {filteredEquip.length === 0 ? (
-                          <div className="py-12 text-center text-slate-400 text-sm">No tags match search.</div>
-                        ) : equipViewMode === 'grid' ? (
-                          /* Grid view */
-                          <div className="p-4 grid gap-2"
-                            style={{ gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))' }}>
-                            {filteredEquip.map((t, idx) => {
-                              const maxS  = topSev(t.findings);
-                              const isSelected = selectedEquipTag === t.id;
-                              const hasIssue = !!maxS;
-                              return (
-                                <button key={t.id}
-                                  onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
-                                  className="relative text-left rounded-xl border p-3 flex flex-col gap-1.5 overflow-hidden transition-all"
-                                  style={{
-                                    animation: `cardIn 0.2s ease-out ${Math.min(idx * 0.018, 0.4)}s both`,
-                                    border: isSelected
-                                      ? `2px solid ${t.cls.color}`
-                                      : hasIssue ? '1.5px solid #fed7aa' : '1.5px solid #e2e8f0',
-                                    background: isSelected
-                                      ? `${t.cls.color}12`
-                                      : hasIssue ? '#fff7ed' : '#ffffff',
-                                    boxShadow: isSelected
-                                      ? `0 4px 16px ${t.cls.color}30`
-                                      : '0 1px 4px rgba(0,0,0,0.04)',
-                                    cursor: 'pointer',
-                                  }}>
-                                  {/* Top accent bar */}
-                                  <div className="absolute top-0 left-0 right-0 h-0.5"
-                                    style={{ background: hasIssue ? (SEV_COLOR[maxS] || '#f97316') : t.cls.color }} />
-                                  {/* Tag ID row */}
-                                  <div className="flex items-center justify-between gap-1 pt-0.5">
-                                    <code className="text-[11px] font-mono font-black text-slate-800 truncate">{t.id}</code>
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                      style={{
-                                        background: hasIssue ? SEV_COLOR[maxS] : '#10b981',
-                                        boxShadow: `0 0 5px ${hasIssue ? SEV_COLOR[maxS] : '#10b981'}88`,
-                                      }} />
+                        {aiInsights.length === 0 ? (
+                          <div className="flex flex-col items-center gap-2 py-12 text-slate-400">
+                            <CheckCircle className="w-10 h-10 text-emerald-400" />
+                            <p className="text-sm font-semibold">No actionable AI insights</p>
+                            <p className="text-xs">All pattern checks passed for this drawing.</p>
+                          </div>
+                        ) : (
+                          aiInsights.map((ins, i) => {
+                            const st = INSIGHT_LEVEL_STYLE[ins.level] || INSIGHT_LEVEL_STYLE.info;
+                            return (
+                              <div key={i} className="rounded-xl border p-4 flex gap-3"
+                                style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${i*0.06}s both` }}>
+                                <div className="w-1 rounded-full flex-shrink-0" style={{ background:st.bar }} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-base leading-none">{ins.icon}</span>
+                                    <p className="text-xs font-bold leading-snug" style={{ color:st.titleColor }}>{ins.title}</p>
+                                    <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full text-white uppercase"
+                                      style={{ background:st.bar }}>{ins.level}</span>
                                   </div>
-                                  {/* Family chip */}
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md w-fit"
-                                    style={{ background:`${t.cls.color}18`, color:t.cls.color, border:`1px solid ${t.cls.color}30` }}>
-                                    {t.cls.icon} {t.cls.label}
+                                  <p className="text-[11px] text-slate-600 leading-relaxed">{ins.detail}</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        {/* Rule family checklist */}
+                        <div className="mt-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Rule Families Active</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(EQUIP_QC_RULES).map(([pfx, def]) => {
+                              const cnt = tagInventory.reduce((s, t) => s + t.findings.filter(f => rulePrefix(f.rule_id) === pfx).length, 0);
+                              return (
+                                <div key={pfx} title={def.fix}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                                    cnt > 0 ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                  }`}>
+                                  <span>{cnt > 0 ? def.icon : '✅'}</span>
+                                  <code className="font-mono">{pfx}</code>
+                                  {cnt > 0 && <span className="ml-0.5 bg-orange-200 text-orange-800 px-1 rounded-full font-black">{cnt}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ════════════════════════════════════
+                        REGISTER view (master / detail)
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'register' && (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+                        {/* Toolbar: type tabs + sort + view toggle + search */}
+                        <div className="px-4 py-2.5 border-b border-slate-100 bg-white/60 flex flex-wrap items-center gap-2">
+                          {/* Type filter chips */}
+                          <div className="flex gap-0.5 flex-wrap">
+                            {[
+                              { id:'all',        label:'All',         cnt:tagInventory.length },
+                              { id:'instrument', label:'Instruments', cnt:instrItems.length   },
+                              { id:'valve',      label:'Valves',      cnt:valveItems.length   },
+                              { id:'equipment',  label:'Equipment',   cnt:equpItems.length    },
+                            ].map(tab => {
+                              const active = equipSubTab === tab.id;
+                              return (
+                                <button key={tab.id}
+                                  onClick={() => { setEquipSubTab(tab.id); setSelectedEquipTag(null); }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
+                                  style={{
+                                    background: active ? '#7c3aed' : '#f8fafc',
+                                    color:      active ? '#fff' : '#64748b',
+                                    border:     active ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+                                  }}>
+                                  {tab.label}
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none"
+                                    style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#64748b' }}>
+                                    {tab.cnt}
                                   </span>
-                                  {/* Position */}
-                                  {t.pos?.x_pct != null && (
-                                    <span className="text-[9px] text-slate-400 font-mono">
-                                      📍 {t.pos.x_pct.toFixed(1)}%, {t.pos.y_pct?.toFixed(1)}%
-                                    </span>
-                                  )}
-                                  {/* Issue hint */}
-                                  {hasIssue && (
-                                    <span className="text-[9px] font-bold"
-                                      style={{ color: SEV_COLOR[maxS] }}>
-                                      ⚠ {t.findings.length} issue{t.findings.length !== 1 ? 's' : ''}
-                                    </span>
-                                  )}
                                 </button>
                               );
                             })}
                           </div>
-                        ) : (
-                          /* List view */
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400 sticky top-0">
-                                <th className="px-4 py-2.5 text-left">Tag ID</th>
-                                <th className="px-4 py-2.5 text-left">Type</th>
-                                <th className="px-4 py-2.5 text-left">Family</th>
-                                <th className="px-4 py-2.5 text-center">Position</th>
-                                <th className="px-4 py-2.5 text-center">QC</th>
-                                <th className="px-4 py-2.5 text-center">Occurrences</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredEquip.map((t, i) => {
-                                const maxS = topSev(t.findings);
-                                const isSelected = selectedEquipTag === t.id;
-                                return (
-                                  <tr key={t.id}
-                                    onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
-                                    className="border-t border-slate-100 cursor-pointer transition-colors"
-                                    style={{
-                                      background: isSelected ? `${t.cls.color}10` : i % 2 === 0 ? '#ffffff' : '#fafafa',
-                                    }}>
-                                    <td className="px-4 py-2.5">
-                                      <code className="text-[11px] font-mono font-black text-slate-800">{t.id}</code>
-                                    </td>
-                                    <td className="px-4 py-2.5">
-                                      <span className="text-[9px] font-bold capitalize px-1.5 py-0.5 rounded"
-                                        style={{ background:`${t.cls.color}15`, color:t.cls.color }}>
-                                        {t.cls.type}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-2.5 text-[10px] text-slate-600">{t.cls.icon} {t.cls.label}</td>
-                                    <td className="px-4 py-2.5 text-center font-mono text-[9px] text-slate-400">
-                                      {t.pos?.x_pct != null
-                                        ? `${t.pos.x_pct.toFixed(1)}, ${t.pos.y_pct?.toFixed(1)}`
-                                        : '—'}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center">
-                                      {maxS ? (
-                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
-                                          style={{ background: SEV_BG[maxS], color: SEV_COLOR[maxS], border:`1px solid ${SEV_COLOR[maxS]}40` }}>
-                                          {maxS}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">OK</span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-center text-[10px] text-slate-500 font-mono">
-                                      {(t.pos?.all || []).length || (t.pos?.x_pct != null ? 1 : 0)}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-
-                      {/* RIGHT — detail drawer */}
-                      <div style={{ width: detailTag ? '300px' : '0px', flexShrink:0, overflow:'hidden', transition:'width 0.25s ease' }}>
-                        {detailTag && (
-                          <div className="flex flex-col h-full overflow-y-auto bg-white border-l border-slate-100"
-                            style={{ minWidth:'300px', maxHeight:'68vh' }}>
-                            {/* Drawer header */}
-                            <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2"
-                              style={{ background:`linear-gradient(135deg,${detailTag.cls.color}14,${detailTag.cls.color}06)` }}>
-                              <div>
-                                <code className="text-base font-mono font-black text-slate-900">{detailTag.id}</code>
-                                <p className="text-[10px] text-slate-500 mt-0.5">{detailTag.cls.icon} {detailTag.cls.label}</p>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block"
-                                  style={{ background:`${detailTag.cls.color}20`, color:detailTag.cls.color, border:`1px solid ${detailTag.cls.color}30` }}>
-                                  {detailTag.cls.type.toUpperCase()}
-                                </span>
-                              </div>
-                              <button onClick={() => setSelectedEquipTag(null)}
-                                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 flex-shrink-0">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
+                          <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                            {/* Sort */}
+                            <select value={equipSortBy} onChange={e => setEquipSortBy(e.target.value)}
+                              className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-violet-300 flex-shrink-0">
+                              {EQUIP_SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                            </select>
+                            {/* View toggle */}
+                            <div className="flex rounded-xl border border-slate-200 overflow-hidden flex-shrink-0">
+                              {[{v:'grid',ic:'⊞'},{v:'list',ic:'≡'}].map(({v,ic}) => (
+                                <button key={v} onClick={() => setEquipViewMode(v)}
+                                  className={`px-2.5 py-1.5 text-xs font-bold transition-all ${equipViewMode===v ? 'bg-violet-500 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                                  {ic}
+                                </button>
+                              ))}
                             </div>
+                            {/* Search */}
+                            <div className="relative flex-shrink-0" style={{ width:'160px' }}>
+                              <input type="text" value={equipTagSearch}
+                                onChange={e => { setEquipTagSearch(e.target.value); setSelectedEquipTag(null); }}
+                                placeholder="Search tags…"
+                                className="w-full text-[11px] pl-7 pr-6 py-1.5 rounded-lg border border-violet-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-violet-300/50" />
+                              <Cpu className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-violet-400 pointer-events-none" />
+                              {equipTagSearch && <button onClick={() => setEquipTagSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <X className="w-3 h-3" /></button>}
+                            </div>
+                          </div>
+                        </div>
 
-                            {/* Position section */}
-                            <div className="px-4 py-3 border-b border-slate-100">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Position on Drawing</p>
-                              {detailTag.pos?.x_pct != null ? (
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[10px] text-slate-500">X coordinate</span>
-                                    <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.x_pct.toFixed(2)}%</code>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[10px] text-slate-500">Y coordinate</span>
-                                    <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.y_pct?.toFixed(2)}%</code>
-                                  </div>
-                                  {(detailTag.pos?.all || []).length > 1 && (
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-[10px] text-slate-500">Occurrences</span>
-                                      <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">
-                                        ×{detailTag.pos.all.length}
+                        {/* Master / Detail split */}
+                        <div className="flex overflow-hidden" style={{ minHeight:0 }}>
+
+                          {/* LEFT — tag list / grid */}
+                          <div className="flex-1 overflow-y-auto border-r border-slate-100"
+                            style={{ maxHeight:'62vh', minWidth:0 }}>
+                            {sortedFiltered.length === 0 ? (
+                              <div className="py-12 text-center text-slate-400 text-sm">No tags match search.</div>
+                            ) : equipViewMode === 'grid' ? (
+                              <div className="p-4 grid gap-2"
+                                style={{ gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))' }}>
+                                {sortedFiltered.map((t, idx) => {
+                                  const maxS  = topSev(t.findings);
+                                  const isSelected = selectedEquipTag === t.id;
+                                  const hasIssue = !!maxS;
+                                  return (
+                                    <button key={t.id}
+                                      onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                      className="relative text-left rounded-xl border p-3 flex flex-col gap-1.5 overflow-hidden transition-all"
+                                      style={{
+                                        animation:`cardIn 0.2s ease-out ${Math.min(idx*0.018,0.4)}s both`,
+                                        border: isSelected ? `2px solid ${t.cls.color}` : hasIssue ? '1.5px solid #fed7aa' : '1.5px solid #e2e8f0',
+                                        background: isSelected ? `${t.cls.color}12` : hasIssue ? '#fff7ed' : '#ffffff',
+                                        boxShadow: isSelected ? `0 4px 16px ${t.cls.color}30` : '0 1px 4px rgba(0,0,0,0.04)',
+                                      }}>
+                                      <div className="absolute top-0 left-0 right-0 h-0.5"
+                                        style={{ background: hasIssue ? (SEV_COLOR[maxS]||'#f97316') : t.cls.color }} />
+                                      <div className="flex items-center justify-between gap-1 pt-0.5">
+                                        <code className="text-[11px] font-mono font-black text-slate-800 truncate">{t.id}</code>
+                                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                          style={{ background: hasIssue ? SEV_COLOR[maxS] : '#10b981',
+                                            boxShadow:`0 0 5px ${hasIssue ? SEV_COLOR[maxS] : '#10b981'}88` }} />
+                                      </div>
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md w-fit"
+                                        style={{ background:`${t.cls.color}18`, color:t.cls.color, border:`1px solid ${t.cls.color}30` }}>
+                                        {t.cls.icon} {t.cls.label}
                                       </span>
+                                      {t.pos?.x_pct != null && (
+                                        <span className="text-[9px] text-slate-400 font-mono">📍 {t.pos.x_pct.toFixed(1)}%, {t.pos.y_pct?.toFixed(1)}%</span>
+                                      )}
+                                      {hasIssue && (
+                                        <span className="text-[9px] font-bold" style={{ color:SEV_COLOR[maxS] }}>
+                                          ⚠ {t.findings.length} issue{t.findings.length!==1?'s':''}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* List view */
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400 sticky top-0">
+                                    <th className="px-4 py-2.5 text-left">Tag ID</th>
+                                    <th className="px-4 py-2.5 text-left">Type</th>
+                                    <th className="px-4 py-2.5 text-left">Family</th>
+                                    <th className="px-4 py-2.5 text-center">Position</th>
+                                    <th className="px-4 py-2.5 text-center">QC</th>
+                                    <th className="px-4 py-2.5 text-center">Occ.</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sortedFiltered.map((t, i) => {
+                                    const maxS = topSev(t.findings);
+                                    const isSelected = selectedEquipTag === t.id;
+                                    return (
+                                      <tr key={t.id}
+                                        onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                        className="border-t border-slate-100 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                                        style={{ background: isSelected ? `${t.cls.color}10` : i%2===0 ? '#ffffff' : '#fafafa' }}>
+                                        <td className="px-4 py-2.5">
+                                          <code className="text-[11px] font-mono font-black text-slate-800">{t.id}</code>
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                          <span className="text-[9px] font-bold capitalize px-1.5 py-0.5 rounded"
+                                            style={{ background:`${t.cls.color}15`, color:t.cls.color }}>{t.cls.type}</span>
+                                        </td>
+                                        <td className="px-4 py-2.5 text-[10px] text-slate-600">{t.cls.icon} {t.cls.label}</td>
+                                        <td className="px-4 py-2.5 text-center font-mono text-[9px] text-slate-400">
+                                          {t.pos?.x_pct != null ? `${t.pos.x_pct.toFixed(1)}, ${t.pos.y_pct?.toFixed(1)}` : '—'}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-center">
+                                          {maxS ? (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                              style={{ background:SEV_BG[maxS], color:SEV_COLOR[maxS], border:`1px solid ${SEV_COLOR[maxS]}40` }}>{maxS}</span>
+                                          ) : (
+                                            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">OK</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-center text-[10px] text-slate-500 font-mono">
+                                          {(t.pos?.all||[]).length || (t.pos?.x_pct!=null?1:0)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+
+                          {/* RIGHT — detail drawer (unchanged core logic) */}
+                          <div style={{ width:detailTag?'300px':'0px', flexShrink:0, overflow:'hidden', transition:'width 0.25s ease' }}>
+                            {detailTag && (
+                              <div className="flex flex-col h-full overflow-y-auto bg-white border-l border-slate-100"
+                                style={{ minWidth:'300px', maxHeight:'62vh' }}>
+                                {/* Drawer header */}
+                                <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2"
+                                  style={{ background:`linear-gradient(135deg,${detailTag.cls.color}14,${detailTag.cls.color}06)` }}>
+                                  <div>
+                                    <code className="text-base font-mono font-black text-slate-900">{detailTag.id}</code>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{detailTag.cls.icon} {detailTag.cls.label}</p>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block"
+                                      style={{ background:`${detailTag.cls.color}20`, color:detailTag.cls.color, border:`1px solid ${detailTag.cls.color}30` }}>
+                                      {detailTag.cls.type.toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <button onClick={() => setSelectedEquipTag(null)}
+                                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 flex-shrink-0">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Position section */}
+                                <div className="px-4 py-3 border-b border-slate-100">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Position on Drawing</p>
+                                  {detailTag.pos?.x_pct != null ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">X coordinate</span>
+                                        <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.x_pct.toFixed(2)}%</code>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">Y coordinate</span>
+                                        <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.y_pct?.toFixed(2)}%</code>
+                                      </div>
+                                      {(detailTag.pos?.all||[]).length > 1 && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-slate-500">Occurrences</span>
+                                          <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">
+                                            ×{detailTag.pos.all.length}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {/* Mini position map */}
+                                      <div className="mt-1 rounded-lg border border-slate-200 overflow-hidden"
+                                        style={{ height:'72px', background:'#f1f5f9', position:'relative' }}>
+                                        <div className="absolute inset-0" style={{
+                                          backgroundImage:'radial-gradient(circle,rgba(99,102,241,0.08) 1px,transparent 1px)',
+                                          backgroundSize:'12px 12px',
+                                        }} />
+                                        <div style={{
+                                          position:'absolute',
+                                          left:`${detailTag.pos.x_pct}%`, top:`${detailTag.pos.y_pct}%`,
+                                          transform:'translate(-50%,-50%)',
+                                          width:'10px', height:'10px', borderRadius:'50%',
+                                          background: detailTag.cls.color,
+                                          boxShadow:`0 0 0 3px ${detailTag.cls.color}40`, zIndex:2,
+                                        }} />
+                                        {(detailTag.pos?.all||[]).slice(1).map((occ,oi) => (
+                                          <div key={oi} style={{
+                                            position:'absolute',
+                                            left:`${occ.x_pct??detailTag.pos.x_pct}%`, top:`${occ.y_pct??detailTag.pos.y_pct}%`,
+                                            transform:'translate(-50%,-50%)',
+                                            width:'7px', height:'7px', borderRadius:'50%',
+                                            background:`${detailTag.cls.color}80`, zIndex:1,
+                                          }} />
+                                        ))}
+                                        <p className="absolute bottom-1 right-1.5 text-[8px] text-slate-400 font-mono">drawing canvas</p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-slate-400 italic">No position data for this tag.</p>
+                                  )}
+                                </div>
+
+                                {/* QC Findings section with AI Recommendation */}
+                                <div className="px-4 py-3 flex-1">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                    QC Findings
+                                    <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                                      style={{ background: detailTag.findings.length>0?'#fef2f2':'#f0fdf4',
+                                               color:      detailTag.findings.length>0?'#dc2626':'#16a34a' }}>
+                                      {detailTag.findings.length>0 ? `${detailTag.findings.length} issue${detailTag.findings.length!==1?'s':''}` : 'QC Pass ✓'}
+                                    </span>
+                                  </p>
+                                  {detailTag.findings.length === 0 ? (
+                                    <div className="rounded-xl p-3 flex items-center gap-2"
+                                      style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                      <span className="text-emerald-500 text-base">✓</span>
+                                      <p className="text-[10px] text-emerald-700 font-semibold">No QC issues. Tag appears compliant.</p>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-2">
+                                      {detailTag.findings.map((f, fi) => {
+                                        const pfx     = rulePrefix(f.rule_id);
+                                        const ruleDef = EQUIP_QC_RULES[pfx] || {};
+                                        return (
+                                          <div key={fi} className="rounded-xl p-3 flex flex-col gap-1.5"
+                                            style={{ background:SEV_BG[f.severity]||'#fff', border:`1px solid ${SEV_COLOR[f.severity]||'#e2e8f0'}40` }}>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <code className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">{f.rule_id}</code>
+                                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                                style={{ background:`${SEV_COLOR[f.severity]}22`, color:SEV_COLOR[f.severity] }}>{f.severity}</span>
+                                              {ruleDef.icon && <span className="text-[10px]">{ruleDef.icon} <span className="text-slate-500 text-[9px]">{ruleDef.short}</span></span>}
+                                              <span className="text-[9px] text-slate-400 capitalize">{f.category?.replace(/_/g,' ')}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 leading-snug">{f.issue_observed}</p>
+                                            {f.evidence && (
+                                              <p className="text-[9px] text-slate-500 italic truncate">Evidence: {f.evidence}</p>
+                                            )}
+                                            {/* AI Recommendation block */}
+                                            {ruleDef.fix && (
+                                              <div className="flex items-start gap-1.5 p-1.5 rounded-lg border text-[9px]"
+                                                style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                                <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                                <div><span className="font-bold text-violet-700">AI: </span><span className="text-slate-600">{ruleDef.fix}</span></div>
+                                              </div>
+                                            )}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                              className="self-start flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:-translate-y-px"
+                                              style={{ background:SEV_COLOR[f.severity]||'#6366f1', color:'#fff', boxShadow:`0 2px 6px ${SEV_COLOR[f.severity]||'#6366f1'}44` }}>
+                                              <ScanLine className="w-3 h-3" /> Locate on Drawing
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
-                                  {/* Mini position map */}
-                                  <div className="mt-1 rounded-lg border border-slate-200 overflow-hidden"
-                                    style={{ height:'72px', background:'#f1f5f9', position:'relative' }}>
-                                    <div className="absolute inset-0" style={{
-                                      backgroundImage:'radial-gradient(circle,rgba(99,102,241,0.08) 1px,transparent 1px)',
-                                      backgroundSize:'12px 12px',
-                                    }} />
-                                    {/* Primary position dot */}
-                                    <div style={{
-                                      position:'absolute',
-                                      left:`${detailTag.pos.x_pct}%`,
-                                      top:`${detailTag.pos.y_pct}%`,
-                                      transform:'translate(-50%,-50%)',
-                                      width:'10px', height:'10px', borderRadius:'50%',
-                                      background: detailTag.cls.color,
-                                      boxShadow:`0 0 0 3px ${detailTag.cls.color}40`,
-                                      zIndex:2,
-                                    }} />
-                                    {/* Extra occurrences */}
-                                    {(detailTag.pos?.all || []).slice(1).map((occ, oi) => (
-                                      <div key={oi} style={{
-                                        position:'absolute',
-                                        left:`${occ.x_pct ?? detailTag.pos.x_pct}%`,
-                                        top:`${occ.y_pct ?? detailTag.pos.y_pct}%`,
-                                        transform:'translate(-50%,-50%)',
-                                        width:'7px', height:'7px', borderRadius:'50%',
-                                        background:`${detailTag.cls.color}80`,
-                                        zIndex:1,
-                                      }} />
-                                    ))}
-                                    <p className="absolute bottom-1 right-1.5 text-[8px] text-slate-400 font-mono">drawing canvas</p>
-                                  </div>
                                 </div>
-                              ) : (
-                                <p className="text-[10px] text-slate-400 italic">No position data for this tag.</p>
-                              )}
+                              </div>
+                            )}
+                            {!detailTag && sortedFiltered.length > 0 && (
+                              <div className="flex flex-col items-center justify-center h-full py-10 gap-2 px-4 text-center"
+                                style={{ minWidth:'300px', maxHeight:'62vh', background:'#fafbff', borderLeft:'1px solid #e2e8f0' }}>
+                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1"
+                                  style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #ddd6fe' }}>
+                                  <Cpu className="w-6 h-6 text-violet-400" />
+                                </div>
+                                <p className="text-xs font-bold text-slate-600">Select a tag to view details</p>
+                                <p className="text-[10px] text-slate-400">Position, classification, QC findings, and AI fix recommendations</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Register footer */}
+                        <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 text-[9px] text-slate-400 flex items-center justify-between">
+                          <span style={{ color:'#7c3aed' }}>{sortedFiltered.length} of {displayItems.length} tags shown</span>
+                          <span>Sorted by {EQUIP_SORT_OPTIONS.find(o=>o.v===equipSortBy)?.label} · ISA 5.1</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ════════════════════════════════════
+                        ANALYTICS view
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'analytics' && (
+                      <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                        {/* QC Score banner */}
+                        <div className="rounded-xl border p-4 flex items-center gap-5"
+                          style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.05),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                          <div className="relative w-20 h-20 flex-shrink-0">
+                            <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                              <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                              <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="5"
+                                strokeLinecap="round"
+                                strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-xl font-black leading-none" style={{ color:qcScoreColor }}>{qcScore}%</span>
+                              <span className="text-[9px] text-slate-400 font-medium">QC</span>
                             </div>
-
-                            {/* QC Findings section */}
-                            <div className="px-4 py-3 flex-1">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                                QC Findings
-                                <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                                  style={{
-                                    background: detailTag.findings.length > 0 ? '#fef2f2' : '#f0fdf4',
-                                    color:      detailTag.findings.length > 0 ? '#dc2626' : '#16a34a',
-                                  }}>
-                                  {detailTag.findings.length > 0 ? `${detailTag.findings.length} issue${detailTag.findings.length !== 1 ? 's' : ''}` : 'QC Pass ✓'}
-                                </span>
-                              </p>
-
-                              {detailTag.findings.length === 0 ? (
-                                <div className="rounded-xl p-3 flex items-center gap-2"
-                                  style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
-                                  <span className="text-emerald-500 text-base">✓</span>
-                                  <p className="text-[10px] text-emerald-700 font-semibold">
-                                    No QC issues found for this tag. Tag appears compliant.
-                                  </p>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-slate-800 mb-1">Equipment &amp; Instrument QC Score</p>
+                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                              {cleanCount} of {tagInventory.length} tags pass all checks.
+                              {critIssues > 0 && ` ${critIssues} critical item${critIssues!==1?'s':''} require immediate attention.`}
+                              {majIssues  > 0 && ` ${majIssues} major item${majIssues!==1?'s':''} need review.`}
+                            </p>
+                            <div className="flex gap-3 mt-2">
+                              {[['Clean',cleanCount,'#22c55e'],['Critical',critIssues,'#dc2626'],['Major',majIssues,'#ea580c'],['Issues',issueCount,'#f97316']].map(([l,v,c])=>(
+                                <div key={l} className="text-center">
+                                  <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
+                                  <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
                                 </div>
-                              ) : (
-                                <div className="flex flex-col gap-2">
-                                  {detailTag.findings.map((f, fi) => (
-                                    <div key={fi} className="rounded-xl p-3 flex flex-col gap-1.5"
-                                      style={{
-                                        background: SEV_BG[f.severity] || '#fff',
-                                        border:`1px solid ${SEV_COLOR[f.severity] || '#e2e8f0'}40`,
-                                      }}>
-                                      {/* Rule + severity */}
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <code className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">{f.rule_id}</code>
-                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
-                                          style={{ background:`${SEV_COLOR[f.severity]}22`, color: SEV_COLOR[f.severity] }}>
-                                          {f.severity}
-                                        </span>
-                                        <span className="text-[9px] text-slate-400 capitalize">{f.category?.replace(/_/g,' ')}</span>
-                                      </div>
-                                      {/* Issue description */}
-                                      <p className="text-[10px] text-slate-700 leading-snug">{f.issue_observed}</p>
-                                      {/* Evidence */}
-                                      {f.evidence && (
-                                        <p className="text-[9px] text-slate-500 italic truncate">
-                                          Evidence: {f.evidence}
-                                        </p>
-                                      )}
-                                      {/* Jump button */}
-                                      <button
-                                        onClick={() => {
-                                          setActivePanel('drawing');
-                                          setTimeout(() => jumpToFinding(f.id), 150);
-                                        }}
-                                        className="self-start flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:-translate-y-px"
-                                        style={{
-                                          background: SEV_COLOR[f.severity] || '#6366f1',
-                                          color: '#fff',
-                                          boxShadow:`0 2px 6px ${SEV_COLOR[f.severity] || '#6366f1'}44`,
-                                        }}>
-                                        <ScanLine className="w-3 h-3" />
-                                        Locate on Drawing
-                                      </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Tag type distribution */}
+                        {typeDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">⚙️</span> Tag Type Distribution
+                              <span className="ml-auto text-[10px] font-normal text-slate-400">{tagInventory.length} tags total</span>
+                            </p>
+                            <div className="space-y-2">
+                              {typeDist.map(({label, count, color}) => (
+                                <div key={label} className="flex items-center gap-3">
+                                  <span className="text-[11px] font-bold w-20 flex-shrink-0" style={{ color }}>{label}</span>
+                                  <div className="flex-1 rounded-full h-4 overflow-hidden" style={{ background:`${color}15` }}>
+                                    <div className="h-full rounded-full flex items-center pl-2 transition-all duration-700"
+                                      style={{ width:`${count/maxTypeCnt*100}%`, background:`linear-gradient(90deg,${color},${color}cc)`, minWidth:'1.5rem' }}>
+                                      <span className="text-[9px] font-black text-white leading-none">{count}</span>
                                     </div>
-                                  ))}
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">{Math.round(count/tagInventory.length*100)}%</span>
                                 </div>
-                              )}
+                              ))}
                             </div>
                           </div>
                         )}
-                        {!detailTag && filteredEquip.length > 0 && (
-                          <div className="flex flex-col items-center justify-center h-full py-10 gap-2 px-4 text-center"
-                            style={{ minWidth:'300px', maxHeight:'68vh', background:'#fafbff', borderLeft:'1px solid #e2e8f0' }}>
-                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1"
-                              style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #ddd6fe' }}>
-                              <Cpu className="w-6 h-6 text-violet-400" />
+
+                        {/* Family distribution */}
+                        {familyDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">🏷️</span> Tag Family Breakdown
+                              <span className="ml-auto text-[10px] font-normal text-slate-400">Top {familyDist.length} families</span>
+                            </p>
+                            <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))' }}>
+                              {familyDist.map(({label, count, color}) => (
+                                <div key={label} className="rounded-xl border p-3 flex flex-col gap-1"
+                                  style={{ background:`${color}08`, borderColor:`${color}25` }}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black" style={{ color }}>{label}</span>
+                                    <span className="text-[10px] font-bold" style={{ color }}>{count}</span>
+                                  </div>
+                                  <div className="w-full rounded-full h-1.5" style={{ background:`${color}20` }}>
+                                    <div className="h-1.5 rounded-full" style={{ width:`${count/maxFamCnt*100}%`, background:`linear-gradient(90deg,${color},${color}aa)` }} />
+                                  </div>
+                                  <span className="text-[9px]" style={{ color }}>{Math.round(count/tagInventory.length*100)}% of tags</span>
+                                </div>
+                              ))}
                             </div>
-                            <p className="text-xs font-bold text-slate-600">Select a tag to view details</p>
-                            <p className="text-[10px] text-slate-400">Position, classification, QC findings, and locate on drawing</p>
+                          </div>
+                        )}
+
+                        {/* QC findings by rule family */}
+                        {ruleDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">🔍</span> QC Findings by Rule Family
+                            </p>
+                            <div className="space-y-2">
+                              {ruleDist.map(([pfx, cnt]) => {
+                                const def = EQUIP_QC_RULES[pfx] || { icon:'❔', short: pfx };
+                                return (
+                                  <button key={pfx}
+                                    onClick={() => setEquipViewTab('register')}
+                                    className="w-full flex items-center gap-3 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-all group text-left">
+                                    <span className="text-base leading-none flex-shrink-0">{def.icon}</span>
+                                    <code className="text-[10px] font-mono font-bold text-violet-700 w-10 flex-shrink-0">{pfx}</code>
+                                    <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                      <div className="h-full rounded-full"
+                                        style={{ width:`${cnt/maxRuleCnt*100}%`, background:'linear-gradient(90deg,#7c3aed,#6366f1)' }} />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-violet-700 w-5 text-right flex-shrink-0">{cnt}</span>
+                                    <span className="text-[10px] text-slate-400 flex-1 truncate group-hover:text-violet-600">{def.short}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
-
-                    </div>
+                    )}
+                    </>
                   )}
 
-                  {/* ── Footer ─────────────────────────────────────────────── */}
+                  {/* ══ Footer ══ */}
                   <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
-                    <span style={{ color:'#7c3aed' }}>{filteredEquip.length} of {displayItems.length} tags shown</span>
-                    <span>{Object.keys(EQUIP_FAMILIES).length} rules · ISA 5.1</span>
+                    <span style={{ color:'#7c3aed' }}>
+                      {equipViewTab === 'register'  ? `${sortedFiltered.length} of ${displayItems.length} tags shown`
+                       : equipViewTab === 'insights' ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>{Object.keys(EQUIP_FAMILIES).length} families · ISA 5.1 · AI analysis active</span>
                   </div>
 
                 </div>
