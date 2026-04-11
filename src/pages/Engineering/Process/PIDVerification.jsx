@@ -8,7 +8,7 @@ import {
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
-  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes,
+  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -783,6 +783,10 @@ const PIDVerification = () => {
   // Equipment panel — view tab (top-level navigation) + sort
   const [equipViewTab,  setEquipViewTab]   = useState('register'); // 'insights'|'register'|'analytics'
   const [equipSortBy,   setEquipSortBy]    = useState('issues');   // 'issues'|'name'|'type'|'family'
+  // Instrumentation panel — per-check manual override states
+  // '' = AI auto | 'pass' = manually confirmed | 'fail' = manually flagged | 'na' = N/A
+  const [instrCheckStates, setInstrCheckStates] = useState({});  // { [checkId]: 'pass'|'fail'|'na' }
+  const [instrActiveView, setInstrActiveView]  = useState('checklist'); // 'checklist'|'summary'
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -2106,6 +2110,20 @@ const PIDVerification = () => {
               badgeCls: 'bg-violet-500 text-white',
               accent: '#7c3aed',
               glow: 'rgba(124,58,237,0.25)',
+            },
+            {
+              id: 'instrumentation',
+              label: 'Instr.',
+              icon: ({ cls }) => <Wrench className={cls} />,
+              badge: (() => {
+                // Show count of AI-detected issues from instr-relevant findings
+                const instrCats = new Set(['instrument','tag','valve']);
+                const cnt = (activeDrawingData?.issues || []).filter(f => instrCats.has(f.category)).length;
+                return cnt || null;
+              })(),
+              badgeCls: 'bg-amber-500 text-white',
+              accent: '#d97706',
+              glow: 'rgba(217,119,6,0.25)',
             },
             {
               id: 'cross',
@@ -4707,9 +4725,10 @@ const PIDVerification = () => {
 
               // ── Top-level view tabs (mirrors LINES panel design) ─────────────────────
               const EQUIP_VIEW_TABS = [
-                { id:'insights',  label:'AI Insights', icon: Brain,    color:'#7c3aed', cnt: aiInsights.length },
-                { id:'register',  label:'Register',    icon: Cpu,      color:'#6366f1', cnt: tagInventory.length },
-                { id:'analytics', label:'Analytics',   icon: BarChart2, color:'#0891b2', cnt: null },
+                { id:'insights',  label:'AI Insights',  icon: Brain,    color:'#7c3aed', cnt: aiInsights.length },
+                { id:'register',  label:'Register',     icon: Cpu,      color:'#6366f1', cnt: tagInventory.length },
+                { id:'drawing',   label:'Drawing View', icon: MapPin,   color:'#059669', cnt: tagInventory.filter(t=>t.pos?.x_pct!=null).length },
+                { id:'analytics', label:'Analytics',    icon: BarChart2, color:'#0891b2', cnt: null },
               ];
 
               const critIssues = tagInventory.filter(t => t.findings.some(f=>f.severity==='critical')).length;
@@ -5318,6 +5337,339 @@ const PIDVerification = () => {
                         )}
                       </div>
                     )}
+                    {/* ════════════════════════════════════
+                        DRAWING VIEW — live coordinate map
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'drawing' && (() => {
+                      // Soft-coded: marker size and color per state
+                      const MARKER_SIZE_NORMAL   = 13; // px
+                      const MARKER_SIZE_SELECTED = 19; // px
+                      const MARKER_COLOR_CLEAN   = '#22c55e';
+                      const MARKER_COLOR_GLOW_CLEAN = 'rgba(34,197,94,0.45)';
+
+                      const tagsWithCoords = sortedFiltered.filter(t => t.pos?.x_pct != null && t.pos?.y_pct != null);
+                      const tagsNoCoords   = sortedFiltered.length - tagsWithCoords.length;
+
+                      return (
+                        <div className="flex overflow-hidden" style={{ minHeight:0 }}>
+
+                          {/* ── LEFT: drawing canvas ── */}
+                          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+                            {/* Type filter toolbar */}
+                            <div className="px-4 py-2.5 border-b border-slate-100 bg-white/70 flex items-center gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Filter:</span>
+                              {[
+                                { id:'all',        label:'All',         cnt:tagInventory.length },
+                                { id:'instrument', label:'Instruments', cnt:instrItems.length   },
+                                { id:'valve',      label:'Valves',      cnt:valveItems.length   },
+                                { id:'equipment',  label:'Equipment',   cnt:equpItems.length    },
+                              ].map(tab => {
+                                const active = equipSubTab === tab.id;
+                                return (
+                                  <button key={tab.id}
+                                    onClick={() => { setEquipSubTab(tab.id); setSelectedEquipTag(null); }}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
+                                    style={{
+                                      background: active ? '#059669' : '#f8fafc',
+                                      color:      active ? '#fff'    : '#64748b',
+                                      border:     active ? '1px solid #059669' : '1px solid #e2e8f0',
+                                    }}>
+                                    {tab.label}
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none"
+                                      style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#64748b' }}>
+                                      {tab.cnt}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                              <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-400 flex-shrink-0">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background:MARKER_COLOR_CLEAN, boxShadow:`0 0 4px ${MARKER_COLOR_GLOW_CLEAN}` }} />
+                                  QC Pass
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />
+                                  Issues
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />
+                                  Critical
+                                </span>
+                                {tagsNoCoords > 0 && (
+                                  <span className="text-amber-500 font-semibold">{tagsNoCoords} hidden (no coords)</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Drawing + markers */}
+                            <div className="overflow-auto bg-slate-100" style={{ maxHeight:'70vh' }}>
+                              {drawingImageLoading && (
+                                <div className="flex items-center justify-center gap-2 py-20 text-slate-400 text-xs">
+                                  <Loader className="w-4 h-4 animate-spin" />Loading drawing image…
+                                </div>
+                              )}
+                              {!drawingImageLoading && !drawingImageUrl && (
+                                <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+                                  <AlertTriangle className="w-8 h-8 text-amber-400" />
+                                  <p className="text-sm font-bold text-slate-600">Drawing preview not loaded</p>
+                                  <p className="text-xs text-center max-w-xs text-slate-400">
+                                    Open the Drawing panel first to load the image, then return here.
+                                  </p>
+                                  <button onClick={() => setActivePanel('drawing')}
+                                    className="mt-1 px-4 py-1.5 text-xs font-bold text-white rounded-xl transition-all hover:-translate-y-px"
+                                    style={{ background:'linear-gradient(135deg,#059669,#0d9488)', boxShadow:'0 3px 10px rgba(5,150,105,0.35)' }}>
+                                    Open Drawing Panel
+                                  </button>
+                                </div>
+                              )}
+                              {!drawingImageLoading && drawingImageUrl && (
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+
+                                  {/* Tag coordinate markers overlay */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                    {tagsWithCoords.map(t => {
+                                      const isSelected = selectedEquipTag === t.id;
+                                      const maxS       = topSev(t.findings);
+                                      const hasIssue   = !!maxS;
+
+                                      // Soft-coded: tag dot colour
+                                      const dotColor = hasIssue ? (SEV_COLOR[maxS] || '#f97316') : MARKER_COLOR_CLEAN;
+                                      const dotGlow  = hasIssue ? `${SEV_COLOR[maxS]}55` : MARKER_COLOR_GLOW_CLEAN;
+
+                                      const left = Math.min(97, Math.max(1, t.pos.x_pct));
+                                      const top  = Math.min(94, Math.max(1, t.pos.y_pct));
+                                      const size = isSelected ? MARKER_SIZE_SELECTED : MARKER_SIZE_NORMAL;
+
+                                      return (
+                                        <React.Fragment key={t.id}>
+                                          {/* Pulse ring when selected */}
+                                          {isSelected && (
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute',
+                                              left:`${left}%`, top:`${top}%`,
+                                              width:'28px', height:'28px',
+                                              borderRadius:'50%',
+                                              transform:'translate(-50%,-50%)',
+                                              border:`2.5px solid ${dotColor}`,
+                                              animation:'markerPing 1.1s ease-out infinite',
+                                              pointerEvents:'none',
+                                              zIndex:9,
+                                            }} />
+                                          )}
+
+                                          {/* The dot itself */}
+                                          <button
+                                            title={`${t.id} · ${t.cls.label}${hasIssue ? ` · ${t.findings.length} issue${t.findings.length!==1?'s':''}` : ' · QC pass'}`}
+                                            onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                            style={{
+                                              position:'absolute',
+                                              left:`${left}%`, top:`${top}%`,
+                                              transform:'translate(-50%,-50%)',
+                                              width:`${size}px`, height:`${size}px`,
+                                              borderRadius:'50%',
+                                              background: dotColor,
+                                              border:`2px solid ${isSelected ? '#fff' : 'rgba(255,255,255,0.65)'}`,
+                                              boxShadow: isSelected
+                                                ? `0 0 0 3px ${dotGlow}, 0 3px 10px rgba(0,0,0,0.45)`
+                                                : `0 1px 4px rgba(0,0,0,0.32)`,
+                                              zIndex: isSelected ? 20 : 10,
+                                              pointerEvents:'all',
+                                              cursor:'pointer',
+                                              transition:'all 0.15s ease',
+                                            }}
+                                          />
+
+                                          {/* Floating label shown only when selected */}
+                                          {isSelected && (
+                                            <div style={{
+                                              position:'absolute',
+                                              left:`${left}%`,
+                                              top:`calc(${top}% + ${MARKER_SIZE_SELECTED/2 + 4}px)`,
+                                              transform:'translateX(-50%)',
+                                              background:'rgba(0,0,0,0.82)',
+                                              color:'#fff',
+                                              fontSize:'10px',
+                                              fontWeight:'bold',
+                                              fontFamily:'monospace',
+                                              padding:'2px 7px',
+                                              borderRadius:'5px',
+                                              whiteSpace:'nowrap',
+                                              zIndex:21,
+                                              pointerEvents:'none',
+                                              boxShadow:'0 2px 6px rgba(0,0,0,0.35)',
+                                            }}>
+                                              {t.id}
+                                            </div>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* Drawing legend */}
+                                  <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl px-3 py-2"
+                                    style={{ pointerEvents:'none' }}>
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-600 flex-wrap">
+                                      <span className="font-bold text-slate-700">Tag Markers</span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full inline-block" style={{ background:MARKER_COLOR_CLEAN, boxShadow:`0 0 5px ${MARKER_COLOR_GLOW_CLEAN}` }} />
+                                        Clean
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full bg-orange-500 inline-block" />
+                                        Major/Minor
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
+                                        Critical
+                                      </span>
+                                      <span className="text-slate-400">·</span>
+                                      <span>{tagsWithCoords.length} of {sortedFiltered.length} tags mapped</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── RIGHT: tag detail sidebar ── */}
+                          <div style={{ width:detailTag ? '290px' : '0px', flexShrink:0, overflow:'hidden', transition:'width 0.25s ease' }}>
+                            {detailTag && (
+                              <div className="flex flex-col h-full overflow-y-auto bg-white border-l border-slate-100"
+                                style={{ minWidth:'290px', maxHeight:'70vh' }}>
+
+                                {/* Sidebar header */}
+                                <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2"
+                                  style={{ background:`linear-gradient(135deg,${detailTag.cls.color}14,${detailTag.cls.color}06)` }}>
+                                  <div>
+                                    <code className="text-base font-mono font-black text-slate-900">{detailTag.id}</code>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{detailTag.cls.icon} {detailTag.cls.label}</p>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block"
+                                      style={{ background:`${detailTag.cls.color}20`, color:detailTag.cls.color, border:`1px solid ${detailTag.cls.color}30` }}>
+                                      {detailTag.cls.type.toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <button onClick={() => setSelectedEquipTag(null)}
+                                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 flex-shrink-0">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Coordinates card */}
+                                {detailTag.pos?.x_pct != null && (
+                                  <div className="px-4 py-3 border-b border-slate-100">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Coordinates on Drawing</p>
+                                    <div className="flex gap-2 mb-2">
+                                      <div className="flex-1 rounded-xl p-2.5 text-center"
+                                        style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                        <p className="text-[9px] text-emerald-600 font-bold">X</p>
+                                        <code className="text-sm font-black text-emerald-700">{detailTag.pos.x_pct.toFixed(2)}%</code>
+                                      </div>
+                                      <div className="flex-1 rounded-xl p-2.5 text-center"
+                                        style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                        <p className="text-[9px] text-emerald-600 font-bold">Y</p>
+                                        <code className="text-sm font-black text-emerald-700">{detailTag.pos.y_pct?.toFixed(2)}%</code>
+                                      </div>
+                                    </div>
+                                    {/* Mini dot map */}
+                                    <div className="rounded-lg border border-slate-200 overflow-hidden"
+                                      style={{ height:'64px', background:'#f1f5f9', position:'relative' }}>
+                                      <div className="absolute inset-0" style={{
+                                        backgroundImage:'radial-gradient(circle,rgba(5,150,105,0.1) 1px,transparent 1px)',
+                                        backgroundSize:'10px 10px',
+                                      }} />
+                                      <div style={{
+                                        position:'absolute',
+                                        left:`${detailTag.pos.x_pct}%`, top:`${detailTag.pos.y_pct}%`,
+                                        transform:'translate(-50%,-50%)',
+                                        width:'11px', height:'11px', borderRadius:'50%',
+                                        background:MARKER_COLOR_CLEAN,
+                                        boxShadow:`0 0 0 3px ${MARKER_COLOR_GLOW_CLEAN}`,
+                                        zIndex:2,
+                                      }} />
+                                      <p className="absolute bottom-1 right-1.5 text-[8px] text-slate-400 font-mono">canvas</p>
+                                    </div>
+                                    {(detailTag.pos?.all||[]).length > 1 && (
+                                      <p className="text-[10px] text-violet-600 font-bold mt-1.5">× {detailTag.pos.all.length} occurrences on drawing</p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* QC findings */}
+                                <div className="px-4 py-3 flex-1">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                    QC Findings
+                                    <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                                      style={{ background: detailTag.findings.length>0?'#fef2f2':'#f0fdf4',
+                                               color:      detailTag.findings.length>0?'#dc2626':'#16a34a' }}>
+                                      {detailTag.findings.length>0 ? `${detailTag.findings.length} issue${detailTag.findings.length!==1?'s':''}` : 'QC Pass ✓'}
+                                    </span>
+                                  </p>
+                                  {detailTag.findings.length === 0 ? (
+                                    <div className="rounded-xl p-3 flex items-center gap-2"
+                                      style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                      <span className="text-emerald-500 text-base">✓</span>
+                                      <p className="text-[10px] text-emerald-700 font-semibold">No QC issues. Tag appears compliant.</p>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-2">
+                                      {detailTag.findings.map((f, fi) => {
+                                        const pfx     = rulePrefix(f.rule_id);
+                                        const ruleDef = EQUIP_QC_RULES[pfx] || {};
+                                        return (
+                                          <div key={fi} className="rounded-xl p-3 flex flex-col gap-1.5"
+                                            style={{ background:SEV_BG[f.severity]||'#fff', border:`1px solid ${SEV_COLOR[f.severity]||'#e2e8f0'}40` }}>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <code className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">{f.rule_id}</code>
+                                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                                style={{ background:`${SEV_COLOR[f.severity]}22`, color:SEV_COLOR[f.severity] }}>{f.severity}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 leading-snug">{f.issue_observed}</p>
+                                            {ruleDef.fix && (
+                                              <div className="flex items-start gap-1.5 p-1.5 rounded-lg border text-[9px]"
+                                                style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                                <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                                <div><span className="font-bold text-violet-700">AI: </span><span className="text-slate-600">{ruleDef.fix}</span></div>
+                                              </div>
+                                            )}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                              className="self-start flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:-translate-y-px"
+                                              style={{ background:SEV_COLOR[f.severity]||'#6366f1', color:'#fff', boxShadow:`0 2px 6px ${SEV_COLOR[f.severity]||'#6366f1'}44` }}>
+                                              <ScanLine className="w-3 h-3" /> Locate Finding
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {!detailTag && (
+                              <div className="flex flex-col items-center justify-center h-full py-12 gap-2 px-4 text-center"
+                                style={{ minWidth:'290px', maxHeight:'70vh', background:'#fafbff', borderLeft:'1px solid #e2e8f0' }}>
+                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1"
+                                  style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)', border:'1px solid #bbf7d0' }}>
+                                  <MapPin className="w-6 h-6 text-emerald-400" />
+                                </div>
+                                <p className="text-xs font-bold text-slate-600">Click a marker on the drawing</p>
+                                <p className="text-[10px] text-slate-400">Tag details, coordinates, and QC findings will appear here</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     </>
                   )}
 
@@ -5326,6 +5678,7 @@ const PIDVerification = () => {
                     <span style={{ color:'#7c3aed' }}>
                       {equipViewTab === 'register'  ? `${sortedFiltered.length} of ${displayItems.length} tags shown`
                        : equipViewTab === 'insights' ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : equipViewTab === 'drawing'  ? `${tagInventory.filter(t=>t.pos?.x_pct!=null).length} tags mapped on drawing`
                        : `QC score: ${qcScore}%`}
                     </span>
                     <span>{Object.keys(EQUIP_FAMILIES).length} families · ISA 5.1 · AI analysis active</span>
@@ -5337,6 +5690,563 @@ const PIDVerification = () => {
             </div>
             )}
             {/* ─── end EQUIPMENT panel ─── */}
+
+            {/* ─── INSTRUMENTATION panel ─── */}
+            {activePanel === 'instrumentation' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ══ Soft-coded: ISA 5.1 / IEC 62424 Instrumentation QC Checklist ══════════
+              // Add, remove, or reorder items here without touching any render logic.
+              // Each entry:
+              //   id         — unique string key
+              //   category   — logical grouping (used for section headers + analytics)
+              //   title      — one-line requirement label
+              //   detail     — verbose requirement text shown in expanded card
+              //   standard   — applicable standard reference
+              //   detectKeys — OCR/rule evidence keywords used for AI auto-detection
+              //                presence in issues → 'warn' | absence → 'ok' (soft)
+              //   severity   — 'critical'|'major'|'minor'|'info'
+              const INSTR_CHECKS = [
+                // ── Identification ──────────────────────────────────────────────────────
+                {
+                  id: 'IC-01',
+                  category: 'Identification',
+                  title: 'Instrumentation identification symbols, tag numbers and location designation',
+                  detail: 'All instruments must carry ISA 5.1 identification symbols, correct tag numbers, and a clear location designation (field, DCS, local panel, unit control panel, ESD, etc.).',
+                  standard: 'ISA 5.1 / IEC 62424',
+                  severity: 'critical',
+                  detectKeys: ['tag','symbol','location','dcs','field','panel','esd','identification'],
+                },
+                {
+                  id: 'IC-02',
+                  category: 'Identification',
+                  title: 'PRV/PCV set-point marked near tag number',
+                  detail: 'For all PRVs and PCVs (self-regulating), the set-point value must be annotated directly adjacent to the tag number on the P&ID.',
+                  standard: 'ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['prv','pcv','set point','setpoint','self-regulating','set-point'],
+                },
+                {
+                  id: 'IC-03',
+                  category: 'Identification',
+                  title: 'Upstream / downstream tapping of PRV/PCV correctly depicted',
+                  detail: 'Upstream and downstream tapping points for PRVs/PCVs (self-regulating) shall be shown exactly as required by the project specification.',
+                  standard: 'ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['upstream','downstream','tapping','prv','pcv'],
+                },
+                // ── Sensors & Transmitters ───────────────────────────────────────────────
+                {
+                  id: 'IC-04',
+                  category: 'Sensors & Transmitters',
+                  title: 'Temperature, pressure and flow sensors/transmitters identified; signal direction checked',
+                  detail: 'All temperature sensors & transmitters (TE/TT), pressure sensors & transmitters (PE/PT), and flow meters & transmitters (FE/FT) must be individually identified. Signal flow direction arrows shall be shown and verified.',
+                  standard: 'ISA 5.1 § 4.3',
+                  severity: 'critical',
+                  detectKeys: ['temperature','pressure','flow','transmitter','sensor','te','tt','pe','pt','fe','ft','signal','direction'],
+                },
+                {
+                  id: 'IC-05',
+                  category: 'Sensors & Transmitters',
+                  title: 'Instrument isolation valve location identified',
+                  detail: 'Instrument isolation valve locations must be explicit on the P&ID. Note: if not shown, they must be covered in typical hook-up drawings in the legend P&ID.',
+                  standard: 'ISA 5.1 / Project Spec',
+                  severity: 'major',
+                  detectKeys: ['isolation valve','isv','hook-up','hook up','legend'],
+                },
+                // ── Control Systems ──────────────────────────────────────────────────────
+                {
+                  id: 'IC-06',
+                  category: 'Control Systems',
+                  title: 'DCS alarms shown; pre-alarm / monitoring signals indicated',
+                  detail: 'DCS alarm set-points (high/low/high-high/low-low) shall be shown on the P&ID where process control is required. Pre-alarm and monitoring signals must also be indicated.',
+                  standard: 'IEC 62424 / ISA-18.2',
+                  severity: 'critical',
+                  detectKeys: ['dcs','alarm','hh','ll','hi','lo','prealarm','pre-alarm','monitoring','control'],
+                },
+                {
+                  id: 'IC-07',
+                  category: 'Control Systems',
+                  title: 'Logic functions shown',
+                  detail: 'All logic functions (AND, OR, etc.) relevant to the control loop must be depicted on the P&ID.',
+                  standard: 'ISA 5.1',
+                  severity: 'minor',
+                  detectKeys: ['logic','function','and gate','or gate'],
+                },
+                {
+                  id: 'IC-08',
+                  category: 'Control Systems',
+                  title: 'Auxiliary control functions — resets, overrides, ESD, interlocks',
+                  detail: 'Auxiliary control system functions including resets, overrides, emergency shutdown (ESD), and interlocks must be clearly indicated on the P&ID.',
+                  standard: 'IEC 61511 / ISA-S84',
+                  severity: 'critical',
+                  detectKeys: ['reset','override','esd','interlock','emergency','shutdown','aux'],
+                },
+                // ── Physical / Installation ──────────────────────────────────────────────
+                {
+                  id: 'IC-09',
+                  category: 'Physical / Installation',
+                  title: 'Upstream/downstream straight run length for control valves and flow meters',
+                  detail: 'The required upstream and downstream pipe straight run lengths for control valves and flow measuring devices must be dimensioned on the P&ID.',
+                  standard: 'ISA 75.01 / Vendor Req.',
+                  severity: 'major',
+                  detectKeys: ['straight run','upstream length','downstream length','control valve','flow meter','diameters','pipe length'],
+                },
+                {
+                  id: 'IC-10',
+                  category: 'Physical / Installation',
+                  title: 'Straight run requirements for flow elements indicated',
+                  detail: 'Flow elements (orifice plates, venturis, Coriolis, ultrasonic) shall show the minimum straight-pipe upstream and downstream requirements in pipe diameters or millimetres.',
+                  standard: 'ISO 5167 / Vendor Req.',
+                  severity: 'major',
+                  detectKeys: ['flow element','orifice','venturi','coriolis','ultrasonic','straight run','upstream','downstream'],
+                },
+                // ── Legend & Continuity ──────────────────────────────────────────────────
+                {
+                  id: 'IC-11',
+                  category: 'Legend & Continuity',
+                  title: 'MOVs, ESD valves and special instrument types covered in legend P&ID',
+                  detail: 'All special instrument types including Motor Operated Valves (MOVs), ESD valves, and proprietary items must be defined with standard symbols in the legend P&ID.',
+                  standard: 'ISA 5.1 § 3',
+                  severity: 'major',
+                  detectKeys: ['mov','esd valve','legend','special','motor operated'],
+                },
+                {
+                  id: 'IC-12',
+                  category: 'Legend & Continuity',
+                  title: 'Instrument signal continuity from one P&ID to another verified',
+                  detail: 'Instrument signal lines that continue to another P&ID sheet must be shown with correct continuation flags and matching tag references on both sheets.',
+                  standard: 'ISA 5.1 § 5.5',
+                  severity: 'critical',
+                  detectKeys: ['continuity','continuation','sheet','reference','signal','cross-reference','inter-pid'],
+                },
+                {
+                  id: 'IC-13',
+                  category: 'Legend & Continuity',
+                  title: 'All alarm set-points indicated on P&ID',
+                  detail: 'Every instrument alarm (PAHH, PAH, PAL, PALL, etc.) must have its engineering-unit set-point value annotated on the P&ID.',
+                  standard: 'ISA-18.2 / Project Spec',
+                  severity: 'critical',
+                  detectKeys: ['alarm','set-point','setpoint','pahh','pah','pal','pall','tahh','lahh','fahh'],
+                },
+              ];
+
+              // ── Soft-coded: categories for section grouping ──────────────────────────
+              const INSTR_CATEGORIES = [
+                'Identification',
+                'Sensors & Transmitters',
+                'Control Systems',
+                'Physical / Installation',
+                'Legend & Continuity',
+              ];
+
+              // ── Soft-coded: severity colours (reuse same scheme as EQUIPMENT) ─────────
+              const IS_SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+              const IS_SEV_BG    = { critical:'#fef2f2', major:'#fff7ed', minor:'#fffbeb', info:'#eff6ff' };
+              const IS_STATUS_STYLE = {
+                pass:  { bg:'#f0fdf4', border:'#86efac', dot:'#22c55e', label:'Pass',    icon:'✓' },
+                fail:  { bg:'#fef2f2', border:'#fca5a5', dot:'#dc2626', label:'Fail',    icon:'✗' },
+                warn:  { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review',  icon:'⚠' },
+                ok:    { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK',  icon:'✓' },
+                na:    { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',     icon:'—' },
+                open:  { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending', icon:'?' },
+              };
+
+              // ── AI auto-detection: cross-reference rule-engine findings against detectKeys ──
+              // For each check, scan all current drawing issues for keyword evidence.
+              // Returns 'warn' if matching issues found, 'ok' if no issues and tags exist, 'open' if insufficient data.
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const haystack = `${(f.issue_observed || '')} ${(f.evidence || '')} ${(f.category || '')} ${(f.rule_id || '')}`.toLowerCase();
+                  return keys.some(k => haystack.includes(k));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              // ── Effective status (manual override wins over auto) ─────────────────────
+              const effectiveStatus = (check) => {
+                const manual = instrCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────────
+              const statCounts = INSTR_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c);
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+              }, {});
+              const total     = INSTR_CHECKS.length;
+              const passCnt   = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt   = (statCounts.fail || 0);
+              const warnCnt   = (statCounts.warn || 0);
+              const pendCnt   = (statCounts.open || 0) + (statCounts.na || 0);
+              const qcScore   = total > 0 ? Math.round(passCnt / total * 100) : 0;
+
+              // Soft-coded thresholds
+              const SCORE_EXCELLENT = 90;
+              const SCORE_GOOD      = 70;
+              const SCORE_FAIR      = 50;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e'
+                               : qcScore >= SCORE_GOOD      ? '#d97706'
+                               : qcScore >= SCORE_FAIR      ? '#f59e0b'
+                               : '#dc2626';
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(217,119,6,0.06), rgba(245,158,11,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#d97706,#f59e0b)', boxShadow:'0 4px 14px rgba(217,119,6,0.35)' }}>
+                      <Wrench className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Instrumentation QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#d97706,#f59e0b)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · ISA 5.1 / IEC 62424 / ISA-18.2
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Traffic light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Clear</span>}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#d97706', bg:'rgba(217,119,6,0.07)',   border:'rgba(217,119,6,0.2)'    },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'    },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.2)'   },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'    },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {[
+                      { id:'checklist', label:'Checklist', icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',   icon:BarChart2,     cnt:null  },
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = instrActiveView === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setInstrActiveView(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:'#d97706', borderColor:'#d97706' } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:'#d97706' } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ════════════════════════════════════
+                      CHECKLIST VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {/* AI confidence banner */}
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-amber-700">No drawing data loaded.</span> Process and analyse a P&ID drawing first; AI auto-detection will then highlight potential gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Grouped checklist sections */}
+                      {INSTR_CATEGORIES.map(cat => {
+                        const checks = INSTR_CHECKS.filter(c => c.category === cat);
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:'linear-gradient(to right,#d9770640,transparent)' }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:'#d97706', background:'rgba(217,119,6,0.1)', border:'1px solid rgba(217,119,6,0.2)' }}>
+                                {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:'linear-gradient(to left,#d9770640,transparent)' }} />
+                            </div>
+
+                            {/* Check cards */}
+                            <div className="flex flex-col gap-2">
+                              {checks.map((check, ci) => {
+                                const status = effectiveStatus(check);
+                                const st     = IS_STATUS_STYLE[status] || IS_STATUS_STYLE.open;
+                                const isManual = !!instrCheckStates[check.id];
+                                // evidence items linked to this check (AI-detected)
+                                const evidence = allIssues.filter(f => {
+                                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                                  return (check.detectKeys||[]).some(k => hay.includes(k));
+                                });
+
+                                return (
+                                  <div key={check.id}
+                                    className="rounded-xl border flex flex-col overflow-hidden"
+                                    style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${ci*0.04}s both` }}>
+                                    {/* Card top row */}
+                                    <div className="flex items-start gap-3 p-3">
+                                      {/* Status dot */}
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] font-black text-white"
+                                        style={{ background:st.dot, boxShadow:`0 0 6px ${st.dot}55` }}>
+                                        {st.icon}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                          <code className="text-[9px] font-mono font-black text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">{check.id}</code>
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                            style={{ background:`${IS_SEV_COLOR[check.severity]}18`, color:IS_SEV_COLOR[check.severity] }}>
+                                            {check.severity}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">{check.standard}</span>
+                                          {isManual && <span className="text-[9px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">Manual Override</span>}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-800 leading-snug">{check.title}</p>
+                                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.detail}</p>
+
+                                        {/* Evidence findings (AI-detected) */}
+                                        {evidence.length > 0 && (
+                                          <div className="mt-2 flex flex-col gap-1">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">AI Evidence ({evidence.length})</p>
+                                            {evidence.slice(0, 3).map((f, fi) => (
+                                              <div key={fi} className="flex items-start gap-1.5 text-[9px] text-slate-600 bg-white/70 rounded-lg px-2 py-1 border border-slate-100">
+                                                <span className="font-black mt-0.5" style={{ color:IS_SEV_COLOR[f.severity]||'#64748b' }}>⚑</span>
+                                                <span className="truncate">{f.issue_observed}</span>
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                                  className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                                                  style={{ background:'#d97706', color:'#fff' }}>
+                                                  Locate
+                                                </button>
+                                              </div>
+                                            ))}
+                                            {evidence.length > 3 && (
+                                              <p className="text-[9px] text-slate-400 px-1">+{evidence.length - 3} more findings</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Manual override row */}
+                                    <div className="flex items-center gap-1.5 px-3 pb-3">
+                                      <span className="text-[9px] font-bold text-slate-400 mr-1">Override:</span>
+                                      {[
+                                        { v:'pass', label:'✓ Pass', color:'#22c55e' },
+                                        { v:'fail', label:'✗ Fail', color:'#dc2626' },
+                                        { v:'na',   label:'— N/A',  color:'#94a3b8' },
+                                      ].map(opt => {
+                                        const isActive = instrCheckStates[check.id] === opt.v;
+                                        return (
+                                          <button key={opt.v}
+                                            onClick={() => setInstrCheckStates(prev => ({
+                                              ...prev,
+                                              [check.id]: isActive ? undefined : opt.v,
+                                            }))}
+                                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border transition-all"
+                                            style={{
+                                              background: isActive ? opt.color : 'white',
+                                              color:      isActive ? '#fff'    : opt.color,
+                                              borderColor: isActive ? opt.color : `${opt.color}60`,
+                                            }}>
+                                            {opt.label}
+                                          </button>
+                                        );
+                                      })}
+                                      {instrCheckStates[check.id] && (
+                                        <button
+                                          onClick={() => setInstrCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                          className="text-[9px] text-slate-400 hover:text-slate-600 ml-auto">
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="h-6" />
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      SUMMARY VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'summary' && (
+                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                      {/* Score ring */}
+                      <div className="rounded-xl border p-4 flex items-center gap-5"
+                        style={{ background:'linear-gradient(135deg,rgba(217,119,6,0.05),rgba(245,158,11,0.04))', borderColor:'rgba(217,119,6,0.2)' }}>
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                            <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black leading-none" style={{ color:scoreColor }}>{qcScore}%</span>
+                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Instrumentation QC Score</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            {passCnt} of {total} checks passed or auto-cleared.
+                            {failCnt > 0 && ` ${failCnt} check${failCnt!==1?'s':''} marked as failed — resolve before IFR/IFC issue.`}
+                            {warnCnt > 0 && ` ${warnCnt} check${warnCnt!==1?'s':''} require engineer review.`}
+                          </p>
+                          <div className="flex gap-4 mt-2">
+                            {[['Pass/OK',passCnt,'#22c55e'],['Review',warnCnt,'#f59e0b'],['Failed',failCnt,'#dc2626'],['Pending',pendCnt,'#94a3b8']].map(([l,v,c])=>(
+                              <div key={l} className="text-center">
+                                <p className="text-base font-black leading-none" style={{color:c}}>{v}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Category breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">📋</span> Checks by Category
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {INSTR_CATEGORIES.map(cat => {
+                            const catChecks = INSTR_CHECKS.filter(c => c.category === cat);
+                            const catPass   = catChecks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                            const catFail   = catChecks.filter(c => effectiveStatus(c) === 'fail').length;
+                            const catWarn   = catChecks.filter(c => effectiveStatus(c) === 'warn').length;
+                            const catPct    = Math.round(catPass / catChecks.length * 100);
+                            return (
+                              <div key={cat} className="rounded-xl border p-3"
+                                style={{ background: catFail>0 ? '#fef2f220' : catWarn>0 ? '#fffbeb40' : '#f0fdf430',
+                                         borderColor: catFail>0 ? '#fca5a580' : catWarn>0 ? '#fcd34d80' : '#86efac80' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[11px] font-bold text-slate-700">{cat}</span>
+                                  <div className="flex items-center gap-2">
+                                    {catFail > 0 && <span className="text-[9px] font-black text-red-600">{catFail}✗</span>}
+                                    {catWarn > 0 && <span className="text-[9px] font-black text-amber-600">{catWarn}⚠</span>}
+                                    <span className="text-[9px] font-bold" style={{ color:catFail>0?'#dc2626':catWarn>0?'#f59e0b':'#22c55e' }}>{catPct}%</span>
+                                  </div>
+                                </div>
+                                <div className="w-full rounded-full h-2" style={{ background:'rgba(0,0,0,0.08)' }}>
+                                  <div className="h-2 rounded-full transition-all duration-700"
+                                    style={{ width:`${catPct}%`, background: catFail>0 ? '#dc2626' : catWarn>0 ? '#f59e0b' : '#22c55e' }} />
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-1">{catPass} of {catChecks.length} checks OK</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Severity breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">🔍</span> Failed / Review by Severity
+                        </p>
+                        {['critical','major','minor','info'].map(sev => {
+                          const sevChecks = INSTR_CHECKS.filter(c => c.severity === sev);
+                          const sevIssues = sevChecks.filter(c => ['fail','warn'].includes(effectiveStatus(c))).length;
+                          if (sevIssues === 0 && sevChecks.length === 0) return null;
+                          return (
+                            <div key={sev} className="flex items-center gap-3 py-1.5 border-b border-slate-100 last:border-0">
+                              <span className="text-[10px] font-black w-14 capitalize" style={{ color:IS_SEV_COLOR[sev] }}>{sev}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width:`${sevIssues/Math.max(1,sevChecks.length)*100}%`, background:`linear-gradient(90deg,${IS_SEV_COLOR[sev]},${IS_SEV_COLOR[sev]}99)` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500 w-16 text-right">{sevIssues} / {sevChecks.length}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Reset all overrides */}
+                      {Object.keys(instrCheckStates).length > 0 && (
+                        <button
+                          onClick={() => setInstrCheckStates({})}
+                          className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
+                          Reset all {Object.keys(instrCheckStates).length} manual override{Object.keys(instrCheckStates).length!==1?'s':''}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ══ Footer ══ */}
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#d97706' }}>
+                      {instrActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(instrCheckStates).length} manual override${Object.keys(instrCheckStates).length!==1?'s':''}`
+                        : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>ISA 5.1 · IEC 62424 · ISA-18.2 · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end INSTRUMENTATION panel ─── */}
 
             {/* ─── CROSS-REF panel ─── */}
             {activePanel === 'cross' && (
