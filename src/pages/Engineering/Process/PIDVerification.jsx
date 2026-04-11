@@ -8,7 +8,7 @@ import {
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
-  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench,
+  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -787,6 +787,9 @@ const PIDVerification = () => {
   // '' = AI auto | 'pass' = manually confirmed | 'fail' = manually flagged | 'na' = N/A
   const [instrCheckStates, setInstrCheckStates] = useState({});  // { [checkId]: 'pass'|'fail'|'na' }
   const [instrActiveView, setInstrActiveView]  = useState('checklist'); // 'checklist'|'summary'
+  // Piping panel — per-check manual override states
+  const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
+  const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -2124,6 +2127,19 @@ const PIDVerification = () => {
               badgeCls: 'bg-amber-500 text-white',
               accent: '#d97706',
               glow: 'rgba(217,119,6,0.25)',
+            },
+            {
+              id: 'piping',
+              label: 'Piping',
+              icon: ({ cls }) => <Network className={cls} />,
+              badge: (() => {
+                const pipCats = new Set(['piping','line','spec','insulation','valve']);
+                const cnt = (activeDrawingData?.issues || []).filter(f => pipCats.has(f.category)).length;
+                return cnt || null;
+              })(),
+              badgeCls: 'bg-cyan-500 text-white',
+              accent: '#0891b2',
+              glow: 'rgba(8,145,178,0.25)',
             },
             {
               id: 'cross',
@@ -6247,6 +6263,576 @@ const PIDVerification = () => {
             </div>
             )}
             {/* ─── end INSTRUMENTATION panel ─── */}
+
+            {/* ─── PIPING panel ─── */}
+            {activePanel === 'piping' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ══ Soft-coded: Piping QC Checklist ═══════════════════════════════════════
+              // Add, remove, or reorder items here — no render logic changes needed.
+              // Each entry:
+              //   id          — unique string key
+              //   category    — logical grouping (sections + analytics)
+              //   title       — short requirement label
+              //   detail      — full requirement text
+              //   standard    — applicable standard / project reference
+              //   detectKeys  — keywords scanned against AI rule-engine findings
+              //   severity    — 'critical'|'major'|'minor'|'info'
+              const PIPE_CHECKS = [
+                // ── Line Identification ──────────────────────────────────────────────────
+                {
+                  id: 'PC-01',
+                  category: 'Line Identification',
+                  title: 'Line numbers, size, class and fluid code per legend P&ID',
+                  detail: 'Each line on the P&ID must carry its line number, line size, piping class, and fluid code as defined in the legend P&ID. Missing or inconsistent line tags are non-conformance.',
+                  standard: 'ISA 5.1 / Project Piping Spec',
+                  severity: 'critical',
+                  detectKeys: ['line number','line size','line class','fluid code','legend','pipe tag','tag number'],
+                },
+                // ── Specialty Items ──────────────────────────────────────────────────────
+                {
+                  id: 'PC-02',
+                  category: 'Specialty Items',
+                  title: 'Specialty piping (SP) items identified and numbered',
+                  detail: 'Specialty piping items (e.g. strainers, injection quills, flame arrestors, etc.) must be uniquely tagged and numbered on the P&ID. Untagged specialty items are non-conformance.',
+                  standard: 'Project Piping Spec',
+                  severity: 'major',
+                  detectKeys: ['strainer','injection quill','flame arrestor','specialty piping','sp ','special piping'],
+                },
+                {
+                  id: 'PC-07',
+                  category: 'Specialty Items',
+                  title: 'Restriction orifices and miscellaneous piping special items tagged',
+                  detail: 'All restriction orifices (RO) and other miscellaneous piping special items must be identified with their tag numbers on the P&ID.',
+                  standard: 'Project Piping Spec / ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['restriction orifice','ro','orifice','miscellaneous','special item'],
+                },
+                {
+                  id: 'PC-08',
+                  category: 'Specialty Items',
+                  title: 'Reducers (eccentric and concentric) identified',
+                  detail: 'All pipe reducers must be shown and labelled as eccentric or concentric as required for draining, venting, or flow considerations.',
+                  standard: 'Project Piping Spec',
+                  severity: 'minor',
+                  detectKeys: ['reducer','eccentric','concentric'],
+                },
+                // ── Line Routing ─────────────────────────────────────────────────────────
+                {
+                  id: 'PC-03',
+                  category: 'Line Routing',
+                  title: 'Underground (UG) / Aboveground (AG) lines and breaks represented',
+                  detail: 'Underground and aboveground lines, including their transition break points, must be shown clearly on the P&ID with appropriate designation symbols.',
+                  standard: 'Project Drafting Standard',
+                  severity: 'major',
+                  detectKeys: ['underground','aboveground','ug','ag','buried','break','transition'],
+                },
+                {
+                  id: 'PC-05',
+                  category: 'Line Routing',
+                  title: 'Special routing — symmetrical piping, gravity flow, no pockets, slopes',
+                  detail: 'Special routing requirements such as symmetrical piping, gravity flow, no-pocket constraints, and slop/drain slopes must be annotated on the P&ID.',
+                  standard: 'Project P&ID Standard',
+                  severity: 'minor',
+                  detectKeys: ['symmetrical','gravity','pocket','slope','slop','drain','routing'],
+                },
+                {
+                  id: 'PC-11',
+                  category: 'Line Routing',
+                  title: 'Slope within equipment to be indicated',
+                  detail: "Equipment internal slopes (e.g. boot, sump, vessel bottom slope) must be indicated on the P&ID where required by process.",
+                  standard: 'Project P&ID Standard',
+                  severity: 'minor',
+                  detectKeys: ['slope','gradient','vessel slope','equipment slope'],
+                },
+                // ── Pipe Specifications ───────────────────────────────────────────────────
+                {
+                  id: 'PC-06',
+                  category: 'Pipe Specifications',
+                  title: 'Pipe spec breaks shown with upstream/downstream protection or reason known',
+                  detail: 'Pipe spec breaks must be shown as required. Relevant protections (e.g. PSVs, ESDVs) must be available upstream or downstream of each spec break, or the reason for the spec break must be clearly documented.',
+                  standard: 'ASME B31.3 / Project Piping Spec',
+                  severity: 'critical',
+                  detectKeys: ['spec break','specification break','psv','esdv','protection','upstream','downstream'],
+                },
+                {
+                  id: 'PC-09',
+                  category: 'Pipe Specifications',
+                  title: 'Insulation requirements and type clearly marked and consistent across P&IDs',
+                  detail: 'Insulation type (heat conservation, cold insulation, personnel protection, etc.) and requirements must be unambiguously shown on all relevant lines and consistent across all P&ID sheets.',
+                  standard: 'Project Insulation Spec',
+                  severity: 'major',
+                  detectKeys: ['insulation','heat conservation','cold insulation','personnel protection','consistent','insulation type'],
+                },
+                {
+                  id: 'PC-12',
+                  category: 'Pipe Specifications',
+                  title: 'Steam/electrical tracing shown for process and freeze-protection requirements',
+                  detail: 'Steam tracing and electrical tracing requirements for process temperature maintenance and freeze protection must be shown on all applicable lines on the P&ID.',
+                  standard: 'Project Tracing Spec',
+                  severity: 'major',
+                  detectKeys: ['tracing','steam tracing','electrical tracing','heat tracing','freeze','heat maintenance'],
+                },
+                // ── Scope & Routing ───────────────────────────────────────────────────────
+                {
+                  id: 'PC-04',
+                  category: 'Scope & Routing',
+                  title: 'Future piping connections — valve or end flange for future modification',
+                  detail: 'Where future piping connections are required, either a valve or an end flange (with blind) must be provided and clearly identified to facilitate future modification.',
+                  standard: 'Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['future','future connection','end flange','future modification','blind flange'],
+                },
+                {
+                  id: 'PC-10',
+                  category: 'Scope & Routing',
+                  title: 'Scope split (existing/new/future) or vendor/EPC boundary clearly indicated',
+                  detail: "Scope boundaries — whether existing/new/future or vendor/EPC contractor boundaries — must be clearly indicated on the P&ID where applicable, using the project's standard scope-split notation.",
+                  standard: 'Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['scope','existing','new scope','future scope','vendor','epc','contractor','battery limit','scope split','boundary'],
+                },
+                // ── Valve & Isolation ─────────────────────────────────────────────────────
+                {
+                  id: 'PC-13',
+                  category: 'Valve & Isolation',
+                  title: 'Double block and bleed requirements per DGS',
+                  detail: 'Double block-and-bleed (DBB) valve arrangement requirements must be verified against the Design Guide Specification (DGS), and correct DBB configurations shown on the P&ID.',
+                  standard: 'DGS (Design Guide Specification)',
+                  severity: 'critical',
+                  detectKeys: ['double block','bleed','dgs','dbb','block and bleed','double isolation'],
+                },
+                {
+                  id: 'PC-14',
+                  category: 'Valve & Isolation',
+                  title: 'Vent/overflow lines at least one nominal size larger than incoming line',
+                  detail: 'Vent and overflow lines must be specified at a minimum of one nominal pipe size (NPS) larger than the incoming line to ensure adequate flow capacity.',
+                  standard: 'Project Piping Spec / Process Requirements',
+                  severity: 'major',
+                  detectKeys: ['vent','overflow','over flow','one size','line size','larger','higher','nominal'],
+                },
+              ];
+
+              // ── Soft-coded: category display config ──────────────────────────────────
+              const PIPE_CATEGORIES = [
+                'Line Identification',
+                'Specialty Items',
+                'Line Routing',
+                'Pipe Specifications',
+                'Scope & Routing',
+                'Valve & Isolation',
+              ];
+              const PIPE_CAT_STYLE = {
+                'Line Identification': { color:'#0891b2', bg:'#ecfeff', border:'#a5f3fc', icon:'🏷️' },
+                'Specialty Items':     { color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe', icon:'🔧' },
+                'Line Routing':        { color:'#0d9488', bg:'#f0fdfa', border:'#99f6e4', icon:'↗️' },
+                'Pipe Specifications': { color:'#dc2626', bg:'#fef2f2', border:'#fecaca', icon:'📋' },
+                'Scope & Routing':     { color:'#d97706', bg:'#fffbeb', border:'#fde68a', icon:'🗺️' },
+                'Valve & Isolation':   { color:'#f97316', bg:'#fff7ed', border:'#fed7aa', icon:'🔒' },
+              };
+
+              // ── Soft-coded: severity colours ─────────────────────────────────────────
+              const PS_SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+              const PS_STATUS_STYLE = {
+                pass: { bg:'#f0fdf4', border:'#86efac', dot:'#22c55e', label:'Pass',   icon:'✓' },
+                fail: { bg:'#fef2f2', border:'#fca5a5', dot:'#dc2626', label:'Fail',   icon:'✗' },
+                warn: { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review', icon:'⚠' },
+                ok:   { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK', icon:'✓' },
+                na:   { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',    icon:'—' },
+                open: { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending',icon:'?' },
+              };
+
+              // ── AI evidence scan ─────────────────────────────────────────────────────
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                  return keys.some(k => hay.includes(k));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              // ── Effective status — manual override takes precedence ───────────────────
+              const effectiveStatus = (check) => {
+                const manual = pipCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────────
+              const statCounts = PIPE_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c);
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+              }, {});
+              const total   = PIPE_CHECKS.length;
+              const passCnt = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt = statCounts.fail || 0;
+              const warnCnt = statCounts.warn || 0;
+              const pendCnt = (statCounts.open || 0) + (statCounts.na || 0);
+
+              // Soft-coded score thresholds
+              const SCORE_EXCELLENT = 90;
+              const SCORE_GOOD      = 70;
+              const SCORE_FAIR      = 50;
+              const qcScore  = total > 0 ? Math.round(passCnt / total * 100) : 0;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e'
+                               : qcScore >= SCORE_GOOD      ? '#0891b2'
+                               : qcScore >= SCORE_FAIR      ? '#f59e0b'
+                               : '#dc2626';
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(8,145,178,0.06), rgba(6,182,212,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 4px 14px rgba(8,145,178,0.35)' }}>
+                      <Network className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Piping QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#0891b2,#06b6d4)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · ASME B31.3 / ISA 5.1 / DGS
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Traffic light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Clear</span>}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',   border:'rgba(8,145,178,0.2)'    },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'    },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.2)'   },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'    },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {[
+                      { id:'checklist', label:'Checklist', icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',   icon:BarChart2,     cnt:null  },
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = pipActiveView === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setPipActiveView(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:'#0891b2', borderColor:'#0891b2' } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:'#0891b2' } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ════════════════════════════════════
+                      CHECKLIST VIEW
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(8,145,178,0.06)', borderColor:'rgba(8,145,178,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-cyan-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-cyan-700">No drawing data loaded.</span> Analyse a P&ID drawing first — AI auto-detection will then highlight piping gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {PIPE_CATEGORIES.map(cat => {
+                        const checks = PIPE_CHECKS.filter(c => c.category === cat);
+                        const catDef = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to right,${catDef.color}40,transparent)` }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:catDef.color, background:catDef.bg, border:`1px solid ${catDef.border}` }}>
+                                {catDef.icon} {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to left,${catDef.color}40,transparent)` }} />
+                            </div>
+
+                            {/* Check cards */}
+                            <div className="flex flex-col gap-2">
+                              {checks.map((check, ci) => {
+                                const status   = effectiveStatus(check);
+                                const st       = PS_STATUS_STYLE[status] || PS_STATUS_STYLE.open;
+                                const isManual = !!pipCheckStates[check.id];
+                                const evidence = allIssues.filter(f => {
+                                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                                  return (check.detectKeys||[]).some(k => hay.includes(k));
+                                });
+
+                                return (
+                                  <div key={check.id}
+                                    className="rounded-xl border flex flex-col overflow-hidden"
+                                    style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${ci*0.04}s both` }}>
+                                    <div className="flex items-start gap-3 p-3">
+                                      {/* Status dot */}
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] font-black text-white"
+                                        style={{ background:st.dot, boxShadow:`0 0 6px ${st.dot}55` }}>
+                                        {st.icon}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                          <code className="text-[9px] font-mono font-black text-cyan-700 bg-cyan-50 px-1 py-0.5 rounded border border-cyan-200">{check.id}</code>
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                            style={{ background:`${PS_SEV_COLOR[check.severity]}18`, color:PS_SEV_COLOR[check.severity] }}>
+                                            {check.severity}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">{check.standard}</span>
+                                          {isManual && <span className="text-[9px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">Manual</span>}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-800 leading-snug">{check.title}</p>
+                                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.detail}</p>
+
+                                        {/* AI evidence */}
+                                        {evidence.length > 0 && (
+                                          <div className="mt-2 flex flex-col gap-1">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">AI Evidence ({evidence.length})</p>
+                                            {evidence.slice(0, 3).map((f, fi) => (
+                                              <div key={fi} className="flex items-start gap-1.5 text-[9px] text-slate-600 bg-white/70 rounded-lg px-2 py-1 border border-slate-100">
+                                                <span className="font-black mt-0.5" style={{ color:PS_SEV_COLOR[f.severity]||'#64748b' }}>⚑</span>
+                                                <span className="truncate">{f.issue_observed}</span>
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                                  className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                                                  style={{ background:'#0891b2', color:'#fff' }}>
+                                                  Locate
+                                                </button>
+                                              </div>
+                                            ))}
+                                            {evidence.length > 3 && (
+                                              <p className="text-[9px] text-slate-400 px-1">+{evidence.length - 3} more findings</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Manual override row */}
+                                    <div className="flex items-center gap-1.5 px-3 pb-3">
+                                      <span className="text-[9px] font-bold text-slate-400 mr-1">Override:</span>
+                                      {[
+                                        { v:'pass', label:'✓ Pass', color:'#22c55e' },
+                                        { v:'fail', label:'✗ Fail', color:'#dc2626' },
+                                        { v:'na',   label:'— N/A',  color:'#94a3b8' },
+                                      ].map(opt => {
+                                        const isActive = pipCheckStates[check.id] === opt.v;
+                                        return (
+                                          <button key={opt.v}
+                                            onClick={() => setPipCheckStates(prev => ({
+                                              ...prev,
+                                              [check.id]: isActive ? undefined : opt.v,
+                                            }))}
+                                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border transition-all"
+                                            style={{
+                                              background: isActive ? opt.color : 'white',
+                                              color:      isActive ? '#fff'    : opt.color,
+                                              borderColor: isActive ? opt.color : `${opt.color}60`,
+                                            }}>
+                                            {opt.label}
+                                          </button>
+                                        );
+                                      })}
+                                      {pipCheckStates[check.id] && (
+                                        <button
+                                          onClick={() => setPipCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                          className="text-[9px] text-slate-400 hover:text-slate-600 ml-auto">
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="h-6" />
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      SUMMARY VIEW
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'summary' && (
+                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                      {/* Score ring */}
+                      <div className="rounded-xl border p-4 flex items-center gap-5"
+                        style={{ background:'linear-gradient(135deg,rgba(8,145,178,0.05),rgba(6,182,212,0.04))', borderColor:'rgba(8,145,178,0.2)' }}>
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                            <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black leading-none" style={{ color:scoreColor }}>{qcScore}%</span>
+                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Piping QC Score</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            {passCnt} of {total} checks passed or auto-cleared.
+                            {failCnt > 0 && ` ${failCnt} check${failCnt!==1?'s':''} marked as failed.`}
+                            {warnCnt > 0 && ` ${warnCnt} check${warnCnt!==1?'s':''} require engineer review.`}
+                          </p>
+                          <div className="flex gap-4 mt-2">
+                            {[['Pass/OK',passCnt,'#22c55e'],['Review',warnCnt,'#f59e0b'],['Failed',failCnt,'#dc2626'],['Pending',pendCnt,'#94a3b8']].map(([l,v,c])=>(
+                              <div key={l} className="text-center">
+                                <p className="text-base font-black leading-none" style={{color:c}}>{v}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Category breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">📋</span> Checks by Category
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {PIPE_CATEGORIES.map(cat => {
+                            const catChecks = PIPE_CHECKS.filter(c => c.category === cat);
+                            const catDef    = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
+                            const catPass   = catChecks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                            const catFail   = catChecks.filter(c => effectiveStatus(c) === 'fail').length;
+                            const catWarn   = catChecks.filter(c => effectiveStatus(c) === 'warn').length;
+                            const catPct    = Math.round(catPass / catChecks.length * 100);
+                            return (
+                              <div key={cat} className="rounded-xl border p-3"
+                                style={{ background: catFail>0 ? '#fef2f220' : catWarn>0 ? '#fffbeb40' : '#f0fdf430',
+                                         borderColor: catFail>0 ? '#fca5a580' : catWarn>0 ? '#fcd34d80' : '#86efac80' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[11px] font-bold" style={{ color:catDef.color }}>{catDef.icon} {cat}</span>
+                                  <div className="flex items-center gap-2">
+                                    {catFail > 0 && <span className="text-[9px] font-black text-red-600">{catFail}✗</span>}
+                                    {catWarn > 0 && <span className="text-[9px] font-black text-amber-600">{catWarn}⚠</span>}
+                                    <span className="text-[9px] font-bold" style={{ color:catFail>0?'#dc2626':catWarn>0?'#f59e0b':'#22c55e' }}>{catPct}%</span>
+                                  </div>
+                                </div>
+                                <div className="w-full rounded-full h-2" style={{ background:'rgba(0,0,0,0.08)' }}>
+                                  <div className="h-2 rounded-full transition-all duration-700"
+                                    style={{ width:`${catPct}%`, background: catFail>0 ? '#dc2626' : catWarn>0 ? '#f59e0b' : catDef.color }} />
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-1">{catPass} of {catChecks.length} checks OK</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Severity breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">🔍</span> Failed / Review by Severity
+                        </p>
+                        {['critical','major','minor','info'].map(sev => {
+                          const sevChecks  = PIPE_CHECKS.filter(c => c.severity === sev);
+                          const sevIssues  = sevChecks.filter(c => ['fail','warn'].includes(effectiveStatus(c))).length;
+                          if (sevChecks.length === 0) return null;
+                          return (
+                            <div key={sev} className="flex items-center gap-3 py-1.5 border-b border-slate-100 last:border-0">
+                              <span className="text-[10px] font-black w-14 capitalize" style={{ color:PS_SEV_COLOR[sev] }}>{sev}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width:`${sevIssues/Math.max(1,sevChecks.length)*100}%`, background:`linear-gradient(90deg,${PS_SEV_COLOR[sev]},${PS_SEV_COLOR[sev]}99)` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500 w-16 text-right">{sevIssues} / {sevChecks.length}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Reset all overrides */}
+                      {Object.keys(pipCheckStates).length > 0 && (
+                        <button
+                          onClick={() => setPipCheckStates({})}
+                          className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
+                          Reset all {Object.keys(pipCheckStates).length} manual override{Object.keys(pipCheckStates).length!==1?'s':''}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ══ Footer ══ */}
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#0891b2' }}>
+                      {pipActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(pipCheckStates).length} manual override${Object.keys(pipCheckStates).length!==1?'s':''}`
+                        : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>ASME B31.3 · ISA 5.1 · DGS · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end PIPING panel ─── */}
 
             {/* ─── CROSS-REF panel ─── */}
             {activePanel === 'cross' && (
