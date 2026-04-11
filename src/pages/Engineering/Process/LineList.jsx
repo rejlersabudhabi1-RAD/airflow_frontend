@@ -1,8 +1,10 @@
 /**
  * 🎯 LINE LIST - BASE EXTRACTION LAYER ONLY
  *
- * Purpose: Extract base 8 columns from P&ID (no enrichment)
+ * Purpose: Extract base 11 columns from P&ID (no enrichment)
  * Route: /engineering/process/line-list
+ * Format: 2"-D-6152-033842-X-N
+ *   → Size | Service Code | Sequence No | Piping Spec | Dept Deviation | Insulation
  *
  * Features:
  * - P&ID upload only (PDF)
@@ -86,15 +88,28 @@ const FORMAT_OPTIONS = [
 ];
 
 // Soft-coded table columns — key maps directly to row fields.
+// Format: 2"-D-6152-033842-X-N
+//   original_detection → full string
+//   size               → 2"
+//   fluid_code         → D         (service / fluid code)
+//   fluid_description  → Drain     (from legend sheet, if uploaded)
+//   sequence_no        → 6152      (line sequence identifier)
+//   piping_spec        → 033842    (piping specification number)
+//   dept_deviation     → X         (department deviation / modifier)
+//   insulation         → N         (insulation class)
+//   insulation_desc    → No Insul. (from legend sheet, if uploaded)
 const COLUMNS = [
-  { key: 'original_detection', label: 'Original Detection', width: 36 },
-  { key: 'fluid_code',         label: 'Fluid Code',         width: 12 },
-  { key: 'size',               label: 'Size',               width: 8  },
-  { key: 'sequence_no',        label: 'Sequence No',        width: 14 },
-  { key: 'pipr_class',         label: 'Pipe Class',         width: 14 },
-  { key: 'insulation',         label: 'Insulation',         width: 12 },
-  { key: 'from',               label: 'From',               width: 20 },
-  { key: 'to',                 label: 'To',                 width: 20 },
+  { key: 'original_detection', label: 'Line Designation',        width: 36 },
+  { key: 'size',               label: 'Size',                    width: 8  },
+  { key: 'fluid_code',         label: 'Service Code',            width: 12 },
+  { key: 'fluid_description',  label: 'Service Description',     width: 22 },
+  { key: 'sequence_no',        label: 'Sequence No.',            width: 12 },
+  { key: 'piping_spec',        label: 'Piping Specification',    width: 16 },
+  { key: 'dept_deviation',     label: 'Dept Deviation',          width: 14 },
+  { key: 'insulation',         label: 'Insulation',              width: 12 },
+  { key: 'insulation_desc',    label: 'Insulation Description',  width: 22 },
+  { key: 'from',               label: 'From',                    width: 20 },
+  { key: 'to',                 label: 'To',                      width: 20 },
 ];
 
 // Soft-coded format reference examples shown in the info card.
@@ -119,7 +134,8 @@ const FORMAT_EXAMPLES = [
     color: '#0369a1',
     bg: 'rgba(3,105,161,0.06)',
     border: 'rgba(3,105,161,0.18)',
-    examples: ['16\"-PG-4667-031441-X', '6\"-VG-4952-011503-X'],
+    examples: ['2\"-D-6152-033842-X-N', '4\"-D-5690-013842-X-N', '16\"-PG-4667-031441-X'],
+    note: 'Size · Service · Seq · PipingSpec · DeptDev · Insulation',
   },
   {
     group: 'SIZE\"-FLUID-CLASS-SEQ',
@@ -141,6 +157,7 @@ const getPatienceMsg = (secs) => {
 const LineList = () => {
   // State management
   const [pidDocument, setPidDocument] = useState(null);
+  const [legendDocument, setLegendDocument] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
@@ -151,6 +168,7 @@ const LineList = () => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const pidRef = useRef(null);
+  const legendRef = useRef(null);
   const pollTimerRef = useRef(null);
   const pollStartRef = useRef(null);
   const elapsedTimerRef = useRef(null);
@@ -166,6 +184,16 @@ const LineList = () => {
       setExtractedData(null);
     } else {
       setError('Please select a valid PDF file');
+    }
+  };
+
+  const handleLegendSelect = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setLegendDocument(file);
+      setError(null);
+    } else if (file) {
+      setError('Legend file must be a PDF');
     }
   };
 
@@ -259,6 +287,9 @@ const LineList = () => {
     formData.append('pid_file', pidDocument);
     formData.append('format_type', formatType);
     formData.append('include_area', includeArea);
+    if (legendDocument) {
+      formData.append('legend_file', legendDocument);
+    }
 
     // JWT token for Authorization header
     const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -521,8 +552,9 @@ const LineList = () => {
               Line <span className="text-blue-600 ml-2">List</span>
             </h1>
             <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
-              Extract {COLUMNS.length} base piping columns from P&amp;ID drawings using AI OCR —{' '}
-              {COLUMNS.map(c => c.label).join(', ')}
+              Extract {COLUMNS.length} columns from P&amp;ID drawings — including line designation segments,
+              service codes, piping specification, and department deviation.
+              Upload an optional legend sheet to resolve code descriptions per project.
             </p>
           </div>
 
@@ -685,6 +717,69 @@ const LineList = () => {
             </div>
           </div>
 
+          {/* ── Legend Sheet Upload Card (optional) ── */}
+          <div className="rounded-2xl p-6 mb-4 ll-section" style={{
+            background: 'white',
+            border: '1px solid rgba(16,185,129,0.18)',
+            boxShadow: '0 2px 16px rgba(16,185,129,0.06)',
+            animationDelay: '0.16s',
+          }}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              }}>2</div>
+              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">
+                Upload Legend Sheet <span className="text-slate-400 font-normal">(optional)</span>
+              </h2>
+              <span className="text-[11px] text-emerald-700 ml-auto bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                Adds service &amp; insulation descriptions
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              Upload the project legend sheet (PDF) to resolve service codes, insulation classes, and piping spec descriptions.
+              Each project may have different legend sheets — upload per extraction as needed.
+            </p>
+
+            <div
+              className="relative rounded-xl cursor-pointer overflow-hidden"
+              style={{
+                border: legendDocument ? '2px solid rgba(16,185,129,0.5)' : '2px dashed rgba(16,185,129,0.25)',
+                background: legendDocument ? 'rgba(16,185,129,0.04)' : 'rgba(16,185,129,0.01)',
+                minHeight: 90,
+                transition: 'border-color 0.3s, background 0.3s',
+              }}
+              onClick={() => !isProcessing && legendRef.current?.click()}
+            >
+              <input ref={legendRef} type="file" accept=".pdf" onChange={handleLegendSelect} className="hidden" />
+              <div className="flex flex-col items-center justify-center gap-2 py-5 px-6">
+                {legendDocument ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(16,185,129,0.12)', border: '1.5px solid rgba(16,185,129,0.35)' }}>
+                        <CheckCircleIcon className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-slate-700 font-medium text-sm">{legendDocument.name}</p>
+                        <p className="text-slate-400 text-xs">{(legendDocument.size / 1024).toFixed(0)} KB · Legend sheet ready</p>
+                      </div>
+                      <button
+                        className="ml-4 text-xs text-red-400 hover:text-red-600"
+                        onClick={e => { e.stopPropagation(); setLegendDocument(null); }}
+                      >✕ Remove</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl">📋</span>
+                    <p className="text-slate-500 text-sm">Drop legend sheet PDF or click to browse</p>
+                    <p className="text-xs text-slate-400">Optional · Enables service &amp; insulation code descriptions</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* ── Action Buttons ── */}
           <div className="flex gap-3 mb-4 ll-section" style={{ animationDelay: '0.2s' }}>
             <button
@@ -710,7 +805,7 @@ const LineList = () => {
                   <span className="text-slate-400">Processing…</span>
                 </span>
               ) : (
-                <span className="flex items-center justify-center gap-2">⚡ Extract Base Columns</span>
+                <span className="flex items-center justify-center gap-2">⚡ Extract Line List</span>
               )}
             </button>
 
@@ -934,7 +1029,8 @@ const LineList = () => {
                 {[
                   ['📄', 'P&ID Only',            'Upload a single P&ID PDF — no HMB, PMS, NACE or Stress docs needed'],
                   ['📊', `${COLUMNS.length} Base Columns`, COLUMNS.map(c => c.label).join(', ')],
-                  ['🔄', 'Background Processing', 'Job runs async on the server — no browser timeout. Progress polling every 3 s.'],
+                  ['�', 'Legend Sheet (optional)', 'Upload a project legend PDF to resolve service codes, insulation classes, and piping spec descriptions'],
+                  ['�🔄', 'Background Processing', 'Job runs async on the server — no browser timeout. Progress polling every 3 s.'],
                   ['🧠', 'AI FROM-TO',            'Computer Vision + OpenAI detects flow direction for every line'],
                   ['⚡', 'Multi-Format Support',  FORMAT_OPTIONS.map(f => f.label).join(', ')],
                   ['📥', 'Excel Export',           'Download all extracted rows as a formatted XLSX workbook'],

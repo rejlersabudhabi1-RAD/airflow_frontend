@@ -236,7 +236,33 @@ const DUP_HIGHLIGHT_COLORS = {
   info:     { fill: '59,130,246',  border: '37,99,235'   },  // blue-500 / blue-600
 };
 
-// ── Soft-coded: Performance & Accuracy panel ────────────────────────────────
+// ── Soft-coded: duplicate overlay cross-verification guard ───────────────────
+// When true: tagHighlights (Duplicate-Line Highlight Overlay) and the Line Tag
+// Duplicate Overlay (blue diamond buttons) only render for line_tag entries that
+// satisfy BOTH conditions:
+//   1. Tag text is referenced in ≥1 DUP_LINE_RULES finding — rule engine confirmed.
+//   2. Tag has ≥ DUP_OVERLAY_MIN_SECTIONS populated section fields (all sections match).
+// Set false to revert to legacy count≥2 behaviour (shows all repeated tags).
+const DUP_OVERLAY_REQUIRE_FINDING = true;
+// Ordered list of line-tag section fields used for the completeness check.
+// A tag is only eligible when ALL of these are non-empty strings.
+// Sections: NPS size · fluid code · area/sequence · sequence no · pipe class · insulation
+const DUP_OVERLAY_SECTION_KEYS = ['size', 'fluid_code', 'area_code', 'sequence_no', 'pipe_class', 'insulation'];
+// Minimum number of the above fields that must be non-empty.
+// Default 5 of 6 — allows insulation to be absent on bare/uninsulated lines.
+const DUP_OVERLAY_MIN_SECTIONS = 5;
+
+// ── Soft-coded: Findings table — drawing-anchored filter ─────────────────────
+// When true: the FINDINGS table lists ONLY findings whose marker has been
+// resolved to a real drawing position (tiers P1–P5 or CX — genuine OCR/tag match).
+// Findings whose marker falls back to a hash-derived pseudo-position (tier FH,
+// meaning the system could not locate the tag on the canvas) are hidden from
+// the table, keeping the list aligned with what is actually visible on the drawing.
+// Set false to restore the legacy behaviour (all findings shown regardless).
+const FINDINGS_TABLE_ANCHORED_ONLY = true;
+// Resolution tiers considered "anchored on the drawing".
+// FH = full heuristic fallback (random hash position — not on the drawing).
+const FINDINGS_ANCHORED_TIERS = new Set(['P1', 'P2', 'P3', 'P4', 'P5', 'CX']);
 // PERF_TIER_WEIGHT: contribution of each resolution tier to the placement-
 //   confidence score (0 = no confidence, 1 = perfect).  Adjust per tier
 //   without touching any computation logic.
@@ -745,6 +771,10 @@ const PIDVerification = () => {
   const [qcSevFilter,  setQcSevFilter]  = useState('all');
   const [qcRuleFilter, setQcRuleFilter] = useState('all');
   const [lineTagSearch,    setLineTagSearch]    = useState('');
+  // Lines panel — sort, view & expand state
+  const [linesSortBy,       setLinesSortBy]       = useState('issues');   // 'name'|'size'|'fluid'|'issues'
+  const [linesViewMode,     setLinesViewMode]      = useState('grid');    // 'grid'|'list'
+  const [expandedFindingId, setExpandedFindingId] = useState(null);       // expanded QC card id
   // Equipment panel state
   const [equipSubTab,    setEquipSubTab]    = useState('all');
   const [equipTagSearch, setEquipTagSearch] = useState('');
@@ -753,13 +783,17 @@ const PIDVerification = () => {
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
-  const [showLineTagOverlay, setShowLineTagOverlay] = useState(true);
+  // Soft-coded: both duplicate-line overlays default OFF so the drawing canvas
+  // is clean on first load.  Engineers can enable them via the toggle buttons.
+  // Previously true — caused every repeated pipeline label (normal on P&IDs) to
+  // show blue diamond dots / glow rectangles even when no real error existed.
+  const [showLineTagOverlay, setShowLineTagOverlay] = useState(false);
   const [focusedLineTagKey,  setFocusedLineTagKey]  = useState(null);
   // Duplicate-line highlight overlay: semi-transparent glow rectangles drawn at
   // the exact OCR coordinates of every duplicate-line finding on the drawing.
   // Toggled independently from the dot markers so the engineer can switch it off
   // when the colour wash makes small details hard to read.
-  const [showDupLineHighlights, setShowDupLineHighlights] = useState(true);
+  const [showDupLineHighlights, setShowDupLineHighlights] = useState(false);
   // ── History (documents in project) ───────────────────────────────────────
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -1572,6 +1606,22 @@ const PIDVerification = () => {
     )
   );
   const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
+
+  // ── Anchored-findings filter ──────────────────────────────────────────────
+  // Inline evidence-key normalizer — mirrors normKey defined inside buildOverlayNodes.
+  // Strips smart/curly quotes so keys from different sources compare equal.
+  const _normEvKey = (k) => (k || '').replace(/[\u201c\u201d\u2018\u2019]/g, '"').trim();
+  // Build the set of normalized evidence keys for findings that have a REAL
+  // drawing position (tier in FINDINGS_ANCHORED_TIERS, i.e. P1–P5 or CX).
+  // This set is consumed by the Findings table IIFE below to restrict the list
+  // to findings actually visible as markers on the canvas.
+  const anchoredEvidenceKeys = FINDINGS_TABLE_ANCHORED_ONLY
+    ? new Set(
+        overlayNodes
+          .filter(n => FINDINGS_ANCHORED_TIERS.has(n.tier))
+          .map(n => _normEvKey(inferEvidenceKey(n.finding)))
+      )
+    : null;
 
   // Auto-record per-drawing resolution tier statistics to localStorage.
   // Accumulates across all P&IDs tested and can be exported for model training.
@@ -2539,9 +2589,38 @@ const PIDVerification = () => {
                                   n => DUP_LINE_RULES.has(n.finding?.rule_id)
                                 );
                                 const ltags = activeDrawingData?.metadata?.line_tags || [];
+                                // Cross-verify: only show highlight markers for tags confirmed
+                                // by at least one DUP_LINE_RULES rule-engine finding.
+                                // This prevents false-positive blue rectangles from appearing
+                                // for legitimate repeated labels (same pipe run) or OCR multi-
+                                // pass near-duplicates that never triggered an actual finding.
+                                const _allIssuesHL = (activeDrawingData?.issues || []).filter(f =>
+                                  !HIDDEN_CATEGORIES.has(f.category) &&
+                                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                                );
+                                const _dupHLConfirmed = DUP_OVERLAY_REQUIRE_FINDING
+                                  ? new Set(
+                                      _allIssuesHL
+                                        .filter(f => DUP_LINE_RULES.has(f.rule_id))
+                                        .flatMap(f =>
+                                          ltags.filter(lt =>
+                                            (f.evidence || '').includes(lt.text) ||
+                                            (f.issue_observed || '').includes(lt.text)
+                                          ).map(lt => lt.text)
+                                        )
+                                    )
+                                  : null;
                                 const tagHighlights = [];
                                 for (const tag of ltags) {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
+                                  // Guard 1: must be referenced by a confirmed DUP_LINE_RULES finding
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupHLConfirmed && !_dupHLConfirmed.has(tag.text)) continue;
+                                  // Guard 2: all key sections must be fully parsed — eliminates OCR
+                                  // artefacts and cloud-truncated partials that lack pipe_class/insulation
+                                  if (DUP_OVERLAY_REQUIRE_FINDING) {
+                                    const pop = DUP_OVERLAY_SECTION_KEYS.filter(k => tag[k] && String(tag[k]).trim()).length;
+                                    if (pop < DUP_OVERLAY_MIN_SECTIONS) continue;
+                                  }
                                   for (const [occIdx, occ] of (tag.occurrences || []).entries()) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
                                     tagHighlights.push({
@@ -2612,9 +2691,38 @@ const PIDVerification = () => {
                               {showLineTagOverlay && (() => {
                                 const ltags = activeDrawingData?.metadata?.line_tags || [];
                                 if (ltags.length === 0) return null;
+                                // Cross-verify: build confirmed-duplicate set from rule-engine findings.
+                                // A line_tag is only a true duplicate if ALL its sections (size, fluid,
+                                // area, sequence, pipe_class, insulation) match AND the rule engine
+                                // has flagged it under a DUP_LINE_RULES rule ID.  Tags where any
+                                // section differs, or where no finding was raised, are excluded so
+                                // that legitimate repeated labels and OCR near-dupes don't produce dots.
+                                const _allIssuesOcc = (activeDrawingData?.issues || []).filter(f =>
+                                  !HIDDEN_CATEGORIES.has(f.category) &&
+                                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                                );
+                                const _dupOccConfirmed = DUP_OVERLAY_REQUIRE_FINDING
+                                  ? new Set(
+                                      _allIssuesOcc
+                                        .filter(f => DUP_LINE_RULES.has(f.rule_id))
+                                        .flatMap(f =>
+                                          ltags.filter(lt =>
+                                            (f.evidence || '').includes(lt.text) ||
+                                            (f.issue_observed || '').includes(lt.text)
+                                          ).map(lt => lt.text)
+                                        )
+                                    )
+                                  : null;
                                 const occNodes = [];
                                 for (const tag of ltags) {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
+                                  // Guard 1: confirmed by a rule-engine DUP_LINE_RULES finding
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupOccConfirmed && !_dupOccConfirmed.has(tag.text)) continue;
+                                  // Guard 2: all key sections must be fully parsed (eliminates noise tags)
+                                  if (DUP_OVERLAY_REQUIRE_FINDING) {
+                                    const pop = DUP_OVERLAY_SECTION_KEYS.filter(k => tag[k] && String(tag[k]).trim()).length;
+                                    if (pop < DUP_OVERLAY_MIN_SECTIONS) continue;
+                                  }
                                   for (const occ of (tag.occurrences || [])) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
                                     occNodes.push({
@@ -2630,6 +2738,8 @@ const PIDVerification = () => {
                                 const connectors = [];
                                 for (const tag of ltags) {
                                   if (!tag.multi_angle) continue;
+                                  // Cross-verify: only connect confirmed duplicate tags
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupOccConfirmed && !_dupOccConfirmed.has(tag.text)) continue;
                                   const occs = (tag.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
                                   const hOcc = occs.find(o => o.direction === 'H');
                                   const vOcc = occs.find(o => o.direction === 'V');
@@ -2802,7 +2912,11 @@ const PIDVerification = () => {
                     {(() => {
                       const visibleIssues = activeDrawingData.issues.filter(f =>
                         !HIDDEN_CATEGORIES.has(f.category) &&
-                        !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                        !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
+                        // Only include findings whose evidence key maps to a confirmed
+                        // anchored drawing marker (tiers P1–P5 / CX); FH-only findings
+                        // have no real canvas position and are hidden when the filter is on.
+                        (!anchoredEvidenceKeys || anchoredEvidenceKeys.has(_normEvKey(inferEvidenceKey(f))))
                       );
                       const availableCategories = [...new Set(visibleIssues.map(f => f.category))];
                       const filteredIssues = visibleIssues.filter(f => {
@@ -2852,7 +2966,7 @@ const PIDVerification = () => {
                             </select>
 
                             <span className="text-xs text-slate-400 ml-auto">
-                              {filteredIssues.length} of {visibleIssues.length} finding{visibleIssues.length !== 1 ? 's' : ''}
+                              {filteredIssues.length} of {visibleIssues.length} {FINDINGS_TABLE_ANCHORED_ONLY ? 'on-drawing ' : ''}finding{visibleIssues.length !== 1 ? 's' : ''}
                               {activeFilterCount > 0 && (
                                 <button
                                   onClick={() => { setFilterSeverity('all'); setFilterCategory('all'); setFilterStatus('all'); }}
@@ -3090,32 +3204,93 @@ const PIDVerification = () => {
               const allIssuesHere = activeDrawingData?.issues || [];
 
               // ── Soft-coded: LSZ rule catalogue ─────────────────────────────────────
-              // Add/edit entries here to change how each rule appears in the QC table.
-              // No other code needs changing.
               const LINE_QC_RULES = {
-                'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏' },
-                'LSZ-002': { short: 'Conflicting sizes on segment', desc: 'Two or more different NPS sizes recorded on the same pipeline segment — inspect for mis-reads.',                          checkName: 'Size Consistency',   icon: '⚠️' },
-                'LSZ-003': { short: 'Valve bore mismatch',         desc: 'A valve bore size does not match the adjacent line size — spec break or wrong tag.',                                      checkName: 'Valve Bore',         icon: '🔧' },
-                'LSZ-004': { short: 'Inline size conflict',        desc: 'Multiple distinct NPS sizes appear on a single OCR line reference — possible scan artefact or copy-paste error.',        checkName: 'Annotation Clarity', icon: '🔍' },
-                'LSZ-005': { short: '3+ distinct NPS on drawing',  desc: '3 or more different pipe sizes found on this drawing — check for undocumented spec-breaks or off-cuts.',                  checkName: 'NPS Diversity',      icon: '📐' },
-                'LSZ-006': { short: 'NPS conflict — same base',    desc: 'The same pipeline designation base exists with conflicting NPS sizes — strong indicator of a duplication error.',         checkName: 'Duplicate (NPS)',    icon: '🚨' },
-                'LSZ-007': { short: 'Designation ×3 (same axis)',  desc: 'Identical pipeline designation appears 3 or more times in the same orientation — likely copy-paste or OCR repeat.',       checkName: 'Duplicate (Count)',  icon: '🔁' },
-                'LSZ-008': { short: 'H + V confirmed duplicate',   desc: 'Pipeline designation confirmed in both horizontal and vertical orientations — strong duplicate signal.',                   checkName: 'Duplicate (H+V)',    icon: '↕️' },
-                'LSZ-009': { short: 'Cloud-boundary truncation',   desc: 'A cloud revision mark is masking part of a line designation — ensure the underlying tag is fully visible.',               checkName: 'Cloud Truncation',   icon: '☁️' },
-                'LSZ-010': { short: 'Shared suffix — copy-paste',  desc: 'Different pipeline identities share the same sequence/pipe-class/insulation suffix — strong copy-paste numbering error.', checkName: 'Suffix Sharing',     icon: '📋' },
+                'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏', fix: 'Add the NPS size label to the affected line designation on the P&ID.' },
+                'LSZ-002': { short: 'Conflicting sizes on segment', desc: 'Two or more different NPS sizes recorded on the same pipeline segment — inspect for mis-reads.',                          checkName: 'Size Consistency',   icon: '⚠️', fix: 'Verify the OCR extraction and check the drawing for any size reduction notation.' },
+                'LSZ-003': { short: 'Valve bore mismatch',         desc: 'A valve bore size does not match the adjacent line size — spec break or wrong tag.',                                      checkName: 'Valve Bore',         icon: '🔧', fix: 'Confirm the valve bore spec in the instrument index or ISS and update the tag.' },
+                'LSZ-004': { short: 'Inline size conflict',        desc: 'Multiple distinct NPS sizes appear on a single OCR line reference — possible scan artefact.',                             checkName: 'Annotation Clarity', icon: '🔍', fix: 'Check for scan artefacts or overlapping text; re-issue the drawing at higher resolution.' },
+                'LSZ-005': { short: '3+ distinct NPS on drawing',  desc: '3 or more different pipe sizes found on this drawing — check for undocumented spec-breaks.',                              checkName: 'NPS Diversity',      icon: '📐', fix: 'Add spec-break symbols at all NPS transitions and document them in the line list.' },
+                'LSZ-006': { short: 'NPS conflict — same base',    desc: 'Same pipeline designation base exists with conflicting NPS sizes — strong indicator of duplication.',                     checkName: 'Duplicate (NPS)',    icon: '🚨', fix: 'Reconcile the duplicate base designation; assign unique sequence numbers to each line.' },
+                'LSZ-007': { short: 'Designation ×3 (same axis)',  desc: 'Identical pipeline designation appears 3+ times in the same orientation — likely copy-paste or OCR repeat.',              checkName: 'Duplicate (Count)',  icon: '🔁', fix: 'Review the drawing for copy-paste errors and ensure each pipeline has a unique tag.' },
+                'LSZ-008': { short: 'H + V confirmed duplicate',   desc: 'Pipeline designation confirmed in both horizontal and vertical orientations — strong duplicate signal.',                   checkName: 'Duplicate (H+V)',    icon: '↕️', fix: 'Cross-check against the line list and remove the duplicate tag from the P&ID.' },
+                'LSZ-009': { short: 'Cloud-boundary truncation',   desc: 'A cloud revision mark is masking part of a line designation — ensure the tag is fully visible.',                          checkName: 'Cloud Truncation',   icon: '☁️', fix: 'Move the revision cloud boundary so the line designation is fully exposed.' },
+                'LSZ-010': { short: 'Shared suffix — copy-paste',  desc: 'Different pipeline identities share the same sequence/pipe-class/insulation suffix — copy-paste numbering error.',        checkName: 'Suffix Sharing',     icon: '📋', fix: 'Assign a unique sequence number to each pipeline and update both the P&ID and line list.' },
               };
 
+              // ── Soft-coded: AI insight generators ──────────────────────────────────
+              // Each entry is a pure function: (tags, findings) → insight | null.
+              // Returns null when the condition is not met (hidden automatically).
+              // Add new insight detectors here without touching the render logic.
+              const LINE_AI_INSIGHT_GENERATORS = [
+                // Multi-spec indicator: 3+ distinct NPS sizes is an elevated engineering risk
+                (tags, _f) => {
+                  const sizes = [...new Set(tags.map(t => t.size).filter(Boolean))];
+                  if (sizes.length < 3) return null;
+                  return { level: 'warning', icon: '📐', title: `${sizes.length} distinct pipe sizes detected`,
+                    detail: `NPS ${sizes.slice(0,5).join(', ')}${sizes.length > 5 ? ' …' : ''}. Multi-spec drawings require spec-break symbols at all NPS transitions.` };
+                },
+                // Dominant fluid risk: warn if >60 % of lines carry a hazardous fluid code
+                (tags, _f) => {
+                  if (tags.length < 4) return null;
+                  const counts = {};
+                  tags.forEach(t => { if (t.fluid_code) counts[t.fluid_code] = (counts[t.fluid_code] || 0) + 1; });
+                  const [topFluid, topCnt] = Object.entries(counts).sort((a,b) => b[1]-a[1])[0] || [];
+                  const pct = topFluid ? Math.round(topCnt / tags.length * 100) : 0;
+                  const HAZARDOUS_FLUID_CODES = new Set(['HC','H2S','HCL','NH3','SO2','CL2','CO','H2']); // soft-coded
+                  if (!topFluid || pct < 60 || !HAZARDOUS_FLUID_CODES.has(topFluid.toUpperCase())) return null;
+                  return { level: 'critical', icon: '⚠️', title: `${pct}% of lines carry ${topFluid} (hazardous)`,
+                    detail: `${topCnt} of ${tags.length} pipeline designations use fluid code ${topFluid}. Verify all associated safety interlocks are in place.` };
+                },
+                // Copy-paste risk: many lines in same area with same pipe class
+                (tags, _f) => {
+                  if (tags.length < 5) return null;
+                  const combos = {};
+                  tags.forEach(t => {
+                    const k = `${t.area_code || ''}|${t.pipe_class || ''}`;
+                    if (t.area_code && t.pipe_class) combos[k] = (combos[k] || 0) + 1;
+                  });
+                  const maxCombo = Math.max(0, ...Object.values(combos));
+                  if (maxCombo < 4) return null;
+                  const [topKey] = Object.entries(combos).find(([,v]) => v === maxCombo) || [];
+                  const [area, pc] = (topKey || '|').split('|');
+                  return { level: 'info', icon: '📋', title: `${maxCombo} lines share area ${area} + class ${pc}`,
+                    detail: `High repetition in one area/class group is a copy-paste risk marker. Verify all sequence numbers are unique.` };
+                },
+                // Duplicate lines detected message
+                (_tags, findings) => {
+                  const dupCnt = findings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length;
+                  if (dupCnt < 2) return null;
+                  return { level: 'warning', icon: '🔁', title: `${dupCnt} duplicate-line findings need review`,
+                    detail: `Duplicate designations inflate the line list and can indicate copy-paste errors or an OCR artefact. Review each finding before issuing the document.` };
+                },
+                // All-clear
+                (_tags, findings) => {
+                  const lineFds = findings.filter(f => LINE_ISSUE_CATEGORIES_CONST.has(f.category) || (f.rule_id||'').startsWith('LSZ'));
+                  if (lineFds.length > 0) return null;
+                  return { level: 'success', icon: '✅', title: 'All pipeline designations pass QC',
+                    detail: `${_tags.length} line designations were extracted and verified against all 10 LSZ rules with zero findings.` };
+                },
+              ];
+
               // Soft-coded: which finding categories count as "line" quality issues.
-              // Add more category keys here to broaden the scope without touching logic.
-              const LINE_ISSUE_CATEGORIES = new Set(['line_size']);
-              // Also catch any finding whose rule_id begins with 'LSZ'
+              const LINE_ISSUE_CATEGORIES_CONST = new Set(['line_size']);
               const isLineFinding = (f) =>
-                LINE_ISSUE_CATEGORIES.has(f.category) || (f.rule_id || '').startsWith('LSZ');
+                LINE_ISSUE_CATEGORIES_CONST.has(f.category) || (f.rule_id || '').startsWith('LSZ');
 
               // Soft-coded sub-tabs for the Lines panel.
               const LINE_SUBTABS = [
-                { id: 'qc',           label: 'QC Checks',    icon: Shield,   color: '#0d9488' },
-                { id: 'designations', label: 'Designations', icon: Ruler,    color: '#0891b2' },
+                { id: 'insights',     label: 'AI Insights',   icon: Brain,   color: '#7c3aed' },
+                { id: 'qc',          label: 'QC Checks',     icon: Shield,  color: '#0d9488' },
+                { id: 'designations',label: 'Designations',  icon: Ruler,   color: '#0891b2' },
+                { id: 'analytics',   label: 'Analytics',     icon: BarChart2, color: '#6366f1' },
+              ];
+
+              // Soft-coded: sort options for the Designations sub-tab.
+              const DESIGNATION_SORT_OPTIONS = [
+                { v: 'issues', label: '⚡ Issues first' },
+                { v: 'name',   label: 'A–Z Name' },
+                { v: 'size',   label: 'NPS size' },
+                { v: 'fluid',  label: 'Fluid code' },
               ];
 
               // Derived data
@@ -3126,8 +3301,10 @@ const PIDVerification = () => {
               const multiAngleCount = lineTags.filter(lt => lt.multi_angle).length;
               const npsSet   = [...new Set(lineTags.map(lt => lt.size).filter(Boolean))];
               const fluidSet = [...new Set(lineTags.map(lt => lt.fluid_code).filter(Boolean))];
+              const areaSet  = [...new Set(lineTags.map(lt => lt.area_code).filter(Boolean))];
+              const dupCount = lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length;
 
-              // Map each line tag text → its related findings (for QC dot on cards)
+              // Map each line tag text → its related findings
               const tagFindingsMap = new Map();
               for (const f of lineFindings) {
                 const ev = (f.evidence || f.issue || '').toLowerCase();
@@ -3139,7 +3316,7 @@ const PIDVerification = () => {
                 }
               }
 
-              // Highest severity for a tag (for dot colour)
+              // Highest severity for a tag
               const sevRank = { critical: 4, major: 3, minor: 2, info: 1 };
               const tagMaxSev = (text) => {
                 const fds = tagFindingsMap.get(text) || [];
@@ -3157,17 +3334,39 @@ const PIDVerification = () => {
                 minor:    'bg-yellow-100 text-yellow-800 border-yellow-300',
                 info:     'bg-green-100 text-green-800 border-green-300',
               };
+              const INSIGHT_LEVEL_STYLE = {
+                critical: { bg: '#fef2f2', border: '#fca5a5', titleColor: '#991b1b', bar: '#dc2626' },
+                warning:  { bg: '#fffbeb', border: '#fcd34d', titleColor: '#92400e', bar: '#f59e0b' },
+                info:     { bg: '#eff6ff', border: '#93c5fd', titleColor: '#1e40af', bar: '#3b82f6' },
+                success:  { bg: '#f0fdf4', border: '#86efac', titleColor: '#166534', bar: '#22c55e' },
+              };
 
               // Search filter (designations tab)
               const query = lineTagSearch.trim().toLowerCase();
-              const filteredTags = query ? lineTags.filter(lt =>
+
+              // Apply sort + search to designations
+              const sortedTags = [...lineTags].sort((a, b) => {
+                if (linesSortBy === 'issues') {
+                  const aHas = tagFindingsMap.has(a.text) ? 1 : 0;
+                  const bHas = tagFindingsMap.has(b.text) ? 1 : 0;
+                  if (aHas !== bHas) return bHas - aHas;
+                  const aRank = sevRank[tagMaxSev(a.text)] || 0;
+                  const bRank = sevRank[tagMaxSev(b.text)] || 0;
+                  return bRank - aRank;
+                }
+                if (linesSortBy === 'size') return (a.size || '').localeCompare(b.size || '', undefined, { numeric: true });
+                if (linesSortBy === 'fluid') return (a.fluid_code || '').localeCompare(b.fluid_code || '');
+                return (a.text || '').localeCompare(b.text || ''); // 'name'
+              });
+              const filteredTags = query ? sortedTags.filter(lt =>
                 lt.text?.toLowerCase().includes(query) ||
                 lt.fluid_code?.toLowerCase().includes(query) ||
                 lt.area_code?.toLowerCase().includes(query) ||
-                lt.size?.toLowerCase().includes(query)
-              ) : lineTags;
+                lt.size?.toLowerCase().includes(query) ||
+                lt.pipe_class?.toLowerCase().includes(query)
+              ) : sortedTags;
 
-              // QC findings filters (state lives at component level)
+              // QC findings filters
               const qcQ = qcSearch.trim().toLowerCase();
               const filteredFindings = lineFindings.filter(f => {
                 if (qcSevFilter !== 'all' && f.severity !== qcSevFilter) return false;
@@ -3179,97 +3378,214 @@ const PIDVerification = () => {
               });
               const uniqueRules = [...new Set(lineFindings.map(f => f.rule_id).filter(Boolean))].sort();
 
+              // Group filteredFindings by rule_id for grouped QC view
+              const findingsByRule = {};
+              for (const f of filteredFindings) {
+                const r = f.rule_id || 'OTHER';
+                if (!findingsByRule[r]) findingsByRule[r] = [];
+                findingsByRule[r].push(f);
+              }
+
+              // AI Insights — evaluate all generators
+              const aiInsights = LINE_AI_INSIGHT_GENERATORS
+                .map(gen => { try { return gen(lineTags, lineFindings); } catch { return null; } })
+                .filter(Boolean);
+
+              // Analytics distributions
+              const npsDist   = npsSet.map(s => ({ label: `${s}"`, count: lineTags.filter(t => t.size === s).length }))
+                                      .sort((a,b) => b.count - a.count);
+              const fluidDist = fluidSet.map(fc => ({ label: fc, count: lineTags.filter(t => t.fluid_code === fc).length }))
+                                        .sort((a,b) => b.count - a.count);
+              const areaDist  = areaSet.map(ac => ({ label: ac, count: lineTags.filter(t => t.area_code === ac).length }))
+                                       .sort((a,b) => b.count - a.count);
+              const maxNpsCnt   = Math.max(1, ...npsDist.map(d => d.count));
+              const maxFluidCnt = Math.max(1, ...fluidDist.map(d => d.count));
+              const maxAreaCnt  = Math.max(1, ...areaDist.map(d => d.count));
+              const cleanCount  = lineTags.length - tagFindingsMap.size;
+              const qcScore     = lineTags.length > 0 ? Math.round(cleanCount / lineTags.length * 100) : 100;
+
+              // ── QC score colour ─────────────────────────────────────────────────────
+              // Soft-coded: score thresholds for colour grading.
+              const QC_SCORE_EXCELLENT = 90;  // ≥ 90% → green
+              const QC_SCORE_GOOD      = 70;  // ≥ 70% → teal
+              const QC_SCORE_FAIR      = 50;  // ≥ 50% → amber
+              // below → red
+              const qcScoreColor = qcScore >= QC_SCORE_EXCELLENT ? '#22c55e'
+                                 : qcScore >= QC_SCORE_GOOD      ? '#0d9488'
+                                 : qcScore >= QC_SCORE_FAIR      ? '#f59e0b'
+                                 : '#dc2626';
+
               if (lineTags.length === 0 && lineFindings.length === 0)
                 return <div className="p-10 text-center text-slate-400 text-sm">No line designations or quality findings for this drawing.</div>;
 
-              const ActiveSubIcon = LINE_SUBTABS.find(t => t.id === lineQcSubTab)?.icon || Shield;
-
               return (
                 <div>
-                  {/* ── Panel header ── */}
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)' }}>
-                      <Shield className="w-4 h-4 text-white" />
+                  {/* ══ Panel header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background: 'linear-gradient(to right, rgba(13,148,136,0.04), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 4px 12px rgba(13,148,136,0.3)' }}>
+                      <Ruler className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-sm font-bold text-slate-900">Pipeline Line QC</h2>
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Pipeline Lines
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background: 'linear-gradient(135deg,#7c3aed,#6366f1)' }}>AI</span>
+                      </h2>
                       <p className="text-xs text-slate-500">
-                        {lineTags.length} designations extracted · {lineFindings.length} quality finding{lineFindings.length !== 1 ? 's' : ''}
+                        {lineTags.length} designations · {lineFindings.length} QC finding{lineFindings.length !== 1 ? 's' : ''}
                         {multiAngleCount > 0 ? ` · ${multiAngleCount} H+V confirmed` : ''}
+                        {` · ${npsSet.length} NPS size${npsSet.length !== 1 ? 's' : ''}`}
+                        {` · ${fluidSet.length} fluid code${fluidSet.length !== 1 ? 's' : ''}`}
                       </p>
                     </div>
-                    {/* QC traffic-light */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {criticalLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
-                          {criticalLF} CRIT
-                        </span>
-                      )}
-                      {majorLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                          {majorLF} MAJ
-                        </span>
-                      )}
-                      {minorLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
-                          {minorLF} MIN
-                        </span>
-                      )}
-                      {lineFindings.length === 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> All Pass
-                        </span>
-                      )}
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 17 * qcScore / 100} ${2 * Math.PI * 17 * (1 - qcScore / 100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color: qcScoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">QC Score</span>
+                    </div>
+                    {/* Traffic-light badges */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {criticalLF > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{criticalLF} CRIT</span>}
+                      {majorLF   > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{majorLF} MAJ</span>}
+                      {minorLF   > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">{minorLF} MIN</span>}
+                      {lineFindings.length === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Pass</span>}
                     </div>
                   </div>
 
-                  {/* ── QC summary stat chips ── */}
+                  {/* ══ QC summary stat bar ══ */}
                   <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                     {[
-                      { v: lineTags.length,                              label: 'Total Lines',  color:'text-teal-600',    bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.18)' },
-                      { v: lineTags.length - tagFindingsMap.size,         label: 'Clean',        color:'text-emerald-600', bg:'rgba(16,185,129,0.08)',  border:'rgba(16,185,129,0.18)' },
-                      { v: criticalLF,                                   label: 'Critical',     color:'text-red-600',     bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.18)'  },
-                      { v: majorLF,                                      label: 'Major',        color:'text-orange-600',  bg:'rgba(234,88,12,0.08)',   border:'rgba(234,88,12,0.18)'  },
-                      { v: lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length, label: 'Duplicates', color:'text-sky-600', bg:'rgba(14,165,233,0.08)', border:'rgba(14,165,233,0.18)' },
+                      { v: lineTags.length,  label: 'Total Lines',  color:'#0d9488', bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.2)' },
+                      { v: cleanCount,        label: 'Clean',        color:'#16a34a', bg:'rgba(22,163,74,0.08)',   border:'rgba(22,163,74,0.2)'  },
+                      { v: criticalLF,        label: 'Critical',     color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'  },
+                      { v: majorLF,           label: 'Major',        color:'#ea580c', bg:'rgba(234,88,12,0.07)',   border:'rgba(234,88,12,0.2)'  },
+                      { v: dupCount,          label: 'Duplicates',   color:'#0284c7', bg:'rgba(2,132,199,0.07)',   border:'rgba(2,132,199,0.2)'  },
                     ].map(c => (
-                      <div key={c.label} className="rounded-xl p-2.5 text-center"
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
                         style={{ background: c.bg, border: `1px solid ${c.border}` }}>
-                        <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
+                        {/* Subtle background progress bar */}
+                        {lineTags.length > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width: `${c.v / lineTags.length * 100}%`, background: c.color, opacity: 0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color: c.color }}>{c.v}</p>
                         <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* ── Sub-tab switcher ── */}
-                  <div className="flex border-b border-slate-100 bg-slate-50/40">
+                  {/* ══ Sub-tab switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
                     {LINE_SUBTABS.map(tab => {
                       const TabIcon = tab.icon;
                       const active  = lineQcSubTab === tab.id;
-                      const cnt = tab.id === 'qc' ? lineFindings.length : lineTags.length;
+                      const cnt = tab.id === 'qc' ? lineFindings.length
+                                : tab.id === 'designations' ? lineTags.length
+                                : tab.id === 'insights' ? aiInsights.length
+                                : null;
                       return (
                         <button key={tab.id}
                           onClick={() => setLineQcSubTab(tab.id)}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                            active ? 'border-teal-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                            active ? 'border-b-2 bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
                           }`}
-                          style={active ? { color: tab.color } : undefined}>
+                          style={active ? { color: tab.color, borderColor: tab.color } : undefined}>
                           <TabIcon className="w-3.5 h-3.5" />
                           {tab.label}
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${
-                            active ? 'text-white' : 'bg-slate-200 text-slate-500'
-                          }`}
-                          style={active ? { background: tab.color } : undefined}>
-                            {cnt}
-                          </span>
+                          {cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${
+                              active ? 'text-white' : 'bg-slate-100 text-slate-500'
+                            }`}
+                            style={active ? { background: tab.color } : undefined}>
+                              {cnt}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* ═══════════════════════════════
+                  {/* ════════════════════════════════════
+                      AI INSIGHTS sub-tab
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'insights' && (
+                    <div className="p-5 flex flex-col gap-3">
+                      {/* Intro banner */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl border"
+                        style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.06),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                        <Brain className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#7c3aed' }} />
+                        <div>
+                          <p className="text-xs font-bold text-violet-800">AI Line Analysis</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Automated pattern recognition across {lineTags.length} pipeline designations and {lineFindings.length} QC findings.
+                            Insights are generated by soft-coded heuristic rules — no external call needed.
+                          </p>
+                        </div>
+                      </div>
+                      {aiInsights.length === 0 ? (
+                        <div className="flex flex-col items-center gap-2 py-12 text-slate-400">
+                          <CheckCircle className="w-10 h-10 text-emerald-400" />
+                          <p className="text-sm font-semibold">No actionable AI insights</p>
+                          <p className="text-xs">All pattern checks passed for this drawing.</p>
+                        </div>
+                      ) : (
+                        aiInsights.map((ins, i) => {
+                          const st = INSIGHT_LEVEL_STYLE[ins.level] || INSIGHT_LEVEL_STYLE.info;
+                          return (
+                            <div key={i} className="rounded-xl border p-4 flex gap-3 transition-all"
+                              style={{ background: st.bg, borderColor: st.border, animation:`cardIn 0.2s ease-out ${i*0.06}s both` }}>
+                              {/* Left accent bar */}
+                              <div className="w-1 rounded-full flex-shrink-0" style={{ background: st.bar }} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-base leading-none">{ins.icon}</span>
+                                  <p className="text-xs font-bold leading-snug" style={{ color: st.titleColor }}>{ins.title}</p>
+                                  <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full text-white uppercase"
+                                    style={{ background: st.bar }}>{ins.level}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 leading-relaxed">{ins.detail}</p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Checklist of all rules run */}
+                      <div className="mt-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Rules Engine — 10 LSZ checks run</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
+                            const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                            return (
+                              <div key={rid} title={def.desc}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                                  cnt > 0 ? 'border-orange-200 bg-orange-50 text-orange-700'
+                                  : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                }`}>
+                                <span>{cnt > 0 ? def.icon : '✅'}</span>
+                                <code className="font-mono">{rid}</code>
+                                {cnt > 0 && <span className="ml-0.5 bg-orange-200 text-orange-800 px-1 rounded-full font-black">{cnt}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
                       QC CHECKS sub-tab
-                  ═══════════════════════════════ */}
+                  ════════════════════════════════════ */}
                   {lineQcSubTab === 'qc' && (
                     <div>
                       {lineFindings.length === 0 ? (
@@ -3286,27 +3602,28 @@ const PIDVerification = () => {
                         </div>
                       ) : (
                         <div>
-                          {/* ── QC checks covered — soft-coded rule breakdown ── */}
+                          {/* Rule chips */}
                           <div className="px-5 pt-4 pb-2">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Checks Performed</p>
-                            <div className="flex flex-wrap gap-2 mb-3">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Filter by Rule</p>
+                            <div className="flex flex-wrap gap-1.5 mb-3">
                               {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
                                 const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                                const active = qcRuleFilter === rid;
                                 return (
-                                  <button
-                                    key={rid}
+                                  <button key={rid}
                                     onClick={() => setQcRuleFilter(r => r === rid ? 'all' : rid)}
                                     title={def.desc}
                                     className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition-all ${
-                                      cnt > 0 ? (qcRuleFilter === rid ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300')
-                                             : 'bg-slate-50 border-slate-100 text-slate-400'
+                                      cnt > 0
+                                        ? active ? 'text-white border-transparent shadow-md' : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300 hover:shadow-sm'
+                                        : 'bg-slate-50 border-slate-100 text-slate-400 cursor-default'
                                     }`}
-                                    style={cnt > 0 && qcRuleFilter === rid ? { background:'linear-gradient(135deg,#0d9488,#0891b2)' } : undefined}
-                                  >
+                                    disabled={cnt === 0}
+                                    style={cnt > 0 && active ? { background:'linear-gradient(135deg,#0d9488,#0891b2)' } : undefined}>
                                     <span>{def.icon}</span>
                                     <code className="font-mono">{rid}</code>
                                     {cnt > 0 && (
-                                      <span className={`ml-0.5 px-1 rounded-full font-black ${qcRuleFilter === rid ? 'bg-white/20 text-white' : 'bg-teal-50 text-teal-700'}`}>{cnt}</span>
+                                      <span className={`ml-0.5 px-1 rounded-full font-black ${active ? 'bg-white/25 text-white' : 'bg-teal-50 text-teal-700'}`}>{cnt}</span>
                                     )}
                                   </button>
                                 );
@@ -3314,16 +3631,12 @@ const PIDVerification = () => {
                             </div>
                           </div>
 
-                          {/* ── Filters ── */}
+                          {/* Search + severity filter */}
                           <div className="px-5 py-2 border-t border-slate-100 flex gap-2 items-center flex-wrap">
                             <div className="relative flex-1 min-w-[180px]">
-                              <input
-                                type="text"
-                                value={qcSearch}
-                                onChange={e => setQcSearch(e.target.value)}
-                                placeholder="Search findings, evidence…"
-                                className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 transition"
-                              />
+                              <input type="text" value={qcSearch} onChange={e => setQcSearch(e.target.value)}
+                                placeholder="Search findings, evidence, rule…"
+                                className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 transition" />
                               <ScanLine className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
                               {qcSearch && <button onClick={() => setQcSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
                             </div>
@@ -3336,85 +3649,95 @@ const PIDVerification = () => {
                             </select>
                             {(qcSevFilter !== 'all' || qcRuleFilter !== 'all' || qcSearch) && (
                               <button onClick={() => { setQcSevFilter('all'); setQcRuleFilter('all'); setQcSearch(''); }}
-                                className="text-xs text-teal-600 hover:text-teal-800 underline">clear</button>
+                                className="text-xs text-teal-600 hover:text-teal-800 font-semibold underline">clear filters</button>
                             )}
-                            <span className="text-[10px] text-slate-400 ml-auto">
-                              {filteredFindings.length} of {lineFindings.length} findings
-                            </span>
+                            <span className="text-[10px] text-slate-400 ml-auto">{filteredFindings.length} of {lineFindings.length} findings</span>
                           </div>
 
-                          {/* ── Findings table ── */}
-                          <div className="overflow-y-auto" style={{ maxHeight: '58vh' }}>
+                          {/* Findings list — expandable cards */}
+                          <div className="overflow-y-auto" style={{ maxHeight: '56vh' }}>
                             {filteredFindings.length === 0 ? (
-                              <div className="py-12 text-center text-slate-400 text-sm">No findings match filters.</div>
+                              <div className="py-12 text-center text-slate-400 text-sm">No findings match current filters.</div>
                             ) : (
                               <div className="divide-y divide-slate-50">
                                 {filteredFindings.map((f, idx) => {
-                                  const ruleDef    = LINE_QC_RULES[f.rule_id] || {};
-                                  const isDup      = DUP_LINE_RULES.has(f.rule_id);
-                                  const isCloudTrunc = CLOUD_TRUNC_RULES.has(f.rule_id);
-                                  const isSharedSfx  = SHARED_SUFFIX_RULES.has(f.rule_id);
+                                  const ruleDef  = LINE_QC_RULES[f.rule_id] || {};
+                                  const isDup    = DUP_LINE_RULES.has(f.rule_id);
+                                  const isCloud  = CLOUD_TRUNC_RULES.has(f.rule_id);
+                                  const isSuffix = SHARED_SUFFIX_RULES.has(f.rule_id);
+                                  const isExpanded = expandedFindingId === (f.id || idx);
                                   return (
-                                    <div
-                                      key={f.id || idx}
-                                      className="px-5 py-4 hover:bg-teal-50/30 transition-colors"
-                                      style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}
-                                    >
-                                      {/* Row 1: rule + severity + badges */}
-                                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                                        {/* Rule ID pill */}
-                                        <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border"
-                                          style={{ background:'rgba(13,148,136,0.07)', borderColor:'rgba(13,148,136,0.2)', color:'#0d9488' }}>
-                                          {f.rule_id}
-                                        </code>
-                                        {/* Severity badge */}
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                          {f.severity?.toUpperCase()}
-                                        </span>
-                                        {/* Check name from soft-coded catalogue */}
-                                        {ruleDef.checkName && (
-                                          <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>
-                                        )}
-                                        {/* Special duplicate badges */}
-                                        {isDup && !isCloudTrunc && !isSharedSfx && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300">Duplicate Line</span>
-                                        )}
-                                        {isCloudTrunc && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">☁️ Cloud Truncation</span>
-                                        )}
-                                        {isSharedSfx && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300">📋 Shared Suffix</span>
-                                        )}
-                                        {/* Jump to findings panel */}
-                                        <button
-                                          className="ml-auto text-[10px] flex items-center gap-1 text-indigo-500 hover:text-indigo-700 font-medium"
-                                          onClick={() => { setActivePanel('findings'); setFocusedFindingId(f.id); setTimeout(() => jumpToFinding(f.id), 150); }}
-                                        >
-                                          <Eye className="w-3 h-3" /> Locate
-                                        </button>
+                                    <div key={f.id || idx}
+                                      className={`transition-all duration-200 ${isExpanded ? 'bg-teal-50/40' : 'hover:bg-slate-50/70'}`}
+                                      style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}>
+                                      {/* Main row — always visible */}
+                                      <div className="px-5 py-3 cursor-pointer"
+                                        onClick={() => setExpandedFindingId(prev => prev === (f.id||idx) ? null : (f.id||idx))}>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border"
+                                            style={{ background:'rgba(13,148,136,0.07)', borderColor:'rgba(13,148,136,0.2)', color:'#0d9488' }}>
+                                            {f.rule_id}
+                                          </code>
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                            {f.severity?.toUpperCase()}
+                                          </span>
+                                          {ruleDef.checkName && (
+                                            <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>
+                                          )}
+                                          {isDup && !isCloud && !isSuffix && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300">Duplicate</span>
+                                          )}
+                                          {isCloud && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">☁️ Cloud</span>
+                                          )}
+                                          {isSuffix && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300">📋 Suffix</span>
+                                          )}
+                                          <div className="ml-auto flex items-center gap-2">
+                                            <button className="text-[10px] flex items-center gap-1 text-indigo-500 hover:text-indigo-700 font-medium"
+                                              onClick={e => { e.stopPropagation(); setActivePanel('findings'); setFocusedFindingId(f.id); setTimeout(() => jumpToFinding(f.id), 150); }}>
+                                              <Eye className="w-3 h-3" /> Locate
+                                            </button>
+                                            <span className="text-slate-300">{isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</span>
+                                          </div>
+                                        </div>
+                                        {ruleDef.short && <p className="text-[10px] font-semibold text-teal-700 mt-1">{ruleDef.short}</p>}
+                                        <p className="text-xs text-slate-700 leading-relaxed mt-0.5 line-clamp-1">{f.issue}</p>
                                       </div>
-                                      {/* Row 2: short description from catalogue + actual issue text */}
-                                      {ruleDef.short && (
-                                        <p className="text-[10px] font-semibold text-teal-700 mb-1">{ruleDef.short}</p>
+
+                                      {/* Expanded detail */}
+                                      {isExpanded && (
+                                        <div className="px-5 pb-4 space-y-2 border-t border-teal-100/60"
+                                          style={{ animation:'fadeUp 0.18s ease-out both' }}>
+                                          {/* Full issue text */}
+                                          <p className="text-xs text-slate-700 leading-relaxed pt-2">{f.issue}</p>
+                                          {/* Evidence tag */}
+                                          {f.evidence && (
+                                            <div className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                                              <Tag className="w-3 h-3 flex-shrink-0 mt-0.5 text-slate-400" />
+                                              <code className="font-mono bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 break-all">{f.evidence}</code>
+                                            </div>
+                                          )}
+                                          {/* Rule description */}
+                                          {ruleDef.desc && (
+                                            <div className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                                              <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
+                                              <span className="leading-relaxed">{ruleDef.desc}</span>
+                                            </div>
+                                          )}
+                                          {/* AI Fix recommendation */}
+                                          {ruleDef.fix && (
+                                            <div className="flex items-start gap-1.5 p-2 rounded-lg border text-[10px]"
+                                              style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                              <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                              <div>
+                                                <span className="font-bold text-violet-700">AI Recommendation: </span>
+                                                <span className="text-slate-600">{ruleDef.fix}</span>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
                                       )}
-                                      <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{f.issue}</p>
-                                      {/* Row 3: evidence + rule explanation */}
-                                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                        {f.evidence && (
-                                          <div className="flex items-start gap-1 text-[10px] text-slate-500 max-w-full">
-                                            <Tag className="w-3 h-3 flex-shrink-0 mt-0.5 text-slate-400" />
-                                            <code className="font-mono bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-slate-700 truncate max-w-[280px]" title={f.evidence}>
-                                              {f.evidence}
-                                            </code>
-                                          </div>
-                                        )}
-                                        {ruleDef.desc && (
-                                          <div className="flex items-start gap-1 text-[10px] text-slate-400 max-w-full">
-                                            <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
-                                            <span className="leading-relaxed">{ruleDef.desc}</span>
-                                          </div>
-                                        )}
-                                      </div>
                                     </div>
                                   );
                                 })}
@@ -3426,110 +3749,288 @@ const PIDVerification = () => {
                     </div>
                   )}
 
-                  {/* ═══════════════════════════════
+                  {/* ════════════════════════════════════
                       DESIGNATIONS sub-tab
-                  ═══════════════════════════════ */}
+                  ════════════════════════════════════ */}
                   {lineQcSubTab === 'designations' && (
                     <div>
-                      {/* Search */}
-                      <div className="px-5 py-3 border-b border-slate-100">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={lineTagSearch}
-                            onChange={e => setLineTagSearch(e.target.value)}
-                            placeholder={`Search ${lineTags.length} designations…`}
-                            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50"
-                          />
-                          <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
-                          {lineTagSearch && (
-                            <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                      {/* Toolbar: search + sort + view mode */}
+                      <div className="px-5 py-3 border-b border-slate-100 space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <div className="relative flex-1">
+                            <input type="text" value={lineTagSearch} onChange={e => setLineTagSearch(e.target.value)}
+                              placeholder={`Search ${lineTags.length} designations…`}
+                              className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50" />
+                            <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
+                            {lineTagSearch && <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
+                          </div>
+                          {/* Sort selector */}
+                          <select value={linesSortBy} onChange={e => setLinesSortBy(e.target.value)}
+                            className="text-xs px-2 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-300 flex-shrink-0">
+                            {DESIGNATION_SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          </select>
+                          {/* Grid / List toggle */}
+                          <div className="flex rounded-xl border border-slate-200 overflow-hidden flex-shrink-0">
+                            {[{m:'grid',ic:'⊞'},{m:'list',ic:'≡'}].map(({m,ic}) => (
+                              <button key={m} onClick={() => setLinesViewMode(m)}
+                                className={`px-2.5 py-1.5 text-xs font-bold transition-all ${linesViewMode === m ? 'bg-teal-500 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                                {ic}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1.5">
-                          {npsSet.length} NPS sizes · {fluidSet.length} fluid codes
+                        <p className="text-[10px] text-slate-400">
+                          {npsSet.length} NPS sizes · {fluidSet.length} fluid codes · {areaSet.length} area codes
                           {multiAngleCount > 0 && ` · ${multiAngleCount} H+V confirmed`}
-                          {tagFindingsMap.size > 0 && (
-                            <span className="ml-2 text-orange-500 font-semibold">· {tagFindingsMap.size} designations with QC issues</span>
-                          )}
+                          {tagFindingsMap.size > 0 && <span className="ml-2 text-orange-500 font-semibold">· {tagFindingsMap.size} tags with issues</span>}
                         </p>
                       </div>
-                      {/* Card grid */}
-                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+
+                      {/* Cards / List */}
+                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: '62vh' }}>
                         {filteredTags.length === 0 ? (
                           <div className="py-12 text-center text-slate-400 text-sm">No designations match search.</div>
-                        ) : (
-                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(170px,1fr))' }}>
+                        ) : linesViewMode === 'grid' ? (
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(165px,1fr))' }}>
                             {filteredTags.map((lt, idx) => {
                               const isFocused = focusedLineTagKey === lt.text;
                               const maxSev    = tagMaxSev(lt.text);
                               const hasIssue  = !!maxSev;
+                              const issueCnt  = (tagFindingsMap.get(lt.text) || []).length;
                               return (
-                                <div
-                                  key={lt.text}
+                                <div key={lt.text}
                                   id={`line-tag-row-${lt.text}`}
                                   onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
                                   className={`relative rounded-xl border cursor-pointer transition-all duration-200 p-3 flex flex-col gap-1.5 overflow-hidden ${
-                                    isFocused  ? 'border-teal-400 bg-teal-50 shadow-md shadow-teal-100'
-                                    : hasIssue  ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400'
-                                    : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400'
-                                    : 'border-slate-200 bg-white hover:border-teal-300'
+                                    isFocused  ? 'border-teal-400 bg-teal-50 shadow-lg shadow-teal-100/60'
+                                    : hasIssue  ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400 hover:shadow-md'
+                                    : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400 hover:shadow-sm'
+                                    : 'border-slate-200 bg-white hover:border-teal-300 hover:shadow-sm'
                                   }`}
-                                  style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx * 0.02, 0.4)}s both` }}
-                                >
+                                  style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx*0.02,0.4)}s both` }}>
                                   {/* Top colour bar */}
                                   <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{
                                     background: hasIssue        ? `linear-gradient(90deg,${SEV_DOT_COLOR[maxSev]},${SEV_DOT_COLOR[maxSev]}88)`
-                                               : lt.multi_angle || isFocused ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
+                                               : isFocused || lt.multi_angle ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
                                                : 'linear-gradient(90deg,#e2e8f0,#cbd5e1)'
                                   }} />
-                                  {/* QC status dot + line text */}
                                   <div className="flex items-center justify-between gap-1">
                                     <code className={`text-[11px] font-mono font-bold truncate flex-1 ${isFocused ? 'text-teal-700' : hasIssue ? 'text-orange-800' : 'text-slate-800'}`}>
                                       {lt.text}
                                     </code>
-                                    {/* QC dot */}
-                                    <span
-                                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                      style={{
-                                        background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981',
-                                        boxShadow: hasIssue ? `0 0 4px ${SEV_DOT_COLOR[maxSev]}88` : '0 0 4px #10b98188',
-                                      }}
-                                      title={hasIssue ? `${(tagFindingsMap.get(lt.text)||[]).length} QC issue(s): ${maxSev}` : 'QC pass'}
-                                    />
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      style={{ background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981',
+                                        boxShadow: `0 0 5px ${hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981'}88` }}
+                                      title={hasIssue ? `${issueCnt} issue(s): ${maxSev}` : 'QC pass'} />
                                   </div>
-                                  {/* Attribute chips */}
                                   <div className="flex items-center gap-1 flex-wrap">
-                                    {lt.size && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
+                                    {lt.size       && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
                                     {lt.fluid_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{lt.fluid_code}</span>}
-                                    {lt.area_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
+                                    {lt.area_code  && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
                                     {lt.pipe_class && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">{lt.pipe_class}</span>}
                                   </div>
-                                  {/* Issue count hint */}
                                   {hasIssue && (
-                                    <p className="text-[10px] text-orange-600 font-semibold">
-                                      {(tagFindingsMap.get(lt.text)||[]).length} QC issue{(tagFindingsMap.get(lt.text)||[]).length !== 1 ? 's' : ''} · {maxSev}
-                                    </p>
+                                    <p className="text-[10px] text-orange-600 font-semibold">{issueCnt} QC issue{issueCnt !== 1 ? 's' : ''} · {maxSev}</p>
                                   )}
+                                  {lt.multi_angle && !hasIssue && (
+                                    <p className="text-[10px] text-teal-600 font-semibold">↕️ H+V confirmed</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          /* List view */
+                          <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 overflow-hidden">
+                            {/* List header */}
+                            <div className="grid text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 py-2 bg-slate-50"
+                              style={{ gridTemplateColumns: '1fr 60px 60px 60px 70px 80px' }}>
+                              <span>Designation</span><span>NPS</span><span>Fluid</span><span>Area</span><span>Class</span><span>QC Status</span>
+                            </div>
+                            {filteredTags.map((lt, idx) => {
+                              const maxSev   = tagMaxSev(lt.text);
+                              const hasIssue = !!maxSev;
+                              const issueCnt = (tagFindingsMap.get(lt.text) || []).length;
+                              const isFocused = focusedLineTagKey === lt.text;
+                              return (
+                                <div key={lt.text}
+                                  onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
+                                  className={`grid items-center text-xs px-4 py-2.5 cursor-pointer transition-all ${
+                                    isFocused ? 'bg-teal-50 border-l-2 border-teal-400' : 'hover:bg-slate-50/80 border-l-2 border-transparent'
+                                  }`}
+                                  style={{ gridTemplateColumns: '1fr 60px 60px 60px 70px 80px', animation:`cardIn 0.2s ease-out ${Math.min(idx*0.015,0.3)}s both` }}>
+                                  <code className={`font-mono font-bold text-[11px] truncate ${isFocused ? 'text-teal-700' : hasIssue ? 'text-orange-800' : 'text-slate-800'}`}>{lt.text}</code>
+                                  <span className="text-[10px] font-bold text-blue-600">{lt.size ? `${lt.size}"` : '—'}</span>
+                                  <span className="text-[10px] font-semibold text-amber-700">{lt.fluid_code || '—'}</span>
+                                  <span className="text-[10px] text-slate-500">{lt.area_code || '—'}</span>
+                                  <span className="text-[10px] text-purple-600">{lt.pipe_class || '—'}</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full flex-shrink-0"
+                                      style={{ background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981' }} />
+                                    <span className={`text-[10px] font-semibold ${hasIssue ? 'text-orange-600' : 'text-emerald-600'}`}>
+                                      {hasIssue ? `${issueCnt} issue${issueCnt!==1?'s':''}` : 'Pass'}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
                         )}
                       </div>
+                      <div className="px-5 py-2 border-t border-slate-100 text-[10px] text-slate-400">
+                        {filteredTags.length} of {lineTags.length} designations shown · sorted by {DESIGNATION_SORT_OPTIONS.find(o=>o.v===linesSortBy)?.label}
+                      </div>
                     </div>
                   )}
 
-                  {/* Footer */}
+                  {/* ════════════════════════════════════
+                      ANALYTICS sub-tab
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'analytics' && (
+                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+                      {/* ── Overall QC score ── */}
+                      <div className="rounded-xl border p-4 flex items-center gap-5"
+                        style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04))', borderColor:'rgba(99,102,241,0.2)' }}>
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                            <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black leading-none" style={{ color: qcScoreColor }}>{qcScore}%</span>
+                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Line Designation Quality Score</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            {cleanCount} of {lineTags.length} designations pass all checks.
+                            {criticalLF > 0 && ` ${criticalLF} critical finding${criticalLF!==1?'s':''} require immediate attention.`}
+                            {majorLF   > 0 && ` ${majorLF} major finding${majorLF!==1?'s':''} need review before issue.`}
+                          </p>
+                          <div className="flex gap-3 mt-2">
+                            {[['Clean', cleanCount, '#22c55e'],['Critical',criticalLF,'#dc2626'],['Major',majorLF,'#ea580c'],['Minor',minorLF,'#f59e0b']].map(([l,v,c])=>(
+                              <div key={l} className="text-center">
+                                <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── NPS Distribution ── */}
+                      {npsDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">📏</span> NPS Size Distribution
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{npsSet.length} sizes across {lineTags.length} lines</span>
+                          </p>
+                          <div className="space-y-2">
+                            {npsDist.slice(0, 10).map(({label, count}) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <span className="text-[11px] font-bold text-blue-700 w-10 text-right flex-shrink-0">{label}</span>
+                                <div className="flex-1 bg-blue-50 rounded-full h-4 overflow-hidden">
+                                  <div className="h-full rounded-full flex items-center pl-2 transition-all duration-700"
+                                    style={{ width:`${count/maxNpsCnt*100}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', minWidth:'1.5rem' }}>
+                                    <span className="text-[9px] font-black text-white leading-none">{count}</span>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">{Math.round(count/lineTags.length*100)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Fluid Code Distribution ── */}
+                      {fluidDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">💧</span> Fluid Code Distribution
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{fluidSet.length} fluid types</span>
+                          </p>
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))' }}>
+                            {fluidDist.slice(0, 12).map(({label, count}) => (
+                              <div key={label} className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-amber-800">{label}</span>
+                                  <span className="text-[10px] font-bold text-amber-600">{count}</span>
+                                </div>
+                                <div className="w-full bg-amber-100 rounded-full h-1.5">
+                                  <div className="h-1.5 rounded-full" style={{ width:`${count/maxFluidCnt*100}%`, background:'linear-gradient(90deg,#f59e0b,#fbbf24)' }} />
+                                </div>
+                                <span className="text-[9px] text-amber-600">{Math.round(count/lineTags.length*100)}% of lines</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Area Code Coverage ── */}
+                      {areaDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">🗺️</span> Area Code Coverage
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{areaSet.length} areas</span>
+                          </p>
+                          <div className="space-y-1.5">
+                            {areaDist.slice(0, 8).map(({label, count}) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <span className="text-[11px] font-bold text-slate-600 w-14 text-right flex-shrink-0">{label}</span>
+                                <div className="flex-1 bg-slate-100 rounded-full h-3.5 overflow-hidden">
+                                  <div className="h-full rounded-full flex items-center pl-1.5 transition-all duration-700"
+                                    style={{ width:`${count/maxAreaCnt*100}%`, background:'linear-gradient(90deg,#6366f1,#818cf8)', minWidth:'1.5rem' }}>
+                                    <span className="text-[9px] font-black text-white leading-none">{count}</span>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-slate-400 w-8 flex-shrink-0">{count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── QC by Rule breakdown ── */}
+                      {lineFindings.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">🔍</span> QC Findings by Rule
+                          </p>
+                          <div className="space-y-2">
+                            {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
+                              const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                              if (!cnt) return null;
+                              const maxCnt = Math.max(1, ...Object.entries(LINE_QC_RULES).map(([r]) => lineFindings.filter(f=>f.rule_id===r).length));
+                              return (
+                                <button key={rid} onClick={() => { setLineQcSubTab('qc'); setQcRuleFilter(rid); }}
+                                  className="w-full flex items-center gap-3 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-all group text-left">
+                                  <code className="text-[10px] font-mono font-bold text-teal-700 w-16 flex-shrink-0">{rid}</code>
+                                  <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width:`${cnt/maxCnt*100}%`, background:'linear-gradient(90deg,#0d9488,#0891b2)' }} />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-teal-700 w-6 text-right flex-shrink-0">{cnt}</span>
+                                  <span className="text-[10px] text-slate-400 flex-1 truncate group-hover:text-teal-600">{def.short}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ══ Footer ══ */}
                   <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
                     <span style={{ color:'#0d9488' }}>
-                      {lineQcSubTab === 'qc'
-                        ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
-                        : `${filteredTags.length} of ${lineTags.length} designations`}
+                      {lineQcSubTab === 'qc'          ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
+                       : lineQcSubTab === 'designations' ? `${filteredTags.length} of ${lineTags.length} designations`
+                       : lineQcSubTab === 'insights'      ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : `QC score: ${qcScore}%`}
                     </span>
-                    <span>LSZ-001 – LSZ-010 · 10 line quality rules active</span>
+                    <span>LSZ-001 – LSZ-010 · 10 line quality rules · AI analysis active</span>
                   </div>
                 </div>
               );
