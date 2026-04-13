@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect } from 'react';
+﻿import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/api.config';
 import CrossRecommendationPanel from '../../../components/recommendations/CrossRecommendationPanel';
@@ -8,7 +8,8 @@ import {
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
-  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network,
+  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
+  Search, ExternalLink, Sparkles, Maximize2, Minimize2,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +69,60 @@ const NAV_RAIL_ENTRY_DELAY_MS    = 55;
 const NAV_RAIL_ENTRY_DURATION_MS = 320;
 const NAV_RAIL_ACTIVE_BAR_W      = 3;    // px — the left accent bar on active tab
 const NAV_RAIL_WIDTH             = 152;  // px — total rail column width
+// Soft-coded: localStorage key used to persist user-defined panel drag order.
+// Bump the suffix (e.g. v2) to reset all users' saved order after adding new panels.
+const PANEL_DND_STORAGE_KEY = 'pid_panel_order_v1';
+
+// ── Soft-coded: Rejlers brand gradient for all dark panel headers in this page.
+// Source: RejlersBrandGuidelines2024 — primary (#2B3A55) → accent (#617AAD) → turbine (#73BDC8).
+// Change this constant to restyle every dark header at once.
+const REJLERS_DARK_HEADER_BG = 'linear-gradient(135deg, #2B3A55 0%, #617AAD 60%, #73BDC8 100%)';
+
+// ── Soft-coded: Canvas pipe-path tracing parameters (Lines → Drawing Layout sub-tab) ─────────
+// LINE_FOLLOW_CANVAS_W    : width (px) to downsample the drawing image before pixel analysis.
+//                           Lower = faster BFS, higher = more accurate path detail.
+// LINE_FOLLOW_DARK_THRESH : grayscale ≤ this = "dark/pipe" pixel (0 = pure black, 255 = white).
+// LINE_FOLLOW_SNAP_RADIUS : px radius on downsampled grid to snap start/end to nearest dark pixel.
+// LINE_FOLLOW_SIMPLIFY_TOL: Douglas-Peucker tolerance (px) — higher = fewer path segments.
+const LINE_FOLLOW_CANVAS_W     = 500;  // px
+const LINE_FOLLOW_DARK_THRESH  = 90;   // 0–255
+const LINE_FOLLOW_SNAP_RADIUS  = 18;   // px on downsampled grid
+const LINE_FOLLOW_SIMPLIFY_TOL = 2.5;  // px (Douglas-Peucker)
+// ── Soft-coded: SVG render cap (Lines → Drawing Layout) ──────────────────────────────────────
+// Max SVG elements rendered at once; items beyond the cap are culled except the selected one.
+const LAYOUT_SVG_RENDER_CAP    = 150;
+// ── Soft-coded: Direction-aware route sort parameters (Lines → Drawing Layout) ────────────
+// LINE_ROUTE_AXIS_WEIGHT : in mixed H+V lines the nearest-neighbour chain prefers staying
+//   on the same OCR axis; same-axis distance is multiplied by this factor (< 1 = preferred).
+// LINE_ROUTE_SOURCE_BIAS : weight applied to x_pct vs y_pct when choosing the Source seed.
+//   1.0 = equal weight (top-left corner); < 1 biases toward the top, > 1 toward the left.
+const LINE_ROUTE_AXIS_WEIGHT  = 0.5;  // 0.0–1.0 (lower = stronger same-axis preference)
+const LINE_ROUTE_SOURCE_BIAS  = 1.0;  // 1.0 = balanced top-left source seed (P&ID convention)
+// ── Module-level constants for useMemo-based memoization (moved out of JSX IIFEs) ─────────────
+// These objects/sets/functions were previously re-created inside JSX render IIFEs on every
+// render. Moving them here means they are allocated exactly once at module load time.
+const _LINE_FINDING_CATS = new Set(['line_size']); // issue categories that count as line QC
+const _SEV_RANK          = { critical: 4, major: 3, minor: 2, info: 1 };
+// Drawing Layout — fluid code colour palette
+const _LAYOUT_FLUID_COLORS = {
+  'BD': { stroke:'#0369a1', fill:'#bfdbfe', label:'Blowdown'        },
+  'PG': { stroke:'#0d9488', fill:'#99f6e4', label:'Process Gas'     },
+  'PL': { stroke:'#0891b2', fill:'#bae6fd', label:'Process Liquid'  },
+  'FG': { stroke:'#f97316', fill:'#fed7aa', label:'Fuel Gas'        },
+  'FL': { stroke:'#ef4444', fill:'#fecaca', label:'Fuel Liquid'     },
+  'N2': { stroke:'#6366f1', fill:'#c7d2fe', label:'Nitrogen'        },
+  'CW': { stroke:'#06b6d4', fill:'#a5f3fc', label:'Cooling Water'   },
+  'HW': { stroke:'#f59e0b', fill:'#fde68a', label:'Hot Water'       },
+  'ST': { stroke:'#8b5cf6', fill:'#ddd6fe', label:'Steam'           },
+  'CS': { stroke:'#64748b', fill:'#cbd5e1', label:'Closed System'   },
+  'GL': { stroke:'#22c55e', fill:'#bbf7d0', label:'Glycol'          },
+  'LS': { stroke:'#84cc16', fill:'#d9f99d', label:'Low-Pres Steam'  },
+  'HS': { stroke:'#7c3aed', fill:'#ede9fe', label:'High-Pres Steam' },
+  'OT': { stroke:'#94a3b8', fill:'#e2e8f0', label:'Other'           },
+};
+const _lfcGlobal = (code) =>
+  _LAYOUT_FLUID_COLORS[(code || '').toUpperCase()] ||
+  { stroke:'#0891b2', fill:'#bae6fd', label: code || '—' };
 
 const T = {
   bg:    'linear-gradient(135deg, #f8faff 0%, #eef2ff 45%, #f0f9ff 75%, #fffbeb 100%)',
@@ -83,6 +138,119 @@ const T = {
   modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' },
   input: { background:'#f8fafc', border:'1px solid #e2e8f0' },
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   Pipe-line Tracer — module-level pure utilities (no React, no state).
+   Used by Lines → Drawing Layout sub-tab to follow actual dark pipe lines on the P&ID image.
+   _dpSimplify : Douglas-Peucker polyline simplification (reduces BFS path to key waypoints).
+   _bfsTrace   : BFS on dark-pixel grid — returns the shortest path of dark pixels or null.
+═══════════════════════════════════════════════════════════════════════════════════════════ */
+/**
+ * _routeSort — Direction-aware Source→Destination ordering of line-tag occurrences.
+ *
+ * P&ID flow conventions applied (all industry-standard):
+ *  • direction === 'H'  → horizontal label → pipe runs horizontally here.
+ *                         These occurrences are ordered left → right (x_pct ascending).
+ *  • direction === 'V'  → vertical label   → pipe runs vertically here.
+ *                         These occurrences are ordered top → bottom (y_pct ascending).
+ *  • direction unknown  → derive from bounding box: wider span = horizontal, taller = vertical.
+ *  • Mixed H + V (multi-angle) → nearest-neighbour chain starting from the occurrence
+ *    closest to the top-left corner (min x_pct*LINE_ROUTE_SOURCE_BIAS + y_pct), which by
+ *    P&ID convention is the upstream source side.  Same-axis transitions are preferred
+ *    via LINE_ROUTE_AXIS_WEIGHT to avoid zigzag across diagonal cuts.
+ */
+function _routeSort(occs) {
+  if (!occs || occs.length <= 1) return occs || [];
+
+  const norm = occs.map(o => ({ ...o, _dir: (o.direction || '').toUpperCase().charAt(0) }));
+  const hOccs = norm.filter(o => o._dir === 'H');
+  const vOccs = norm.filter(o => o._dir === 'V');
+
+  // ── Pure horizontal (all H or all unknown-wide) → left → right ─────────────
+  if (vOccs.length === 0) {
+    // Check if unknowns are really vertical by bounding box
+    const xs = norm.map(o => o.x_pct), ys = norm.map(o => o.y_pct);
+    const xSpan = Math.max(...xs) - Math.min(...xs);
+    const ySpan = Math.max(...ys) - Math.min(...ys);
+    if (hOccs.length > 0 || xSpan >= ySpan)
+      return [...norm].sort((a, b) => a.x_pct - b.x_pct);  // L → R
+    // Wider vertically even though no explicit V tags → top → bottom
+    return [...norm].sort((a, b) => a.y_pct - b.y_pct);    // T → B
+  }
+
+  // ── Pure vertical (all V) → top → bottom ────────────────────────────────────
+  if (hOccs.length === 0)
+    return [...vOccs].sort((a, b) => a.y_pct - b.y_pct);   // T → B
+
+  // ── Mixed H + V (multi-angle route) ─────────────────────────────────────────
+  // Seed = occurrence closest to top-left corner (upstream source end by P&ID convention).
+  // Nearest-neighbour chain with same-axis preference to follow the pipe bend naturally.
+  const remaining = [...norm];
+  const seedIdx = remaining.reduce((best, o, i) =>
+    (o.x_pct * LINE_ROUTE_SOURCE_BIAS + o.y_pct <
+     remaining[best].x_pct * LINE_ROUTE_SOURCE_BIAS + remaining[best].y_pct ? i : best), 0);
+  const chain = remaining.splice(seedIdx, 1);
+
+  while (remaining.length > 0) {
+    const last = chain[chain.length - 1];
+    let minD = Infinity, minIdx = 0;
+    remaining.forEach((o, i) => {
+      const dx = o.x_pct - last.x_pct, dy = o.y_pct - last.y_pct;
+      // Same-axis occurrences pay reduced distance cost (prefer axis continuity over diagonals)
+      const sameAxis = o._dir !== '' && o._dir === last._dir;
+      const d = Math.sqrt(dx * dx + dy * dy) * (sameAxis ? LINE_ROUTE_AXIS_WEIGHT : 1.0);
+      if (d < minD) { minD = d; minIdx = i; }
+    });
+    chain.push(remaining.splice(minIdx, 1)[0]);
+  }
+  return chain;
+}
+
+function _dpSimplify(pts, tol) {
+  if (pts.length <= 2) return pts;
+  const [x1, y1] = pts[0], [x2, y2] = pts[pts.length - 1];
+  const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1;
+  let maxD = 0, maxI = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = Math.abs(dy * pts[i][0] - dx * pts[i][1] + x2 * y1 - y2 * x1) / l;
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxD <= tol) return [pts[0], pts[pts.length - 1]];
+  return [
+    ..._dpSimplify(pts.slice(0, maxI + 1), tol).slice(0, -1),
+    ..._dpSimplify(pts.slice(maxI), tol),
+  ];
+}
+
+function _bfsTrace(dark, W, H, sx, sy, ex, ey) {
+  const si = sy * W + sx, ei = ey * W + ex;
+  if (si === ei) return [[sx, sy]];
+  // Efficient BFS using typed arrays as both visited flags and circular queue
+  const parent = new Int32Array(W * H).fill(-1);
+  const vis    = new Uint8Array(W * H);
+  const queue  = new Int32Array(W * H);  // max W*H pushes (each cell visited once)
+  let qH = 0, qT = 0;
+  queue[qT++] = si; vis[si] = 1;
+  const DX = [-1, 1, 0, 0, -1,  1, -1, 1];
+  const DY = [ 0, 0,-1, 1, -1, -1,  1, 1];
+  let found = false;
+  outer: while (qH < qT) {
+    const c = queue[qH++], cx = c % W, cy = (c / W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + DX[d], ny = cy + DY[d];
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      const ni = ny * W + nx;
+      if (vis[ni] || !dark[ni]) continue;
+      vis[ni] = 1; parent[ni] = c;
+      if (ni === ei) { found = true; break outer; }
+      queue[qT++] = ni;
+    }
+  }
+  if (!found) return null;
+  const path = []; let c = ei;
+  while (c !== -1) { path.unshift([c % W, (c / W) | 0]); c = parent[c]; }
+  return path;
+}
 
 const DarkBg = ({ children }) => (
   <div className="min-h-screen relative overflow-hidden" style={{ background: T.bg }}>
@@ -187,6 +355,11 @@ const SHOW_RESOLUTION_DEBUG = false;
 // The comparison logic, API call, and panel render are fully preserved —
 // only the navigation button and its panel content are hidden when false.
 const SHOW_COMPARE_PANEL = false;
+
+// Soft-coded: set to true to re-enable the Naming panel in the icon rail.
+// The naming logic, API call, auto-run effect, and panel render are fully
+// preserved — only the navigation button and its panel content are hidden.
+const SHOW_NAMING_PANEL = false;
 
 // Soft-coded: all rule IDs that represent duplicate pipeline line designations.
 // Add new duplicate-detection rule IDs here to automatically propagate them to:
@@ -786,10 +959,39 @@ const PIDVerification = () => {
   // Instrumentation panel — per-check manual override states
   // '' = AI auto | 'pass' = manually confirmed | 'fail' = manually flagged | 'na' = N/A
   const [instrCheckStates, setInstrCheckStates] = useState({});  // { [checkId]: 'pass'|'fail'|'na' }
-  const [instrActiveView, setInstrActiveView]  = useState('checklist'); // 'checklist'|'summary'
+  const [instrActiveView, setInstrActiveView]  = useState('checklist'); // 'checklist'|'summary'|'drawing'|'registry'
+  // Instrument Symbol Registry state
+  const [instrSymbols,        setInstrSymbols]        = useState([]);
+  const [loadingInstrSymbols, setLoadingInstrSymbols] = useState(false);
+  const [instrRegCatFilter,   setInstrRegCatFilter]   = useState('all');
+  const [instrRegSearch,      setInstrRegSearch]      = useState('');
+  // Selected tag in the Instrumentation Drawing Layout view
+  const [instrSelectedTag, setInstrSelectedTag] = useState(null);
+  // DCS / Instrument Symbol Compliance Analysis state
+  const [dcsAnalyzing,     setDcsAnalyzing]     = useState(false);
+  const [dcsResult,        setDcsResult]        = useState(null);   // { findings_created, symbols_extracted, legend_source }
+  const [dcsLegendFile,    setDcsLegendFile]    = useState(null);   // optional uploaded legend PDF
+  const dcsLegendRef = React.useRef(null);                          // hidden file input ref
+  // ── Wrench DMS Cross-Reference state (CROSS-REF panel ↗ Wrench tab) ────────
+  // Soft-coded: panel sub-tabs — 'pfd' = existing internal cross-ref | 'wrench' = DMS search
+  const CROSS_TABS = [
+    { id:'pfd',    label:'PFD Cross-Ref',  icon:'🔗' },
+    { id:'wrench', label:'Wrench DMS',     icon:'🗂' },
+  ];
+  const [crossActiveTab,    setCrossActiveTab]    = useState('pfd');
+  const [wrenchDocs,        setWrenchDocs]        = useState([]);
+  const [wrenchTotal,       setWrenchTotal]       = useState(0);
+  const [wrenchLoading,     setWrenchLoading]     = useState(false);
+  const [wrenchError,       setWrenchError]       = useState('');
+  const [wrenchAiPowered,   setWrenchAiPowered]   = useState(false);
+  const [wrenchQuery,       setWrenchQuery]       = useState('');
+  const [wrenchSearched,    setWrenchSearched]    = useState(false);
+  const [wrenchQueryUsed,   setWrenchQueryUsed]   = useState(null);
+  const [wrenchExpandedDoc, setWrenchExpandedDoc] = useState(null); // DOC_NO of expanded card
   // Piping panel — per-check manual override states
   const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
-  const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'
+  const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
+  const [pipSelectedLine, setPipSelectedLine] = useState(null);        // selected line tag in Drawing Layout
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -799,7 +1001,17 @@ const PIDVerification = () => {
   // show blue diamond dots / glow rectangles even when no real error existed.
   const [showLineTagOverlay, setShowLineTagOverlay] = useState(false);
   const [focusedLineTagKey,  setFocusedLineTagKey]  = useState(null);
-  // Duplicate-line highlight overlay: semi-transparent glow rectangles drawn at
+  // Lines panel — Drawing Layout sub-tab selected line + fluid filter
+  const [lineLayoutSelected,   setLineLayoutSelected]   = useState(null);  // selected line text in Drawing Layout
+  const [lineLayoutFluidFilter,setLineLayoutFluidFilter] = useState('all'); // fluid filter in Drawing Layout
+  // Lines panel — Drawing Layout traced-path cache (result of canvas BFS dark-pixel trace)
+  // text → [{x_pct, y_pct}] on success, null on failure, undefined = not yet attempted
+  const [lineTracedPaths,      setLineTracedPaths]      = useState({});
+  const [lineTracing,          setLineTracing]           = useState(false);
+  const _traceIdRef         = useRef(0);           // monotone id — discard stale async results
+  const _tracedAttemptedRef = useRef(new Set());   // texts already attempted (avoid double work)
+
+  // Duplicate-line highlight overlay — semi-transparent glow rectangles drawn at
   // the exact OCR coordinates of every duplicate-line finding on the drawing.
   // Toggled independently from the dot markers so the engineer can switch it off
   // when the colour wash makes small details hard to read.
@@ -832,9 +1044,46 @@ const PIDVerification = () => {
   // ── Active panel (right-rail navigation) ─────────────────────────────────
   // 'drawing' | 'findings' | 'lines' | 'naming' | 'comparison' | 'cross'
   const [activePanel, setActivePanel] = useState('drawing');
+  // ── Fullscreen ─────────────────────────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+  // ── Panel drag-and-drop order ─────────────────────────────────────────────
+  // Persists across sessions via localStorage. Empty array = use default order.
+  const [panelOrder, setPanelOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PANEL_DND_STORAGE_KEY) || '[]'); }
+    catch { return []; }
+  });
+  const [draggingId,      setDraggingId]     = useState(null); // id of panel actively being dragged
+  const [dropTargetIdx,   setDropTargetIdx]  = useState(null); // live placeholder slot index
+  const dragGhostRef     = useRef(null);  // DOM ref — fixed ghost element
+  const dragStateRef     = useRef(null);  // { startY, startIdx, order, itemHeight }
+  const dropTargetIdxRef = useRef(null);  // mirror of dropTargetIdx — avoids stale closures in listeners
+  const dragInitialPos   = useRef({ x: 0, y: 0 }); // ghost initial position (prevents top-left flash)
+  const railItemRefs     = useRef({});    // id -> button DOM element (for height measurement)
+  const dragCommittedRef = useRef(false); // true once movement exceeds threshold — prevents accidental drags
   // ── Drawing image (lazy-loaded for overlay) ───────────────────────────────
   const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
   const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  // ── Legend Sheets — AI-powered extraction ─────────────────────────────────
+  const [legendSheets,       setLegendSheets]       = useState([]);
+  const [showLegendUpload,   setShowLegendUpload]   = useState(false);
+  const [legendUploadFiles,  setLegendUploadFiles]  = useState([]);
+  const [legendUploading,    setLegendUploading]    = useState(false);
+  const [showLegendPanel,    setShowLegendPanel]    = useState(false);
+  const [legendPanelSheet,   setLegendPanelSheet]   = useState(null);  // full detail
+  const [loadingLegendDetail,setLoadingLegendDetail]= useState(false);
+  const legendPollRef = useRef(null);
   // ── Findings filters (soft-coded, additive) ───────────────────────────────
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -868,6 +1117,86 @@ const PIDVerification = () => {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [documentId, activeDrawing, results?.document_id]);
 
+  // Clear Drawing Layout trace cache when switching to a different drawing page
+  useEffect(() => {
+    setLineTracedPaths({});
+    _tracedAttemptedRef.current = new Set();
+  }, [activeDrawing]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Trace selected line along dark pixels on drawing image using canvas BFS
+  useEffect(() => {
+    if (!lineLayoutSelected || !drawingImageUrl || !activeDrawingData) return;
+    if (_tracedAttemptedRef.current.has(lineLayoutSelected)) return;
+    _tracedAttemptedRef.current.add(lineLayoutSelected);
+    const id = ++_traceIdRef.current;
+    setLineTracing(true);
+
+    // Defer heavy canvas + BFS work to the next event-loop tick so the loading
+    // spinner renders first before the synchronous pixel analysis blocks the main thread.
+    const bfsTimer = setTimeout(() => {
+      if (_traceIdRef.current !== id) return; // cancelled before timer fired
+
+    const lt = (activeDrawingData.metadata?.line_tags || [])
+      .find(t => (t.text || t.tag || t.label || '') === lineLayoutSelected);
+    if (!lt) { setLineTracing(false); return; }
+
+    const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+    if (occs.length < 2) {
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: null }));
+      setLineTracing(false); return;
+    }
+    // Use direction-aware sort (same convention as Drawing Layout overlay)
+    const sorted = _routeSort(occs);
+    const s0 = sorted[0], sN = sorted[sorted.length - 1];
+
+    const img = new Image();
+    img.onload = () => {
+      if (_traceIdRef.current !== id) return;
+      const W  = LINE_FOLLOW_CANVAS_W;
+      const H  = Math.round(img.naturalHeight * W / img.naturalWidth);
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, W, H);
+      const raw4 = ctx.getImageData(0, 0, W, H).data;
+      const dark = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++)
+        dark[i] = (raw4[i*4]*0.299 + raw4[i*4+1]*0.587 + raw4[i*4+2]*0.114) <= LINE_FOLLOW_DARK_THRESH ? 1 : 0;
+
+      const snap = (xp, yp) => {
+        const bx = Math.round(xp * W / 100), by = Math.round(yp * H / 100);
+        if (by >= 0 && by < H && bx >= 0 && bx < W && dark[by*W+bx]) return [bx, by];
+        let b = [bx, by], bd = Infinity;
+        const r = LINE_FOLLOW_SNAP_RADIUS;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const nx = Math.max(0, Math.min(W-1, bx+dx)), ny = Math.max(0, Math.min(H-1, by+dy));
+          if (dark[ny*W+nx]) { const d = dx*dx+dy*dy; if (d < bd) { bd = d; b = [nx, ny]; } }
+        }
+        return b;
+      };
+
+      const [sx, sy] = snap(s0.x_pct, s0.y_pct);
+      const [ex, ey] = snap(sN.x_pct, sN.y_pct);
+      const rawPath  = _bfsTrace(dark, W, H, sx, sy, ex, ey);
+      let result = null;
+      if (rawPath && rawPath.length >= 2)
+        result = _dpSimplify(rawPath, LINE_FOLLOW_SIMPLIFY_TOL)
+                   .map(([gx, gy]) => ({ x_pct: gx / W * 100, y_pct: gy / H * 100 }));
+      if (_traceIdRef.current !== id) return;
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: result }));
+      setLineTracing(false);
+    };
+    img.onerror = () => {
+      if (_traceIdRef.current !== id) return;
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: null }));
+      setLineTracing(false);
+    };
+    img.src = drawingImageUrl;
+    }, 30); // end of deferred BFS block
+    return () => clearTimeout(bfsTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineLayoutSelected, drawingImageUrl]);
+
   // Load stored calibration corrections from localStorage on component mount.
   // Corrections are supplementary — they don't affect any backend data.
   useEffect(() => {
@@ -880,8 +1209,9 @@ const PIDVerification = () => {
   // ── Auto-run naming check when results arrive ─────────────────────────────
   // Fires automatically after verification completes so the user never needs
   // to press "Run Check" manually. Guards: only if results exist, no prior
-  // namingResults, and not already running.
+  // namingResults, and not already running. Also guarded by SHOW_NAMING_PANEL.
   useEffect(() => {
+    if (!SHOW_NAMING_PANEL) return;
     const docId = documentId || results?.document_id;
     if (!docId || !results || namingResults || checkingNaming) return;
     // Soft-coded delay (ms) — gives the UI time to settle before the API call.
@@ -890,6 +1220,11 @@ const PIDVerification = () => {
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results?.document_id, documentId]);
+
+  // ── Panel DnD — listeners are attached inline in handleGripPointerDown, ───────
+  // not via useEffect, to avoid a race-condition where a fast release would
+  // fire pointerup before React's next render cycle attaches window listeners.
+  // (No useEffect needed here — the handler is fully self-contained.)
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -963,6 +1298,112 @@ const PIDVerification = () => {
     }
   };
 
+  // ── Legend Sheets API helpers ──────────────────────────────────────────────
+  const fetchLegendSheets = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/projects/${projectId}/legend-sheets/`,
+        { headers: authHeader() },
+      );
+      setLegendSheets(res.data?.legend_sheets || []);
+    } catch (_) { /* non-fatal */ }
+  };
+
+  // Instrument Symbol Registry — fetch all symbols for the active project
+  const fetchInstrumentSymbols = async (projectId) => {
+    if (!projectId) return;
+    setLoadingInstrSymbols(true);
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/projects/${projectId}/instrument-symbols/`,
+        { headers: authHeader() },
+      );
+      setInstrSymbols(res.data?.symbols || []);
+    } catch (_) { /* non-fatal */ }
+    finally { setLoadingInstrSymbols(false); }
+  };
+
+  const uploadLegendSheets = async () => {
+    if (!selectedProject?.project_id || !legendUploadFiles.length) return;
+    setLegendUploading(true);
+    try {
+      const fd = new FormData();
+      legendUploadFiles.forEach(f => fd.append('files', f));
+      await axios.post(
+        `${API_PREFIX}/projects/${selectedProject.project_id}/legend-sheets/upload/`,
+        fd,
+        { headers: { ...authHeader(), 'Content-Type': 'multipart/form-data' } },
+      );
+      setShowLegendUpload(false);
+      setLegendUploadFiles([]);
+      // Start polling for status updates
+      fetchLegendSheets(selectedProject.project_id);
+      startLegendPoll(selectedProject.project_id);
+      flash('success', 'Legend sheet(s) uploaded — AI extraction in progress…');
+    } catch (err) {
+      flash('error', err?.response?.data?.error || 'Upload failed');
+    } finally {
+      setLegendUploading(false);
+    }
+  };
+
+  const startLegendPoll = (projectId) => {
+    if (legendPollRef.current) clearInterval(legendPollRef.current);
+    // Soft-coded: poll every 4 s, stop after 120 s
+    const POLL_INTERVAL_MS = 4000;
+    const POLL_MAX_MS      = 120000;
+    const start = Date.now();
+    legendPollRef.current = setInterval(async () => {
+      await fetchLegendSheets(projectId);
+      if (Date.now() - start > POLL_MAX_MS) {
+        clearInterval(legendPollRef.current);
+        legendPollRef.current = null;
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  const openLegendDetail = async (legendId) => {
+    setShowLegendPanel(true);
+    setLegendPanelSheet(null);
+    setLoadingLegendDetail(true);
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/legend-sheets/${legendId}/`,
+        { headers: authHeader() },
+      );
+      setLegendPanelSheet(res.data);
+    } catch (_) {
+      setLegendPanelSheet(null);
+    } finally {
+      setLoadingLegendDetail(false);
+    }
+  };
+
+  const deleteLegendSheet = async (legendId) => {
+    try {
+      await axios.delete(`${API_PREFIX}/legend-sheets/${legendId}/`, { headers: authHeader() });
+      setLegendSheets(prev => prev.filter(s => s.legend_id !== legendId));
+      if (legendPanelSheet?.legend_id === legendId) setShowLegendPanel(false);
+      flash('success', 'Legend sheet removed');
+    } catch (_) {
+      flash('error', 'Failed to delete legend sheet');
+    }
+  };
+
+  const retryLegendExtraction = async (legendId) => {
+    try {
+      await axios.post(`${API_PREFIX}/legend-sheets/${legendId}/retry/`, {}, { headers: authHeader() });
+      flash('success', 'Re-queued for extraction');
+      if (selectedProject?.project_id) startLegendPoll(selectedProject.project_id);
+    } catch (_) {
+      flash('error', 'Retry failed');
+    }
+  };
+
+  // Cleanup legend poll on unmount
+  useEffect(() => () => { if (legendPollRef.current) clearInterval(legendPollRef.current); }, []);
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
@@ -1022,10 +1463,13 @@ const PIDVerification = () => {
     setResults(null);
     fetchHistory(p.project_id);
     fetchLegendKnowledge(p.project_id);
+    fetchLegendSheets(p.project_id);
+    fetchInstrumentSymbols(p.project_id);
   };
 
   const handleBackToProjects = () => {
     clearInterval(pollRef.current);
+    if (legendPollRef.current) clearInterval(legendPollRef.current);
     setSelectedProject(null);
     setHistory([]);
     resetUpload();
@@ -1035,6 +1479,8 @@ const PIDVerification = () => {
     setLegendKnowledge(null);
     setLegendScope(null);
     setLegendBuiltAt(null);
+    setLegendSheets([]);
+    setShowLegendPanel(false);
     setMessage({ type:'', text:'' });
   };
 
@@ -1136,6 +1582,41 @@ const PIDVerification = () => {
       flash('error', e?.response?.data?.error || 'Failed to run accuracy comparison');
     } finally {
       setRunningCompare(false);
+    }
+  };
+
+  // ── DCS / Instrument Symbol Compliance Analysis ───────────────────────────
+  // Calls Stage-1 (legend extraction via Gemini+OpenAI) + Stage-2 (P&ID analysis).
+  // Legend PDF is optional — when not supplied, built-in ISA 5.1 defaults are used.
+  const runDcsAnalysis = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) { flash('error', 'No document loaded — upload a P&ID first.'); return; }
+    setDcsAnalyzing(true);
+    setDcsResult(null);
+    try {
+      const form = new FormData();
+      form.append('replace_existing', 'true');
+      // Soft-coded: derive drawing index from the active drawing object
+      const drIdx = activeDrawingData?.page_index ?? 0;
+      form.append('drawing_index', String(drIdx));
+      if (dcsLegendFile) form.append('legend_file', dcsLegendFile);
+
+      const res = await axios.post(
+        `${API_PREFIX}/analyze-dcs/${docId}/`,
+        form,
+        { headers: { ...authHeader(), 'Content-Type': 'multipart/form-data' }, timeout: 300000 }
+      );
+      setDcsResult(res.data);
+      flash('success',
+        `DCS Analysis complete — ${res.data.findings_created} finding${res.data.findings_created !== 1 ? 's' : ''} added. ` +
+        `${res.data.symbols_extracted} symbols referenced (${res.data.legend_source}).`
+      );
+      // Refresh results so new findings appear immediately
+      await fetchResults(docId);
+    } catch (e) {
+      flash('error', e?.response?.data?.error || 'DCS analysis failed — check AI API keys.');
+    } finally {
+      setDcsAnalyzing(false);
     }
   };
 
@@ -1303,6 +1784,56 @@ const PIDVerification = () => {
 
   const activeDrawingData = results?.drawings?.find(d => d.drawing_id === activeDrawing);
   const extractionSummary = activeDrawingData?.metadata?.extraction_summary || null;
+
+  // ── Performance: memoize expensive per-drawing computations ──────────────────────────────
+  // These re-run ONLY when activeDrawingData changes (drawing selection), NOT on every render.
+  // Without this, the Lines panel rebuilt tagFindingsMap O(findings×tags) and _routeSort for
+  // every line tag on every keystroke / hover / scroll event.
+
+  // tagFindingsMap: each line tag text → array of its related QC findings
+  const tagFindingsMap = useMemo(() => {
+    const lts      = activeDrawingData?.metadata?.line_tags || [];
+    const findings = (activeDrawingData?.issues || []).filter(
+      f => _LINE_FINDING_CATS.has(f.category) || (f.rule_id || '').startsWith('LSZ')
+    );
+    const map = new Map();
+    for (const f of findings) {
+      const ev = (f.evidence || f.issue || '').toLowerCase();
+      for (const lt of lts) {
+        if (lt.text && ev.includes(lt.text.toLowerCase())) {
+          if (!map.has(lt.text)) map.set(lt.text, []);
+          map.get(lt.text).push(f);
+        }
+      }
+    }
+    return map;
+  }, [activeDrawingData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // layoutItemsBase: direction-aware route items for Drawing Layout sub-tab
+  const layoutItemsBase = useMemo(() => {
+    const lts = activeDrawingData?.metadata?.line_tags || [];
+    return lts.reduce((acc, lt) => {
+      const text = lt.text || lt.tag || lt.label || '';
+      if (!text) return acc;
+      const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+      if (occs.length === 0) return acc;
+      const parts = text.match(/^(\d+(?:\.\d+)?)"?[-_]([A-Za-z0-9]+)[-_](\d+)/);
+      const fluidCode = parts ? parts[2].toUpperCase() : (lt.fluid_code || '').toUpperCase();
+      const fc      = _lfcGlobal(fluidCode);
+      const sorted  = _routeSort(occs);
+      const start   = sorted[0], end = sorted[sorted.length - 1], middle = sorted.slice(1, -1);
+      const fds     = tagFindingsMap.get(text) || [];
+      const hasIssue = fds.length > 0;
+      const maxSev   = fds.length
+        ? fds.reduce((b, f) => (_SEV_RANK[f.severity] || 0) > (_SEV_RANK[b] || 0) ? f.severity : b, fds[0].severity)
+        : null;
+      const dirs = [...new Set(occs.map(o => (o.direction || '').toUpperCase().charAt(0)).filter(Boolean))];
+      const routeType = dirs.length > 1 ? 'HV' : (dirs[0] || 'H');
+      acc.push({ text, fluidCode, fc, start, end, middle, sorted, hasIssue, maxSev,
+                 multi_angle: !!lt.multi_angle, routeType });
+      return acc;
+    }, []);
+  }, [activeDrawingData, tagFindingsMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Override-aware helpers — use local draft until saved
   const getVal = (f, field) => overrides[f.id]?.[field] ?? f[field];
@@ -1681,7 +2212,7 @@ const PIDVerification = () => {
   if (!selectedProject) {
     return (
       <DarkBg>
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="w-full px-2 sm:px-4 lg:px-6 py-10">
 
           {/* Page header */}
           <div className="mb-10" style={{ animation:'fadeUp 0.6s ease-out both' }}>
@@ -1864,7 +2395,7 @@ const PIDVerification = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <DarkBg>
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-14 pt-6">
+      <div className="w-full px-2 sm:px-4 lg:px-6 pb-14 pt-6">
 
         {/* ── Dashboard hero header ────────────────────────────────────────── */}
         <div className="rounded-2xl mb-6 overflow-hidden" style={{ background:'linear-gradient(135deg,rgba(239,246,255,0.98),rgba(238,242,255,0.98))', border:'1px solid #bfdbfe', backdropFilter:'blur(16px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)', animation:'fadeUp 0.4s ease-out both' }}>
@@ -2026,6 +2557,173 @@ const PIDVerification = () => {
 
             </div>{/* end grid */}
 
+            {/* ── Legend Sheets — AI extraction card ──────────────────────── */}
+            <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
+              {/* Header */}
+              <div className="px-4 py-3 flex items-center gap-2.5 border-b border-slate-100"
+                style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background:'linear-gradient(135deg,#16a34a,#15803d)' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-white">
+                    <path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wide leading-none">Legend Sheets</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Upload legend sheets — AI extracts line types, numbering, abbreviations &amp; more</p>
+                </div>
+                {legendSheets.length > 0 && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{legendSheets.length} sheet{legendSheets.length !== 1 ? 's' : ''}</span>
+                )}
+                <button
+                  onClick={() => setShowLegendUpload(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:-translate-y-px"
+                  style={{ background:'linear-gradient(135deg,#16a34a,#15803d)', boxShadow:'0 2px 8px rgba(22,163,74,0.3)' }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  {showLegendUpload ? 'Cancel' : 'Add Legend'}
+                </button>
+              </div>
+
+              {/* Upload drop zone (shown only when panel is open) */}
+              {showLegendUpload && (
+                <div className="px-4 py-3 border-b border-slate-100 bg-white flex flex-col gap-3">
+                  <label className="flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 cursor-pointer hover:bg-emerald-50 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 text-emerald-400">
+                      <path d="M4 16l4-4 4 4M12 12V4M8 20h8M16 16l4-4 4 4"/>
+                      <path d="M4 20h4"/>
+                    </svg>
+                    <span className="text-xs font-semibold text-emerald-700">Drop legend files here, or click to browse</span>
+                    <span className="text-xs text-slate-400">PDF · PNG · JPG · TIFF · BMP</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif,.bmp"
+                      className="sr-only"
+                      onChange={e => setLegendUploadFiles(Array.from(e.target.files || []))}
+                    />
+                  </label>
+                  {legendUploadFiles.length > 0 && (
+                    <ul className="flex flex-col gap-1">
+                      {legendUploadFiles.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+                          </svg>
+                          <span className="truncate flex-1">{f.name}</span>
+                          <span className="text-slate-400">{(f.size/1024).toFixed(0)} KB</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <button
+                    onClick={uploadLegendSheets}
+                    disabled={legendUploading || !legendUploadFiles.length}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50 transition-all hover:-translate-y-px"
+                    style={{ background:'linear-gradient(135deg,#16a34a,#15803d)', boxShadow:'0 3px 10px rgba(22,163,74,0.25)' }}
+                  >
+                    {legendUploading
+                      ? <><Loader className="w-3.5 h-3.5 animate-spin" />Uploading…</>
+                      : <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload &amp; Extract</>}
+                  </button>
+                </div>
+              )}
+
+              {/* Sheet list */}
+              {legendSheets.length > 0 && (
+                <div className="divide-y divide-slate-100 bg-white">
+                  {legendSheets.map(sheet => {
+                    // Soft-coded: status colours
+                    const STATUS_STYLE = {
+                      pending:    { bg:'bg-slate-100', text:'text-slate-500', dot:'bg-slate-400' },
+                      processing: { bg:'bg-amber-50',  text:'text-amber-600', dot:'bg-amber-400 animate-pulse' },
+                      completed:  { bg:'bg-emerald-50',text:'text-emerald-700', dot:'bg-emerald-500' },
+                      failed:     { bg:'bg-red-50',    text:'text-red-600',  dot:'bg-red-400' },
+                    };
+                    const ss = STATUS_STYLE[sheet.status] || STATUS_STYLE.pending;
+                    const cats = sheet.category_counts || {};
+                    const totalItems = Object.values(cats).reduce((a, b) => a + b, 0);
+
+                    return (
+                      <div key={sheet.legend_id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors group">
+                        {/* File icon */}
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-100">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-slate-500">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+                          </svg>
+                        </div>
+                        {/* File name + meta */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{sheet.file_name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {/* Status */}
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${ss.bg} ${ss.text}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
+                              {sheet.status}
+                            </span>
+                            {/* Extraction method */}
+                            {sheet.extraction_method && (
+                              <span className="text-xs text-slate-400">
+                                {sheet.extraction_method === 'ai_vision' ? '🤖 AI Vision' : '📝 Text parse'}
+                              </span>
+                            )}
+                            {/* Category count */}
+                            {sheet.status === 'completed' && totalItems > 0 && (
+                              <span className="text-xs text-emerald-600 font-medium">{totalItems} items extracted</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {sheet.status === 'completed' && (
+                            <button
+                              onClick={() => openLegendDetail(sheet.legend_id)}
+                              title="View extracted data"
+                              className="w-7 h-7 rounded-lg border border-emerald-200 bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            </button>
+                          )}
+                          {sheet.status === 'failed' && (
+                            <button
+                              onClick={() => retryLegendExtraction(sheet.legend_id)}
+                              title="Retry extraction"
+                              className="w-7 h-7 rounded-lg border border-amber-200 bg-amber-50 flex items-center justify-center hover:bg-amber-100 transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-amber-600">
+                                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                              </svg>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteLegendSheet(sheet.legend_id)}
+                            title="Remove legend sheet"
+                            className="w-7 h-7 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-red-500">
+                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                              <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {legendSheets.length === 0 && !showLegendUpload && (
+                <p className="px-4 py-4 text-xs text-slate-400 text-center bg-white">
+                  No legend sheets uploaded yet — click <strong>Add Legend</strong> to upload PDF/image legend files
+                </p>
+              )}
+            </div>
+            {/* ── End Legend Sheets card ─────────────────────────────────── */}
+
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -2083,7 +2781,7 @@ const PIDVerification = () => {
               accent: '#0d9488',
               glow: 'rgba(13,148,136,0.25)',
             },
-            {
+            ...( SHOW_NAMING_PANEL ? [{
               id: 'naming',
               label: 'Naming',
               icon: ({ cls }) => <Type className={cls} />,
@@ -2091,7 +2789,7 @@ const PIDVerification = () => {
               badgeCls: namingResults?.total > 0 ? 'bg-violet-500 text-white' : 'bg-emerald-500 text-white',
               accent: '#7c3aed',
               glow: 'rgba(124,58,237,0.25)',
-            },
+            }] : []),
             ...( SHOW_COMPARE_PANEL ? [{
               id: 'comparison',
               label: 'Compare',
@@ -2172,7 +2870,80 @@ const PIDVerification = () => {
             },
           ];
 
-          const activePanelDef = PANELS.find(p => p.id === activePanel) || PANELS[0];
+          // ── Apply user-defined drag order; default = definition order ─────
+          const orderedPanels = panelOrder.length === 0
+            ? PANELS
+            : [
+                ...panelOrder.map(id => PANELS.find(p => p.id === id)).filter(Boolean),
+                ...PANELS.filter(p => !panelOrder.includes(p.id)),
+              ];
+
+          // ── Drag-and-drop: self-contained pointer handler with 5 px threshold ─────
+          // Listeners are attached directly inside onPointerDown so they are
+          // guaranteed to be in place before pointerup can fire — no useEffect race.
+          // Soft-coded: min vertical movement (px) before the drag is committed.
+          const DRAG_THRESHOLD_PX = 5;
+          const RAIL_GAP_PX = 6; // must match gap-1.5 (6 px) in the flex col
+          const handleGripPointerDown = (e, tab, idx) => {
+            e.preventDefault();  // prevent text selection while dragging
+            e.stopPropagation();
+            dragCommittedRef.current = false;
+            dragInitialPos.current = { x: e.clientX - 76, y: e.clientY - 22 };
+            const h = (railItemRefs.current[tab.id]?.getBoundingClientRect().height ?? 44) + RAIL_GAP_PX;
+            dragStateRef.current = { startY: e.clientY, startIdx: idx, order: orderedPanels.map(p => p.id), itemHeight: h };
+            dropTargetIdxRef.current = idx;
+
+            const onMove = (ev) => {
+              // Only commit the drag after intentional vertical movement
+              if (!dragCommittedRef.current) {
+                if (Math.abs(ev.clientY - dragStateRef.current.startY) < DRAG_THRESHOLD_PX) return;
+                dragCommittedRef.current = true;
+                setDraggingId(tab.id);
+                setDropTargetIdx(idx);
+              }
+              // Move ghost imperatively — no setState on every frame
+              if (dragGhostRef.current) {
+                dragGhostRef.current.style.top  = `${ev.clientY - 22}px`;
+                dragGhostRef.current.style.left = `${ev.clientX - 76}px`;
+              }
+              const { startY, startIdx, order, itemHeight } = dragStateRef.current;
+              const clamped = Math.max(0, Math.min(order.length - 1, Math.round((ev.clientY - startY) / itemHeight) + startIdx));
+              if (dropTargetIdxRef.current !== clamped) {
+                dropTargetIdxRef.current = clamped;
+                setDropTargetIdx(clamped);
+              }
+            };
+
+            const onUp = () => {
+              window.removeEventListener('pointermove', onMove);
+              window.removeEventListener('pointerup',   onUp);
+              if (dragCommittedRef.current) {
+                // Real drag — commit the new order
+                const { startIdx, order } = dragStateRef.current;
+                const ti = dropTargetIdxRef.current;
+                if (ti !== null && ti !== startIdx) {
+                  const ids = [...order];
+                  const [moved] = ids.splice(startIdx, 1);
+                  ids.splice(ti, 0, moved);
+                  setPanelOrder(ids);
+                  localStorage.setItem(PANEL_DND_STORAGE_KEY, JSON.stringify(ids));
+                }
+              } else {
+                // No movement — treat as a tap/click: navigate to this panel.
+                // (click event is suppressed by e.preventDefault above, so we navigate manually)
+                setActivePanel(tab.id);
+              }
+              setDraggingId(null);
+              setDropTargetIdx(null);
+              dropTargetIdxRef.current = null;
+              dragCommittedRef.current = false;
+            };
+
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup',   onUp);
+          };
+
+          const activePanelDef = orderedPanels.find(p => p.id === activePanel) || orderedPanels[0];
 
           return (
           <div className="flex gap-4 items-start flex-row-reverse" style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
@@ -2229,6 +3000,14 @@ const PIDVerification = () => {
                       className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
                       <RefreshCw className="w-3.5 h-3.5" />New
                     </button>
+                    <button
+                      onClick={toggleFullscreen}
+                      title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all"
+                    >
+                      {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                      {isFullscreen ? 'Exit' : 'Fullscreen'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2268,68 +3047,168 @@ const PIDVerification = () => {
               ════════════════════════════════════════════════ */}
               <div key={activePanel} style={{ animation:'panelSlide 0.25s ease-out both' }}>
 
-              {/* ─── DRAWING panel ───────────────────────────────────── */}
+              {/* ─── DRAWING panel — consolidated QC dashboard ───────────── */}
               {activePanel === 'drawing' && activeDrawingData && (
               <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'fadeUp 0.5s ease-out 0.1s both' }}>
-                {/* Drawing panel header */}
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <GitBranch className="w-4 h-4 text-blue-600" />
+
+              {/* ── Dashboard: computed inline so no new state is needed ── */}
+              {(() => {
+                // Soft-coded: issue severity weights used to compute the quality score.
+                // Adjust these values to tune how aggressively each severity penalises the score.
+                const QC_SCORE_WEIGHTS = { critical: 15, major: 5, minor: 1 };
+                // Soft-coded: panel navigation cards shown in the Drawing dashboard.
+                // Reorder, add, or remove entries here — the grid adjusts automatically.
+                const _minor   = (activeDrawingData?.issues||[]).filter(f=>(f.severity||'').toLowerCase()==='minor').length;
+                const _instrCnt= (activeDrawingData?.issues||[]).filter(f=>new Set(['instrument','tag','valve']).has(f.category)).length;
+                const _pipCnt  = (activeDrawingData?.issues||[]).filter(f=>new Set(['piping','line','spec','insulation','valve']).has(f.category)).length;
+                const _lineCnt = (activeDrawingData?.metadata?.line_tags||[]).length;
+                const _equipCnt= Object.keys(activeDrawingData?.metadata?.tag_positions||{}).length || (extractionSummary?.tags??0);
+                const _overCnt = (results.drawings??[]).reduce((s,d)=>s+(d.overrides_applied??0),0);
+                const qScore   = Math.max(0,Math.min(100,Math.round(100-criticalCount*QC_SCORE_WEIGHTS.critical-majorCount*QC_SCORE_WEIGHTS.major-_minor*QC_SCORE_WEIGHTS.minor)));
+                const qGrade   = qScore>=90?{letter:'A',color:'#10b981',glow:'rgba(16,185,129,0.22)',label:'Excellent'}
+                               : qScore>=70?{letter:'B',color:'#3b82f6',glow:'rgba(59,130,246,0.22)',label:'Good'}
+                               : qScore>=50?{letter:'C',color:'#f59e0b',glow:'rgba(245,158,11,0.22)',label:'Fair'}
+                               :            {letter:'D',color:'#ef4444',glow:'rgba(239,68,68,0.22)',label:'Needs Attention'};
+                const NAV_CARDS = [
+                  { id:'findings',       label:'Findings',   Icon:GitBranch, count:totalIssues,  sub:`${criticalCount} crit · ${majorCount} major · ${_minor} minor`, accent:'#ef4444', bg:'rgba(239,68,68,0.07)',    border:'rgba(239,68,68,0.18)',    status: criticalCount>0?'critical':majorCount>0?'major':totalIssues>0?'minor':'pass' },
+                  { id:'lines',         label:'Lines',       Icon:Ruler,     count:_lineCnt,     sub:`${extractionSummary?.line_tags_multi_angle||0} multi-angle · ${extractionSummary?.line_sizes||0} sizes`,      accent:'#0d9488', bg:'rgba(13,148,136,0.07)',  border:'rgba(13,148,136,0.18)',  status:'info' },
+                  { id:'equipment',     label:'Equipment',   Icon:Cpu,       count:_equipCnt,    sub:`${extractionSummary?.instruments||0} instr · ${extractionSummary?.valves||0} valves · ${extractionSummary?.equipment||0} equip`, accent:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)', status:'info' },
+                  { id:'instrumentation',label:'Instr.',     Icon:Wrench,    count:_instrCnt,    sub:_instrCnt>0?`${_instrCnt} issue${_instrCnt!==1?'s':''} detected`:'No issues found',   accent:'#d97706', bg:'rgba(217,119,6,0.07)',   border:'rgba(217,119,6,0.18)',   status:_instrCnt>0?'warn':'pass' },
+                  { id:'piping',        label:'Piping',      Icon:Network,   count:_pipCnt,      sub:_pipCnt>0?`${_pipCnt} issue${_pipCnt!==1?'s':''} detected`:'No issues found',          accent:'#0891b2', bg:'rgba(8,145,178,0.07)',   border:'rgba(8,145,178,0.18)',   status:_pipCnt>0?'warn':'pass' },
+                  { id:'cross',         label:'Cross-Ref',   Icon:Activity,  count:null,         sub:'Cross-drawing references',   accent:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.18)',  status:'info' },
+                ];
+                // Soft-coded: status badge styles keyed by `status` field above.
+                const STATUS_BADGE = {
+                  critical:{ dot:'#ef4444', label:'Critical', cls:'bg-red-50 text-red-700 border border-red-200' },
+                  major:   { dot:'#f97316', label:'Major',    cls:'bg-orange-50 text-orange-700 border border-orange-200' },
+                  minor:   { dot:'#fbbf24', label:'Minor',    cls:'bg-yellow-50 text-yellow-700 border border-yellow-200' },
+                  warn:    { dot:'#f97316', label:'Issues',   cls:'bg-orange-50 text-orange-600 border border-orange-200' },
+                  pass:    { dot:'#10b981', label:'OK',       cls:'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+                  info:    { dot:'#6366f1', label:'Data',     cls:'bg-indigo-50 text-indigo-600 border border-indigo-200' },
+                };
+                return (
+                  <>
+                  {/* ── Section 1: Quality score + drawing identity + save action ── */}
+                  <div style={{ background: REJLERS_DARK_HEADER_BG, padding:'20px 20px 16px' }}>
+                    <div className="flex items-start gap-4 flex-wrap">
+                      {/* Quality grade ring */}
+                      <div className="flex-shrink-0 relative flex items-center justify-center"
+                        style={{ width:72, height:72 }}>
+                        <svg width="72" height="72" viewBox="0 0 72 72" style={{ position:'absolute', top:0, left:0, transform:'rotate(-90deg)' }}>
+                          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6"/>
+                          <circle cx="36" cy="36" r="30" fill="none" stroke={qGrade.color} strokeWidth="6"
+                            strokeDasharray={`${(qScore/100)*188.5} 188.5`} strokeLinecap="round"
+                            style={{ filter:`drop-shadow(0 0 6px ${qGrade.color})`, transition:'stroke-dasharray 0.8s ease' }}/>
+                        </svg>
+                        <div className="relative flex flex-col items-center">
+                          <span className="text-2xl font-black leading-none" style={{ color:qGrade.color }}>{qGrade.letter}</span>
+                          <span className="text-[9px] font-bold" style={{ color:`${qGrade.color}bb` }}>{qScore}%</span>
+                        </div>
+                      </div>
+                      {/* Drawing name + severity bar */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-base font-black text-white truncate">{activeDrawing}</h2>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                            style={{ background:`${qGrade.color}25`, color:qGrade.color, border:`1px solid ${qGrade.color}40` }}>
+                            {qGrade.label}
+                          </span>
+                        </div>
+                        <p className="text-xs mt-0.5" style={{ color:'rgba(148,163,184,0.9)' }}>
+                          {activeDrawingData.issues?.length??0} findings · {results.drawings?.length??0} drawing{(results.drawings?.length??0)!==1?'s':''} in report · {(results.drawings??[]).reduce((s,d)=>s+(d.issues?.length??0),0)} total issues
+                        </p>
+                        {/* Severity proportion bar */}
+                        {totalIssues > 0 ? (
+                          <div className="mt-2.5 flex gap-0.5 rounded-full overflow-hidden h-2" style={{ background:'rgba(255,255,255,0.08)' }}>
+                            {criticalCount>0&&<div title={`${criticalCount} Critical`} style={{ flex:criticalCount, background:'#ef4444', borderRadius:'99px 0 0 99px' }}/>}
+                            {majorCount>0  &&<div title={`${majorCount} Major`}    style={{ flex:majorCount,    background:'#f97316' }}/>}
+                            {_minor>0      &&<div title={`${_minor} Minor`}        style={{ flex:_minor,        background:'#fbbf24' }}/>}
+                            {_overCnt>0    &&<div title={`${_overCnt} Overridden`} style={{ flex:_overCnt,      background:'rgba(148,163,184,0.6)', borderRadius:'0 99px 99px 0' }}/>}
+                          </div>
+                        ) : (
+                          <div className="mt-2.5 h-2 rounded-full" style={{ background:'rgba(16,185,129,0.4)' }}/>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                          {[
+                            { v:criticalCount, label:'Critical', color:'#ef4444' },
+                            { v:majorCount,    label:'Major',    color:'#f97316' },
+                            { v:_minor,        label:'Minor',    color:'#fbbf24' },
+                            { v:_overCnt,      label:'Overridden',color:'rgba(148,163,184,0.7)' },
+                          ].map(c=>(
+                            <span key={c.label} className="text-[10px] font-semibold" style={{ color:'rgba(148,163,184,0.8)' }}>
+                              <span className="font-black" style={{ color:c.color }}>{c.v}</span> {c.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Save action — right side */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {overridesSaved && pendingCount===0 && (
+                          <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5"/>Review saved
+                          </span>
+                        )}
+                        {pendingCount>0 && (
+                          <>
+                            <span className="text-xs text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-full font-medium">
+                              {pendingCount} unsaved
+                            </span>
+                            <button onClick={handleSaveOverrides} disabled={savingOverrides}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50 transition-all hover:-translate-y-px"
+                              style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow:'0 2px 8px rgba(245,158,11,0.4)' }}>
+                              {savingOverrides?<><Loader className="w-3 h-3 animate-spin"/>Saving…</>:<><Save className="w-3 h-3"/>Save Review</>}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">{activeDrawing}</h2>
-                      <p className="text-xs text-slate-500">{activeDrawingData.issues?.length ?? 0} findings · Drawing View</p>
-                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {overridesSaved && pendingCount === 0 && (
-                      <span className="text-xs text-emerald-600 flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5" />Review saved
-                      </span>
-                    )}
-                    {pendingCount > 0 && (
-                      <>
-                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                          {pendingCount} unsaved change{pendingCount !== 1 ? 's' : ''}
-                        </span>
-                        <button onClick={handleSaveOverrides} disabled={savingOverrides}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50 transition-all hover:-translate-y-px"
-                          style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow:'0 2px 8px rgba(245,158,11,0.35)' }}>
-                          {savingOverrides
-                            ? <><Loader className="w-3 h-3 animate-spin" />Saving…</>
-                            : <><Save className="w-3 h-3" />Save Review</>
-                          }
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {/* Drawing-panel stat chips */}
-                <div className="grid grid-cols-5 gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.15)' }}>
-                    <p className="font-bold text-xl text-blue-600">{results.drawings?.length ?? 0}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Drawings</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', border:`1px solid ${totalIssues > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}` }}>
-                    <p className={`font-bold text-xl ${totalIssues > 0 ? 'text-red-600' : 'text-green-600'}`}>{totalIssues}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Issues</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)' }}>
-                    <p className="font-bold text-xl text-red-700">{criticalCount}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Critical</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(234,88,12,0.08)', border:'1px solid rgba(234,88,12,0.15)' }}>
-                    <p className="font-bold text-xl text-orange-600">{majorCount}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Major</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(100,116,139,0.08)', border:'1px solid rgba(100,116,139,0.15)' }}>
-                    <p className="font-bold text-xl text-slate-600">
-                      {(results.drawings ?? []).reduce((s, d) => s + (d.overrides_applied ?? 0), 0)}
+
+                  {/* ── Section 2: Panel navigation cards grid ── */}
+                  <div className="px-4 py-4 border-b border-slate-100" style={{ background:'rgba(248,250,255,0.7)' }}>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+                      <span className="inline-block w-3 h-px bg-slate-300"/>QC Panel Summary — click to navigate
+                      <span className="inline-block w-3 h-px bg-slate-300"/>
                     </p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Overridden</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {NAV_CARDS.map(({id,label,Icon,count,sub,accent,bg,border,status})=>{
+                        const bs = STATUS_BADGE[status]||STATUS_BADGE.info;
+                        return (
+                          <button key={id} onClick={()=>setActivePanel(id)}
+                            className="group relative text-left rounded-xl p-3 transition-all hover:-translate-y-0.5 hover:shadow-md"
+                            style={{ background:bg, border:`1.5px solid ${border}`, boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+                            {/* Top row: icon + status badge */}
+                            <div className="flex items-start justify-between gap-1 mb-2">
+                              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ background:`${accent}20` }}>
+                                <Icon className="w-3.5 h-3.5" style={{ color:accent }}/>
+                              </div>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0 ${bs.cls}`}>
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:bs.dot }}/>
+                                {bs.label}
+                              </span>
+                            </div>
+                            {/* Count */}
+                            <p className="text-xl font-black leading-none" style={{ color:accent }}>
+                              {count??'—'}
+                            </p>
+                            {/* Label */}
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-700 mt-0.5">{label}</p>
+                            {/* Sub-line */}
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1">{sub}</p>
+                            {/* Hover arrow */}
+                            <span className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              style={{ color:accent }}>
+                              <ChevronRight className="w-3 h-3"/>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                  </>
+                );
+              })()}
 
                 {/* Extraction summary */}
                 {extractionSummary && (
@@ -3316,10 +4195,11 @@ const PIDVerification = () => {
 
               // Soft-coded sub-tabs for the Lines panel.
               const LINE_SUBTABS = [
-                { id: 'insights',     label: 'AI Insights',   icon: Brain,   color: '#7c3aed' },
-                { id: 'qc',          label: 'QC Checks',     icon: Shield,  color: '#0d9488' },
-                { id: 'designations',label: 'Designations',  icon: Ruler,   color: '#0891b2' },
+                { id: 'insights',     label: 'AI Insights',   icon: Brain,     color: '#7c3aed' },
+                { id: 'qc',          label: 'QC Checks',     icon: Shield,    color: '#0d9488' },
+                { id: 'designations',label: 'Designations',  icon: Ruler,     color: '#0891b2' },
                 { id: 'analytics',   label: 'Analytics',     icon: BarChart2, color: '#6366f1' },
+                { id: 'layout',      label: 'Drawing Layout',icon: MapPin,    color: '#2B3A55' },
               ];
 
               // Soft-coded: sort options for the Designations sub-tab.
@@ -3341,17 +4221,8 @@ const PIDVerification = () => {
               const areaSet  = [...new Set(lineTags.map(lt => lt.area_code).filter(Boolean))];
               const dupCount = lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length;
 
-              // Map each line tag text → its related findings
-              const tagFindingsMap = new Map();
-              for (const f of lineFindings) {
-                const ev = (f.evidence || f.issue || '').toLowerCase();
-                for (const lt of lineTags) {
-                  if (lt.text && ev.includes(lt.text.toLowerCase())) {
-                    if (!tagFindingsMap.has(lt.text)) tagFindingsMap.set(lt.text, []);
-                    tagFindingsMap.get(lt.text).push(f);
-                  }
-                }
-              }
+              // tagFindingsMap is provided by useMemo at component level (avoids O(n²) rebuild per render)
+              // tagFindingsMap already in scope from outer component — do NOT re-declare here.
 
               // Highest severity for a tag
               const sevRank = { critical: 4, major: 3, minor: 2, info: 1 };
@@ -4059,12 +4930,396 @@ const PIDVerification = () => {
                     </div>
                   )}
 
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT sub-tab
+                      Shows the P&ID drawing with SVG path overlays:
+                      - Each line tag's occurrences become Start→End markers
+                      - Lines are color-coded by fluid code
+                      - Clicking a line selects it for detail
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'layout' && (() => {
+                    // Fluid colours + lookup come from module-level constants (no re-creation per render)
+                    const LAYOUT_FLUID_COLORS = _LAYOUT_FLUID_COLORS;
+                    const _lfc = _lfcGlobal;
+
+                    // ── Layout items from useMemo at component level ──────────────────────
+                    // layoutItemsBase is computed once per drawing change (not per render).
+                    // It already contains direction-aware sorted routes via _routeSort.
+                    const layoutItems = layoutItemsBase;
+
+                    // Unique fluid codes present with coordinates
+                    const layoutFluids = ['all', ...new Set(layoutItems.map(i => i.fluidCode).filter(Boolean))];
+
+                    const filteredLayout = lineLayoutFluidFilter === 'all'
+                      ? layoutItems
+                      : layoutItems.filter(i => i.fluidCode === lineLayoutFluidFilter);
+
+                    const polylinePoints = (sorted) =>
+                      sorted.map(o => `${o.x_pct},${o.y_pct}`).join(' ');
+
+                    const selItem = lineLayoutSelected
+                      ? filteredLayout.find(i => i.text === lineLayoutSelected)
+                      : null;
+
+                    return (
+                      <div className="flex flex-col gap-3 p-4">
+
+                        {/* ── Fluid-filter chips + clear ───────────────────────────────── */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex-shrink-0">Filter by fluid:</span>
+                          {layoutFluids.map(fc => {
+                            const active = lineLayoutFluidFilter === fc;
+                            const color  = fc === 'all' ? '#2B3A55' : _lfc(fc).stroke;
+                            return (
+                              <button key={fc}
+                                onClick={() => { setLineLayoutFluidFilter(fc); setLineLayoutSelected(null); }}
+                                className="text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all"
+                                style={{
+                                  background:  active ? color   : 'white',
+                                  color:       active ? 'white' : color,
+                                  borderColor: color,
+                                  boxShadow:   active ? `0 0 8px ${color}50` : 'none',
+                                }}>
+                                {fc === 'all' ? `All (${layoutItems.length})` : (LAYOUT_FLUID_COLORS[fc]?.label || fc)}
+                              </button>
+                            );
+                          })}
+                          {lineLayoutSelected && (
+                            <button onClick={() => setLineLayoutSelected(null)}
+                              className="ml-auto flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50">
+                              <X className="w-3 h-3" />Clear selection
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ── Visual legend ─────────────────────────────────────────────── */}
+                        <div className="flex items-center gap-4 flex-wrap bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Legend:</span>
+                          {[
+                            { node: <span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" style={{ boxShadow:'0 0 4px #16a34a80' }} />, label:'Start' },
+                            { node: <span className="w-3 h-3 rotate-45 rounded-[2px] flex-shrink-0 inline-block bg-red-500" style={{ boxShadow:'0 0 4px #dc262680' }} />, label:'End' },
+                            { node: <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#0891b2" strokeWidth="2"/></svg>, label:'Path (clean)' },
+                            { node: <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#f97316" strokeWidth="2" strokeDasharray="4,2"/></svg>, label:'Path (issues)' },
+                            { node: <span className="w-2 h-2 rounded-full flex-shrink-0 bg-slate-400" />, label:'Waypoint' },
+                          ].map((l, i) => (
+                            <span key={i} className="flex items-center gap-1.5 text-[10px] text-slate-600">{l.node}{l.label}</span>
+                          ))}
+                        </div>
+
+                        {/* ── Drawing + SVG overlay ─────────────────────────────────────── */}
+                        {!drawingImageUrl ? (
+                          <div className="flex items-center justify-center gap-2 py-16 text-slate-400 text-xs rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                            <AlertTriangle className="w-4 h-4" />Drawing image not available — run analysis first
+                          </div>
+                        ) : filteredLayout.length === 0 ? (
+                          <div className="flex items-center justify-center gap-2 py-16 text-slate-400 text-xs rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                            <MapPin className="w-4 h-4" />No line designations with coordinates for selected filter
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                            <div className="overflow-auto" style={{ maxHeight:'68vh' }}>
+                              <div className="relative w-full" style={{ lineHeight:0 }}>
+
+                                {/* Drawing image */}
+                                <img
+                                  src={drawingImageUrl} alt="P&ID Drawing" draggable={false}
+                                  className="w-full block"
+                                  style={{ height:'auto', userSelect:'none',
+                                           opacity: lineLayoutSelected ? 0.72 : 1,
+                                           transition:'opacity 0.2s' }}
+                                />
+
+                                {/* ── Decorative SVG overlay (pointer-events: none) ──────── */}
+                                <svg className="absolute inset-0 w-full h-full"
+                                  viewBox="0 0 100 100" preserveAspectRatio="none"
+                                  style={{ pointerEvents:'none' }}>
+                                  <defs>
+                                    {/* Arrow-head marker per fluid */}
+                                    {layoutFluids.filter(f => f !== 'all').map(fc => {
+                                      const col = _lfc(fc).stroke;
+                                      return (
+                                        <marker key={`arrow-${fc}`}
+                                          id={`lnarrow-${fc}`} markerWidth="5" markerHeight="5"
+                                          refX="4.5" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                          <path d="M0,0 L0,5 L5,2.5 z" fill={col} />
+                                        </marker>
+                                      );
+                                    })}
+                                    <marker id="lnarrow-unknown" markerWidth="5" markerHeight="5"
+                                      refX="4.5" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                      <path d="M0,0 L0,5 L5,2.5 z" fill="#0891b2" />
+                                    </marker>
+                                  </defs>
+
+                                  {/* Cap SVG elements to LAYOUT_SVG_RENDER_CAP to avoid browser
+                                      paint thrashing on large drawings; selected item always shown */}
+                                  {(filteredLayout.length > LAYOUT_SVG_RENDER_CAP
+                                    ? filteredLayout.filter((item, idx) => item.text === lineLayoutSelected || idx < LAYOUT_SVG_RENDER_CAP)
+                                    : filteredLayout
+                                  ).map((item) => {
+                                    const isSel   = lineLayoutSelected === item.text;
+                                    const isOther = lineLayoutSelected && !isSel;
+                                    const stroke  = item.hasIssue ? (SEV_DOT_COLOR[item.maxSev] || '#f97316') : item.fc.stroke;
+                                    const opacity = isOther ? 0.15 : isSel ? 1 : 0.7;
+                                    const sw      = isSel ? 0.55 : 0.28;
+                                    const hasPath = item.sorted.length > 1;
+                                    const arrowId = `lnarrow-${item.fluidCode || 'unknown'}`;
+
+                                    return (
+                                      <g key={item.text} style={{ opacity }}>
+                                        {/* Connecting path — BFS-traced along actual dark pipe lines when available */}
+                                        {hasPath && (() => {
+                                          const isTracingNow = lineTracing && isSel;
+                                          const tracedPts    = lineTracedPaths[item.text];
+                                          const pts = (tracedPts && tracedPts.length > 0)
+                                            ? tracedPts.map(p => `${p.x_pct},${p.y_pct}`).join(' ')
+                                            : polylinePoints(item.sorted);
+                                          const isTraced = !!(tracedPts && tracedPts.length > 0);
+                                          return (
+                                            <polyline
+                                              points={pts}
+                                              fill="none"
+                                              stroke={isTracingNow ? '#6366f1' : stroke}
+                                              strokeWidth={isTracingNow ? sw * 1.5 : isSel && isTraced ? sw * 1.8 : sw}
+                                              strokeDasharray={isTracingNow ? '0.8,0.8' : item.hasIssue ? '1.2,0.7' : undefined}
+                                              strokeLinecap="round" strokeLinejoin="round"
+                                              markerEnd={`url(#${arrowId})`}
+                                              style={{
+                                                filter: isSel ? `drop-shadow(0 0 ${isTraced ? '1.2px' : '0.8px'} ${isTracingNow ? '#6366f1' : stroke})` : undefined,
+                                                opacity: isTracingNow ? 0.55 : 1,
+                                              }}
+                                            />
+                                          );
+                                        })()}
+                                        {/* Start — green circle */}
+                                        <circle cx={item.start.x_pct} cy={item.start.y_pct}
+                                          r={isSel ? 1.2 : 0.65}
+                                          fill="#16a34a" stroke="white" strokeWidth="0.15"
+                                          style={{ filter: isSel ? 'drop-shadow(0 0 0.7px #16a34a)' : undefined }}
+                                        />
+                                        {/* End — red diamond */}
+                                        {hasPath && (
+                                          <rect
+                                            x={item.end.x_pct - (isSel ? 0.85 : 0.48)}
+                                            y={item.end.y_pct - (isSel ? 0.85 : 0.48)}
+                                            width={isSel ? 1.7 : 0.96} height={isSel ? 1.7 : 0.96}
+                                            fill="#dc2626" stroke="white" strokeWidth="0.12"
+                                            transform={`rotate(45,${item.end.x_pct},${item.end.y_pct})`}
+                                            style={{ filter: isSel ? 'drop-shadow(0 0 0.7px #dc2626)' : undefined }}
+                                          />
+                                        )}
+                                        {/* Waypoint dots */}
+                                        {item.middle.map((o, mi) => (
+                                          <circle key={mi} cx={o.x_pct} cy={o.y_pct}
+                                            r={isSel ? 0.55 : 0.28}
+                                            fill={stroke} stroke="white" strokeWidth="0.1" />
+                                        ))}
+                                        {/* Label when selected or few lines */}
+                                        {(isSel || filteredLayout.length <= 10) && (
+                                          <text
+                                            x={item.start.x_pct + 0.5} y={item.start.y_pct - 0.7}
+                                            fontSize={isSel ? '1.4' : '0.9'}
+                                            fill={stroke} fontWeight="700" fontFamily="monospace"
+                                            style={{ userSelect:'none', filter:'drop-shadow(0 0 0.4px white)' }}>
+                                            {item.text}
+                                          </text>
+                                        )}
+                                      </g>
+                                    );
+                                  })}
+                                </svg>
+
+                                {/* ── Click hit-zones (pointer-events: all) ──────────────── */}
+                                <svg className="absolute inset-0 w-full h-full"
+                                  viewBox="0 0 100 100" preserveAspectRatio="none"
+                                  style={{ pointerEvents:'all', cursor:'pointer' }}>
+                                  {filteredLayout.map((item) => (
+                                    <g key={item.text}
+                                      onClick={() => setLineLayoutSelected(prev => prev === item.text ? null : item.text)}>
+                                      {item.sorted.length > 1 ? (
+                                        <polyline points={polylinePoints(item.sorted)}
+                                          fill="none" stroke="transparent" strokeWidth="2.5" />
+                                      ) : (
+                                        <circle cx={item.start.x_pct} cy={item.start.y_pct} r="2" fill="transparent" />
+                                      )}
+                                    </g>
+                                  ))}
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Selected-line detail card ─────────────────────────────────── */}
+                        {selItem && (
+                          <div className="rounded-xl border p-4 flex flex-col gap-3"
+                            style={{ borderColor: selItem.fc.stroke + '55',
+                                     background: selItem.fc.fill + '25',
+                                     animation:'cardIn 0.18s ease-out both' }}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ background: selItem.fc.stroke, boxShadow:`0 3px 10px ${selItem.fc.stroke}50` }}>
+                                <MapPin className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-black text-slate-900 font-mono">{selItem.text}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  {selItem.fc.label} · {selItem.sorted.length} occurrence{selItem.sorted.length !== 1 ? 's' : ''}
+                                  {selItem.hasIssue && (
+                                    <span className="ml-2 font-bold text-orange-600">
+                                      {(tagFindingsMap.get(selItem.text)||[]).length} QC issue{(tagFindingsMap.get(selItem.text)||[]).length !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <button onClick={() => setLineLayoutSelected(null)}
+                                className="p-1.5 hover:bg-white/60 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Route type badge */}
+                            {(() => {
+                              const rt = selItem.routeType;
+                              const ROUTE_META = {
+                                'H':  { label:'→ Horizontal run',       bg:'#e0f2fe', color:'#0369a1', desc:'Flows left → right'   },
+                                'V':  { label:'↓ Vertical run',         bg:'#dcfce7', color:'#15803d', desc:'Flows top → bottom'   },
+                                'HV': { label:'↔↕ Multi-angle route',   bg:'#f3e8ff', color:'#7c3aed', desc:'L-shaped / complex run' },
+                              };
+                              const meta = ROUTE_META[rt] || ROUTE_META['H'];
+                              return (
+                                <div className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+                                  style={{ background: meta.bg, borderLeft:`3px solid ${meta.color}` }}>
+                                  <span className="text-[11px] font-black" style={{ color: meta.color }}>{meta.label}</span>
+                                  <span className="text-[10px] text-slate-500">{meta.desc}</span>
+                                  {selItem.multi_angle && (
+                                    <span className="ml-auto text-[9px] font-bold bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">H+V confirmed by OCR</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Start / End coordinates */}
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { label:'Start (Source)',    point: selItem.start, color:'#16a34a', shape:'circle'  },
+                                { label:'End (Destination)', point: selItem.end,   color:'#dc2626', shape:'diamond' },
+                              ].map(pt => (
+                                <div key={pt.label} className="rounded-lg p-2.5 border border-white/60 bg-white/50">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    {pt.shape === 'circle'
+                                      ? <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: pt.color }} />
+                                      : <span className="w-3 h-3 rotate-45 rounded-[2px] flex-shrink-0 inline-block" style={{ background: pt.color }} />
+                                    }
+                                    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: pt.color }}>{pt.label}</span>
+                                  </div>
+                                  <p className="text-xs font-mono text-slate-700">
+                                    X: <strong>{pt.point.x_pct.toFixed(1)}%</strong>&nbsp;&nbsp;Y: <strong>{pt.point.y_pct.toFixed(1)}%</strong>
+                                  </p>
+                                  {pt.point._dir && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                      <span className="font-bold" style={{ color: pt.point._dir === 'H' ? '#0369a1' : pt.point._dir === 'V' ? '#15803d' : '#7c3aed' }}>
+                                        {pt.point._dir === 'H' ? '→ H' : pt.point._dir === 'V' ? '↓ V' : pt.point._dir}
+                                      </span>
+                                      <span>pipe orientation</span>
+                                    </p>
+                                  )}
+                                  {!pt.point._dir && pt.point.direction && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">Dir: <strong>{pt.point.direction}</strong></p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Intermediate waypoints */}
+                            {selItem.middle.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                                  {selItem.middle.length} Waypoint{selItem.middle.length !== 1 ? 's' : ''} (in route order)
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {selItem.middle.map((o, mi) => (
+                                    <span key={mi} className="text-[10px] font-mono bg-white/70 border border-slate-200 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
+                                      <span className="font-bold" style={{ color: o._dir === 'H' ? '#0369a1' : o._dir === 'V' ? '#15803d' : '#94a3b8' }}>
+                                        {o._dir === 'H' ? '→' : o._dir === 'V' ? '↓' : '·'}
+                                      </span>
+                                      ({o.x_pct.toFixed(1)}%, {o.y_pct.toFixed(1)}%)
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* QC issues */}
+                            {selItem.hasIssue && (
+                              <div>
+                                <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1.5">QC Issues</p>
+                                <div className="flex flex-col gap-1.5">
+                                  {(tagFindingsMap.get(selItem.text)||[]).map((f, fi) => (
+                                    <div key={fi} className="text-[11px] bg-white/70 border border-orange-200 rounded-lg px-3 py-2 text-slate-700">
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded-full border text-[10px] font-bold mr-2 ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                        {f.severity}
+                                      </span>
+                                      <code className="font-mono text-[10px] text-slate-400 mr-1">{f.rule_id}</code>
+                                      {f.issue}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pipe-path trace status */}
+                            {lineTracing && (
+                              <div className="flex items-center gap-2 text-[11px] text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+                                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25"/>
+                                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                                </svg>
+                                Tracing pipe path along drawing lines…
+                              </div>
+                            )}
+                            {!lineTracing && lineTracedPaths[selItem.text] != null && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-1.5 border border-emerald-100">
+                                <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                                Pipe path traced · <strong>{lineTracedPaths[selItem.text].length}</strong> waypoints along drawing lines
+                              </div>
+                            )}
+                            {!lineTracing && lineTracedPaths[selItem.text] === null && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200">
+                                Path trace unavailable — no continuous dark-pixel route found
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ── Summary bar ────────────────────────────────────────────────── */}
+                        <div className="flex items-center gap-4 flex-wrap text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-1">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />Start markers: {filteredLayout.length}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rotate-45 rounded-[1px] inline-block bg-red-500" />End markers: {filteredLayout.filter(i => i.sorted.length > 1).length}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full inline-block bg-orange-400" />With issues: {filteredLayout.filter(i => i.hasIssue).length}
+                          </span>
+                          {filteredLayout.filter(i => i.sorted.length > 1).length > 0 && (
+                            <span className="text-teal-600 font-semibold">
+                              {filteredLayout.filter(i => i.sorted.length > 1).length} lines have Start→End path
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* ══ Footer ══ */}
                   <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
                     <span style={{ color:'#0d9488' }}>
                       {lineQcSubTab === 'qc'          ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
                        : lineQcSubTab === 'designations' ? `${filteredTags.length} of ${lineTags.length} designations`
                        : lineQcSubTab === 'insights'      ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : lineQcSubTab === 'layout'        ? `${lineTags.filter(lt => (lt.occurrences||[]).some(o => o.x_pct != null)).length} lines mapped on drawing`
                        : `QC score: ${qcScore}%`}
                     </span>
                     <span>LSZ-001 – LSZ-010 · 10 line quality rules · AI analysis active</span>
@@ -4077,7 +5332,7 @@ const PIDVerification = () => {
             {/* ─── end LINES panel ─── */}
 
             {/* ─── NAMING panel ─── */}
-            {activePanel === 'naming' && (
+            {SHOW_NAMING_PANEL && activePanel === 'naming' && (
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
               // ── Soft-coded: NAM rule catalogue ──────────────────────────────────────
@@ -5914,6 +7169,14 @@ const PIDVerification = () => {
                                : qcScore >= SCORE_FAIR      ? '#f59e0b'
                                : '#dc2626';
 
+              // Soft-coded: flexible badge count for Drawing Layout tab.
+              // Accepts single-letter prefixes (V-3115, E-101) plus standard ISA (FT-101).
+              // Excludes pipeline designations that start with a digit or inch mark.
+              const _INSTR_BADGE_RE = /^[A-Za-z]{1,6}[-_\s.]?\d/;
+              const instrMarkerCount = Object.keys(
+                activeDrawingData?.metadata?.tag_positions || {}
+              ).filter(t => _INSTR_BADGE_RE.test((t || '').trim())).length;
+
               return (
                 <div className="flex flex-col" style={{ minHeight:0 }}>
 
@@ -5981,8 +7244,10 @@ const PIDVerification = () => {
                   {/* ══ View switcher ══ */}
                   <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
                     {[
-                      { id:'checklist', label:'Checklist', icon:ClipboardList, cnt:total },
-                      { id:'summary',   label:'Summary',   icon:BarChart2,     cnt:null  },
+                      { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                      { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:instrMarkerCount || null },
+                      { id:'registry',  label:'Registry',       icon:Database,      cnt:instrSymbols.length || null },
                     ].map(tab => {
                       const TabIcon = tab.icon;
                       const active  = instrActiveView === tab.id;
@@ -6247,12 +7512,1024 @@ const PIDVerification = () => {
                     </div>
                   )}
 
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'drawing' && (() => {
+                    // ── Soft-coded: ISA 5.1 instrument tag type descriptions ────────────────
+                    // Key = ISA prefix (e.g. 'PT'), Value = human-readable type label.
+                    // Add/remove entries without touching render logic below.
+                    const ISA_TAG_TYPES = {
+                      // Temperature
+                      'TE':'Temp. Element',          'TT':'Temp. Transmitter',       'TI':'Temp. Indicator',
+                      'TIC':'Temp. Ind. Controller', 'TC':'Temp. Controller',         'TCV':'Temp. Control Valve',
+                      'TS':'Temp. Switch',           'TSH':'Temp. Switch Hi',         'TSL':'Temp. Switch Lo',
+                      'TSHH':'Temp. Switch HiHi',    'TSLL':'Temp. Switch LoLo',      'TY':'Temp. Relay',
+                      'TAH':'Temp. Alarm Hi',        'TAL':'Temp. Alarm Lo',          'TAHH':'Temp. Alarm HiHi', 'TALL':'Temp. Alarm LoLo',
+                      // Pressure
+                      'PE':'Press. Element',        'PT':'Press. Transmitter',       'PI':'Press. Indicator',
+                      'PIC':'Press. Ind. Controller','PC':'Press. Controller',         'PCV':'Press. Control Valve',
+                      'PS':'Press. Switch',          'PSH':'Press. Switch Hi',         'PSL':'Press. Switch Lo',
+                      'PSHH':'Press. Switch HiHi',   'PSLL':'Press. Switch LoLo',
+                      'PSV':'Press. Safety Valve',   'PRV':'Press. Relief Valve',      'PY':'Press. Relay',
+                      'PAH':'Press. Alarm Hi',       'PAL':'Press. Alarm Lo',          'PAHH':'Press. Alarm HiHi', 'PALL':'Press. Alarm LoLo',
+                      // Flow
+                      'FE':'Flow Element',          'FT':'Flow Transmitter',         'FI':'Flow Indicator',
+                      'FIC':'Flow Ind. Controller', 'FC':'Flow Controller',           'FCV':'Flow Control Valve',
+                      'FS':'Flow Switch',            'FSH':'Flow Switch Hi',           'FSL':'Flow Switch Lo',
+                      'FV':'Flow Control Valve',     'FY':'Flow Relay',
+                      'FAH':'Flow Alarm Hi',         'FAL':'Flow Alarm Lo',
+                      // Level
+                      'LE':'Level Element',         'LT':'Level Transmitter',         'LI':'Level Indicator',
+                      'LIC':'Level Ind. Controller','LC':'Level Controller',           'LCV':'Level Control Valve',
+                      'LG':'Level Gauge',            'LS':'Level Switch',              'LSH':'Level Switch Hi',  'LSL':'Level Switch Lo',
+                      'LSHH':'Level Switch HiHi',   'LSLL':'Level Switch LoLo',        'LY':'Level Relay',
+                      'LAH':'Level Alarm Hi',        'LAL':'Level Alarm Lo',            'LAHH':'Level Alarm HiHi','LALL':'Level Alarm LoLo',
+                      // Analysis
+                      'AE':'Analysis Element',      'AT':'Analysis Transmitter',      'AI':'Analysis Indicator',
+                      'AIC':'Analysis Ind. Controller','AC':'Analysis Controller',    'AY':'Analysis Relay',
+                      // Valves / Actuators
+                      'SV':'Solenoid Valve',        'SDV':'Shutdown Valve',           'XV':'Actuated Valve',
+                      'MOV':'Motor Operated Valve', 'XCV':'Actuated Ctrl Valve',      'HV':'Hand Valve',
+                      'LV':'Level Valve',           'TV':'Temp. Valve',               'PV':'Press. Valve',
+                      'HIC':'Hand Ind. Controller',
+                      // Position / Speed / Misc
+                      'ZT':'Position Transmitter',  'ZI':'Position Indicator',        'ZS':'Position Switch',
+                      'ST':'Speed Transmitter',     'SI':'Speed Indicator',            'SS':'Speed Switch',
+                      'WT':'Weight Transmitter',    'WI':'Weight Indicator',           'WIC':'Weight Ind. Controller',
+                      'JT':'Power Transmitter',     'JI':'Power Indicator',
+                      // ── Soft-coded: P&ID Equipment tags (single / short prefix) ──────────
+                      // These appear in tag_positions when OCR extracts equipment tags.
+                      // Add project-specific prefixes here without changing render logic.
+                      'V':   'Vessel / Drum',        'TK':  'Storage Tank',          'D':   'Drum',
+                      'E':   'Heat Exchanger',       'P':   'Pump',                   'C':   'Compressor',
+                      'K':   'Turbine / Compressor', 'H':   'Fired Heater',           'B':   'Blower / Fan',
+                      'FR':  'Filter',               'SCR': 'Scrubber',               'SEP': 'Separator',
+                      'MX':  'Mixer',                'STR': 'Strainer',               'RX':  'Reactor',
+                      'CO':  'Cooler',               'HE':  'Heater',                 'EX':  'Expander',
+                      'SP':  'Spool Piece',          'AG':  'Agitator',               'CR':  'Crystalliser',
+                      'EJ':  'Ejector',              'FL':  'Flare Stack',            'MR':  'Manifold',
+                    };
+
+                    // ── Soft-coded: ISA prefix detector (derives from ISA_TAG_TYPES above) ─────
+                    // Single source of truth: the same ISA_TAG_TYPES dict drives BOTH label lookup
+                    // AND tag detection — no separate regex to maintain.
+                    // Handles all real-world formats: FT-101, FT101, FT_101, ft-101, FT 101.
+                    // Returns matched prefix (UPPERCASE) or null if not an ISA instrument tag.
+                    const _ISA_SORTED_PFX = Object.keys(ISA_TAG_TYPES)
+                      .sort((a, b) => b.length - a.length); // longest-first: TSHH beats TSH beats TS
+                    const _detectIsaPfx = (rawTag) => {
+                      const t = (rawTag || '').trim().toUpperCase();
+                      for (const pfx of _ISA_SORTED_PFX) {
+                        if (t.startsWith(pfx)) {
+                          const rem = t.slice(pfx.length);
+                          // Accept separator (- _ space .) then digit, or directly a digit
+                          if (/^[-_\s.]?\d/.test(rem)) return pfx;
+                        }
+                      }
+                      return null;
+                    };
+
+                    // ── Soft-coded: P&ID title-block exclusion zones ──────────────────────────
+                    // Tags found ONLY within these regions are drawing references, not P&ID
+                    // diagram positions. Adjust thresholds to match your drawing border template.
+                    // Right-side notes/title column: x > 80%
+                    // Bottom title strip / revision table: y > 88%
+                    // Binding margins (left <4%, top <4%)
+                    const TB_X_RIGHT  = 80;   // % — right-side title block start
+                    const TB_Y_BOTTOM = 88;   // % — bottom title strip start
+                    const TB_X_LEFT   = 4;    // % — left margin end
+                    const TB_Y_TOP    = 4;    // % — top margin end
+                    const _isInTitleBlock = (x, y) =>
+                      x > TB_X_RIGHT || y > TB_Y_BOTTOM || x < TB_X_LEFT || y < TB_Y_TOP;
+
+                    // ── Soft-coded: title-block-aware coordinate resolver ─────────────────────
+                    // Returns [x_pct, y_pct, isRef] where isRef=true means the tag was found
+                    // ONLY in the drawing reference area — not on the actual P&ID diagram.
+                    // Priority order:
+                    //   1. occurrence(s) inside diagram area — pick nearest centroid (50%, 50%)
+                    //   2. primary x_pct/y_pct if inside diagram area
+                    //   3. any position (fallback) — but marks isRef=true so it renders differently
+                    const _resolveCoord = (pos) => {
+                      if (!pos) return [null, null, false];
+                      const primary = (pos.x_pct != null && pos.y_pct != null)
+                        ? { x_pct: pos.x_pct, y_pct: pos.y_pct } : null;
+                      const candidates = [
+                        ...(Array.isArray(pos.all) ? pos.all : []),
+                        ...(primary ? [primary] : []),
+                      ].filter(o => o.x_pct != null && o.y_pct != null);
+                      if (candidates.length === 0) return [null, null, false];
+                      // Step 1: prefer diagram-area occurrences, pick nearest to centroid
+                      const inDiagram = candidates.filter(o => !_isInTitleBlock(o.x_pct, o.y_pct));
+                      if (inDiagram.length > 0) {
+                        let best = inDiagram[0]; let bestD = Infinity;
+                        for (const o of inDiagram) {
+                          const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
+                          if (d < bestD) { bestD = d; best = o; }
+                        }
+                        return [best.x_pct, best.y_pct, false];
+                      }
+                      // Step 2: all occurrences are in title block — flag as reference-only
+                      const fallback = primary || candidates[0];
+                      return [fallback.x_pct, fallback.y_pct, true];
+                    };
+
+                    // ── Soft-coded: severity colour scheme ───────────────────────────────────
+                    const DRAW_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+
+                    // ── Soft-coded: severity priority order ───────────────────────────────────
+                    const SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Build instrument marker list ──────────────────────────────────────────
+                    // Source 1: tag_positions entries classified as ISA instrument tags
+                    const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+
+                    // Source 2: ALL findings (including info severity) — drawing layout
+                    // shows ALL severity levels, styled distinctly.  The global
+                    // HIDDEN_SEVERITIES set only applies to the findings table view.
+                    const instrRelatedIssues = activeDrawingData?.issues || [];
+
+                    // Build findings map with UPPERCASE-dash-normalised keys.
+                    // Regex now also accepts space as a tag-number separator (e.g. "FT 101").
+                    const _tagFindMap = {};
+                    for (const f of instrRelatedIssues) {
+                      const haystack = `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase();
+                      // Soft-coded: {1,6} captures single-letter equipment prefixes (V, E, P, C, K)
+                      const re2 = /\b([A-Z]{1,6})[-_\s]?(\d{2,6}[A-Z]?(?:[-]\d{1,4})?)\b/g;
+                      let m2;
+                      while ((m2 = re2.exec(haystack)) !== null) {
+                        const tid = `${m2[1]}-${m2[2]}`;
+                        if (!_tagFindMap[tid]) _tagFindMap[tid] = [];
+                        _tagFindMap[tid].push(f);
+                      }
+                    }
+
+                    // Build the final marker array using _detectIsaPfx + _resolveCoord
+                    // Three-level lookup mirrors the piping approach:
+                    //  1. normalised key map  2. raw-uppercase map  3. full-text fallback
+                    const instrMarkerList = Object.entries(tagPositions)
+                      .reduce((acc, [rawTag, pos]) => {
+                        const matchedPfx = _detectIsaPfx(rawTag);
+                        if (!matchedPfx) return acc;
+                        const [xp, yp, isRef] = _resolveCoord(pos);
+                        if (xp == null || yp == null) return acc;
+                        const typeLabel = ISA_TAG_TYPES[matchedPfx] || `${matchedPfx} Instrument`;
+                        const tagNorm = rawTag.toUpperCase().replace(/[-_\s.]+/g, '-');
+                        // Mirror piping: regex map → raw-tag map → full-text fallback
+                        const findings = _tagFindMap[tagNorm]
+                          || _tagFindMap[rawTag.toUpperCase()]
+                          || instrRelatedIssues.filter(f =>
+                               `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase().includes(tagNorm)
+                               || `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase().includes(rawTag.toUpperCase())
+                             );
+                        const topSev = findings.reduce((best, f) => {
+                          return (SEV_ORDER[f.severity]||0) > (SEV_ORDER[best]||0) ? f.severity : best;
+                        }, null);
+                        acc.push({ tag: rawTag, prefix: matchedPfx, typeLabel, xp, yp, findings, topSev, isRef });
+                        return acc;
+                      }, [])
+                      .sort((a, b) => a.tag.localeCompare(b.tag));
+
+                    const selectedMarkerData = instrSelectedTag
+                      ? instrMarkerList.find(m => m.tag === instrSelectedTag)
+                      : null;
+
+                    const markerWithFindings = instrMarkerList.filter(m => m.findings.length > 0).length;
+                    const markerCompliant    = instrMarkerList.filter(m => m.findings.length === 0).length;
+
+                    // ── Virtual marker miner ─────────────────────────────────────────────────
+                    // When tag_positions has no ISA tags (e.g. scanned P&ID or different
+                    // tag format), scan all findings text for ISA tag mentions and place
+                    // them at deterministic hash-based positions on the drawing.
+                    // Soft-coded: hash scatter keeps tags within 12%–86% drawing bounds.
+                    const _hashPos = (str) => {
+                      let h = 5381;
+                      for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+                      const ha = Math.abs(h);
+                      return [12 + (ha % 74), 12 + ((ha >>> 8) % 74)];
+                    };
+
+                    if (instrMarkerList.length === 0 && instrRelatedIssues.length > 0) {
+                      const _mined = {};
+                      for (const f of instrRelatedIssues) {
+                        const hay = `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase();
+                        // Mine: standard ISA format AND single-letter equipment prefix
+                        const re3 = /\b([A-Z]{1,6})[-_\s]?(\d{2,6}[A-Z]?(?:[-]\d{1,4})?)\b/g;
+                        let m3;
+                        while ((m3 = re3.exec(hay)) !== null) {
+                          const candidate = `${m3[1]}-${m3[2]}`;
+                          if (!_detectIsaPfx(candidate)) continue;
+                          if (!_mined[candidate]) _mined[candidate] = [];
+                          _mined[candidate].push(f);
+                        }
+                      }
+                      for (const [tag, finds] of Object.entries(_mined)) {
+                        const pfx = _detectIsaPfx(tag);
+                        if (!pfx) continue;
+                        const [xp, yp] = _hashPos(tag);
+                        const topSev = finds.reduce((best, f) =>
+                          (SEV_ORDER[f.severity]||0) > (SEV_ORDER[best]||0) ? f.severity : best, null);
+                        instrMarkerList.push({ tag, prefix:pfx,
+                          typeLabel: ISA_TAG_TYPES[pfx] || `${pfx} Tag`,
+                          xp, yp, findings:finds, topSev, isVirtual:true });
+                      }
+                      instrMarkerList.sort((a, b) => a.tag.localeCompare(b.tag));
+                    }
+
+                    // ── Unmatched findings: ALL findings not attributed to any tag ────────────
+                    // Soft-coded: accepts every category so nothing is hidden.
+                    const _matchedFindingIds = new Set(instrMarkerList.flatMap(m => m.findings.map(f => f.id)));
+                    const unmatchedInstrFindings = instrRelatedIssues.filter(f =>
+                      !_matchedFindingIds.has(f.id)
+                    );
+
+                    // ── ISA 5.1 First-letter → Functional Category ───────────────────────────
+                    // Soft-coded: per ISA-5.1-2009 Table 1 (measured variable first-letter).
+                    // Single source of truth — drives marker bubbles, filter chips, table groups.
+                    const ISA_CAT_MAP = {
+                      A:{ label:'Analysis',      color:'#8b5cf6', light:'rgba(139,92,246,0.10)', ring:'#7c3aed'  },
+                      B:{ label:'Burner/Flame',  color:'#f97316', light:'rgba(249,115,22,0.10)', ring:'#ea580c'  },
+                      E:{ label:'Voltage',       color:'#eab308', light:'rgba(234,179,8,0.10)',  ring:'#ca8a04'  },
+                      F:{ label:'Flow',          color:'#3b82f6', light:'rgba(59,130,246,0.10)', ring:'#1d4ed8'  },
+                      H:{ label:'Hand Operated', color:'#14b8a6', light:'rgba(20,184,166,0.10)', ring:'#0f766e'  },
+                      I:{ label:'Current',       color:'#f59e0b', light:'rgba(245,158,11,0.10)', ring:'#d97706'  },
+                      L:{ label:'Level',         color:'#22c55e', light:'rgba(34,197,94,0.10)',  ring:'#16a34a'  },
+                      P:{ label:'Pressure',      color:'#ef4444', light:'rgba(239,68,68,0.10)',  ring:'#dc2626'  },
+                      Q:{ label:'Quantity',      color:'#a855f7', light:'rgba(168,85,247,0.10)', ring:'#9333ea'  },
+                      S:{ label:'Speed/Freq',    color:'#06b6d4', light:'rgba(6,182,212,0.10)',  ring:'#0891b2'  },
+                      T:{ label:'Temperature',   color:'#f97316', light:'rgba(249,115,22,0.10)', ring:'#ea580c'  },
+                      V:{ label:'Vibration',     color:'#a855f7', light:'rgba(168,85,247,0.10)', ring:'#9333ea'  },
+                      W:{ label:'Weight/Force',  color:'#78716c', light:'rgba(120,113,108,0.10)',ring:'#57534e'  },
+                      Z:{ label:'Position',      color:'#f59e0b', light:'rgba(245,158,11,0.10)', ring:'#d97706'  },
+                    };
+                    const _ISA_CAT_DFLT = { label:'Misc Instrument', color:'#94a3b8', light:'rgba(148,163,184,0.10)', ring:'#64748b' };
+                    const _getIsaCat    = (pfx) => ISA_CAT_MAP[(pfx||'?')[0].toUpperCase()] || _ISA_CAT_DFLT;
+
+                    // ── ISA category distribution ─────────────────────────────────────────────
+                    const _catDistrib = instrMarkerList.reduce((acc, m) => {
+                      const cat = _getIsaCat(m.prefix);
+                      if (!acc[cat.label]) acc[cat.label] = { cat, total:0, withFindings:0, markers:[] };
+                      acc[cat.label].total++;
+                      if (m.findings.length > 0) acc[cat.label].withFindings++;
+                      acc[cat.label].markers.push(m);
+                      return acc;
+                    }, {});
+                    const _catArr = Object.values(_catDistrib).sort((a,b) => b.total - a.total);
+
+                    // ── Coordinate confidence metrics ──────────────────────────────────────────
+                    // Soft-coded thresholds: ≥70% = high, ≥40% = medium, <40% = low.
+                    const _posConf = instrMarkerList.filter(m => !m.isRef && !m.isVirtual).length;
+                    const _posRef  = instrMarkerList.filter(m =>  m.isRef).length;
+                    const _posEst  = instrMarkerList.filter(m =>  m.isVirtual).length;
+                    const _confPct = instrMarkerList.length > 0
+                      ? Math.round((_posConf / instrMarkerList.length) * 100) : 0;
+                    const _confLvl = _confPct >= 70 ? 'high' : _confPct >= 40 ? 'medium' : 'low';
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* ── No drawing data ── */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-amber-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see the instrument layout map with tagged coordinates.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Loading ── */}
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-amber-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {/* ── Drawing available ── */}
+                        {!drawingImageLoading && drawingImageUrl && (
+                          <>
+                            {/* ── DCS / Instrument Symbol Analysis button bar ── */}
+                            <div className="mx-5 mt-3 mb-1 rounded-xl border overflow-hidden"
+                              style={{ borderColor: dcsResult ? 'rgba(139,92,246,0.30)' : 'rgba(139,92,246,0.18)',
+                                       background: 'rgba(139,92,246,0.04)' }}>
+                              <div className="flex items-center gap-2 px-3 py-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] font-black text-violet-700 uppercase tracking-wider">DCS Analysis</span>
+                                  {dcsResult && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700">
+                                      {dcsResult.findings_created} finding{dcsResult.findings_created !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] text-slate-400 truncate">
+                                    {dcsLegendFile
+                                      ? `Legend: ${dcsLegendFile.name}`
+                                      : 'Using built-in ISA 5.1 symbols (attach legend PDF for project-specific analysis)'}
+                                  </span>
+                                </div>
+                                {/* Hidden file input for optional legend PDF */}
+                                <input
+                                  ref={dcsLegendRef}
+                                  type="file"
+                                  accept=".pdf"
+                                  className="hidden"
+                                  onChange={e => setDcsLegendFile(e.target.files?.[0] || null)}
+                                />
+                                {/* Attach legend button */}
+                                <button
+                                  onClick={() => dcsLegendRef.current?.click()}
+                                  className="text-[9px] font-bold px-2 py-1 rounded-lg border transition-all flex-shrink-0"
+                                  style={{ borderColor:'rgba(139,92,246,0.3)', color:'#7c3aed',
+                                           background: dcsLegendFile ? 'rgba(139,92,246,0.12)' : 'transparent' }}
+                                  title="Attach instrument legend PDF for project-specific symbol extraction">
+                                  {dcsLegendFile ? '✓ Legend attached' : '+ Attach Legend PDF'}
+                                </button>
+                                {dcsLegendFile && (
+                                  <button
+                                    onClick={() => setDcsLegendFile(null)}
+                                    className="text-[9px] text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                    title="Remove legend file">✕</button>
+                                )}
+                                {/* Run analysis button */}
+                                <button
+                                  onClick={runDcsAnalysis}
+                                  disabled={dcsAnalyzing}
+                                  className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex-shrink-0"
+                                  style={{ background: dcsAnalyzing ? 'rgba(139,92,246,0.15)' : '#7c3aed',
+                                           color: dcsAnalyzing ? '#7c3aed' : 'white',
+                                           border: '1px solid rgba(139,92,246,0.4)',
+                                           opacity: dcsAnalyzing ? 0.7 : 1 }}>
+                                  {dcsAnalyzing
+                                    ? <><span className="w-2.5 h-2.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />Analyzing…</>
+                                    : '⚡ Analyze DCS Compliance'}
+                                </button>
+                              </div>
+                              {/* Result summary strip */}
+                              {dcsResult && (
+                                <div className="px-3 pb-2 text-[9px] text-slate-500 border-t border-violet-100 pt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                  <span className="text-violet-700 font-bold">Last run:</span>
+                                  <span>{dcsResult.findings_created} findings created</span>
+                                  <span>·</span>
+                                  <span>{dcsResult.symbols_extracted} symbols referenced</span>
+                                  <span>·</span>
+                                  <span>Source: <span className="font-semibold">{dcsResult.legend_source === 'uploaded' ? 'Uploaded legend PDF' : 'Built-in ISA 5.1'}</span></span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* ── ISA 5.1 Category Distribution ── */}
+                            {instrMarkerList.length > 0 && (
+                              <div className="mx-5 mt-3 mb-2">
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">ISA 5.1 Variable Breakdown</p>
+                                  <div className="flex-1 h-px bg-slate-100" />
+                                  {/* Coordinate confidence badge */}
+                                  <span
+                                    className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
+                                    style={{
+                                      background: _confLvl==='high'   ? 'rgba(34,197,94,0.10)'  : _confLvl==='medium' ? 'rgba(245,158,11,0.10)' : 'rgba(239,68,68,0.08)',
+                                      color:      _confLvl==='high'   ? '#16a34a'               : _confLvl==='medium' ? '#d97706'              : '#dc2626',
+                                      border:    `1px solid ${_confLvl==='high' ? 'rgba(34,197,94,0.3)' : _confLvl==='medium' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.25)'}`,
+                                    }}
+                                    title={`${_posConf} confirmed diagram positions · ${_posRef} title-block refs · ${_posEst} hash-estimated`}>
+                                    ◎ {_confPct}% coord verified
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {_catArr.map(({ cat, total, withFindings }) => (
+                                    <div key={cat.label}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold flex-shrink-0"
+                                      style={{ background: cat.light, border:`1px solid ${cat.ring}30`, color: cat.color }}>
+                                      <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-black text-white flex-shrink-0"
+                                        style={{ background: cat.color }}>
+                                        {cat.label[0]}
+                                      </span>
+                                      <span className="font-black">{total}</span>
+                                      <span className="font-medium opacity-80">{cat.label}</span>
+                                      {withFindings > 0 && (
+                                        <span className="ml-0.5 text-[7px] px-1.5 py-0.5 rounded-full font-black text-white"
+                                          style={{ background:'#dc2626' }}>{withFindings}!</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── Coordinate confidence warning banner ── */}
+                            {instrMarkerList.length > 0 && _confLvl !== 'high' && (
+                              <div className="mx-5 mb-2 p-2 rounded-lg border flex items-start gap-2"
+                                style={{
+                                  borderColor: _confLvl==='medium' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.25)',
+                                  background:  _confLvl==='medium' ? 'rgba(245,158,11,0.05)' : 'rgba(239,68,68,0.04)',
+                                }}>
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                                  style={{ color: _confLvl==='medium' ? '#d97706' : '#dc2626' }} />
+                                <p className="text-[9px] leading-relaxed"
+                                  style={{ color: _confLvl==='medium' ? '#92400e' : '#7f1d1d' }}>
+                                  <strong>Position Accuracy {_confLvl === 'medium' ? 'Moderate' : 'Low'}:</strong>
+                                  {' '}{_posConf} confirmed diagram positions
+                                  {_posRef   > 0 ? ` · ${_posRef} title-block refs (dotted border)` : ''}
+                                  {_posEst   > 0 ? ` · ${_posEst} hash-estimated (dashed border)` : ''}.
+                                  {' '}Re-process the drawing for improved coordinate accuracy.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* ── Drawing legend ── */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-2 text-[9px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center text-[5.5px] font-black flex-shrink-0"
+                                  style={{ background:'rgba(59,130,246,0.12)', border:'2px solid #1d4ed8', color:'#3b82f6' }}>FT</span>
+                                ISA bubble (OK)
+                              </span>
+                              {[['critical','#dc2626'],['major','#f97316'],['minor','#d97706']].map(([sev,c]) => (
+                                <span key={sev} className="flex items-center gap-1 capitalize">
+                                  <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                    style={{ background:`${c}15`, border:`2px solid ${c}` }}>
+                                    <span className="text-[5.5px] font-black" style={{ color:c }}>FT</span>
+                                  </span>
+                                  {sev}
+                                </span>
+                              ))}
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                  style={{ background:'rgba(148,163,184,0.12)', border:'2px dotted #94a3b8' }}>
+                                  <span className="text-[5.5px] font-black text-slate-400">??</span>
+                                </span>
+                                Title-block ref
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                  style={{ background:'rgba(59,130,246,0.08)', border:'2px dashed #3b82f6' }}>
+                                  <span className="text-[5.5px] font-black text-blue-400">??</span>
+                                </span>
+                                ~Estimated
+                              </span>
+                              <span className="ml-auto text-amber-600 font-medium">Bubble = ISA variable · Border = finding severity · Click to inspect</span>
+                            </div>
+
+                            {/* Diagnostic empty-state: drawing has tags but none are ISA instruments */}
+                            {instrMarkerList.length === 0 && Object.keys(tagPositions).length > 0 && (
+                              <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                                style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-bold text-amber-700 mb-0.5">
+                                    No ISA 5.1 instrument tags located on this drawing
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                                    {Object.keys(tagPositions).length} tag{Object.keys(tagPositions).length !== 1 ? 's' : ''} found
+                                    in drawing data — none matched a known ISA prefix (FT, PT, LT, TT, AT…).
+                                    Sample keys: <span className="font-mono font-bold text-slate-700">
+                                      {Object.keys(tagPositions).slice(0, 5).join(', ')}
+                                    </span>{Object.keys(tagPositions).length > 5 ? ` …+${Object.keys(tagPositions).length - 5} more` : ''}.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            {instrMarkerList.length === 0 && Object.keys(tagPositions).length === 0 && (
+                              <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                                style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                                No tag coordinate data yet — process and analyse a P&amp;ID drawing first.
+                              </div>
+                            )}
+
+                            {/* ── Filter chip strip: one chip per instrument, sorted by # findings ── */}
+                            {instrMarkerList.length > 0 && (
+                              <div className="px-5 pb-2">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                  Filter — tap a tag to isolate on drawing
+                                </p>
+                                <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                  style={{ scrollbarWidth:'thin', scrollbarColor:'#cbd5e1 transparent' }}>
+                                  <button
+                                    onClick={() => setInstrSelectedTag(null)}
+                                    className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                    style={{
+                                      background: !instrSelectedTag ? '#d97706'             : 'rgba(217,119,6,0.08)',
+                                      color:      !instrSelectedTag ? 'white'               : '#d97706',
+                                      border:    `1px solid ${!instrSelectedTag ? '#d97706' : 'rgba(217,119,6,0.25)'}`,
+                                      boxShadow:  !instrSelectedTag ? '0 0 10px rgba(217,119,6,0.4)' : 'none',
+                                    }}>
+                                    ◈ All
+                                  </button>
+                                  {[...instrMarkerList]
+                                    .sort((a, b) => b.findings.length - a.findings.length || a.tag.localeCompare(b.tag))
+                                    .map(m => {
+                                      const isAct  = instrSelectedTag === m.tag;
+                                      const isaCat = _getIsaCat(m.prefix);
+                                      return (
+                                        <button key={m.tag}
+                                          onClick={() => setInstrSelectedTag(prev => prev === m.tag ? null : m.tag)}
+                                          className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                          style={{
+                                            background: isAct ? isaCat.color       : isaCat.light,
+                                            color:      isAct ? 'white'            : isaCat.color,
+                                            border:    `1px solid ${isAct ? isaCat.color : isaCat.ring + '50'}`,
+                                            boxShadow:  isAct ? `0 0 10px ${isaCat.color}55` : 'none',
+                                          }}>
+                                          <span className="font-mono">{m.tag}</span>
+                                          {m.findings.length > 0 && (
+                                            <span
+                                              className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                              style={{
+                                                background: isAct ? 'rgba(255,255,255,0.3)' : '#dc2626',
+                                                color: 'white',
+                                              }}>
+                                              {m.findings.length}
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Drawing + overlay */}
+                            <div className="px-5 pb-3">
+                              <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                                <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                  <div className="relative w-full" style={{ lineHeight:0 }}>
+                                    <img
+                                      src={drawingImageUrl}
+                                      alt={activeDrawing}
+                                      draggable={false}
+                                      className="w-full block"
+                                      style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                    />
+                                    {/* Overlay */}
+                                    <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                      {/* Dim background when a tag is isolated */}
+                                      {instrSelectedTag && (
+                                        <div className="absolute inset-0"
+                                          style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
+                                                   transition:'opacity 0.25s ease' }} />
+                                      )}
+                                      {/* Render only the selected marker when chip is active */}
+                                      {instrMarkerList.filter(m => !instrSelectedTag || m.tag === instrSelectedTag).map((m) => {
+                                        const isSel   = instrSelectedTag === m.tag;
+                                        const isaCat  = _getIsaCat(m.prefix);
+                                        // ISA P&ID balloon convention:
+                                        //   bubble fill  = ISA measured-variable category colour
+                                        //   border colour = finding severity (or category ring if no findings)
+                                        const sev = m.topSev;
+                                        const sevBorder = m.isRef ? '#94a3b8'
+                                          : sev === 'critical' ? '#dc2626'
+                                          : sev === 'major'    ? '#f97316'
+                                          : sev === 'minor'    ? '#d97706'
+                                          : isaCat.ring;
+                                        const borderStyle = m.isRef ? 'dotted' : m.isVirtual ? 'dashed' : 'solid';
+                                        const glowColor   = m.findings.length > 0 ? `${sevBorder}55` : `${isaCat.color}33`;
+                                        const sz = isSel ? 28 : 20;
+                                        return (
+                                          <React.Fragment key={m.tag}>
+                                            {/* Ping ripple — only for markers with findings */}
+                                            {!isSel && m.findings.length > 0 && (
+                                              <div aria-hidden="true" style={{
+                                                position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz + 8}px`, height:`${sz + 8}px`, borderRadius:'50%',
+                                                border:`1.5px solid ${sevBorder}`, backgroundColor:'transparent',
+                                                animation:'markerPing 2800ms ease-out infinite',
+                                                transform:'translate(-50%,-50%)',
+                                                pointerEvents:'none', zIndex:8,
+                                              }} />
+                                            )}
+                                            {/* ISA Balloon marker — standard P&ID instrument bubble with prefix label */}
+                                            <button
+                                              onClick={() => setInstrSelectedTag(prev => prev === m.tag ? null : m.tag)}
+                                              title={`${m.tag} · ${m.typeLabel}${m.isRef ? ' · ⚠ Title-block ref — actual position unknown' : m.isVirtual ? ' · ~Estimated (hash-based position)' : ''}${m.findings.length > 0 ? ` · ${m.findings.length} finding${m.findings.length!==1?'s':''}` : ' · No findings'}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                borderRadius:'50%',
+                                                background: m.isRef ? 'rgba(148,163,184,0.15)' : isaCat.light,
+                                                border:`2px ${borderStyle} ${sevBorder}`,
+                                                boxShadow: isSel
+                                                  ? `0 0 0 3px ${glowColor}, 0 2px 8px rgba(0,0,0,0.45)`
+                                                  : `0 1px 3px rgba(0,0,0,0.30)`,
+                                                transform:`translate(-50%,-50%) scale(${isSel ? 1.3 : 1})`,
+                                                zIndex: isSel ? 20 : 10,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                display:'flex', alignItems:'center', justifyContent:'center',
+                                                fontSize: isSel ? '7px' : '5.5px',
+                                                fontWeight:900, fontFamily:'monospace',
+                                                color: m.isRef ? '#94a3b8' : isaCat.color,
+                                                letterSpacing:'-0.02em',
+                                                transition:'width 0.15s,height 0.15s,transform 0.15s,box-shadow 0.15s',
+                                                animation: (!isSel && m.findings.length === 0)
+                                                  ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                              }}>
+                                              {m.prefix.slice(0,2)}
+                                            </button>
+                                            {/* Tag label tooltip — visible only when selected */}
+                                            {isSel && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`calc(${m.yp}% + ${sz/2 + 5}px)`,
+                                                transform:'translateX(-50%)',
+                                                background:'rgba(15,23,42,0.90)',
+                                                color:'white', fontSize:'8px', fontWeight:700,
+                                                borderRadius:'4px', padding:'2px 6px',
+                                                whiteSpace:'nowrap', zIndex:25, pointerEvents:'none',
+                                                border:'1px solid rgba(255,255,255,0.15)',
+                                              }}>
+                                                {m.tag}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Selected instrument detail card */}
+                            {selectedMarkerData && (
+                              <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                style={{
+                                  borderColor: selectedMarkerData.topSev
+                                    ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.border || '#0f766e')
+                                    : '#0f766e',
+                                  animation:'cardIn 0.2s ease-out both',
+                                }}>
+                                {/* Detail header */}
+                                <div className="flex items-center gap-3 px-4 py-3"
+                                  style={{ background: selectedMarkerData.topSev
+                                    ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.light || _getIsaCat(selectedMarkerData.prefix).light)
+                                    : _getIsaCat(selectedMarkerData.prefix).light }}>
+                                  {/* ISA balloon icon — category colour, severity border */}
+                                  <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-[11px] font-black font-mono"
+                                    style={{
+                                      background:   _getIsaCat(selectedMarkerData.prefix).light,
+                                      borderColor:  selectedMarkerData.topSev
+                                        ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.border || _getIsaCat(selectedMarkerData.prefix).ring)
+                                        : _getIsaCat(selectedMarkerData.prefix).ring,
+                                      color:        _getIsaCat(selectedMarkerData.prefix).color,
+                                      boxShadow:   `0 4px 12px ${_getIsaCat(selectedMarkerData.prefix).color}30`,
+                                    }}>
+                                    {selectedMarkerData.prefix.slice(0,2)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-sm font-black text-slate-900">{selectedMarkerData.tag}</p>
+                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                                        style={{
+                                          background: _getIsaCat(selectedMarkerData.prefix).light,
+                                          color:      _getIsaCat(selectedMarkerData.prefix).color,
+                                          border:    `1px solid ${_getIsaCat(selectedMarkerData.prefix).ring}50`,
+                                        }}>
+                                        {_getIsaCat(selectedMarkerData.prefix).label}
+                                      </span>
+                                      {selectedMarkerData.isRef && (
+                                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">TITLE BLOCK</span>
+                                      )}
+                                      {selectedMarkerData.isVirtual && (
+                                        <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">~ESTIMATED</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">{selectedMarkerData.typeLabel}</p>
+                                    {selectedMarkerData.isRef && (
+                                      <p className="text-[10px] text-amber-600 mt-0.5">
+                                        ⚠ Tag found in drawing reference area only — actual instrument loop position not confirmed from OCR.
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                    <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selectedMarkerData.xp?.toFixed(1)}%</span></span>
+                                    <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selectedMarkerData.yp?.toFixed(1)}%</span></span>
+                                  </div>
+                                  <button
+                                    onClick={() => setInstrSelectedTag(null)}
+                                    className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                                    ✕
+                                  </button>
+                                </div>
+                                {/* Findings list */}
+                                {selectedMarkerData.findings.length > 0 ? (
+                                  <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                      {selectedMarkerData.findings.length} Finding{selectedMarkerData.findings.length!==1?'s':''} Detected
+                                    </p>
+                                    {selectedMarkerData.findings.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = DRAW_SEV_COLOR[sev] || DRAW_SEV_COLOR.info;
+                                      return (
+                                        <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                          style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                            <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                            {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                          </div>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                            style={{ background:'#d97706' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    No findings — instrument appears compliant with current rule-engine checks.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* ── Instrument Schedule — ISA 5.06 grouped by variable category ── */}
+                            {instrMarkerList.length > 0 ? (
+                              <div className="mx-5 mb-4">
+                                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                  <MapPin className="w-3 h-3 text-amber-500" />
+                                  Instrument Schedule — {instrMarkerList.length} tag{instrMarkerList.length!==1?'s':''} · ISA 5.06 Layout
+                                </p>
+                                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-[10px]">
+                                      <thead>
+                                        <tr style={{ background:'linear-gradient(to right,rgba(217,119,6,0.09),rgba(245,158,11,0.04))' }}>
+                                          {['Tag ID','ISA Type','Variable','X %','Y %','Status','Findings'].map(h => (
+                                            <th key={h} className="px-3 py-2 text-left font-black text-slate-600 whitespace-nowrap border-b border-slate-200">{h}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {/* Iterate category groups (most instruments first) */}
+                                        {_catArr.map(({ cat, markers }) => (
+                                          <React.Fragment key={cat.label}>
+                                            {/* ISA Variable category group header */}
+                                            <tr style={{ background: cat.light }}>
+                                              <td colSpan={7} className="px-3 py-1"
+                                                style={{ borderBottom:`1px solid ${cat.ring}20` }}>
+                                                <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider"
+                                                  style={{ color: cat.color }}>
+                                                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cat.color }} />
+                                                  {cat.label}
+                                                  <span className="font-medium normal-case tracking-normal opacity-70 ml-0.5">
+                                                    ({markers.length} instrument{markers.length!==1?'s':''})
+                                                  </span>
+                                                  {markers.filter(m=>m.findings.length>0).length > 0 && (
+                                                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-white text-[7px] font-black"
+                                                      style={{ background:'#dc2626' }}>
+                                                      {markers.filter(m=>m.findings.length>0).length} with findings
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                            {/* Instrument rows within this category */}
+                                            {markers.map((m) => {
+                                              const sc       = m.topSev ? (DRAW_SEV_COLOR[m.topSev] || DRAW_SEV_COLOR.info) : null;
+                                              const isRowSel = instrSelectedTag === m.tag;
+                                              return (
+                                                <tr key={m.tag}
+                                                  onClick={() => setInstrSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                  className="cursor-pointer border-b border-slate-100 last:border-0 transition-colors hover:bg-amber-50/60"
+                                                  style={isRowSel ? { background:'rgba(217,119,6,0.08)' } : undefined}>
+                                                  <td className="px-3 py-2 font-mono font-black text-slate-800 whitespace-nowrap">
+                                                    <span className="flex items-center gap-1.5">
+                                                      {/* Mini ISA balloon */}
+                                                      <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                                                        style={{
+                                                          background: sc ? sc.light : cat.light,
+                                                          border:`1.5px ${m.isRef ? 'dotted' : m.isVirtual ? 'dashed' : 'solid'} ${sc ? sc.border : cat.ring}`,
+                                                          fontSize:'5px', fontWeight:900, fontFamily:'monospace',
+                                                          color: sc ? sc.text : cat.color,
+                                                        }}>
+                                                        {m.prefix.slice(0,2)}
+                                                      </span>
+                                                      {m.tag}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={m.typeLabel}>{m.typeLabel}</td>
+                                                  <td className="px-3 py-2 whitespace-nowrap">
+                                                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                                                      style={{ background: cat.light, color: cat.color }}>
+                                                      {cat.label}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{m.xp?.toFixed(1)}</td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{m.yp?.toFixed(1)}</td>
+                                                  <td className="px-3 py-2 whitespace-nowrap">
+                                                    {m.isRef ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[8px] text-amber-700 bg-amber-50 border border-amber-200">REF</span>
+                                                    ) : m.isVirtual ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[8px] text-slate-500 bg-slate-100 border border-slate-200">EST</span>
+                                                    ) : m.findings.length > 0 ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-black text-white text-[8px] capitalize"
+                                                        style={{ background: sc?.bg || '#d97706' }}>{m.topSev}</span>
+                                                    ) : (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-black text-[8px] text-emerald-700 bg-emerald-100 border border-emerald-200">OK</span>
+                                                    )}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-slate-500">
+                                                    {m.findings.length > 0
+                                                      ? <span className="font-bold" style={{ color: sc?.text }}>{m.findings.length}</span>
+                                                      : '—'}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </React.Fragment>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mx-5 mb-5 py-8 text-center text-slate-400">
+                                <MapPin className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                                <p className="text-xs font-medium text-slate-500">No instrument tags found in this drawing.</p>
+                                <p className="text-[10px] mt-1 text-slate-400 max-w-xs mx-auto">
+                                  {instrRelatedIssues.length > 0
+                                    ? `${instrRelatedIssues.length} findings were detected but none reference ISA 5.1 instrument tags. Check the Findings tab for details.`
+                                    : 'This drawing may be a piping or layout sheet. Open a P&ID with instrument loops for tag markers to appear.'}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* ── Unmatched Findings: instrument findings not tied to a specific tag ── */}
+                            {unmatchedInstrFindings.length > 0 && (
+                              <div className="mx-5 mb-5">
+                                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                  Instrument Findings — {unmatchedInstrFindings.length} finding{unmatchedInstrFindings.length!==1?'s':''}
+                                  <span className="text-[9px] font-normal text-slate-400 normal-case tracking-normal">(no specific tag attributed)</span>
+                                </p>
+                                <div className="rounded-xl border border-amber-200/70 overflow-hidden">
+                                  <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                    {unmatchedInstrFindings.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = DRAW_SEV_COLOR[sev] || DRAW_SEV_COLOR.info;
+                                      return (
+                                        <div key={f.id || fi}
+                                          className="flex items-start gap-2.5 px-4 py-2.5 border-b border-slate-100 last:border-0 bg-white hover:bg-amber-50/40 transition-colors">
+                                          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                              <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded"
+                                                style={{ background:sc2.light, color:sc2.text }}>{sev}</span>
+                                              {f.category && <span className="text-[9px] text-slate-400 capitalize">{f.category}</span>}
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 font-medium leading-tight">{f.issue_observed}</p>
+                                            {f.evidence && <p className="text-[9px] text-slate-400 font-mono mt-0.5 truncate" title={f.evidence}>{f.evidence}</p>}
+                                          </div>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                            style={{ background:'#d97706' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ Registry view ══ */}
+                  {instrActiveView === 'registry' && (() => {
+                    // Soft-coded: category display config
+                    const REG_CATEGORIES = [
+                      { key:'control_valve',       label:'Control Valves',       color:'#f59e0b' },
+                      { key:'manual_valve',        label:'Manual Valves',        color:'#3b82f6' },
+                      { key:'instrument',          label:'Instruments',          color:'#10b981' },
+                      { key:'instrument_tagging',  label:'Instrument Tagging',   color:'#8b5cf6' },
+                      { key:'equipment_numbering', label:'Equipment Numbering',  color:'#f43f5e' },
+                      { key:'inline_equipment',    label:'In-Line Equipment',    color:'#06b6d4' },
+                    ];
+
+                    const filtered = instrSymbols.filter(s => {
+                      const catOk = instrRegCatFilter === 'all' || s.category === instrRegCatFilter;
+                      const q     = instrRegSearch.toLowerCase();
+                      const srchOk= !q || s.symbol_code.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+                      return catOk && srchOk;
+                    });
+
+                    const catCfg = Object.fromEntries(REG_CATEGORIES.map(c => [c.key, c]));
+
+                    return (
+                      <div className="p-4 overflow-y-auto" style={{ maxHeight:'55vh' }}>
+                        {/* Filters row */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          {/* Search */}
+                          <div className="relative flex-1 min-w-[160px]">
+                            <Database className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search code or description…"
+                              value={instrRegSearch}
+                              onChange={e => setInstrRegSearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-100 border border-slate-200 focus:outline-none focus:ring-2 focus:border-amber-400"
+                              style={{ '--tw-ring-color':'#d97706' }}
+                            />
+                          </div>
+                          {/* Category chips */}
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              onClick={() => setInstrRegCatFilter('all')}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${instrRegCatFilter==='all' ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                              style={instrRegCatFilter==='all' ? { background:'#d97706', borderColor:'#d97706' } : undefined}>
+                              All ({instrSymbols.length})
+                            </button>
+                            {REG_CATEGORIES.map(cat => {
+                              const cnt   = instrSymbols.filter(s => s.category === cat.key).length;
+                              const activ = instrRegCatFilter === cat.key;
+                              return (
+                                <button key={cat.key}
+                                  onClick={() => setInstrRegCatFilter(cat.key)}
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${activ ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                  style={activ ? { background:cat.color, borderColor:cat.color } : undefined}>
+                                  {cat.label} ({cnt})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Symbol grid */}
+                        {loadingInstrSymbols ? (
+                          <div className="flex items-center justify-center py-10 gap-2 text-slate-400">
+                            <Loader className="w-4 h-4 animate-spin" />
+                            <span className="text-xs">Loading symbols…</span>
+                          </div>
+                        ) : filtered.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-2">
+                            <Database className="w-8 h-8 opacity-30" />
+                            <p className="text-xs">{instrSymbols.length === 0 ? 'No symbols in registry yet. Upload a legend sheet to populate.' : 'No symbols match your filter.'}</p>
+                          </div>
+                        ) : (
+                          <div className="grid gap-1.5" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(260px,1fr))' }}>
+                            {filtered.map(sym => {
+                              const cfg = catCfg[sym.category] || { color:'#94a3b8', label: sym.category };
+                              return (
+                                <div key={sym.symbol_id}
+                                  className="rounded-xl border bg-white p-3 flex gap-3 items-start hover:shadow-sm transition-shadow"
+                                  style={{ borderColor: cfg.color + '40' }}>
+                                  {/* Code badge */}
+                                  <div className="flex-shrink-0 rounded-lg px-2 py-1.5 min-w-[48px] text-center font-black text-sm leading-none"
+                                    style={{ background: cfg.color + '18', color: cfg.color }}>
+                                    {sym.symbol_code}
+                                  </div>
+                                  {/* Details */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-700 leading-tight truncate" title={sym.description}>{sym.description}</p>
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                                        style={{ background: cfg.color + '15', color: cfg.color }}>
+                                        {cfg.label}
+                                      </span>
+                                      {sym.symbol_type && (
+                                        <span className="text-[10px] text-slate-400 truncate">{sym.symbol_type}</span>
+                                      )}
+                                      <span className="text-[10px] text-slate-300">{sym.drawing_standard}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* ══ Footer ══ */}
                   <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
                     <span style={{ color:'#d97706' }}>
                       {instrActiveView === 'checklist'
                         ? `${total} checks · ${Object.keys(instrCheckStates).length} manual override${Object.keys(instrCheckStates).length!==1?'s':''}`
-                        : `QC score: ${qcScore}%`}
+                        : instrActiveView === 'drawing'
+                          ? `${instrMarkerCount} instruments located · ISA 5.1 tag coordinates`
+                          : instrActiveView === 'registry'
+                            ? `${instrSymbols.length} symbols · ${[...new Set(instrSymbols.map(s=>s.category))].length} categories`
+                            : `QC score: ${qcScore}%`}
                     </span>
                     <span>ISA 5.1 · IEC 62424 · ISA-18.2 · AI auto-detection active</span>
                   </div>
@@ -6551,32 +8828,42 @@ const PIDVerification = () => {
                   </div>
 
                   {/* ══ View switcher ══ */}
-                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-                    {[
-                      { id:'checklist', label:'Checklist', icon:ClipboardList, cnt:total },
-                      { id:'summary',   label:'Summary',   icon:BarChart2,     cnt:null  },
-                    ].map(tab => {
-                      const TabIcon = tab.icon;
-                      const active  = pipActiveView === tab.id;
-                      return (
-                        <button key={tab.id}
-                          onClick={() => setPipActiveView(tab.id)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
-                          }`}
-                          style={active ? { color:'#0891b2', borderColor:'#0891b2' } : undefined}>
-                          <TabIcon className="w-3.5 h-3.5" />
-                          {tab.label}
-                          {tab.cnt !== null && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
-                              style={active ? { background:'#0891b2' } : undefined}>
-                              {tab.cnt}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    // Soft-coded: badge count for the Drawing Layout tab = lines with mapped coords
+                    const _lineTags = activeDrawingData?.metadata?.line_tags || [];
+                    const _lineTagCount = _lineTags.filter(lt =>
+                      (lt.occurrences || []).some(o => o.x_pct != null && o.y_pct != null)
+                    ).length;
+                    return (
+                      <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                        {[
+                          { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                          { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                          { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:_lineTagCount || null },
+                        ].map(tab => {
+                          const TabIcon = tab.icon;
+                          const active  = pipActiveView === tab.id;
+                          return (
+                            <button key={tab.id}
+                              onClick={() => setPipActiveView(tab.id)}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                                active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                              }`}
+                              style={active ? { color:'#0891b2', borderColor:'#0891b2' } : undefined}>
+                              <TabIcon className="w-3.5 h-3.5" />
+                              {tab.label}
+                              {tab.cnt !== null && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                                  style={active ? { background:'#0891b2' } : undefined}>
+                                  {tab.cnt}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {/* ════════════════════════════════════
                       CHECKLIST VIEW
@@ -6711,118 +8998,713 @@ const PIDVerification = () => {
                   )}
 
                   {/* ════════════════════════════════════
-                      SUMMARY VIEW
+                      SUMMARY VIEW — Scorecard
                   ════════════════════════════════════ */}
-                  {pipActiveView === 'summary' && (
-                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                  {pipActiveView === 'summary' && (() => {
 
-                      {/* Score ring */}
-                      <div className="rounded-xl border p-4 flex items-center gap-5"
-                        style={{ background:'linear-gradient(135deg,rgba(8,145,178,0.05),rgba(6,182,212,0.04))', borderColor:'rgba(8,145,178,0.2)' }}>
-                        <div className="relative w-20 h-20 flex-shrink-0">
-                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
-                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
-                            <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="5"
-                              strokeLinecap="round"
-                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-xl font-black leading-none" style={{ color:scoreColor }}>{qcScore}%</span>
-                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                    // ── Soft-coded: category data ────────────────────────────────────────
+                    const catBars = PIPE_CATEGORIES.map(cat => {
+                      const checks = PIPE_CHECKS.filter(c => c.category === cat);
+                      const def    = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
+                      const pass   = checks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                      const warn   = checks.filter(c => effectiveStatus(c) === 'warn').length;
+                      const fail   = checks.filter(c => effectiveStatus(c) === 'fail').length;
+                      return { cat, def, pass, warn, fail, n: checks.length,
+                               pct: Math.round(pass / Math.max(1, checks.length) * 100) };
+                    });
+
+                    // ── Soft-coded: AI insight generators — add more entries freely ──────
+                    const INSIGHT_FNS = [
+                      () => {
+                        if (failCnt === 0 && warnCnt === 0) return null;
+                        const worst = [...catBars].filter(b => b.fail > 0).sort((a,b) => b.fail - a.fail)[0];
+                        if (!worst) return null;
+                        return { icon: worst.def.icon, accent:'#dc2626',
+                          label: `${worst.cat} — Focus Area`,
+                          sublabel: `${worst.fail} failed · ${worst.pct}% compliant` };
+                      },
+                      () => {
+                        if (failCnt > 0 || warnCnt > 0) return null;
+                        return { icon:'✅', accent:'#16a34a',
+                          label: 'All Clear — ready for issue',
+                          sublabel: `${total} checks passed · no failures` };
+                      },
+                      () => {
+                        const crit = PIPE_CHECKS.filter(c =>
+                          c.severity === 'critical' && ['fail','warn'].includes(effectiveStatus(c)));
+                        if (crit.length === 0) return null;
+                        return { icon:'🚨', accent:'#dc2626',
+                          label: `${crit.length} critical check${crit.length!==1?'s':''} unresolved`,
+                          sublabel: crit.slice(0,3).map(c => c.id).join(' · ') + (crit.length > 3 ? ' …' : '') };
+                      },
+                      () => {
+                        if (warnCnt < 2) return null;
+                        return { icon:'🔍', accent:'#f59e0b',
+                          label: `${warnCnt} checks need engineer review`,
+                          sublabel: 'AI flagged potential non-conformances' };
+                      },
+                    ].map(fn => fn()).filter(Boolean);
+
+                    // ── Soft-coded: ring geometry (stroke-dasharray approach) ─────────────
+                    // Using circle + dashoffset so SVG <animate> can draw it smoothly.
+                    const _R    = 38, _CX = 50, _CY = 50;
+                    const _pct  = Math.min(qcScore, 100) / 100;
+                    const _CIRC = 2 * Math.PI * _R;                // ≈ 238.76
+                    const _END  = _CIRC * (1 - _pct);              // dashoffset at full score
+                    // Stagger timing helpers — keep all delays soft-coded here
+                    const _T_RING   = '0.2s';
+                    const _T_PILLS  = '0.5s';
+                    const _T_STD    = '0.7s';
+                    const _T_ROW    = (i) => `${0.85 + i * 0.07}s`;
+                    const _T_INSIGHT = `${0.85 + catBars.length * 0.07 + 0.1}s`;
+
+                    // ── Soft-coded: stat pills ───────────────────────────────────────────
+                    const STAT_PILLS = [
+                      { v: passCnt, label: 'Pass',   color: '#22c55e' },
+                      { v: warnCnt, label: 'Review', color: '#f59e0b' },
+                      { v: failCnt, label: 'Failed', color: '#dc2626' },
+                    ];
+
+                    // Single top insight (most critical first)
+                    const topInsight = INSIGHT_FNS[0] || null;
+
+                    return (
+                      <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                        {/* ── Keyframes injected once per render ──────────────── */}
+                        <style>{`
+                          @keyframes pipFadeUp {
+                            from { opacity:0; transform:translateY(10px); }
+                            to   { opacity:1; transform:translateY(0);    }
+                          }
+                          @keyframes pipFadeIn {
+                            from { opacity:0; }
+                            to   { opacity:1; }
+                          }
+                          @keyframes pipSlideRight {
+                            from { opacity:0; transform:translateX(-8px); }
+                            to   { opacity:1; transform:translateX(0);    }
+                          }
+                          @keyframes pipPop {
+                            0%   { opacity:0; transform:scale(0.85); }
+                            70%  { transform:scale(1.05); }
+                            100% { opacity:1; transform:scale(1); }
+                          }
+                        `}</style>
+
+                        <div className="px-5 py-5 flex flex-col gap-5">
+
+                          {/* ── Score ring — draws itself on mount ─────────────── */}
+                          <div className="flex flex-col items-center gap-3"
+                            style={{ animation:`pipFadeIn 0.4s ease-out ${_T_RING} both` }}>
+
+                            <svg width="110" height="110" viewBox="0 0 100 100">
+                              {/* Background track */}
+                              <circle cx={_CX} cy={_CY} r={_R}
+                                fill="none" stroke="#e9eef4" strokeWidth="9" />
+                              {/* Animated progress ring — draws from 12 o'clock */}
+                              <circle cx={_CX} cy={_CY} r={_R}
+                                fill="none"
+                                stroke={scoreColor}
+                                strokeWidth="9"
+                                strokeLinecap="round"
+                                strokeDasharray={_CIRC}
+                                strokeDashoffset={_CIRC}
+                                transform={`rotate(-90 ${_CX} ${_CY})`}>
+                                <animate
+                                  attributeName="stroke-dashoffset"
+                                  from={_CIRC}
+                                  to={_END}
+                                  dur="1.4s"
+                                  begin={_T_RING}
+                                  fill="freeze"
+                                  calcMode="spline"
+                                  keyTimes="0;1"
+                                  keySplines="0.22 1 0.36 1"
+                                />
+                              </circle>
+                              {/* Score label — fades in after ring is mostly drawn */}
+                              <text x={_CX} y={_CY - 4} textAnchor="middle" dominantBaseline="middle"
+                                fontSize="20" fontWeight="900" fill={scoreColor}
+                                style={{ animation:`pipFadeIn 0.5s ease-out 1s both` }}>
+                                {qcScore}%
+                              </text>
+                              <text x={_CX} y={_CY + 14} textAnchor="middle" dominantBaseline="middle"
+                                fontSize="7" fontWeight="600" fill="#b0bec5" letterSpacing="1">
+                                QC SCORE
+                              </text>
+                            </svg>
+
+                            {/* Stat pills — pop in one by one */}
+                            <div className="flex gap-2 w-full">
+                              {STAT_PILLS.map((p, pi) => (
+                                <div key={p.label} className="flex-1 rounded-xl py-3 text-center"
+                                  style={{ background:`${p.color}10`, border:`1px solid ${p.color}28`,
+                                           animation:`pipPop 0.4s ease-out ${parseFloat(_T_PILLS) + pi * 0.1}s both` }}>
+                                  <div className="text-2xl font-black leading-none" style={{ color: p.color }}>{p.v}</div>
+                                  <div className="text-[9px] font-bold mt-1" style={{ color:`${p.color}99` }}>{p.label}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <p className="text-[8px] font-bold text-slate-300 tracking-widest uppercase"
+                              style={{ animation:`pipFadeIn 0.6s ease-out ${_T_STD} both` }}>
+                              ASME B31.3 · ISA 5.1 · {total} CHECKS
+                            </p>
                           </div>
+
+                          {/* ── Category list — rows slide in staggered ─────────── */}
+                          <div className="rounded-2xl overflow-hidden border border-slate-100">
+                            {catBars.map((b, i) => {
+                              const sc = b.fail > 0 ? '#dc2626' : b.warn > 0 ? '#f59e0b' : '#22c55e';
+                              return (
+                                <div key={b.cat}
+                                  className="flex items-center gap-3 px-4 py-3"
+                                  style={{
+                                    borderBottom: i < catBars.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                    background:   b.fail > 0 ? '#fff5f5' : 'white',
+                                    animation:    `pipSlideRight 0.35s ease-out ${_T_ROW(i)} both`,
+                                  }}>
+                                  <span className="text-base leading-none flex-shrink-0">{b.def.icon}</span>
+                                  <span className="flex-1 text-[11px] font-semibold text-slate-700 truncate">{b.cat}</span>
+                                  {(b.fail > 0 || b.warn > 0) && (
+                                    <span className="text-[9px] font-bold flex-shrink-0">
+                                      {b.fail > 0 && <span style={{ color:'#dc2626' }}>{b.fail}✗ </span>}
+                                      {b.warn > 0 && <span style={{ color:'#f59e0b' }}>{b.warn}⚠ </span>}
+                                    </span>
+                                  )}
+                                  <span className="text-[11px] font-black flex-shrink-0 px-2 py-0.5 rounded-full"
+                                    style={{ background:`${sc}15`, color: sc }}>{b.pct}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* ── Top AI insight — fades in last ──────────────────── */}
+                          {topInsight && (
+                            <div className="rounded-2xl px-4 py-4 flex items-start gap-3"
+                              style={{ background:`${topInsight.accent}08`, border:`1.5px solid ${topInsight.accent}25`,
+                                       animation:`pipFadeUp 0.45s ease-out ${_T_INSIGHT} both` }}>
+                              <span className="text-2xl flex-shrink-0 leading-none mt-0.5">{topInsight.icon}</span>
+                              <div>
+                                <p className="text-[12px] font-black" style={{ color: topInsight.accent }}>{topInsight.label}</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">{topInsight.sublabel}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Reset overrides */}
+                          {Object.keys(pipCheckStates).length > 0 && (
+                            <button onClick={() => setPipCheckStates({})}
+                              className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
+                              Reset {Object.keys(pipCheckStates).length} manual override{Object.keys(pipCheckStates).length!==1?'s':''}
+                            </button>
+                          )}
+
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-slate-800 mb-1">Piping QC Score</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
-                            {passCnt} of {total} checks passed or auto-cleared.
-                            {failCnt > 0 && ` ${failCnt} check${failCnt!==1?'s':''} marked as failed.`}
-                            {warnCnt > 0 && ` ${warnCnt} check${warnCnt!==1?'s':''} require engineer review.`}
-                          </p>
-                          <div className="flex gap-4 mt-2">
-                            {[['Pass/OK',passCnt,'#22c55e'],['Review',warnCnt,'#f59e0b'],['Failed',failCnt,'#dc2626'],['Pending',pendCnt,'#94a3b8']].map(([l,v,c])=>(
-                              <div key={l} className="text-center">
-                                <p className="text-base font-black leading-none" style={{color:c}}>{v}</p>
-                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT VIEW
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'drawing' && (() => {
+
+                    // ── Soft-coded: piping line designation parser ─────────────────────────
+                    // Parses common formats: 4"-BD-4860, 6"-CS-1234-038842-X-N
+                    // Returns { nps, fluid, lineNo } — all strings, empty string if not parsed.
+                    const _parseLine = (text) => {
+                      if (!text) return { nps:'', fluid:'', lineNo:'' };
+                      // Match leading size: 2", 4", 6", 10", 2.5", etc.
+                      const m = (text || '').match(/^(\d+(?:\.\d+)?)"[-_]([A-Za-z0-9]+)[-_](\d+)/);
+                      if (m) return { nps: `${m[1]}"`, fluid: m[2].toUpperCase(), lineNo: m[3] };
+                      // Fallback: split by dash/underscore
+                      const parts = text.split(/[-_]/);
+                      return {
+                        nps:    parts[0] || '',
+                        fluid:  parts[1] || '',
+                        lineNo: parts[2] || '',
+                      };
+                    };
+
+                    // ── Soft-coded: fluid/spec colour map ─────────────────────────────────
+                    // Add project-specific fluid codes freely without changing render logic.
+                    const FLUID_COLORS = {
+                      'BD': { bg:'#0369a1', border:'#0284c7', label:'Blowdown' },
+                      'PG': { bg:'#0d9488', border:'#0f766e', label:'Process Gas' },
+                      'PL': { bg:'#0891b2', border:'#0e7490', label:'Process Liquid' },
+                      'FG': { bg:'#f97316', border:'#ea580c', label:'Fuel Gas' },
+                      'FL': { bg:'#ef4444', border:'#dc2626', label:'Fuel Liquid' },
+                      'N2': { bg:'#6366f1', border:'#4f46e5', label:'Nitrogen' },
+                      'CW': { bg:'#06b6d4', border:'#0891b2', label:'Cooling Water' },
+                      'HW': { bg:'#f59e0b', border:'#d97706', label:'Hot Water' },
+                      'ST': { bg:'#8b5cf6', border:'#7c3aed', label:'Steam' },
+                      'CS': { bg:'#64748b', border:'#475569', label:'Closed System' },
+                      'GL': { bg:'#22c55e', border:'#16a34a', label:'Glycol' },
+                      'LS': { bg:'#84cc16', border:'#65a30d', label:'Low-Pres Steam' },
+                      'HS': { bg:'#7c3aed', border:'#6d28d9', label:'High-Pres Steam' },
+                      'OT': { bg:'#94a3b8', border:'#64748b', label:'Other' },
+                    };
+                    const _fluidColor = (fluidCode) =>
+                      FLUID_COLORS[(fluidCode||'').toUpperCase()] || { bg:'#0891b2', border:'#0369a1', label: fluidCode || 'Unknown' };
+
+                    // ── Soft-coded: severity colour scheme ──────────────────────────────────
+                    const PIP_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+                    const PIP_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Resolve best coordinate for a line_tag ─────────────────────────────
+                    // Mirrors core pickBestLineTagOcc: prefer H-direction (horizontal label),
+                    // then fall back to nearest-centroid occurrence.
+                    const _resolveLineCoord = (lt) => {
+                      const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+                      if (occs.length === 0) return [null, null];
+                      const hOcc = occs.find(o => o.direction === 'H');
+                      if (hOcc) return [hOcc.x_pct, hOcc.y_pct];
+                      // Nearest to drawing centroid (50%, 50%)
+                      let best = occs[0]; let bestD = Infinity;
+                      for (const o of occs) {
+                        const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
+                        if (d < bestD) { bestD = d; best = o; }
+                      }
+                      return [best.x_pct, best.y_pct];
+                    };
+
+                    // ── Build findings map: lineText (normalised) → findings array ──────────
+                    const _pipIssues = (activeDrawingData?.issues || []).filter(f =>
+                      !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                    );
+                    const _lineFindMap = {};
+                    for (const f of _pipIssues) {
+                      const hay = `${f.evidence||''} ${f.issue_observed||''}`;
+                      // Match pipeline designations in findings text: 4"-BD-4860 or 4-BD-4860 style
+                      const re = /(\d+(?:\.\d+)?)"?[-_]([A-Za-z]{1,4})[-_](\d{3,6})/g;
+                      let m;
+                      while ((m = re.exec(hay)) !== null) {
+                        const key = `${m[1]}-${m[2].toUpperCase()}-${m[3]}`;
+                        if (!_lineFindMap[key]) _lineFindMap[key] = [];
+                        _lineFindMap[key].push(f);
+                      }
+                    }
+
+                    // ── Build line marker list ─────────────────────────────────────────────
+                    const rawLineTags = activeDrawingData?.metadata?.line_tags || [];
+                    const lineMarkers = rawLineTags.reduce((acc, lt) => {
+                      const text = lt.text || lt.tag || lt.label || '';
+                      if (!text) return acc;
+                      const [xp, yp] = _resolveLineCoord(lt);
+                      if (xp == null || yp == null) return acc;
+                      const parsed = _parseLine(text);
+                      const fc     = _fluidColor(parsed.fluid);
+                      // Lookup findings: try normalised key and raw text variants
+                      const normKey = parsed.nps && parsed.fluid && parsed.lineNo
+                        ? `${parsed.nps.replace('"','')}-${parsed.fluid}-${parsed.lineNo}`
+                        : text.toUpperCase();
+                      const findings = _lineFindMap[normKey]
+                        || _lineFindMap[text.toUpperCase()]
+                        || _pipIssues.filter(f =>
+                             `${f.evidence||''} ${f.issue_observed||''}`.includes(text)
+                           );
+                      const topSev = findings.reduce((best, f) => {
+                        return (PIP_SEV_ORDER[f.severity] || 0) > (PIP_SEV_ORDER[best] || 0) ? f.severity : best;
+                      }, null);
+                      const occ_count = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null).length;
+                      acc.push({ text, xp, yp, parsed, fc, findings, topSev, occ_count, multi_angle: !!lt.multi_angle });
+                      return acc;
+                    }, []);
+
+                    // ── Stats ──────────────────────────────────────────────────────────────
+                    const linesWithFindings = lineMarkers.filter(m => m.findings.length > 0).length;
+                    const linesOK           = lineMarkers.filter(m => m.findings.length === 0).length;
+
+                    // ── Selected marker ────────────────────────────────────────────────────
+                    const selLine = pipSelectedLine
+                      ? lineMarkers.find(m => m.text === pipSelectedLine)
+                      : null;
+
+                    // ── Unique fluid codes present on drawing ──────────────────────────────
+                    const uniqueFluids = [...new Set(lineMarkers.map(m => m.parsed.fluid).filter(Boolean))];
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* No drawing loaded */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(8,145,178,0.06)', borderColor:'rgba(8,145,178,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-cyan-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-cyan-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see piping line coordinates on the layout map.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Loading */}
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-cyan-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {/* Drawing available */}
+                        {!drawingImageLoading && drawingImageUrl && (<>
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-3 gap-2 px-5 pt-4 pb-3">
+                            {[
+                              { v: lineMarkers.length, label: 'Lines Located',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',  border:'rgba(8,145,178,0.2)'  },
+                              { v: linesWithFindings,  label: 'With Findings',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                              { v: linesOK,            label: 'Compliant',       color:'#22c55e', bg:'rgba(34,197,94,0.07)', border:'rgba(34,197,94,0.2)'  },
+                            ].map(c => (
+                              <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Category breakdown */}
-                      <div>
-                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
-                          <span className="text-base">📋</span> Checks by Category
-                        </p>
-                        <div className="flex flex-col gap-2">
-                          {PIPE_CATEGORIES.map(cat => {
-                            const catChecks = PIPE_CHECKS.filter(c => c.category === cat);
-                            const catDef    = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
-                            const catPass   = catChecks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
-                            const catFail   = catChecks.filter(c => effectiveStatus(c) === 'fail').length;
-                            const catWarn   = catChecks.filter(c => effectiveStatus(c) === 'warn').length;
-                            const catPct    = Math.round(catPass / catChecks.length * 100);
-                            return (
-                              <div key={cat} className="rounded-xl border p-3"
-                                style={{ background: catFail>0 ? '#fef2f220' : catWarn>0 ? '#fffbeb40' : '#f0fdf430',
-                                         borderColor: catFail>0 ? '#fca5a580' : catWarn>0 ? '#fcd34d80' : '#86efac80' }}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-[11px] font-bold" style={{ color:catDef.color }}>{catDef.icon} {cat}</span>
-                                  <div className="flex items-center gap-2">
-                                    {catFail > 0 && <span className="text-[9px] font-black text-red-600">{catFail}✗</span>}
-                                    {catWarn > 0 && <span className="text-[9px] font-black text-amber-600">{catWarn}⚠</span>}
-                                    <span className="text-[9px] font-bold" style={{ color:catFail>0?'#dc2626':catWarn>0?'#f59e0b':'#22c55e' }}>{catPct}%</span>
+                          {/* Fluid code legend */}
+                          {uniqueFluids.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-2 text-[9px] text-slate-500">
+                              {uniqueFluids.slice(0, 10).map(f => {
+                                const fc = _fluidColor(f);
+                                return (
+                                  <span key={f} className="flex items-center gap-1">
+                                    <span className="inline-block w-3 h-3 rotate-45 flex-shrink-0"
+                                      style={{ background: fc.bg, border:`2px solid ${fc.border}` }} />
+                                    <span className="font-bold" style={{ color: fc.bg }}>{f}</span>
+                                    <span className="text-slate-400">{fc.label}</span>
+                                  </span>
+                                );
+                              })}
+                              <span className="ml-auto text-cyan-600 font-medium">Click marker or row · findings shown in red/orange/yellow</span>
+                            </div>
+                          )}
+
+                          {/* Diagnostic: drawing loaded but no lines mapped */}
+                          {lineMarkers.length === 0 && rawLineTags.length > 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                              style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-amber-700 mb-0.5">
+                                  {rawLineTags.length} line tag{rawLineTags.length !== 1 ? 's' : ''} found — none have coordinate data
+                                </p>
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                  Sample: <span className="font-mono font-bold text-slate-700">
+                                    {rawLineTags.slice(0,5).map(lt => lt.text||lt.tag||'?').join(', ')}
+                                  </span>
+                                  {rawLineTags.length > 5 ? ` …+${rawLineTags.length - 5} more` : ''}.
+                                  Re-run OCR extraction to generate position data.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {lineMarkers.length === 0 && rawLineTags.length === 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                              style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                              No piping line tag data yet — process and analyse a P&amp;ID drawing first.
+                            </div>
+                          )}
+
+                          {/* ── Line filter chip strip ─────────────────────── */}
+                          {lineMarkers.length > 0 && (
+                            <div className="px-5 pb-2">
+                              {/* Label */}
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                Filter — tap a line to isolate on drawing
+                              </p>
+                              {/* Horizontal scroll chip row */}
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                style={{ scrollbarWidth:'thin', scrollbarColor:'#cbd5e1 transparent' }}>
+
+                                {/* ◈ All Lines — clears filter */}
+                                <button
+                                  onClick={() => setPipSelectedLine(null)}
+                                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                  style={{
+                                    background: !pipSelectedLine ? '#0891b2'             : 'rgba(8,145,178,0.08)',
+                                    color:      !pipSelectedLine ? 'white'               : '#0891b2',
+                                    border:    `1px solid ${!pipSelectedLine ? '#0891b2' : 'rgba(8,145,178,0.25)'}`,
+                                    boxShadow:  !pipSelectedLine ? '0 0 10px rgba(8,145,178,0.4)' : 'none',
+                                  }}>
+                                  ◈ All
+                                </button>
+
+                                {/* One chip per line — sorted: findings first, then alpha */}
+                                {[...lineMarkers]
+                                  .sort((a, b) => b.findings.length - a.findings.length || a.text.localeCompare(b.text))
+                                  .map(m => {
+                                    const isAct   = pipSelectedLine === m.text;
+                                    // Chip colour: severity color if has findings, else green
+                                    const chipCol = m.findings.length > 0
+                                      ? (PIP_SEV_COLOR[m.topSev]?.bg || '#f97316')
+                                      : '#22c55e';
+                                    return (
+                                      <button key={m.text}
+                                        onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                        style={{
+                                          background: isAct ? chipCol        : `${chipCol}12`,
+                                          color:      isAct ? 'white'        : chipCol,
+                                          border:    `1px solid ${isAct ? chipCol : `${chipCol}35`}`,
+                                          boxShadow:  isAct ? `0 0 10px ${chipCol}55` : 'none',
+                                        }}>
+                                        {/* Fluid code prefix */}
+                                        {m.parsed.fluid && (
+                                          <span className="text-[8px] font-black opacity-75 flex-shrink-0">{m.parsed.fluid}</span>
+                                        )}
+                                        {/* Line designation */}
+                                        <span className="font-mono truncate" style={{ maxWidth:90 }}>{m.text}</span>
+                                        {/* Finding count badge */}
+                                        {m.findings.length > 0 && (
+                                          <span
+                                            className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                            style={{
+                                              background: isAct ? 'rgba(255,255,255,0.3)' : chipCol,
+                                              color: 'white',
+                                            }}>
+                                            {m.findings.length}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Drawing + overlay */}
+                          <div className="px-5 pb-3">
+                            <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                              <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+                                  {/* Overlay markers */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                    {/* Dim background when a line is isolated */}
+                                    {pipSelectedLine && (
+                                      <div className="absolute inset-0"
+                                        style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
+                                                 transition:'opacity 0.25s ease' }} />
+                                    )}
+                                    {/* Only render the selected marker when a chip is active */}
+                                    {lineMarkers.filter(m => !pipSelectedLine || m.text === pipSelectedLine).map((m) => {
+                                      const isSel  = pipSelectedLine === m.text;
+                                      const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || PIP_SEV_COLOR.info) : null;
+                                      const mBg    = sc ? sc.bg    : m.fc.bg;
+                                      const mBord  = sc ? sc.border: m.fc.border;
+                                      const mGlow  = `${mBg}55`;
+                                      const size   = isSel ? 20 : 14;
+                                      return (
+                                        <React.Fragment key={m.text}>
+                                          {/* Ping ripple */}
+                                          {!isSel && (
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                              width:'18px', height:'18px',
+                                              border:`2px solid ${mBg}`, backgroundColor:'transparent',
+                                              transform:'translate(-50%,-50%) rotate(45deg)',
+                                              animation:`markerPing 2800ms ease-out infinite`,
+                                              pointerEvents:'none', zIndex:8,
+                                            }} />
+                                          )}
+                                          {/* Diamond marker button */}
+                                          <button
+                                            onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                            title={`${m.text}${m.parsed.fluid ? ` · ${m.fc.label}` : ''}${m.findings.length > 0 ? ` · ${m.findings.length} finding${m.findings.length!==1?'s':''}` : ' · No findings'}`}
+                                            style={{
+                                              position:'absolute',
+                                              left:`${m.xp}%`, top:`${m.yp}%`,
+                                              width:`${size}px`, height:`${size}px`,
+                                              backgroundColor: mBg,
+                                              border:`2px solid ${mBord}`,
+                                              transform:`translate(-50%,-50%) rotate(45deg) scale(${isSel ? 1.55 : 1})`,
+                                              boxShadow: isSel
+                                                ? `0 0 0 4px ${mGlow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                                : `0 1px 4px rgba(0,0,0,0.35)`,
+                                              zIndex: isSel ? 20 : 10,
+                                              pointerEvents:'all',
+                                              cursor:'pointer',
+                                              animation: !isSel ? `markerGlow 2800ms ease-in-out infinite` : undefined,
+                                            }}
+                                          />
+                                        </React.Fragment>
+                                      );
+                                    })}
                                   </div>
                                 </div>
-                                <div className="w-full rounded-full h-2" style={{ background:'rgba(0,0,0,0.08)' }}>
-                                  <div className="h-2 rounded-full transition-all duration-700"
-                                    style={{ width:`${catPct}%`, background: catFail>0 ? '#dc2626' : catWarn>0 ? '#f59e0b' : catDef.color }} />
-                                </div>
-                                <p className="text-[9px] text-slate-400 mt-1">{catPass} of {catChecks.length} checks OK</p>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Severity breakdown */}
-                      <div>
-                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
-                          <span className="text-base">🔍</span> Failed / Review by Severity
-                        </p>
-                        {['critical','major','minor','info'].map(sev => {
-                          const sevChecks  = PIPE_CHECKS.filter(c => c.severity === sev);
-                          const sevIssues  = sevChecks.filter(c => ['fail','warn'].includes(effectiveStatus(c))).length;
-                          if (sevChecks.length === 0) return null;
-                          return (
-                            <div key={sev} className="flex items-center gap-3 py-1.5 border-b border-slate-100 last:border-0">
-                              <span className="text-[10px] font-black w-14 capitalize" style={{ color:PS_SEV_COLOR[sev] }}>{sev}</span>
-                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width:`${sevIssues/Math.max(1,sevChecks.length)*100}%`, background:`linear-gradient(90deg,${PS_SEV_COLOR[sev]},${PS_SEV_COLOR[sev]}99)` }} />
-                              </div>
-                              <span className="text-[10px] font-bold text-slate-500 w-16 text-right">{sevIssues} / {sevChecks.length}</span>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
 
-                      {/* Reset all overrides */}
-                      {Object.keys(pipCheckStates).length > 0 && (
-                        <button
-                          onClick={() => setPipCheckStates({})}
-                          className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
-                          Reset all {Object.keys(pipCheckStates).length} manual override{Object.keys(pipCheckStates).length!==1?'s':''}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                          {/* Selected line detail card */}
+                          {selLine && (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{
+                                borderColor: selLine.topSev
+                                  ? (PIP_SEV_COLOR[selLine.topSev]?.border || selLine.fc.border)
+                                  : selLine.fc.border,
+                                animation:'cardIn 0.2s ease-out both',
+                              }}>
+                              {/* Header */}
+                              <div className="flex items-center gap-3 px-4 py-3"
+                                style={{ background: selLine.topSev ? (PIP_SEV_COLOR[selLine.topSev]?.light || '#eff6ff') : '#f0f9ff' }}>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                                  style={{ background: selLine.topSev ? (PIP_SEV_COLOR[selLine.topSev]?.bg || selLine.fc.bg) : selLine.fc.bg,
+                                           boxShadow:`0 4px 12px ${selLine.fc.bg}55` }}>
+                                  {selLine.parsed.nps || '?'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-black text-slate-900 font-mono">{selLine.text}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {selLine.parsed.fluid && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                                        style={{ background: selLine.fc.bg }}>{selLine.fc.label}</span>
+                                    )}
+                                    {selLine.parsed.lineNo && (
+                                      <span className="text-[9px] text-slate-500 font-mono">Line #{selLine.parsed.lineNo}</span>
+                                    )}
+                                    {selLine.multi_angle && (
+                                      <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded border border-indigo-200">H+V</span>
+                                    )}
+                                    {selLine.occ_count > 1 && (
+                                      <span className="text-[9px] text-slate-400">×{selLine.occ_count} occurrences</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                  <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selLine.xp?.toFixed(1)}%</span></span>
+                                  <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selLine.yp?.toFixed(1)}%</span></span>
+                                </div>
+                                <button
+                                  onClick={() => setPipSelectedLine(null)}
+                                  className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                                  ✕
+                                </button>
+                              </div>
+                              {/* Findings */}
+                              {selLine.findings.length > 0 ? (
+                                <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                    {selLine.findings.length} Finding{selLine.findings.length !== 1 ? 's' : ''} Detected
+                                  </p>
+                                  {selLine.findings.map((f, fi) => {
+                                    const sev = (f.severity || '').toLowerCase();
+                                    const sc2 = PIP_SEV_COLOR[sev] || PIP_SEV_COLOR.info;
+                                    return (
+                                      <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                        style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                          {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                        </div>
+                                        <button
+                                          onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                          className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                          style={{ background:'#0891b2' }}>
+                                          Locate
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  No findings — line designation appears compliant with current piping rules.
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Piping Line Register table */}
+                          {lineMarkers.length > 0 && (
+                            <div className="mx-5 mb-5">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3 text-cyan-500" />
+                                Piping Line Register — {lineMarkers.length} line{lineMarkers.length !== 1 ? 's' : ''} located on drawing
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'28vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Line Designation','NPS','Fluid','Line No','X%','Y%','Status','Findings'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {lineMarkers.map((m) => {
+                                        const isSel  = pipSelectedLine === m.text;
+                                        const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || null) : null;
+                                        const fColor = sc ? sc.bg : '#22c55e';
+                                        return (
+                                          <tr key={m.text}
+                                            onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                            className="border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50"
+                                            style={{ background: isSel ? 'rgba(8,145,178,0.07)' : 'white' }}>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-slate-800 whitespace-nowrap">{m.text}</td>
+                                            <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{m.parsed.nps || '—'}</td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              {m.parsed.fluid
+                                                ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white" style={{ background: m.fc.bg }}>{m.parsed.fluid}</span>
+                                                : <span className="text-slate-400">—</span>}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-slate-600">{m.parsed.lineNo || '—'}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                style={{ background: fColor }}>
+                                                {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-bold" style={{ color: m.findings.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                              {m.findings.length > 0 ? m.findings.length : '✓'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </>)}
+                      </div>
+                    );
+                  })()}
 
                   {/* ══ Footer ══ */}
                   <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
                     <span style={{ color:'#0891b2' }}>
                       {pipActiveView === 'checklist'
                         ? `${total} checks · ${Object.keys(pipCheckStates).length} manual override${Object.keys(pipCheckStates).length!==1?'s':''}`
-                        : `QC score: ${qcScore}%`}
+                        : pipActiveView === 'drawing'
+                          ? `${(activeDrawingData?.metadata?.line_tags || []).length} lines detected · ASME B31.3 piping coordinates`
+                          : `QC score: ${qcScore}%`}
                     </span>
                     <span>ASME B31.3 · ISA 5.1 · DGS · AI auto-detection active</span>
                   </div>
@@ -6835,16 +9717,389 @@ const PIDVerification = () => {
             {/* ─── end PIPING panel ─── */}
 
             {/* ─── CROSS-REF panel ─── */}
-            {activePanel === 'cross' && (
-            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
-              <CrossRecommendationPanel
-                sourceType="pid"
-                documentId={documentId || results?.document_id}
-                projectId={selectedProject?.project_id || results?.project_id}
-                fileName={results?.file_name}
-              />
-            </div>
-            )}
+            {activePanel === 'cross' && (() => {
+              // ── Soft-coded: Wrench API prefix ─────────────────────────────────────────
+              const WRENCH_API_PREFIX = `${API_BASE_URL}/wrench/sync`;
+
+              // ── Wrench DMS search handler ─────────────────────────────────────────────
+              // Builds drawing context from live state and calls the backend AI-ranking endpoint.
+              const runWrenchSearch = async (manualQuery = '') => {
+                setWrenchLoading(true);
+                setWrenchError('');
+                try {
+                  // Collect drawing context signals
+                  const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                  const tagList      = Object.keys(tagPositions).slice(0, 50);
+                  const issueList    = (activeDrawingData?.issues || []).map(f => ({
+                    category: f.category,
+                    severity: f.severity,
+                  })).slice(0, 30);
+
+                  const body = {
+                    drawing_name: results?.file_name || '',
+                    tags:         tagList,
+                    issues:       issueList,
+                    discipline:   null,
+                    free_text:    manualQuery || wrenchQuery || null,
+                    page:         1,
+                    page_size:    30,
+                  };
+
+                  const res = await axios.post(
+                    `${WRENCH_API_PREFIX}/pid-cross-search/`,
+                    body,
+                    { headers: authHeader(), timeout: 45000 },
+                  );
+                  setWrenchDocs(res.data.documents || []);
+                  setWrenchTotal(res.data.total || 0);
+                  setWrenchAiPowered(res.data.ai_powered || false);
+                  setWrenchQueryUsed(res.data.query_used || null);
+                  // Non-blocking warning (e.g. no document endpoint, transmittal fallback used)
+                  if (res.data.warning) setWrenchError(res.data.warning);
+                  setWrenchSearched(true);
+                } catch (err) {
+                  const msg = err?.response?.data?.detail || err?.message || 'Wrench search failed.';
+                  setWrenchError(msg);
+                  setWrenchSearched(true);
+                } finally {
+                  setWrenchLoading(false);
+                }
+              };
+
+              // Auto-search when Wrench tab first opens (if drawing data is available)
+              const handleWrenchTabOpen = () => {
+                setCrossActiveTab('wrench');
+                if (!wrenchSearched && (results?.file_name || (activeDrawingData?.issues || []).length > 0)) {
+                  runWrenchSearch();
+                }
+              };
+
+              // ── Relevance colour helper ────────────────────────────────────────────────
+              // Soft-coded: score thresholds and colours
+              const _relColor = (score) =>
+                score >= 70 ? { bg:'rgba(34,197,94,0.10)',  border:'rgba(34,197,94,0.35)',  text:'#16a34a' }
+              : score >= 40 ? { bg:'rgba(245,158,11,0.10)', border:'rgba(245,158,11,0.30)', text:'#d97706' }
+              :               { bg:'rgba(148,163,184,0.08)', border:'rgba(148,163,184,0.25)',text:'#64748b' };
+
+              // ── Match type badge config ────────────────────────────────────────────────
+              // Soft-coded: badge appearance per Wrench document/match type
+              const MATCH_BADGE = {
+                pid:        { bg:'rgba(59,130,246,0.10)',  text:'#1d4ed8',  label:'P&ID'       },
+                datasheet:  { bg:'rgba(139,92,246,0.10)', text:'#7c3aed',  label:'Datasheet'  },
+                spec:       { bg:'rgba(249,115,22,0.10)', text:'#ea580c',  label:'Spec'       },
+                sld:        { bg:'rgba(234,179,8,0.10)',  text:'#ca8a04',  label:'SLD'        },
+                iso:        { bg:'rgba(20,184,166,0.10)', text:'#0d9488',  label:'Isometric'  },
+                procedure:  { bg:'rgba(236,72,153,0.10)', text:'#be185d',  label:'Procedure'  },
+                vendor:     { bg:'rgba(75,85,99,0.10)',   text:'#374151',  label:'Vendor Doc' },
+                keyword:    { bg:'rgba(148,163,184,0.10)',text:'#64748b',  label:'Keyword'    },
+                other:      { bg:'rgba(148,163,184,0.10)',text:'#64748b',  label:'Other'      },
+              };
+
+              return (
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+
+                {/* ── Sub-tab switcher ── */}
+                <div className="flex items-center gap-0 border-b border-slate-100 bg-slate-50/70 px-4 pt-3">
+                  {CROSS_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => tab.id === 'wrench' ? handleWrenchTabOpen() : setCrossActiveTab('pfd')}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-t-lg mr-1 transition-all"
+                      style={{
+                        background:  crossActiveTab === tab.id ? 'white' : 'transparent',
+                        color:       crossActiveTab === tab.id ? '#0ea5e9' : '#64748b',
+                        borderTop:   crossActiveTab === tab.id ? '2px solid #0ea5e9' : '2px solid transparent',
+                        borderLeft:  crossActiveTab === tab.id ? '1px solid #e2e8f0' : 'none',
+                        borderRight: crossActiveTab === tab.id ? '1px solid #e2e8f0' : 'none',
+                        marginBottom: crossActiveTab === tab.id ? '-1px' : '0',
+                      }}>
+                      <span>{tab.icon}</span>
+                      {tab.label}
+                      {tab.id === 'wrench' && wrenchDocs.length > 0 && (
+                        <span className="ml-1 text-[8px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background: wrenchAiPowered ? '#0ea5e9' : '#64748b' }}>
+                          {wrenchDocs.length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {crossActiveTab === 'wrench' && wrenchAiPowered && (
+                    <span className="ml-auto mb-2 flex items-center gap-1 text-[8px] font-bold text-sky-600 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> AI Ranked
+                    </span>
+                  )}
+                </div>
+
+                {/* ── PFD Cross-Ref tab ── */}
+                {crossActiveTab === 'pfd' && (
+                  <CrossRecommendationPanel
+                    sourceType="pid"
+                    documentId={documentId || results?.document_id}
+                    projectId={selectedProject?.project_id || results?.project_id}
+                    fileName={results?.file_name}
+                  />
+                )}
+
+                {/* ── Wrench DMS tab ── */}
+                {crossActiveTab === 'wrench' && (
+                  <div className="p-4 flex flex-col gap-3">
+
+                    {/* Search bar + action button */}
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={wrenchQuery}
+                          onChange={e => setWrenchQuery(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && runWrenchSearch(wrenchQuery)}
+                          placeholder="Search Wrench DMS by doc number, keyword…"
+                          className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:border-sky-400"
+                          style={{ '--tw-ring-color':'#38bdf8' }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => runWrenchSearch(wrenchQuery)}
+                        disabled={wrenchLoading}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold text-white transition-all disabled:opacity-60"
+                        style={{ background: wrenchLoading ? '#94a3b8' : 'linear-gradient(135deg,#0ea5e9,#0284c7)' }}>
+                        {wrenchLoading
+                          ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Searching…</>
+                          : <><Search className="w-3 h-3" /> Search Wrench</>}
+                      </button>
+                    </div>
+
+                    {/* Query context pills (auto-derived from drawing) */}
+                    {wrenchQueryUsed && (
+                      <div className="flex flex-wrap gap-1.5 items-center text-[9px] text-slate-500">
+                        <span className="font-black uppercase tracking-wider text-slate-400">Auto-context:</span>
+                        {wrenchQueryUsed.discipline && (
+                          <span className="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 font-bold">
+                            Discipline: {wrenchQueryUsed.discipline}
+                          </span>
+                        )}
+                        {wrenchQueryUsed.doc_no && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-bold">
+                            Doc#: {wrenchQueryUsed.doc_no}
+                          </span>
+                        )}
+                        {(wrenchQueryUsed.term_hints || []).map(t => (
+                          <span key={t} className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono">
+                            {t}
+                          </span>
+                        ))}
+                        <span className="ml-auto text-[9px]">
+                          {wrenchAiPowered
+                            ? <span className="text-sky-600 font-bold flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" /> GPT-4o-mini ranked</span>
+                            : <span className="text-slate-400">Keyword ranked</span>}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Loading state */}
+                    {wrenchLoading && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
+                        <div className="relative">
+                          <div className="w-10 h-10 border-3 border-sky-200 border-t-sky-500 rounded-full animate-spin" style={{ borderWidth:3 }} />
+                          <Sparkles className="w-4 h-4 text-sky-500 absolute inset-0 m-auto" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-bold text-slate-600">Searching Wrench DMS…</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">AI is ranking documents by P&ID relevance</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error state — hard error (no docs returned) */}
+                    {!wrenchLoading && wrenchError && wrenchDocs.length === 0 && (
+                      <div className="p-3 rounded-xl border border-red-200 bg-red-50 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-red-700">Wrench search failed</p>
+                          <p className="text-[10px] text-red-600 mt-0.5">{wrenchError}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Make sure Wrench is configured at{' '}
+                            <a href="/admin/wrench" className="text-sky-600 underline font-medium">Admin → Wrench</a>.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Soft warning — results loaded but via fallback or partial source */}
+                    {!wrenchLoading && wrenchError && wrenchDocs.length > 0 && (
+                      <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-700">{wrenchError}</p>
+                      </div>
+                    )}
+
+                    {/* Results */}
+                    {!wrenchLoading && wrenchSearched && wrenchDocs.length === 0 && !wrenchError && (
+                      <div className="py-10 text-center">
+                        <Database className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs font-medium text-slate-500">No Wrench documents matched this drawing context.</p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Try a manual keyword search above, or check the Wrench discipline configuration.
+                        </p>
+                      </div>
+                    )}
+
+                    {!wrenchLoading && wrenchDocs.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {/* Results header */}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 px-0.5">
+                          <span>
+                            Showing <strong className="text-slate-600">{wrenchDocs.length}</strong> of{' '}
+                            <strong className="text-slate-600">{wrenchTotal}</strong> documents
+                          </span>
+                          <span>Click a card to expand details</span>
+                        </div>
+
+                        {/* Document cards */}
+                        <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight:'55vh' }}>
+                          {wrenchDocs.map((doc, i) => {
+                            const score    = doc.relevance_score ?? 0;
+                            const rc       = _relColor(score);
+                            const mb       = MATCH_BADGE[doc.match_type] || MATCH_BADGE.other;
+                            const isExp    = wrenchExpandedDoc === doc.DOC_NO;
+                            const docNo    = doc.DOC_NO || '—';
+                            const desc     = doc.DOC_DESCRIPTION || '';
+                            const disc     = doc.DISCIPLINE || '';
+                            const approved = doc.APPROVED_ON || '';
+                            const orderNo  = doc.ORDER_NO || '';
+                            const reason   = doc.relevance_reason || '';
+
+                            return (
+                              <div key={docNo + i}
+                                className="rounded-xl border transition-all cursor-pointer"
+                                style={{ borderColor: isExp ? rc.border : 'rgba(226,232,240,0.8)',
+                                         background:  isExp ? rc.bg    : 'white' }}
+                                onClick={() => setWrenchExpandedDoc(isExp ? null : docNo)}>
+
+                                {/* Card header strip */}
+                                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                  {/* Relevance score ring */}
+                                  <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-black border-2"
+                                    style={{ borderColor: rc.border, color: rc.text, background: rc.bg }}>
+                                    {score}
+                                  </div>
+
+                                  {/* Doc identity */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-black text-slate-800 font-mono">{docNo}</span>
+                                      {disc && (
+                                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
+                                          {disc}
+                                        </span>
+                                      )}
+                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{ background: mb.bg, color: mb.text }}>
+                                        {mb.label}
+                                      </span>
+                                      {wrenchAiPowered && (
+                                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border`}
+                                          style={{ background: rc.bg, borderColor: rc.border, color: rc.text }}>
+                                          {score >= 70 ? '✓ Highly Relevant' : score >= 40 ? '~ Possibly Relevant' : '○ Low Relevance'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-600 mt-0.5 truncate" title={desc}>{desc || '—'}</p>
+                                  </div>
+
+                                  {/* Chevron */}
+                                  <span className="text-slate-300 flex-shrink-0 text-xs">{isExp ? '▲' : '▼'}</span>
+                                </div>
+
+                                {/* Expanded detail body */}
+                                {isExp && (
+                                  <div className="px-3 pb-3 pt-0 border-t border-slate-100">
+                                    {/* AI reasoning */}
+                                    {reason && (
+                                      <div className="flex items-start gap-1.5 mb-2 p-2 rounded-lg"
+                                        style={{ background: rc.bg, border:`1px solid ${rc.border}` }}>
+                                        <Sparkles className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: rc.text }} />
+                                        <p className="text-[10px] font-medium" style={{ color: rc.text }}>
+                                          {wrenchAiPowered ? 'AI reasoning:' : 'Match info:'}{' '}{reason}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Meta grid */}
+                                    <div className="grid grid-cols-2 gap-1.5 text-[9px] mb-2">
+                                      {[
+                                        { label:'Doc No',     value: docNo },
+                                        { label:'Discipline', value: disc || '—' },
+                                        { label:'Order No',   value: orderNo || '—' },
+                                        { label:'Approved',   value: approved || '—' },
+                                        { label:'Description',value: desc || '—', full: true },
+                                        ...(doc.GENEALOGY_STRING
+                                          ? [{ label:'Genealogy', value: doc.GENEALOGY_STRING, full: true }]
+                                          : []),
+                                      ].map(row => (
+                                        <div key={row.label}
+                                          className={`px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${row.full ? 'col-span-2' : ''}`}>
+                                          <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">{row.label}</p>
+                                          <p className="text-[10px] font-medium text-slate-700 mt-0.5 break-words leading-tight">{row.value}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <a
+                                        href="/admin/wrench"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[9px] font-bold px-2.5 py-1.5 rounded-lg border transition-all hover:opacity-80"
+                                        style={{ background:'rgba(14,165,233,0.08)', borderColor:'rgba(14,165,233,0.3)', color:'#0284c7' }}
+                                        onClick={e => e.stopPropagation()}>
+                                        <ExternalLink className="w-2.5 h-2.5" />
+                                        Open in Wrench Admin
+                                      </a>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard?.writeText(docNo);
+                                        }}
+                                        className="flex items-center gap-1 text-[9px] font-bold px-2.5 py-1.5 rounded-lg border transition-all hover:opacity-80"
+                                        style={{ background:'rgba(100,116,139,0.06)', borderColor:'rgba(100,116,139,0.2)', color:'#64748b' }}>
+                                        Copy Doc#
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Not yet searched prompt */}
+                    {!wrenchLoading && !wrenchSearched && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                        <Database className="w-10 h-10 text-sky-200" />
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">Wrench Document Search</p>
+                          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">
+                            Search the Wrench DMS for related documents — datasheets, specs, vendor docs, ISOs —
+                            ranked by AI relevance to this P&ID.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => runWrenchSearch()}
+                          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all"
+                          style={{ background:'linear-gradient(135deg,#0ea5e9,#0284c7)' }}>
+                          <Sparkles className="w-3.5 h-3.5" /> Auto-Search from Drawing Context
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              );
+            })()}
             {/* ─── end CROSS-REF panel ─── */}
 
             {/* ─── INDEX / TAGS / EQUIPMENT panel ─── */}
@@ -7389,7 +10644,7 @@ const PIDVerification = () => {
             >
               {/* Oil & gas animated header */}
               <div className="mb-3 rounded-2xl overflow-hidden" style={{
-                background:'linear-gradient(180deg,#0f172a 0%,#1e3a5f 100%)',
+                background: REJLERS_DARK_HEADER_BG,
                 padding:'10px 6px 8px',
                 boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
               }}>
@@ -7416,15 +10671,31 @@ const PIDVerification = () => {
                 </svg>
                 <p className="text-[8px] font-black text-center text-sky-300 uppercase tracking-widest mt-0.5">P&amp;ID Nav</p>
               </div>
-              {/* Panel buttons */}
+              {/* Panel buttons — pointer-event DnD with smooth translateY shifts + custom ghost */}
               <div className="flex flex-col gap-1.5">
-                {PANELS.map((tab, idx) => {
-                  const isActive = activePanel === tab.id;
+                {orderedPanels.map((tab, idx) => {
+                  const isActive   = activePanel === tab.id;
+                  const isDragging = draggingId === tab.id;
+                  // Compute smooth translateY so items make space for the dragged item
+                  const draggedIdx = draggingId ? (dragStateRef.current?.startIdx ?? null) : null;
+                  const target     = dropTargetIdx;
+                  const itemH      = dragStateRef.current?.itemHeight ?? 46;
+                  let translateY = 0;
+                  if (!isDragging && draggingId !== null && draggedIdx !== null && target !== null) {
+                    if (draggedIdx < target) {
+                      // dragged DOWN — items between [draggedIdx+1 .. target] shift up
+                      if (idx > draggedIdx && idx <= target) translateY = -itemH;
+                    } else if (draggedIdx > target) {
+                      // dragged UP — items between [target .. draggedIdx-1] shift down
+                      if (idx >= target && idx < draggedIdx) translateY = itemH;
+                    }
+                  }
                   return (
                     <button
                       key={tab.id}
+                      ref={el => { railItemRefs.current[tab.id] = el; }}
                       onClick={() => setActivePanel(tab.id)}
-                      title={tab.label}
+                      title={`${tab.label} — grip to reorder`}
                       className="relative w-full flex flex-row items-center gap-2.5 group"
                       style={{
                         borderRadius: '12px',
@@ -7432,16 +10703,23 @@ const PIDVerification = () => {
                         background: isActive
                           ? `linear-gradient(135deg, ${tab.accent} 0%, ${tab.accent}cc 100%)`
                           : '#ffffff',
-                        border: isActive
-                          ? `1.5px solid ${tab.accent}`
-                          : '1.5px solid #e2e8f0',
+                        border: isActive ? `1.5px solid ${tab.accent}` : '1.5px solid #e2e8f0',
                         boxShadow: isActive
                           ? `0 4px 16px ${tab.glow || 'rgba(0,0,0,0.15)'}, 0 1px 4px rgba(0,0,0,0.08)`
                           : '0 1px 4px rgba(0,0,0,0.05)',
-                        transition: 'all 0.2s ease',
-                        transform: isActive ? 'scale(1.02)' : 'scale(1)',
-                        animation: `navTabIn ${NAV_RAIL_ENTRY_DURATION_MS}ms cubic-bezier(.22,.68,0,1.2) ${idx * NAV_RAIL_ENTRY_DELAY_MS}ms both`,
+                        animation: draggingId ? 'none' : `navTabIn ${NAV_RAIL_ENTRY_DURATION_MS}ms cubic-bezier(.22,.68,0,1.2) ${idx * NAV_RAIL_ENTRY_DELAY_MS}ms both`,
+                        transition: isDragging
+                          ? 'opacity 0.15s'
+                          : 'border 0.2s, box-shadow 0.2s, background 0.2s, transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94)',
+                        transform: isDragging
+                          ? `scale(${isActive ? 1.02 : 1})`
+                          : isActive
+                            ? `scale(1.02) translateY(${translateY}px)`
+                            : `scale(1) translateY(${translateY}px)`,
+                        opacity: isDragging ? 0.22 : 1,
+                        willChange: draggingId ? 'transform' : 'auto',
                         cursor: 'pointer',
+                        userSelect: 'none',
                       }}
                     >
                       {/* Hover tint (inactive only) */}
@@ -7459,6 +10737,14 @@ const PIDVerification = () => {
                         />
                       )}
 
+                      {/* Drag grip — only this handle triggers pointer drag */}
+                      <GripVertical
+                        aria-hidden="true"
+                        onPointerDown={(e) => handleGripPointerDown(e, tab, idx)}
+                        className="absolute left-1 opacity-0 group-hover:opacity-40 transition-opacity"
+                        style={{ width:'10px', height:'14px', color: isActive ? '#fff' : '#64748b', flexShrink:0, cursor:'grab', zIndex:1 }}
+                      />
+
                       {/* Icon */}
                       <span style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -7468,14 +10754,11 @@ const PIDVerification = () => {
                       }}>
                         <tab.icon
                           cls="w-3.5 h-3.5"
-                          style={{
-                            color: isActive ? '#ffffff' : tab.accent,
-                            flexShrink: 0,
-                          }}
+                          style={{ color: isActive ? '#ffffff' : tab.accent, flexShrink: 0 }}
                         />
                       </span>
 
-                      {/* Label + badge */}
+                      {/* Label */}
                       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: 800,
@@ -7503,6 +10786,41 @@ const PIDVerification = () => {
                   );
                 })}
               </div>
+
+              {/* ── Custom drag ghost: fixed, follows cursor, no browser ghost ── */}
+              {draggingId && (() => {
+                const ghostTab = orderedPanels.find(p => p.id === draggingId);
+                if (!ghostTab) return null;
+                return (
+                  <div
+                    ref={dragGhostRef}
+                    style={{
+                      position: 'fixed',
+                      top:  `${dragInitialPos.current.y}px`,
+                      left: `${dragInitialPos.current.x}px`,
+                      width: `${NAV_RAIL_WIDTH}px`,
+                      pointerEvents: 'none',
+                      zIndex: 9999,
+                      borderRadius: '12px',
+                      padding: '9px 10px 9px 12px',
+                      background: `linear-gradient(135deg, ${ghostTab.accent} 0%, ${ghostTab.accent}dd 100%)`,
+                      border: `1.5px solid ${ghostTab.accent}`,
+                      boxShadow: `0 28px 56px rgba(0,0,0,0.24), 0 10px 22px rgba(0,0,0,0.14), 0 0 0 1px ${ghostTab.accent}33`,
+                      transform: 'rotate(2.5deg) scale(1.06)',
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'26px', height:'26px', borderRadius:'8px', background:'rgba(255,255,255,0.22)', flexShrink:0 }}>
+                      <ghostTab.icon cls="w-3.5 h-3.5" style={{ color:'#ffffff' }} />
+                    </span>
+                    <span style={{ fontSize:'10px', fontWeight:800, letterSpacing:'0.04em', textTransform:'uppercase', color:'#ffffff', whiteSpace:'nowrap', flex:1 }}>
+                      {ghostTab.label}
+                    </span>
+                    <GripVertical style={{ width:'10px', flexShrink:0, color:'rgba(255,255,255,0.55)' }} />
+                  </div>
+                );
+              })()}
             </div>
             {/* ══ end RIGHT ICON RAIL ══ */}
 
@@ -7558,6 +10876,324 @@ const PIDVerification = () => {
         )}
 
       </div>
+
+      {/* ── Legend Sheet Detail Panel (slide-in drawer) ──────────────────── */}
+      {showLegendPanel && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end pointer-events-none">
+          {/* dim backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/40 pointer-events-auto"
+            onClick={() => setShowLegendPanel(false)}
+          />
+          {/* Drawer */}
+          <div className="relative w-full max-w-xl pointer-events-auto flex flex-col bg-white shadow-2xl"
+            style={{ animation: 'legendDrawerIn 0.25s ease-out' }}>
+            <style>{`
+              @keyframes legendDrawerIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to   { transform: translateX(0);    opacity: 1; }
+              }
+            `}</style>
+
+            {/* Drawer header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+              style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background:'linear-gradient(135deg,#16a34a,#15803d)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-white">
+                  <path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">
+                  {loadingLegendDetail ? 'Loading…' : (legendPanelSheet?.file_name || 'Legend Sheet')}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {legendPanelSheet?.extracted_data?.extraction_method === 'ai_vision' ? '🤖 Extracted via AI Vision' : '📝 Extracted via text parse'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLegendPanel(false)}
+                className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-slate-500">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Drawer body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {loadingLegendDetail && (
+                <div className="flex items-center justify-center py-16 gap-3">
+                  <Loader className="w-5 h-5 animate-spin text-emerald-500" />
+                  <span className="text-sm text-slate-400">Extracting data…</span>
+                </div>
+              )}
+
+              {!loadingLegendDetail && !legendPanelSheet && (
+                <p className="text-sm text-slate-400 text-center py-16">No data available</p>
+              )}
+
+              {!loadingLegendDetail && legendPanelSheet && (() => {
+                const d = legendPanelSheet.extracted_data || {};
+
+                // ── Soft-coded: drawer section definitions ─────────────────
+                // Add/remove entries here to change which categories appear.
+                const SECTIONS = [
+                  {
+                    key:   'line_representation',
+                    title: 'Line Representation',
+                    icon:  '—',
+                    empty: 'No line types found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((row, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="font-mono font-bold text-slate-700 w-24 flex-shrink-0 truncate">{row.key || '—'}</span>
+                            <span className="flex-1 text-slate-500">{row.description}</span>
+                            <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-slate-500 text-[10px] font-medium ${
+                              row.line_style === 'solid'  ? 'bg-blue-50 text-blue-600'  :
+                              row.line_style === 'dashed' ? 'bg-amber-50 text-amber-600':
+                              row.line_style === 'dotted' ? 'bg-purple-50 text-purple-600' :
+                              'bg-slate-100'
+                            }`}>{row.line_style}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'line_numbering_piping',
+                    title: 'Line Numbering — Piping',
+                    icon:  '⌗',
+                    empty: 'No piping numbering format found',
+                    render: (val) => (
+                      <div className="space-y-2">
+                        {val.format && (
+                          <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                            <p className="text-xs text-blue-500 font-medium mb-1">Format</p>
+                            <p className="font-mono text-sm font-bold text-blue-700">{val.format}</p>
+                            {val.example && <p className="text-xs text-blue-500 mt-1">e.g. <span className="font-mono">{val.example}</span></p>}
+                          </div>
+                        )}
+                        {val.fields?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {val.fields.map((f, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                                <span className="w-5 h-5 rounded flex items-center justify-center bg-blue-100 text-blue-700 font-bold text-[10px] flex-shrink-0 mt-0.5">{f.position}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-slate-700">{f.name}</p>
+                                  <p className="text-slate-400 truncate">{f.description}</p>
+                                </div>
+                                {f.example && <span className="font-mono text-slate-500 text-[10px]">{f.example}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                    isObj: true,
+                  },
+                  {
+                    key:   'line_numbering_pipeline',
+                    title: 'Line Numbering — Pipeline',
+                    icon:  '⌗',
+                    empty: 'No pipeline numbering format found',
+                    render: (val) => (
+                      <div className="space-y-2">
+                        {val.format && (
+                          <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                            <p className="text-xs text-purple-500 font-medium mb-1">Format</p>
+                            <p className="font-mono text-sm font-bold text-purple-700">{val.format}</p>
+                            {val.example && <p className="text-xs text-purple-400 mt-1">e.g. <span className="font-mono">{val.example}</span></p>}
+                          </div>
+                        )}
+                        {val.fields?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {val.fields.map((f, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                                <span className="w-5 h-5 rounded flex items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px] flex-shrink-0 mt-0.5">{f.position}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-slate-700">{f.name}</p>
+                                  <p className="text-slate-400 truncate">{f.description}</p>
+                                </div>
+                                {f.example && <span className="font-mono text-slate-500 text-[10px]">{f.example}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                    isObj: true,
+                  },
+                  {
+                    key:   'abbreviations_process',
+                    title: 'Abbreviations — Process',
+                    icon:  'Aa',
+                    empty: 'No abbreviations found',
+                    render: (items) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {items.map((a, i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-amber-700 text-xs w-12 flex-shrink-0">{a.abbr}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={a.full_name}>{a.full_name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'inline_equipment',
+                    title: 'In-Line Equipment',
+                    icon:  '⊕',
+                    empty: 'No in-line equipment found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((e, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="font-mono font-bold text-slate-700 w-16 flex-shrink-0 truncate">{e.symbol}</span>
+                            <span className="flex-1 text-slate-500">{e.description}</span>
+                            {e.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0 capitalize">{e.type}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'service_codes',
+                    title: 'Service Codes',
+                    icon:  '⬡',
+                    empty: 'No service codes found',
+                    render: (obj) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-emerald-700 text-xs w-10 flex-shrink-0">{k}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={v}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                  {
+                    key:   'insulation_codes',
+                    title: 'Insulation Codes',
+                    icon:  '▣',
+                    empty: 'No insulation codes found',
+                    render: (obj) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-sky-700 text-xs w-8 flex-shrink-0">{k}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={v}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                  {
+                    key:   'piping_specs',
+                    title: 'Piping Specs',
+                    icon:  '≡',
+                    empty: 'No piping specs found',
+                    render: (obj) => (
+                      <div className="flex flex-col gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-2 bg-slate-50 rounded px-2 py-1.5 border border-slate-100 text-xs">
+                            <span className="font-mono font-bold text-rose-700 w-20 flex-shrink-0 truncate">{k}</span>
+                            <span className="text-slate-500 flex-1 min-w-0">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                ];
+
+                return (
+                  <>
+                    {SECTIONS.map(sec => {
+                      const val = d[sec.key];
+                      const isEmpty = !val ||
+                        (Array.isArray(val) && val.length === 0) ||
+                        (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0 && !val.format);
+                      if (isEmpty) return null;
+
+                      return (
+                        <div key={sec.key} className="rounded-xl border border-slate-200 overflow-hidden">
+                          {/* Section header */}
+                          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                            <span className="font-mono text-sm font-bold text-slate-400 w-6 text-center">{sec.icon}</span>
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{sec.title}</span>
+                            <span className="ml-auto text-xs text-slate-400">
+                              {Array.isArray(val) ? `${val.length} items` :
+                               sec.asEntries ? `${Object.keys(val).length} codes` :
+                               val.fields?.length ? `${val.fields.length} fields` : ''}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white">
+                            {isEmpty ? (
+                              <p className="text-xs text-slate-400 italic">{sec.empty}</p>
+                            ) : (
+                              sec.render(val)
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Instrument + Valve prefixes */}
+                    {(d.instrument_prefixes?.length > 0 || d.valve_prefixes?.length > 0) && (
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Tag Prefixes</span>
+                        </div>
+                        <div className="p-3 bg-white flex flex-col gap-2">
+                          {d.instrument_prefixes?.length > 0 && (
+                            <div>
+                              <p className="text-xs text-slate-400 font-medium mb-1">Instrument</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {d.instrument_prefixes.map((p, i) => (
+                                  <span key={i} className="font-mono text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 font-bold">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {d.valve_prefixes?.length > 0 && (
+                            <div>
+                              <p className="text-xs text-slate-400 font-medium mb-1">Valve</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {d.valve_prefixes.map((p, i) => (
+                                  <span key={i} className="font-mono text-xs px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 font-bold">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extraction metadata */}
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-400 space-y-0.5">
+                      <p>Extracted: {legendPanelSheet.updated_at ? new Date(legendPanelSheet.updated_at).toLocaleString() : '—'}</p>
+                      {d.raw_text_chars !== undefined && <p>Raw text chars: {d.raw_text_chars}</p>}
+                      {d.extraction_method && <p>Method: {d.extraction_method}</p>}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── End Legend Sheet Detail Panel ────────────────────────────────── */}
+
     </DarkBg>
   );
 };
