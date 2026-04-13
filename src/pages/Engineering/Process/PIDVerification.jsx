@@ -9,7 +9,7 @@ import {
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
   Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
-  Search, ExternalLink, Sparkles, Maximize2, Minimize2,
+  Search, ExternalLink, Sparkles, Maximize2, Minimize2, Wind,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -521,6 +521,18 @@ const PERF_MODEL_ACCURACY_LABEL =
 // Adjust this set as new tiers are introduced.
 const PERF_MODEL_HIGHCONF_TIERS = new Set(['P1', 'P2', 'CX']);
 
+// DRAWING_PANEL_LABEL: display name for the main "Drawing" panel tab.
+// Change only this value to rename the tab across the entire UI — no other code changes needed.
+const DRAWING_PANEL_LABEL = 'General';
+
+// GENERAL_CHECKLIST_ITEMS: items shown in the General panel's drawing-level checklist.
+// Add, remove, or reorder entries here — the checklist renders automatically.
+const GENERAL_CHECKLIST_ITEMS = [
+  { id: 'legend_check',   text: 'Check that all depictions are as per Legend P&ID.' },
+  { id: 'revision_check', text: 'Check all revisions are clearly marked as per Project requirements.' },
+  { id: 'process_notes',  text: 'Identification of process requirements by notes e.g. slopes of lines, minimum distance.' },
+];
+
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -1020,6 +1032,9 @@ const PIDVerification = () => {
   const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
   const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
   const [pipSelectedLine, setPipSelectedLine] = useState(null);        // selected line tag in Drawing Layout
+  const [cmpCheckStates, setCmpCheckStates]   = useState({});          // { [checkId]: 'pass'|'fail'|'na' }
+  const [cmpActiveView,  setCmpActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
+  const [cmpSelectedTag, setCmpSelectedTag]   = useState(null);        // selected compressor tag on drawing
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -1072,6 +1087,9 @@ const PIDVerification = () => {
   // ── Active panel (right-rail navigation) ─────────────────────────────────
   // 'drawing' | 'findings' | 'lines' | 'naming' | 'comparison' | 'cross'
   const [activePanel, setActivePanel] = useState('drawing');
+  // generalChecklist: tracks which GENERAL_CHECKLIST_ITEMS are ticked by the reviewer,
+  // keyed by item id. Persists in component state; resets on new upload.
+  const [generalChecklist, setGeneralChecklist] = useState({});
   // ── Fullscreen ─────────────────────────────────────────────────────────────
   const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
@@ -2817,7 +2835,7 @@ const PIDVerification = () => {
           const PANELS = [
             {
               id: 'drawing',
-              label: 'Drawing',
+              label: DRAWING_PANEL_LABEL,
               icon: ({ cls }) => (
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="1.8" stroke="currentColor" className={cls}>
                   <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9"/><circle cx="15" cy="15" r="2" /><path d="M13.5 15h-7"/>
@@ -2902,6 +2920,20 @@ const PIDVerification = () => {
               badgeCls: 'bg-cyan-500 text-white',
               accent: '#0891b2',
               glow: 'rgba(8,145,178,0.25)',
+            },
+            {
+              id: 'compressor',
+              label: 'Compressor',
+              icon: ({ cls }) => <Wind className={cls} />,
+              badge: (() => {
+                const cnt = (activeDrawingData?.issues || []).filter(f =>
+                  (f.rule_id || '').startsWith('CMP-') || f.category === 'compressor'
+                ).length;
+                return cnt || null;
+              })(),
+              badgeCls: 'bg-violet-500 text-white',
+              accent: '#7c3aed',
+              glow: 'rgba(124,58,237,0.25)',
             },
             {
               id: 'cross',
@@ -3143,6 +3175,7 @@ const PIDVerification = () => {
                 const _minor   = (activeDrawingData?.issues||[]).filter(f=>(f.severity||'').toLowerCase()==='minor').length;
                 const _instrCnt= (activeDrawingData?.issues||[]).filter(f=>new Set(['instrument','tag','valve']).has(f.category)).length;
                 const _pipCnt  = (activeDrawingData?.issues||[]).filter(f=>new Set(['piping','line','spec','insulation','valve']).has(f.category)).length;
+                const _cmpCnt  = (activeDrawingData?.issues||[]).filter(f=>(f.rule_id||'').startsWith('CMP-')||f.category==='compressor').length;
                 const _lineCnt = (activeDrawingData?.metadata?.line_tags||[]).length;
                 const _equipCnt= Object.keys(activeDrawingData?.metadata?.tag_positions||{}).length || (extractionSummary?.tags??0);
                 const _overCnt = (results.drawings??[]).reduce((s,d)=>s+(d.overrides_applied??0),0);
@@ -3157,6 +3190,7 @@ const PIDVerification = () => {
                   { id:'equipment',     label:'Equipment',   Icon:Cpu,       count:_equipCnt,    sub:`${extractionSummary?.instruments||0} instr · ${extractionSummary?.valves||0} valves · ${extractionSummary?.equipment||0} equip`, accent:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)', status:'info' },
                   { id:'instrumentation',label:'Instr.',     Icon:Wrench,    count:_instrCnt,    sub:_instrCnt>0?`${_instrCnt} issue${_instrCnt!==1?'s':''} detected`:'No issues found',   accent:'#d97706', bg:'rgba(217,119,6,0.07)',   border:'rgba(217,119,6,0.18)',   status:_instrCnt>0?'warn':'pass' },
                   { id:'piping',        label:'Piping',      Icon:Network,   count:_pipCnt,      sub:_pipCnt>0?`${_pipCnt} issue${_pipCnt!==1?'s':''} detected`:'No issues found',          accent:'#0891b2', bg:'rgba(8,145,178,0.07)',   border:'rgba(8,145,178,0.18)',   status:_pipCnt>0?'warn':'pass' },
+                  { id:'compressor',    label:'Compressor',  Icon:Wind,      count:_cmpCnt,      sub:_cmpCnt>0?`${_cmpCnt} CMP issue${_cmpCnt!==1?'s':''} detected`:'Compressor QC checklist', accent:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)', status:_cmpCnt>0?'warn':'pass' },
                   { id:'cross',         label:'Cross-Ref',   Icon:Activity,  count:null,         sub:'Cross-drawing references',   accent:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.18)',  status:'info' },
                 ];
                 // Soft-coded: status badge styles keyed by `status` field above.
@@ -3207,6 +3241,56 @@ const PIDVerification = () => {
                       style={{ transform: qcPanelOpen ? 'rotate(180deg)' : 'rotate(0deg)', color:'rgba(148,163,184,0.6)' }}>
                       <ChevronDown className="w-4 h-4" />
                     </span>
+                  </div>
+
+                  {/* ── General checklist strip — always visible below the toggle bar ────── */}
+                  {/* Items are defined in GENERAL_CHECKLIST_ITEMS; click to tick, click again to clear. */}
+                  <div
+                    className="flex items-center gap-1 px-4 py-1.5 flex-wrap"
+                    style={{ background:'rgba(15,23,42,0.92)', borderBottom: qcPanelOpen ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
+                    onClick={e => e.stopPropagation()} // prevent toggle strip click-through
+                  >
+                    <span className="text-[9px] font-black uppercase tracking-widest flex-shrink-0 mr-1"
+                      style={{ color:'rgba(148,163,184,0.45)' }}>Review:</span>
+                    {GENERAL_CHECKLIST_ITEMS.map((item, idx) => {
+                      const done = !!generalChecklist[item.id];
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setGeneralChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          title={item.text}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all hover:scale-105 flex-shrink-0"
+                          style={{
+                            background: done ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.06)',
+                            border:     `1px solid ${done ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.10)'}`,
+                            color:      done ? '#34d399' : 'rgba(148,163,184,0.65)',
+                          }}
+                        >
+                          {/* Tiny check circle */}
+                          <span className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ background: done ? '#10b981' : 'rgba(255,255,255,0.08)', border: `1px solid ${done ? '#059669' : 'rgba(255,255,255,0.15)'}` }}>
+                            {done && (
+                              <svg viewBox="0 0 8 7" fill="none" className="w-2 h-2">
+                                <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </span>
+                          {/* Short label — tooltip holds full text */}
+                          {idx + 1}. {item.text.length > 28 ? item.text.slice(0, 28) + '…' : item.text}
+                        </button>
+                      );
+                    })}
+                    {/* Aggregate progress pill */}
+                    {(() => {
+                      const done = GENERAL_CHECKLIST_ITEMS.filter(it => generalChecklist[it.id]).length;
+                      const all  = GENERAL_CHECKLIST_ITEMS.length;
+                      return (
+                        <span className="ml-auto text-[9px] font-black flex-shrink-0"
+                          style={{ color: done === all ? '#34d399' : 'rgba(148,163,184,0.40)' }}>
+                          {done}/{all}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* ── Collapsible body: Section 1 (full header) + Section 2 (nav cards) ── */}
@@ -5122,8 +5206,7 @@ const PIDVerification = () => {
                           {[
                             { node: <span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" style={{ boxShadow:'0 0 4px #16a34a80' }} />, label:'Start' },
                             { node: <span className="w-3 h-3 rotate-45 rounded-[2px] flex-shrink-0 inline-block bg-red-500" style={{ boxShadow:'0 0 4px #dc262680' }} />, label:'End' },
-                            { node: <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#0891b2" strokeWidth="2"/></svg>, label:'Path (clean)' },
-                            { node: <svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#f97316" strokeWidth="2" strokeDasharray="4,2"/></svg>, label:'Path (issues)' },
+                            { node: <svg width="28" height="8" style={{overflow:'visible'}}><defs><marker id="leg-src-dst" markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,4 L4,2 z" fill="#0891b2"/></marker></defs><line x1="2" y1="4" x2="22" y2="4" stroke="#0891b2" strokeWidth="1.5" strokeDasharray="5,2" markerEnd="url(#leg-src-dst)"/></svg>, label:'Source → Destination' },
                             { node: <span className="w-2 h-2 rounded-full flex-shrink-0 bg-slate-400" />, label:'Waypoint' },
                           ].map((l, i) => (
                             <span key={i} className="flex items-center gap-1.5 text-[10px] text-slate-600">{l.node}{l.label}</span>
@@ -5191,30 +5274,24 @@ const PIDVerification = () => {
 
                                     return (
                                       <g key={item.text} style={{ opacity }}>
-                                        {/* Connecting path — BFS-traced along actual dark pipe lines when available */}
-                                        {hasPath && (() => {
-                                          const isTracingNow = lineTracing && isSel;
-                                          const tracedPts    = lineTracedPaths[item.text];
-                                          const pts = (tracedPts && tracedPts.length > 0)
-                                            ? tracedPts.map(p => `${p.x_pct},${p.y_pct}`).join(' ')
-                                            : polylinePoints(item.sorted);
-                                          const isTraced = !!(tracedPts && tracedPts.length > 0);
-                                          return (
-                                            <polyline
-                                              points={pts}
-                                              fill="none"
-                                              stroke={isTracingNow ? '#6366f1' : stroke}
-                                              strokeWidth={isTracingNow ? sw * 1.5 : isSel && isTraced ? sw * 1.8 : sw}
-                                              strokeDasharray={isTracingNow ? '0.8,0.8' : item.hasIssue ? '1.2,0.7' : undefined}
-                                              strokeLinecap="round" strokeLinejoin="round"
-                                              markerEnd={`url(#${arrowId})`}
-                                              style={{
-                                                filter: isSel ? `drop-shadow(0 0 ${isTraced ? '1.2px' : '0.8px'} ${isTracingNow ? '#6366f1' : stroke})` : undefined,
-                                                opacity: isTracingNow ? 0.55 : 1,
-                                              }}
-                                            />
-                                          );
-                                        })()}
+                                        {/* Source → Destination direct flow arrow */}
+                                        {/* BFS trace data (lineTracedPaths/lineTracing) is preserved for the detail card; */}
+                                        {/* only the visual rendering switches to a clean direct arrow.                   */}
+                                        {hasPath && (
+                                          <line
+                                            x1={item.start.x_pct} y1={item.start.y_pct}
+                                            x2={item.end.x_pct}   y2={item.end.y_pct}
+                                            stroke={stroke}
+                                            strokeWidth={isSel ? sw * 0.80 : sw * 0.72}
+                                            strokeDasharray={isSel ? undefined : '0.8,0.55'}
+                                            strokeLinecap="round"
+                                            markerEnd={`url(#${arrowId})`}
+                                            style={{
+                                              filter: isSel ? `drop-shadow(0 0 0.6px ${stroke})` : undefined,
+                                              opacity: isSel ? 1 : 0.62,
+                                            }}
+                                          />
+                                        )}
                                         {/* Start — green circle */}
                                         <circle cx={item.start.x_pct} cy={item.start.y_pct}
                                           r={isSel ? 1.2 : 0.65}
@@ -5300,6 +5377,28 @@ const PIDVerification = () => {
                                 className="p-1.5 hover:bg-white/60 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
                                 <X className="w-4 h-4" />
                               </button>
+                            </div>
+
+                            {/* Source → Destination flow indicator */}
+                            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+                              style={{ background:`${selItem.fc.fill}18`, border:`1.5px solid ${selItem.fc.stroke}35` }}>
+                              <span className="flex items-center gap-1.5 text-[11px] font-black flex-shrink-0" style={{ color:'#16a34a' }}>
+                                <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500 flex-shrink-0"
+                                  style={{ boxShadow:'0 0 4px #16a34a80' }} />
+                                Source
+                                <span className="font-mono text-[9px] font-normal text-slate-400">
+                                  ({selItem.start.x_pct.toFixed(1)}%, {selItem.start.y_pct.toFixed(1)}%)
+                                </span>
+                              </span>
+                              <span className="text-base font-black flex-shrink-0" style={{ color: selItem.fc.stroke }}>→</span>
+                              <span className="flex items-center gap-1.5 text-[11px] font-black flex-shrink-0" style={{ color:'#dc2626' }}>
+                                <span className="font-mono text-[9px] font-normal text-slate-400">
+                                  ({selItem.end.x_pct.toFixed(1)}%, {selItem.end.y_pct.toFixed(1)}%)
+                                </span>
+                                Destination
+                                <span className="w-2.5 h-2.5 rotate-45 rounded-[1px] inline-block bg-red-500 flex-shrink-0"
+                                  style={{ boxShadow:'0 0 4px #dc262680' }} />
+                              </span>
                             </div>
 
                             {/* Route type badge */}
@@ -5419,17 +5518,17 @@ const PIDVerification = () => {
                         {/* ── Summary bar ────────────────────────────────────────────────── */}
                         <div className="flex items-center gap-4 flex-wrap text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-1">
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />Start markers: {filteredLayout.length}
+                            <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />Source: {filteredLayout.length}
                           </span>
                           <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rotate-45 rounded-[1px] inline-block bg-red-500" />End markers: {filteredLayout.filter(i => i.sorted.length > 1).length}
+                            <span className="w-2 h-2 rotate-45 rounded-[1px] inline-block bg-red-500" />Destination: {filteredLayout.filter(i => i.sorted.length > 1).length}
                           </span>
                           <span className="flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full inline-block bg-orange-400" />With issues: {filteredLayout.filter(i => i.hasIssue).length}
                           </span>
                           {filteredLayout.filter(i => i.sorted.length > 1).length > 0 && (
                             <span className="text-teal-600 font-semibold">
-                              {filteredLayout.filter(i => i.sorted.length > 1).length} lines have Start→End path
+                              {filteredLayout.filter(i => i.sorted.length > 1).length} Source → Destination lines
                             </span>
                           )}
                         </div>
@@ -9839,6 +9938,1000 @@ const PIDVerification = () => {
             </div>
             )}
             {/* ─── end PIPING panel ─── */}
+
+            {/* ─── COMPRESSOR panel ─── */}
+            {activePanel === 'compressor' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ══ Soft-coded: CMP checklist items ══════════════════════════════════════
+              // Add, remove, or reorder items here — render logic never changes.
+              // id         — unique key, matches CMP rule_id from backend
+              // category   — section grouping label
+              // title      — short requirement label shown in checklist row
+              // detail     — full requirement text shown in expanded row
+              // standard   — applicable standard / reference
+              // detectKeys — keywords scanned against AI findings for auto-detection
+              // severity   — 'critical'|'major'|'minor'|'info'
+              const CMP_CHECKS = [
+                {
+                  id: 'CMP-001',
+                  category: 'Type & Configuration',
+                  title: 'Type of compressor shown correctly',
+                  detail: 'The type of compressor (Centrifugal, Reciprocating, Screw, Axial, Diaphragm, etc.) must be clearly identified on the P&ID by name/description adjacent to the equipment symbol or in the equipment tag.',
+                  standard: 'ISA 5.1 / Project Equipment Standard',
+                  severity: 'major',
+                  detectKeys: ['cmp-001','compressor type','centrifugal','reciprocating','screw compressor','axial','type of compressor'],
+                },
+                {
+                  id: 'CMP-008',
+                  category: 'Type & Configuration',
+                  title: 'Correct driver identified (GT, Motor, Steam Turbine, etc.)',
+                  detail: 'The driver type must be labelled on the drawing — Gas Turbine (GT), Electric Motor, Steam Turbine, etc. This defines utility connections (fuel gas, lube oil, air intake, MCC) and maintenance philosophy.',
+                  standard: 'Project P&ID Standard / API 614',
+                  severity: 'major',
+                  detectKeys: ['cmp-008','gas turbine','electric motor','steam turbine','motor drive','gt driver','driver'],
+                },
+                {
+                  id: 'CMP-002',
+                  category: 'Cooling & Heat Exchange',
+                  title: 'Intercooler/Aftercooler — isolation valves + temperature measurements',
+                  detail: 'All intercooler and aftercooler connections must include isolation (block) valves on inlet and outlet for maintenance isolation, and temperature indicators or transmitters (TI/TT) to confirm cooling performance.',
+                  standard: 'API 672 / API 614 / Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['cmp-002','intercooler','aftercooler','after-cooler','inter-cooler','isolation valve','block valve','temperature indicator','ti-','tt-'],
+                },
+                {
+                  id: 'CMP-003',
+                  category: 'Start-up & Commissioning',
+                  title: 'Temporary strainer provision for start-up and commissioning',
+                  detail: 'Temporary strainers (cone or basket type) must be shown on compressor suction piping for protection during start-up and commissioning. The strainer must be noted "TEMPORARY — REMOVE AFTER COMMISSIONING" with a spool tie-in point on the P&ID.',
+                  standard: 'API 670 / Project Commissioning Spec',
+                  severity: 'major',
+                  detectKeys: ['cmp-003','temporary strainer','temp strainer','start-up strainer','commissioning strainer','cone strainer','basket strainer'],
+                },
+                {
+                  id: 'CMP-004',
+                  category: 'Discharge Protection',
+                  title: 'Check valve(s) on compressor discharge — type identified',
+                  detail: 'A check valve (NRV/non-return valve) must be installed on the compressor discharge to prevent reverse flow on shutdown or trip. The valve type (swing check, dual-plate, lift check, tilting disc) must be specified.',
+                  standard: 'API 618 / API 672 / Project P&ID Standard',
+                  severity: 'critical',
+                  detectKeys: ['cmp-004','check valve','nrv','non-return','swing check','dual-plate check','lift check','tilting disc','downstream check'],
+                },
+                {
+                  id: 'CMP-006',
+                  category: 'Discharge Protection',
+                  title: 'Relief and blowdown requirements identified',
+                  detail: 'Pressure safety valves (PSV/PRV) and blowdown valves (BDV) must be shown on the compressor package. Set pressures must not exceed MAWP of the downstream piping, and discharge must be routed to the correct flare or vent header.',
+                  standard: 'ASME VIII / API 521 / PED',
+                  severity: 'critical',
+                  detectKeys: ['cmp-006','relief valve','psv','prv','blowdown','bdv','pressure safety valve','pressure relief','blow-down','flare'],
+                },
+                {
+                  id: 'CMP-005',
+                  category: 'Control & Operating Philosophy',
+                  title: 'Anti-surge / recycle / hot-gas bypass arrangements shown',
+                  detail: 'Anti-surge protection is mandatory for centrifugal and axial compressors. Recycle and hot-gas bypass arrangements must be shown with their control valves (FCV/PCV). The surge control strategy must be agreed with the process licensor and compressor vendor.',
+                  standard: 'API 670 / API 672 / Project Process Philosophy',
+                  severity: 'major',
+                  detectKeys: ['cmp-005','anti-surge','antisurge','surge control','recycle','recirculation','hot gas bypass','hot-gas bypass'],
+                },
+                {
+                  id: 'CMP-007',
+                  category: 'Safety & Shutdown',
+                  title: 'ESD on compressor suction and discharge (subject to configuration)',
+                  detail: 'Emergency Shutdown Valves (ESDV/SDV) must be shown on compressor suction and discharge subject to the HAZOP / safety philosophy. ESD valves must be linked to the compressor trip logic in the cause-and-effect matrix.',
+                  standard: 'IEC 61511 / Project Safety Philosophy / HAZOP Action',
+                  severity: 'major',
+                  detectKeys: ['cmp-007','esd','esdv','sdv','emergency shutdown','shutdown valve','trip valve','emergency stop'],
+                },
+              ];
+
+              // Soft-coded: category ordering and styling for sections
+              const CMP_CAT_STYLE = {
+                'Type & Configuration':          { color:'#7c3aed', bg:'rgba(124,58,237,0.08)',  border:'rgba(124,58,237,0.20)',  icon:'⚙️' },
+                'Cooling & Heat Exchange':        { color:'#0891b2', bg:'rgba(8,145,178,0.08)',   border:'rgba(8,145,178,0.20)',   icon:'❄️' },
+                'Start-up & Commissioning':       { color:'#d97706', bg:'rgba(217,119,6,0.08)',   border:'rgba(217,119,6,0.20)',   icon:'🔧' },
+                'Discharge Protection':           { color:'#dc2626', bg:'rgba(220,38,38,0.08)',   border:'rgba(220,38,38,0.20)',   icon:'🛡️' },
+                'Control & Operating Philosophy': { color:'#059669', bg:'rgba(5,150,105,0.08)',   border:'rgba(5,150,105,0.20)',   icon:'🔄' },
+                'Safety & Shutdown':              { color:'#be123c', bg:'rgba(190,18,60,0.08)',   border:'rgba(190,18,60,0.20)',   icon:'🚨' },
+              };
+              const CMP_CATEGORIES = Object.keys(CMP_CAT_STYLE);
+
+              // Soft-coded: status badge styles
+              const CMP_STATUS_STYLE = {
+                pass: { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'Pass',   icon:'✓' },
+                fail: { bg:'#fef2f2', border:'#fecaca', dot:'#ef4444', label:'Fail',   icon:'✕' },
+                warn: { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review', icon:'⚠' },
+                ok:   { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK', icon:'✓' },
+                na:   { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',    icon:'—' },
+                open: { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending',icon:'?' },
+              };
+
+              // ── AI evidence scan ────────────────────────────────────────────────────
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                  return keys.some(k => hay.includes(k.toLowerCase()));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              const effectiveStatus = (check) => {
+                const manual = cmpCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────
+              const statCounts = CMP_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c); acc[s] = (acc[s] || 0) + 1; return acc;
+              }, {});
+              const total    = CMP_CHECKS.length;
+              const passCnt  = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt  = statCounts.fail || 0;
+              const warnCnt  = statCounts.warn || 0;
+              const pendCnt  = (statCounts.open || 0) + (statCounts.na || 0);
+              // Soft-coded: QC score thresholds
+              const SCORE_EXCELLENT = 90; const SCORE_GOOD = 70; const SCORE_FAIR = 50;
+              const qcScore   = total > 0 ? Math.round(passCnt / total * 100) : 0;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e' : qcScore >= SCORE_GOOD ? '#0891b2' : qcScore >= SCORE_FAIR ? '#f59e0b' : '#dc2626';
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══════════════════════════════════════════════════════════ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(124,58,237,0.06), rgba(139,92,246,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#7c3aed,#8b5cf6)', boxShadow:'0 4px 14px rgba(124,58,237,0.35)' }}>
+                      <Wind className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Compressor QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#7c3aed,#8b5cf6)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · API 618 / API 670 / API 672 / IEC 61511
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Status pills */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> All Clear
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ════════════════════════════════════════════════════════ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.2)' },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',  border:'rgba(34,197,94,0.2)'  },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)', border:'rgba(245,158,11,0.2)' },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)',border:'rgba(148,163,184,0.2)'},
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ═══════════════════════════════════════════════════ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {[
+                      { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                      { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:null  },
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = cmpActiveView === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setCmpActiveView(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:'#7c3aed', borderColor:'#7c3aed' } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:'#7c3aed' } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ════════ CHECKLIST VIEW ═══════════════════════════════════════════ */}
+                  {cmpActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(124,58,237,0.06)', borderColor:'rgba(124,58,237,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-violet-700">No drawing data loaded.</span> Analyse a P&ID drawing first — AI auto-detection will highlight compressor checklist gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {CMP_CATEGORIES.map(cat => {
+                        const checks = CMP_CHECKS.filter(c => c.category === cat);
+                        if (checks.length === 0) return null;
+                        const catDef = CMP_CAT_STYLE[cat];
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category heading */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to right,${catDef.color}40,transparent)` }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:catDef.color, background:catDef.bg, border:`1px solid ${catDef.border}` }}>
+                                {catDef.icon} {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to left,${catDef.color}40,transparent)` }} />
+                            </div>
+
+                            <div className="space-y-2">
+                              {checks.map(check => {
+                                const status   = effectiveStatus(check);
+                                const stStyle  = CMP_STATUS_STYLE[status] || CMP_STATUS_STYLE.open;
+                                const isManual = !!cmpCheckStates[check.id];
+                                // Soft-coded: severity → colour map
+                                const SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+                                return (
+                                  <div key={check.id} className="rounded-xl border p-3 transition-all"
+                                    style={{ background:stStyle.bg, borderColor:stStyle.border }}>
+                                    <div className="flex items-start gap-3">
+                                      {/* Status dot */}
+                                      <div className="flex-shrink-0 w-5 h-5 rounded-full mt-0.5 flex items-center justify-center text-[10px] font-black text-white"
+                                        style={{ background:stStyle.dot }}>{stStyle.icon}</div>
+                                      {/* Content */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          <code className="text-[10px] font-mono font-bold" style={{ color:catDef.color }}>{check.id}</code>
+                                          <span className="text-xs font-bold text-slate-800 leading-tight">{check.title}</span>
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0"
+                                            style={{ color:SEV_COLOR[check.severity], background:`${SEV_COLOR[check.severity]}12`, borderColor:`${SEV_COLOR[check.severity]}30` }}>
+                                            {check.severity}
+                                          </span>
+                                          {isManual && (
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">Manual</span>
+                                          )}
+                                        </div>
+                                        <p className="text-[11px] text-slate-500 leading-relaxed mb-2">{check.detail}</p>
+                                        <p className="text-[10px] text-slate-400">Ref: <span className="font-semibold text-slate-500">{check.standard}</span></p>
+                                      </div>
+                                      {/* Manual override buttons */}
+                                      <div className="flex flex-col gap-1 flex-shrink-0">
+                                        {[{v:'pass',l:'✓',title:'Mark Pass'},{v:'fail',l:'✕',title:'Mark Fail'},{v:'na',l:'—',title:'Mark N/A'}].map(opt => {
+                                          const isActive = cmpCheckStates[check.id] === opt.v;
+                                          return (
+                                            <button key={opt.v} title={opt.title}
+                                              onClick={() => setCmpCheckStates(prev => ({ ...prev, [check.id]: isActive ? undefined : opt.v }))}
+                                              className={`w-7 h-7 rounded-lg text-[11px] font-black border transition-all ${
+                                                isActive ? 'text-white shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600'
+                                              }`}
+                                              style={isActive ? {
+                                                background: opt.v==='pass'?'#22c55e':opt.v==='fail'?'#ef4444':'#94a3b8',
+                                                borderColor: opt.v==='pass'?'#16a34a':opt.v==='fail'?'#dc2626':'#64748b',
+                                              } : undefined}>
+                                              {opt.l}
+                                            </button>
+                                          );
+                                        })}
+                                        {cmpCheckStates[check.id] && (
+                                          <button title="Clear override"
+                                            onClick={() => setCmpCheckStates(prev => { const n={...prev}; delete n[check.id]; return n; })}
+                                            className="w-7 h-7 rounded-lg text-[10px] font-black bg-white text-slate-300 border border-slate-200 hover:text-red-400 hover:border-red-200 transition-all">
+                                            ↺
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="pb-6" />
+                    </div>
+                  )}
+
+                  {/* ════════ SUMMARY VIEW ══════════════════════════════════════════════ */}
+                  {cmpActiveView === 'summary' && (() => {
+                    return (
+                      <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight:'70vh' }}>
+                        {CMP_CATEGORIES.map(cat => {
+                          const checks = CMP_CHECKS.filter(c => c.category === cat);
+                          if (checks.length === 0) return null;
+                          const catDef = CMP_CAT_STYLE[cat];
+                          const passC  = checks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                          const failC  = checks.filter(c => effectiveStatus(c)==='fail').length;
+                          const warnC  = checks.filter(c => effectiveStatus(c)==='warn').length;
+                          const catPct = checks.length > 0 ? Math.round(passC/checks.length*100) : 0;
+                          return (
+                            <div key={cat} className="rounded-xl p-3 border"
+                              style={{ background:catDef.bg, borderColor:catDef.border }}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-base">{catDef.icon}</span>
+                                <span className="text-xs font-bold flex-1" style={{ color:catDef.color }}>{cat}</span>
+                                <span className="text-[10px] font-black" style={{ color:catDef.color }}>{catPct}%</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full mb-2 overflow-hidden bg-white/50">
+                                <div className="h-full rounded-full transition-all duration-700"
+                                  style={{ width:`${catPct}%`, background:catDef.color }} />
+                              </div>
+                              <div className="flex gap-3 text-[10px]">
+                                <span style={{color:'#22c55e'}}>{passC} pass</span>
+                                {warnC>0 && <span style={{color:'#f59e0b'}}>{warnC} review</span>}
+                                {failC>0 && <span style={{color:'#ef4444'}}>{failC} fail</span>}
+                                <span className="text-slate-400">{checks.length - passC - warnC - failC} pending</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* AI findings linked to CMP rules */}
+                        {allIssues.filter(f => (f.rule_id||'').startsWith('CMP-')).length > 0 && (
+                          <div className="rounded-xl p-3 border border-violet-200 bg-violet-50/60">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-violet-700 mb-2">AI-detected CMP findings on this drawing</p>
+                            <div className="space-y-1.5">
+                              {allIssues.filter(f => (f.rule_id||'').startsWith('CMP-')).map((f, fi) => (
+                                <div key={fi} className="text-[11px] bg-white/70 border border-violet-100 rounded-lg px-3 py-2">
+                                  <span className="font-black text-violet-700 mr-1.5">{f.rule_id}</span>
+                                  <span className="text-slate-700">{f.issue_observed?.slice(0,120)}{(f.issue_observed?.length||0)>120?'…':''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {Object.keys(cmpCheckStates).length > 0 && (
+                          <button
+                            onClick={() => setCmpCheckStates({})}
+                            className="w-full text-[11px] font-semibold text-slate-400 hover:text-red-500 py-2 border border-dashed border-slate-200 hover:border-red-200 rounded-xl transition-all">
+                            ↺ Reset all manual overrides
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ════════ DRAWING LAYOUT VIEW ═══════════════════════════════════════ */}
+                  {cmpActiveView === 'drawing' && (() => {
+
+                    // ── Soft-coded: compressor equipment code prefixes ─────────────────────
+                    // Tags whose letter-only prefix matches are shown as equipment circles.
+                    const CMP_EQUIP_PREFIXES = new Set(['K','C','CM','CP','CMP','KO','KA','KC','KR','KS','MK']);
+
+                    // ── Soft-coded: severity colour scheme ────────────────────────────────
+                    const CMP_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+                    const CMP_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Helper: pick best {x_pct, y_pct} from a tag_positions entry ────────
+                    // tag_positions entries are one of:
+                    //   { x_pct, y_pct }            — direct single position
+                    //   { all:[{x_pct,y_pct},...] } — multiple OCR occurrences, pick nearest centroid
+                    // This mirrors pickBestOcc() in buildOverlayNodes().
+                    const _pickPos = (pos) => {
+                      if (!pos) return null;
+                      // Case 1: direct position — use as-is
+                      if (!pos.all || pos.all.length === 0) {
+                        return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                      }
+                      // Case 2: occurrences array — filter to drawing content area then pick nearest centroid
+                      const inArea = pos.all.filter(o =>
+                        o.x_pct != null && o.y_pct != null &&
+                        o.x_pct >= 1 && o.x_pct <= 96 &&
+                        o.y_pct >= 1 && o.y_pct <= 87
+                      );
+                      const pool = inArea.length > 0 ? inArea : pos.all.filter(o => o.x_pct != null && o.y_pct != null);
+                      if (pool.length === 0) return null;
+                      let best = pool[0]; let bestD = Infinity;
+                      for (const o of pool) {
+                        const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
+                        if (d < bestD) { bestD = d; best = o; }
+                      }
+                      return { xp: best.x_pct, yp: best.y_pct };
+                    };
+
+                    // ── Source 1: CMP finding nodes from overlayNodes (already P1–P5 resolved) ──
+                    // overlayNodes is built by buildOverlayNodes() at component scope.
+                    // Each anchored node has {left, top} already calibrated. We use left/top
+                    // directly as CSS percentage values.
+                    const cmpNodes = overlayNodes.filter(n =>
+                      n.anchored && (n.finding?.rule_id || '').startsWith('CMP-')
+                    );
+
+                    // ── Source 2: Equipment tag circles from tag_positions ─────────────────
+                    // Independently shows where compressor tags are located on the drawing.
+                    // Uses _pickPos() to correctly handle both data formats.
+                    const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                    const cmpRuleFindings = (activeDrawingData?.issues || []).filter(f =>
+                      (f.rule_id || '').startsWith('CMP-')
+                    );
+
+                    const allCmpMarkers = Object.entries(tagPositions)
+                      .filter(([tag]) => {
+                        const prefix = (tag.match(/^([A-Za-z]+)/) || [])[1] || '';
+                        return CMP_EQUIP_PREFIXES.has(prefix.toUpperCase());
+                      })
+                      .map(([tag, pos]) => {
+                        const coord = _pickPos(pos);
+                        if (!coord) return null;
+                        // Link any CMP findings that mention this tag
+                        const findings = cmpRuleFindings.filter(f => {
+                          const hay = `${f.evidence||''} ${f.issue_observed||''} ${f.location||''}`.toUpperCase();
+                          return hay.includes(tag.toUpperCase());
+                        });
+                        const topSev = findings.reduce((best, f) => {
+                          return (CMP_SEV_ORDER[(f.severity||'').toLowerCase()] || 0) >
+                                 (CMP_SEV_ORDER[best] || 0) ? f.severity : best;
+                        }, null);
+                        return { tag, xp: coord.xp, yp: coord.yp, findings, topSev };
+                      })
+                      .filter(Boolean);
+
+                    const markersWithFindings = allCmpMarkers.filter(m => m.findings.length > 0).length;
+                    const markersOK           = allCmpMarkers.filter(m => m.findings.length === 0).length;
+
+                    // The finding node for a selected chip or clicked overlay node
+                    const selMarker = cmpSelectedTag
+                      ? allCmpMarkers.find(m => m.tag === cmpSelectedTag) || null
+                      : null;
+
+                    // ── Chip filter: deduplicate by tag across both sources ─────────────
+                    const chipTags = allCmpMarkers.length > 0
+                      ? allCmpMarkers
+                      : cmpNodes.map(n => ({
+                          tag: n.finding?.rule_id || '?',
+                          xp: n.left, yp: n.top,
+                          findings: [n.finding],
+                          topSev: n.finding?.severity,
+                        }));
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* No drawing loaded guard */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(124,58,237,0.06)', borderColor:'rgba(124,58,237,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-violet-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see compressor locations on the layout map.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-violet-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {!drawingImageLoading && drawingImageUrl && (<>
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                            {[
+                              { v: allCmpMarkers.length, label:'Equip. Tags',    color:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.2)' },
+                              { v: cmpNodes.length,      label:'CMP Findings',   color:'#f97316', bg:'rgba(249,115,22,0.07)', border:'rgba(249,115,22,0.2)' },
+                              { v: markersWithFindings,  label:'Tags w/ Issues', color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                              { v: markersOK,            label:'Compliant',      color:'#22c55e', bg:'rgba(34,197,94,0.07)', border:'rgba(34,197,94,0.2)'  },
+                            ].map(c => (
+                              <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Legend */}
+                          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0" style={{ background:'#7c3aed', borderColor:'#5b21b6' }} />
+                              <span>Compressor tag (equipment)</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rotate-45 inline-block flex-shrink-0" style={{ background:'#f97316', border:'2px solid #c2410c' }} />
+                              <span>CMP finding (AI-located)</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rotate-45 inline-block flex-shrink-0" style={{ background:'#dc2626', border:'2px solid #991b1b' }} />
+                              <span>Critical finding</span>
+                            </span>
+                            <span className="ml-auto font-medium" style={{ color:'#7c3aed' }}>Click any marker · API 618/670/672</span>
+                          </div>
+
+                          {/* No tags or findings info */}
+                          {allCmpMarkers.length === 0 && cmpNodes.length === 0 && Object.keys(tagPositions).length > 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                              style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-amber-700 mb-0.5">No compressor tags auto-detected</p>
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                  Drawing tags: <span className="font-mono font-bold text-slate-700">
+                                    {Object.keys(tagPositions).slice(0, 7).join(', ')}{Object.keys(tagPositions).length > 7 ? ' …' : ''}
+                                  </span>. Compressor tags start with K, C, CM, CP, CMP.
+                                  CMP findings are plotted as diamonds if AI evidence is available.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {allCmpMarkers.length === 0 && cmpNodes.length === 0 && Object.keys(tagPositions).length === 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                              style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                              No tag position data yet — process and analyse a P&amp;ID drawing first.
+                            </div>
+                          )}
+
+                          {/* Filter chips — only show when we have equipment tags */}
+                          {chipTags.length > 0 && (
+                            <div className="px-5 pb-2">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                Filter — tap a tag to isolate on drawing
+                              </p>
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                style={{ scrollbarWidth:'thin', scrollbarColor:'#c4b5fd transparent' }}>
+                                <button onClick={() => setCmpSelectedTag(null)}
+                                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                  style={{
+                                    background: !cmpSelectedTag ? '#7c3aed'                        : 'rgba(124,58,237,0.08)',
+                                    color:      !cmpSelectedTag ? 'white'                          : '#7c3aed',
+                                    border:     `1px solid ${!cmpSelectedTag ? '#7c3aed'          : 'rgba(124,58,237,0.25)'}`,
+                                    boxShadow:   !cmpSelectedTag ? '0 0 10px rgba(124,58,237,0.4)' : 'none',
+                                  }}>
+                                  ◈ All
+                                </button>
+                                {[...chipTags]
+                                  .sort((a, b) => b.findings.length - a.findings.length || a.tag.localeCompare(b.tag))
+                                  .map(m => {
+                                    const isAct   = cmpSelectedTag === m.tag;
+                                    const cc      = m.findings.length > 0 ? (CMP_SEV_COLOR[(m.topSev||'').toLowerCase()]?.bg || '#f97316') : '#22c55e';
+                                    return (
+                                      <button key={m.tag}
+                                        onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                        style={{
+                                          background: isAct ? cc : `${cc}12`,
+                                          color:      isAct ? 'white' : cc,
+                                          border:     `1px solid ${isAct ? cc : `${cc}35`}`,
+                                          boxShadow:  isAct ? `0 0 10px ${cc}55` : 'none',
+                                        }}>
+                                        <span className="font-mono truncate" style={{ maxWidth:100 }}>{m.tag}</span>
+                                        {m.findings.length > 0 && (
+                                          <span className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                            style={{ background: isAct ? 'rgba(255,255,255,0.3)' : cc, color:'white' }}>
+                                            {m.findings.length}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ── Drawing + overlay ─────────────────────────────────────── */}
+                          <div className="px-5 pb-3">
+                            <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                              <div className="overflow-auto" style={{ maxHeight:'55vh' }}>
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+
+                                  {/* SVG + absolute overlay — same stacking as main drawing panel */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                    {/* Dim backdrop when a tag is isolated */}
+                                    {cmpSelectedTag && (
+                                      <div className="absolute inset-0"
+                                        style={{ background:'rgba(15,23,42,0.55)', zIndex:5,
+                                                 pointerEvents:'none', transition:'opacity 0.25s ease' }} />
+                                    )}
+
+                                    {/* ── Layer A: Equipment tag circles (from tag_positions) ── */}
+                                    {allCmpMarkers
+                                      .filter(m => !cmpSelectedTag || m.tag === cmpSelectedTag)
+                                      .map(m => {
+                                        const isSel = cmpSelectedTag === m.tag;
+                                        const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
+                                        const bg    = sc ? sc.bg     : '#7c3aed';
+                                        const bord  = sc ? sc.border : '#5b21b6';
+                                        const sz    = isSel ? 22 : 15;
+                                        return (
+                                          <React.Fragment key={`eq-${m.tag}`}>
+                                            {/* Pulse ring */}
+                                            {!isSel && (
+                                              <div aria-hidden="true" style={{
+                                                position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:'24px', height:'24px', borderRadius:'50%',
+                                                border:`2px solid ${bg}`,
+                                                transform:'translate(-50%,-50%)',
+                                                animation:'markerPing 2800ms ease-out infinite',
+                                                pointerEvents:'none', zIndex:9,
+                                              }} />
+                                            )}
+                                            {/* Circle button */}
+                                            <button
+                                              onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                              title={`${m.tag} · ${m.findings.length > 0 ? m.findings.length + ' CMP finding(s)' : 'No findings'}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                borderRadius:'50%',
+                                                backgroundColor: bg,
+                                                border:`2px solid ${bord}`,
+                                                transform:`translate(-50%,-50%) scale(${isSel ? 1.65 : 1})`,
+                                                boxShadow: isSel
+                                                  ? `0 0 0 4px ${bg}40, 0 2px 10px rgba(0,0,0,0.55)`
+                                                  : `0 1px 5px rgba(0,0,0,0.4)`,
+                                                zIndex: isSel ? 20 : 11,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                display:'flex', alignItems:'center', justifyContent:'center',
+                                                animation: !isSel ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                              }}>
+                                              {isSel && <span style={{ color:'white', fontSize:'8px', fontWeight:900, lineHeight:1 }}>⚙</span>}
+                                            </button>
+                                            {/* Tag label callout */}
+                                            {(isSel || allCmpMarkers.length <= 8) && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`calc(${m.xp}% + ${sz/2 + 5}px)`,
+                                                top:`${m.yp}%`,
+                                                transform:'translateY(-50%)',
+                                                background: isSel ? bg : `${bg}dd`,
+                                                color:'white', fontSize:'9px', fontWeight:900,
+                                                padding:'1px 5px', borderRadius:'4px',
+                                                whiteSpace:'nowrap', zIndex: isSel ? 21 : 12,
+                                                pointerEvents:'none',
+                                                boxShadow:'0 1px 4px rgba(0,0,0,0.4)',
+                                              }}>
+                                                {m.tag}
+                                                {m.findings.length > 0 && (
+                                                  <span style={{ marginLeft:3, opacity:0.85 }}>({m.findings.length})</span>
+                                                )}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+
+                                    {/* ── Layer B: CMP AI finding diamonds (from overlayNodes) ── */}
+                                    {/* These use the same P1-P5 coordinate resolution as the main
+                                        drawing panel — exact OCR-located positions. */}
+                                    {cmpNodes
+                                      .filter(n => {
+                                        if (!cmpSelectedTag) return true;
+                                        // When a tag is selected, only show findings mentioning it
+                                        const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                                        return hay.includes(cmpSelectedTag.toUpperCase());
+                                      })
+                                      .map((n, ni) => {
+                                        const sev    = (n.finding?.severity || '').toLowerCase();
+                                        const sc     = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.major;
+                                        const isHighl = cmpSelectedTag && `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase().includes(cmpSelectedTag.toUpperCase());
+                                        const sz     = isHighl ? 16 : 11;
+                                        return (
+                                          <React.Fragment key={`fn-${ni}`}>
+                                            {/* Ripple ping */}
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                              width:'18px', height:'18px',
+                                              border:`2px solid ${sc.bg}`,
+                                              transform:'translate(-50%,-50%) rotate(45deg)',
+                                              animation:'markerPing 2200ms ease-out infinite',
+                                              animationDelay:`${ni * 120}ms`,
+                                              pointerEvents:'none', zIndex:13,
+                                            }} />
+                                            {/* Diamond marker */}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                              title={`${n.finding?.rule_id || 'CMP'}: ${n.finding?.issue_observed?.slice(0,80) || ''}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${n.left}%`, top:`${n.top}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                backgroundColor: sc.bg,
+                                                border:`2px solid ${sc.border}`,
+                                                transform:`translate(-50%,-50%) rotate(45deg) scale(${isHighl ? 1.5 : 1})`,
+                                                boxShadow: isHighl
+                                                  ? `0 0 0 3px ${sc.bg}40, 0 2px 8px rgba(0,0,0,0.5)`
+                                                  : `0 1px 4px rgba(0,0,0,0.4)`,
+                                                zIndex: isHighl ? 22 : 14,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                animation: 'markerGlow 2200ms ease-in-out infinite',
+                                              }}
+                                            />
+                                            {/* Rule ID label */}
+                                            {(isHighl || cmpNodes.length <= 5) && n.finding?.rule_id && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`calc(${n.left}% + ${sz/2 + 5}px)`,
+                                                top:`${n.top}%`,
+                                                transform:'translateY(-50%)',
+                                                background:`${sc.bg}ee`,
+                                                color:'white', fontSize:'9px', fontWeight:900,
+                                                padding:'1px 5px', borderRadius:'4px',
+                                                whiteSpace:'nowrap', zIndex:23,
+                                                pointerEvents:'none',
+                                                boxShadow:'0 1px 4px rgba(0,0,0,0.4)',
+                                              }}>
+                                                {n.finding.rule_id}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Selected tag detail card */}
+                          {selMarker && (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{
+                                borderColor: selMarker.topSev
+                                  ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.border || '#7c3aed')
+                                  : '#7c3aed',
+                                animation:'cardIn 0.2s ease-out both',
+                              }}>
+                              <div className="flex items-center gap-3 px-4 py-3"
+                                style={{
+                                  background: selMarker.topSev
+                                    ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.light || 'rgba(124,58,237,0.07)')
+                                    : 'rgba(124,58,237,0.07)',
+                                }}>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-base font-black"
+                                  style={{
+                                    background: selMarker.topSev
+                                      ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.bg || '#7c3aed')
+                                      : '#7c3aed',
+                                    boxShadow:'0 4px 12px rgba(124,58,237,0.4)',
+                                  }}>
+                                  ⚙
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-black text-slate-900 font-mono">{selMarker.tag}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background:'#7c3aed' }}>Compressor</span>
+                                    {selMarker.topSev && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
+                                        style={{
+                                          color: CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.text,
+                                          background:`${CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.bg}15`,
+                                          borderColor:`${CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.border}40`,
+                                        }}>
+                                        {selMarker.topSev} severity
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                  <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selMarker.xp?.toFixed(1)}%</span></span>
+                                  <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selMarker.yp?.toFixed(1)}%</span></span>
+                                </div>
+                                <button onClick={() => setCmpSelectedTag(null)}
+                                  className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">✕</button>
+                              </div>
+                              {selMarker.findings.length > 0 ? (
+                                <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                    {selMarker.findings.length} CMP Finding{selMarker.findings.length !== 1 ? 's' : ''} Detected
+                                  </p>
+                                  {selMarker.findings.map((f, fi) => {
+                                    const sev = (f.severity || '').toLowerCase();
+                                    const sc2 = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.info;
+                                    return (
+                                      <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                        style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                        <div className="flex-1 min-w-0">
+                                          {f.rule_id && <span className="text-[9px] font-black mr-1.5" style={{ color:'#7c3aed' }}>{f.rule_id}</span>}
+                                          <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                          {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                        </div>
+                                        <button
+                                          onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                          className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white hover:opacity-80 transition-all"
+                                          style={{ background:'#7c3aed' }}>
+                                          Locate
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  No CMP findings linked to this compressor tag — appears compliant.
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* All CMP AI findings table */}
+                          {cmpRuleFindings.length > 0 && (
+                            <div className="mx-5 mb-4">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <Wind className="w-3 h-3 text-violet-500" />
+                                CMP AI Findings — {cmpRuleFindings.length} item{cmpRuleFindings.length!==1?'s':''}
+                                <span className="text-[9px] font-normal text-slate-400">(click row → jump to drawing)</span>
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Rule','Sev.','Anchored','Issue','Evidence'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {cmpRuleFindings.map((f, fi) => {
+                                        const sev  = (f.severity || '').toLowerCase();
+                                        const sc   = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.info;
+                                        const node = overlayNodes.find(n => n.finding?.id === f.id);
+                                        const anchored = node?.anchored;
+                                        return (
+                                          <tr key={fi}
+                                            className="border-b border-slate-100 hover:bg-violet-50 transition-all cursor-pointer"
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}>
+                                            <td className="px-3 py-1.5 font-mono font-black text-violet-700 whitespace-nowrap">{f.rule_id || '—'}</td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white" style={{ background:sc.bg }}>{sev}</span>
+                                            </td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              {anchored
+                                                ? <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {node.tier}</span>
+                                                : <span className="text-[9px] text-slate-400">–</span>}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-slate-700 max-w-[180px] truncate">{f.issue_observed}</td>
+                                            <td className="px-3 py-1.5 font-mono text-slate-400 text-[9px] max-w-[140px] truncate">{f.evidence || '—'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Compressor Equipment Register */}
+                          {allCmpMarkers.length > 0 && (
+                            <div className="mx-5 mb-5">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3 text-violet-500" />
+                                Compressor Equipment Register — {allCmpMarkers.length} tag{allCmpMarkers.length!==1?'s':''} located
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Tag','X%','Y%','Status','CMP Findings'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {allCmpMarkers.map(m => {
+                                        const isSel = cmpSelectedTag === m.tag;
+                                        const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
+                                        return (
+                                          <tr key={m.tag}
+                                            onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                            className="border-b border-slate-100 cursor-pointer hover:bg-violet-50 transition-all"
+                                            style={{ background: isSel ? 'rgba(124,58,237,0.07)' : 'white' }}>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-slate-800 whitespace-nowrap">{m.tag}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                style={{ background: sc ? sc.bg : '#22c55e' }}>
+                                                {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-bold"
+                                              style={{ color: m.findings.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                              {m.findings.length > 0 ? m.findings.length : '✓'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </>)}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#7c3aed' }}>
+                      {cmpActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(cmpCheckStates).length} manual override${Object.keys(cmpCheckStates).length!==1?'s':''}`
+                        : cmpActiveView === 'drawing'
+                          ? `${Object.entries(activeDrawingData?.metadata?.tag_positions||{}).filter(([t])=>/^[A-Za-z]+/.test(t)).length} equipment tags located · API 618/670/672 coordinates`
+                          : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>API 618 · API 670 · API 672 · IEC 61511 · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end COMPRESSOR panel ─── */}
 
             {/* ─── CROSS-REF panel ─── */}
             {activePanel === 'cross' && (() => {
