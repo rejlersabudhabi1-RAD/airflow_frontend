@@ -499,6 +499,18 @@ const PERF_TOP_RULES_COUNT = 8;
 // PERF_TOP_CATS_COUNT: number of top categories shown in the category breakdown bar.
 const PERF_TOP_CATS_COUNT = 6;
 
+// PERF_MODEL_ACCURACY_PCT: the AI model's known precision rate (0–100).
+// This is the % of reported findings that are expected to be genuine defects.
+// Adjust this value as the model improves over time.
+// Example: 85 means 85% of reported issues are real; 15% may be false positives.
+const PERF_MODEL_ACCURACY_PCT = 85;
+
+// PERF_MODEL_ACCURACY_LABEL: friendly explanation shown in the UI tooltip / sub-text.
+const PERF_MODEL_ACCURACY_LABEL =
+  `Of every 100 issues the AI flags, ${PERF_MODEL_ACCURACY_PCT} are expected to be genuine defects and ` +
+  `${100 - PERF_MODEL_ACCURACY_PCT} may be false positives. ` +
+  `The model-adjusted score caps document quality at the model\'s own ceiling.`;
+
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -10409,6 +10421,159 @@ const PIDVerification = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* ── Section 0b: Model-Adjusted Document Accuracy ─────── */}
+                  {(() => {
+                    // How many reported findings are estimated to be genuine
+                    const estTrue   = Math.round(totalFindings * PERF_MODEL_ACCURACY_PCT / 100);
+                    const estFalse  = totalFindings - estTrue;
+                    // Model-adjusted score = raw document score × model accuracy ceiling
+                    const adjScore  = docAccuracyRate != null
+                      ? Math.round(docAccuracyRate * PERF_MODEL_ACCURACY_PCT / 100)
+                      : null;
+                    const adjQual   = scoreQuality(adjScore, PERF_DOC_ACCURACY_THRESHOLDS);
+                    // Gauge fill for model accuracy badge (always fixed at MODEL_ACCURACY_PCT)
+                    const modelCirc = Math.PI * 28;
+                    const modelDash = (PERF_MODEL_ACCURACY_PCT / 100) * modelCirc;
+                    return (
+                      <div className="rounded-2xl overflow-hidden" style={{
+                        ...T.card,
+                        border: '1.5px solid #6366f120',
+                        boxShadow: '0 4px 20px #6366f110',
+                      }}>
+                        {/* Header */}
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3"
+                          style={{ background: 'linear-gradient(135deg,#f5f3ff,#ede9fe)' }}>
+                          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#7c3aed,#8b5cf6)' }}>
+                            <span className="text-white text-sm font-black">AI</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-black text-slate-900">Model-Adjusted Document Accuracy</p>
+                            <p className="text-[10px] text-slate-500">
+                              {PERF_MODEL_ACCURACY_LABEL}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Three-column metric row */}
+                        <div className="grid grid-cols-3 divide-x divide-slate-100">
+
+                          {/* Col 1 — AI Model Accuracy (fixed constant) */}
+                          <div className="px-4 py-4 flex flex-col items-center gap-0.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1 text-center">AI Model Accuracy</p>
+                            <div className="relative flex flex-col items-center">
+                              <svg width="70" height="42" viewBox="0 0 70 42">
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke="#e2e8f0"
+                                  strokeWidth="7" strokeLinecap="round" />
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke="#7c3aed"
+                                  strokeWidth="7" strokeLinecap="round"
+                                  strokeDasharray={`${modelDash} ${modelCirc}`}
+                                  style={{ transition: 'stroke-dasharray 0.9s ease' }}
+                                />
+                              </svg>
+                              <p className="text-xl font-black -mt-2" style={{ color: '#7c3aed' }}>
+                                {PERF_MODEL_ACCURACY_PCT}%
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1"
+                              style={{ background: '#7c3aed18', color: '#7c3aed' }}>Precision</span>
+                            <p className="text-[9px] text-slate-400 text-center mt-0.5">Verified model benchmark</p>
+                          </div>
+
+                          {/* Col 2 — Model-Adjusted Score */}
+                          <div className="px-4 py-4 flex flex-col items-center gap-0.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1 text-center">Adjusted Doc Score</p>
+                            <div className="relative flex flex-col items-center">
+                              <svg width="70" height="42" viewBox="0 0 70 42">
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke="#e2e8f0"
+                                  strokeWidth="7" strokeLinecap="round" />
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke={adjQual.color}
+                                  strokeWidth="7" strokeLinecap="round"
+                                  strokeDasharray={`${
+                                    adjScore != null ? (adjScore / 100) * modelCirc : 0
+                                  } ${modelCirc}`}
+                                  style={{ transition: 'stroke-dasharray 0.9s ease' }}
+                                />
+                              </svg>
+                              <p className="text-xl font-black -mt-2" style={{ color: adjQual.color }}>
+                                {adjScore != null ? `${adjScore}%` : '—'}
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1"
+                              style={{ background: `${adjQual.color}18`, color: adjQual.color }}>
+                              {adjQual.label || 'No data'}
+                            </span>
+                            <p className="text-[9px] text-slate-400 text-center mt-0.5">
+                              Doc score × {PERF_MODEL_ACCURACY_PCT}% model ceiling
+                            </p>
+                          </div>
+
+                          {/* Col 3 — Finding breakdown (genuine vs. false positives) */}
+                          <div className="px-4 py-4 flex flex-col items-center justify-center gap-2">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5 text-center">Findings Breakdown</p>
+                            {totalFindings > 0 ? (
+                              <>
+                                <div className="flex flex-col gap-1.5 w-full">
+                                  {/* Genuine findings bar */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-emerald-600 font-bold w-14 shrink-0">Genuine</span>
+                                    <div style={{ flex: 1, height: '6px', borderRadius: '4px',
+                                      background: '#f1f5f9', overflow: 'hidden' }}>
+                                      <div style={{
+                                        height: '100%',
+                                        width: `${PERF_MODEL_ACCURACY_PCT}%`,
+                                        background: '#10b981',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.7s ease',
+                                      }} />
+                                    </div>
+                                    <span className="text-[9px] font-black text-emerald-700 w-6 text-right shrink-0">{estTrue}</span>
+                                  </div>
+                                  {/* False positive bar */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-rose-500 font-bold w-14 shrink-0">False +ve</span>
+                                    <div style={{ flex: 1, height: '6px', borderRadius: '4px',
+                                      background: '#f1f5f9', overflow: 'hidden' }}>
+                                      <div style={{
+                                        height: '100%',
+                                        width: `${100 - PERF_MODEL_ACCURACY_PCT}%`,
+                                        background: '#f87171',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.7s ease',
+                                      }} />
+                                    </div>
+                                    <span className="text-[9px] font-black text-rose-500 w-6 text-right shrink-0">{estFalse}</span>
+                                  </div>
+                                </div>
+                                <p className="text-[9px] text-slate-500 text-center mt-0.5">
+                                  of {totalFindings} reported finding{totalFindings !== 1 ? 's' : ''}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-[10px] text-slate-400 text-center">No findings yet</p>
+                            )}
+                          </div>
+
+                        </div>
+
+                        {/* Footer note */}
+                        <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60">
+                          <p className="text-[9px] text-slate-500">
+                            <span className="font-bold text-violet-700">How to read this:</span>
+                            {' '}The raw Document Accuracy Rate reflects OCR, placement and anchor quality.
+                            The <span className="font-bold">Adjusted Score</span> accounts for the model's own{' '}
+                            <span className="font-bold text-violet-700">{PERF_MODEL_ACCURACY_PCT}% precision ceiling</span> —
+                            the highest confidence you can reliably assign to any AI-generated result from this model.
+                            Of {totalFindings} flagged issue{totalFindings !== 1 ? 's' : ''},
+                            {' '}<span className="font-bold text-emerald-700">{estTrue} are estimated genuine</span> and
+                            {' '}<span className="font-bold text-rose-500">{estFalse} may be false alarms</span> worth
+                            manual verification.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* ── Section 1: Score gauges ─────────────────────────── */}
                   <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
