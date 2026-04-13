@@ -84,7 +84,10 @@ const InstrumentIndex = () => {
   // Table filtering state
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterText, setFilterText]         = useState('');
-  const [activeView, setActiveView]         = useState('table'); // 'table' | 'summary'
+  const [activeView, setActiveView]         = useState('table'); // 'table' | 'summary' | 'layout'
+  // Layout view state
+  const [layoutSelected, setLayoutSelected] = useState(null); // { measured, fn } cell selected
+  const [layoutHovered,  setLayoutHovered]  = useState(null);
 
   const fileInputRef = useRef(null);
   const legendInputRef = useRef(null);
@@ -575,6 +578,7 @@ const InstrumentIndex = () => {
               {[
                 { id: 'table',   icon: <ListBulletIcon className="h-4 w-4" />,  label: 'Instrument Table' },
                 { id: 'summary', icon: <ChartBarIcon   className="h-4 w-4" />,  label: 'Category Summary' },
+                { id: 'layout',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>, label: 'ISA Layout Matrix' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -768,6 +772,447 @@ const InstrumentIndex = () => {
                 </div>
               </div>
             )}
+
+            {/* ── LAYOUT VIEW — ISA 5.1 Functional Classification Matrix ── */}
+            {activeView === 'layout' && (() => {
+              // ═══════════════════════════════════════════════════════════════════
+              // Soft-coded: ISA 5.1 measured-variable first letters (rows of matrix)
+              // Each entry: letter, full name, accent colour
+              // ═══════════════════════════════════════════════════════════════════
+              const ISA_MEASURED = [
+                { letter:'F', name:'Flow',                   color:'#22c55e', light:'#f0fdf4' },
+                { letter:'P', name:'Pressure',               color:'#f97316', light:'#fff7ed' },
+                { letter:'T', name:'Temperature',            color:'#ef4444', light:'#fef2f2' },
+                { letter:'L', name:'Level',                  color:'#eab308', light:'#fefce8' },
+                { letter:'A', name:'Analysis',               color:'#a855f7', light:'#faf5ff' },
+                { letter:'d', name:'Differential Pressure',  color:'#fb923c', light:'#fff7ed' },
+                { letter:'Z', name:'Position / Actuator',    color:'#64748b', light:'#f8fafc' },
+                { letter:'S', name:'Safety / Speed / Limit', color:'#dc2626', light:'#fef2f2' },
+                { letter:'W', name:'Weight / Force',         color:'#6b7280', light:'#f9fafb' },
+                { letter:'J', name:'Power / Elect.',         color:'#3b82f6', light:'#eff6ff' },
+                { letter:'X', name:'Unknown / Other',        color:'#94a3b8', light:'#f8fafc' },
+              ];
+
+              // ═══════════════════════════════════════════════════════════════════
+              // Soft-coded: ISA 5.1 function suffix letters (columns of matrix)
+              // ═══════════════════════════════════════════════════════════════════
+              const ISA_FUNCTIONS = [
+                { code:'T',   label:'Transmitter' },
+                { code:'I',   label:'Indicator'   },
+                { code:'IC',  label:'Ind.Control.' },
+                { code:'C',   label:'Controller'  },
+                { code:'CV',  label:'Ctrl. Valve'  },
+                { code:'V',   label:'Valve'        },
+                { code:'S',   label:'Switch'       },
+                { code:'SH',  label:'Switch Hi'    },
+                { code:'SL',  label:'Switch Lo'    },
+                { code:'SHH', label:'Switch HiHi'  },
+                { code:'SLL', label:'Switch LoLo'  },
+                { code:'AH',  label:'Alarm Hi'     },
+                { code:'AL',  label:'Alarm Lo'     },
+                { code:'E',   label:'Element'      },
+                { code:'G',   label:'Gauge'        },
+                { code:'R',   label:'Recorder'     },
+                { code:'Y',   label:'Relay/Comput.' },
+  ];
+
+              // ═══════════════════════════════════════════════════════════════════
+              // Soft-coded: parse ISA first-letter from a tag number
+              // e.g. "FT-1234" → F,  "LIC-001" → L,  "dPT-5A" → d
+              // ═══════════════════════════════════════════════════════════════════
+              const parseTagMeasured = (tag) => {
+                if (!tag) return 'X';
+                const m = tag.match(/^([A-Za-z]{1,3})-?\d/);
+                if (!m) return 'X';
+                const prefix = m[1].toUpperCase();
+                // Differential pressure: DPT, dPT, DP...
+                if (prefix.startsWith('DP') || prefix.startsWith('d')) return 'd';
+                return prefix[0];
+              };
+
+              // ═══════════════════════════════════════════════════════════════════
+              // Soft-coded: parse ISA function suffix from tag prefix
+              // e.g. "FT" → T,  "LIC" → IC,  "PSV" → SV
+              // Match by longest suffix first to avoid false positives
+              // ═══════════════════════════════════════════════════════════════════
+              const FUNC_PRIORITY = ['SHH','SLL','SH','SL','IC','CV','AH','AL','T','I','C','V','S','E','G','R','Y'];
+              const parseTagFn = (tag) => {
+                if (!tag) return null;
+                const m = tag.match(/^[A-Za-z]+/);
+                if (!m) return null;
+                const prefix = m[0].toUpperCase();
+                const letters = prefix.replace(/^[FLPTA-Z]/, ''); // strip first measured variable letter
+                for (const fn of FUNC_PRIORITY) {
+                  if (letters.endsWith(fn) || letters === fn) return fn;
+                }
+                return null;
+              };
+
+              // Build matrix: { measured: { fn: [instruments] } }
+              const matrix = {};
+              for (const inst of (result.instruments || [])) {
+                const mv  = parseTagMeasured(inst.tag_number);
+                const fn  = parseTagFn(inst.tag_number) || '—';
+                if (!matrix[mv]) matrix[mv] = {};
+                if (!matrix[mv][fn]) matrix[mv][fn] = [];
+                matrix[mv][fn].push(inst);
+              }
+
+              // Determine which function columns have any data
+              const activeFns = ISA_FUNCTIONS.filter(f =>
+                ISA_MEASURED.some(mv => (matrix[mv.letter]?.[f.code] || []).length > 0)
+              );
+
+              // Max count in any cell (for heatmap intensity)
+              const allCounts  = ISA_MEASURED.flatMap(mv =>
+                activeFns.map(fn => (matrix[mv.letter]?.[fn.code] || []).length)
+              );
+              const maxCount = Math.max(1, ...allCounts);
+
+              // Instruments shown in the detail drawer
+              const selectedCell = layoutSelected
+                ? (matrix[layoutSelected.measured]?.[layoutSelected.fn] || [])
+                : null;
+              const selectedMvDef = layoutSelected
+                ? ISA_MEASURED.find(m => m.letter === layoutSelected.measured)
+                : null;
+              const selectedFnDef = layoutSelected
+                ? ISA_FUNCTIONS.find(f => f.code === layoutSelected.fn)
+                : null;
+
+              // Summary counts per row
+              const rowTotal = (mv) =>
+                activeFns.reduce((s, fn) => s + (matrix[mv]?.[fn.code]||[]).length, 0);
+              const totalInMatrix = (result.instruments||[]).length;
+
+              return (
+                <div>
+                  {/* ── Header ── */}
+                  <div className="bg-white rounded-xl shadow-sm p-5 mb-4">
+                    <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                          <span className="text-2xl">🎛️</span>
+                          ISA 5.1 Instrument Classification Matrix
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Each cell shows the count of instruments for a given
+                          <strong> Measured Variable</strong> (row) ×
+                          <strong> Function Suffix</strong> (column).
+                          Click any cell to inspect the tag list. Colour intensity reflects count density.
+                        </p>
+                      </div>
+                      <div className="flex gap-3 flex-shrink-0">
+                        <div className="text-center px-4 py-2 bg-purple-50 border border-purple-200 rounded-xl">
+                          <p className="text-2xl font-black text-purple-700">{totalInMatrix}</p>
+                          <p className="text-xs text-purple-500 font-medium">Instruments</p>
+                        </div>
+                        <div className="text-center px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl">
+                          <p className="text-2xl font-black text-indigo-700">
+                            {ISA_MEASURED.filter(m => rowTotal(m.letter) > 0).length}
+                          </p>
+                          <p className="text-xs text-indigo-500 font-medium">Variables</p>
+                        </div>
+                        <div className="text-center px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl">
+                          <p className="text-2xl font-black text-teal-700">{activeFns.length}</p>
+                          <p className="text-xs text-teal-500 font-medium">Functions</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ISA Legend strip */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {ISA_MEASURED.filter(m => rowTotal(m.letter) > 0).map(m => (
+                        <span key={m.letter}
+                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold border"
+                          style={{ background:m.light, color:m.color, borderColor:`${m.color}40` }}>
+                          <span className="font-black font-mono">{m.letter}</span>
+                          {m.name}
+                          <span className="ml-1 font-black bg-white rounded-full px-1.5 py-0.5 text-[10px]"
+                            style={{ color:m.color }}>{rowTotal(m.letter)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Matrix + Detail split ── */}
+                  <div className="flex gap-4 items-start">
+
+                    {/* Matrix table */}
+                    <div className="flex-1 bg-white rounded-xl shadow-sm overflow-hidden" style={{ minWidth:0 }}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-xs">
+                          {/* Column headers */}
+                          <thead>
+                            <tr>
+                              <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2.5 text-left font-bold text-gray-500 text-[10px] uppercase tracking-wider border-b border-r border-gray-200 whitespace-nowrap"
+                                style={{ minWidth:'110px' }}>
+                                Measured Variable
+                              </th>
+                              {activeFns.map(fn => (
+                                <th key={fn.code}
+                                  className="px-2 py-2.5 text-center font-bold text-gray-500 text-[10px] border-b border-gray-200 whitespace-nowrap"
+                                  style={{ minWidth:'52px' }}>
+                                  <div className="font-mono font-black text-gray-700">{fn.code}</div>
+                                  <div className="text-[8px] text-gray-400 font-normal leading-tight mt-0.5">{fn.label}</div>
+                                </th>
+                              ))}
+                              <th className="px-3 py-2.5 text-center font-bold text-gray-500 text-[10px] border-b border-l border-gray-200 whitespace-nowrap bg-gray-50">
+                                Total
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ISA_MEASURED.map((mv) => {
+                              const total = rowTotal(mv.letter);
+                              if (total === 0) return null;
+                              return (
+                                <tr key={mv.letter} className="group hover:bg-gray-50/70 transition-colors">
+                                  {/* Row header */}
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2.5 font-medium border-b border-r border-gray-100 group-hover:bg-gray-50/70"
+                                      style={{ background:'inherit' }}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-black font-mono flex-shrink-0"
+                                        style={{ background:mv.color }}>
+                                        {mv.letter}
+                                      </span>
+                                      <div>
+                                        <p className="font-bold text-gray-800 text-[11px] leading-none">{mv.name}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  {/* Data cells */}
+                                  {activeFns.map(fn => {
+                                    const items = matrix[mv.letter]?.[fn.code] || [];
+                                    const cnt   = items.length;
+                                    const isSelected = layoutSelected?.measured === mv.letter && layoutSelected?.fn === fn.code;
+                                    const isHovered  = layoutHovered?.measured  === mv.letter && layoutHovered?.fn  === fn.code;
+                                    // Heatmap: intensity proportional to count / maxCount
+                                    const intensity  = cnt > 0 ? 0.12 + (cnt / maxCount) * 0.75 : 0;
+                                    const cellBg     = cnt > 0
+                                      ? `rgba(${mv.color === '#22c55e' ? '34,197,94'
+                                               : mv.color === '#f97316' ? '249,115,22'
+                                               : mv.color === '#ef4444' ? '239,68,68'
+                                               : mv.color === '#eab308' ? '234,179,8'
+                                               : mv.color === '#a855f7' ? '168,85,247'
+                                               : mv.color === '#fb923c' ? '251,146,60'
+                                               : mv.color === '#dc2626' ? '220,38,38'
+                                               : mv.color === '#3b82f6' ? '59,130,246'
+                                               : '148,163,184'},${intensity})`
+                                      : 'transparent';
+
+                                    return (
+                                      <td key={fn.code}
+                                        className={`px-1 py-2 text-center border-b border-gray-100 transition-all cursor-pointer ${
+                                          cnt === 0 ? 'text-gray-200' : ''
+                                        }`}
+                                        style={{
+                                          background: isSelected ? mv.color : isHovered && cnt > 0 ? `${mv.color}30` : cellBg,
+                                          outline: isSelected ? `2px solid ${mv.color}` : undefined,
+                                          outlineOffset: '-2px',
+                                          borderRadius: isSelected ? '4px' : undefined,
+                                        }}
+                                        onClick={() => cnt > 0 && setLayoutSelected(
+                                          isSelected ? null : { measured: mv.letter, fn: fn.code }
+                                        )}
+                                        onMouseEnter={() => cnt > 0 && setLayoutHovered({ measured: mv.letter, fn: fn.code })}
+                                        onMouseLeave={() => setLayoutHovered(null)}>
+                                        {cnt > 0 ? (
+                                          <span className={`font-black text-[11px] ${isSelected ? 'text-white' : ''}`}
+                                            style={{ color: isSelected ? '#fff' : mv.color }}>
+                                            {cnt}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-100 text-[10px]">·</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                  {/* Row total */}
+                                  <td className="px-3 py-2 text-center border-b border-l border-gray-100 font-black text-[11px]"
+                                    style={{ color:mv.color, background:`${mv.color}10` }}>
+                                    {total}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {/* Column totals row */}
+                            <tr className="bg-gray-50 border-t-2 border-gray-200">
+                              <td className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-[10px] font-black text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                                Total
+                              </td>
+                              {activeFns.map(fn => {
+                                const colTotal = ISA_MEASURED.reduce((s,mv) => s + (matrix[mv.letter]?.[fn.code]||[]).length, 0);
+                                return (
+                                  <td key={fn.code} className="px-1 py-2 text-center font-black text-[11px] text-gray-600">
+                                    {colTotal > 0 ? colTotal : '·'}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-3 py-2 text-center font-black text-gray-800 border-l border-gray-200">
+                                {totalInMatrix}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Detail drawer */}
+                    <div style={{ width: selectedCell ? '320px' : '200px', flexShrink:0, transition:'width 0.22s ease' }}>
+                      {selectedCell ? (
+                        <div className="bg-white rounded-xl shadow-sm overflow-hidden" style={{ maxHeight:'75vh', display:'flex', flexDirection:'column' }}>
+                          {/* Drawer header */}
+                          <div className="px-4 py-3 flex items-center justify-between gap-2 border-b"
+                            style={{ background: selectedMvDef ? selectedMvDef.light : '#f8fafc' }}>
+                            <div>
+                              <p className="text-sm font-black text-gray-900">
+                                {selectedMvDef?.letter}{selectedFnDef?.code}
+                                <span className="text-[11px] font-normal text-gray-500 ml-2">
+                                  {selectedMvDef?.name} · {selectedFnDef?.label}
+                                </span>
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {selectedCell.length} instrument{selectedCell.length!==1?'s':''}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setLayoutSelected(null)}
+                              className="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none flex-shrink-0">
+                              ×
+                            </button>
+                          </div>
+                          {/* Tag list */}
+                          <div className="overflow-y-auto flex-1 p-3 flex flex-col gap-2">
+                            {selectedCell.map((inst, i) => {
+                              const cs = categoryStyle(inst.category);
+                              return (
+                                <div key={i} className="rounded-xl border p-3 flex flex-col gap-1"
+                                  style={{ borderColor: `${selectedMvDef?.color || '#94a3b8'}30`,
+                                           background: selectedMvDef?.light || '#f8fafc' }}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <code className="text-sm font-black font-mono"
+                                      style={{ color: selectedMvDef?.color || '#334155' }}>
+                                      {inst.tag_number || '—'}
+                                    </code>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{ background:cs.bg, color:cs.text }}>
+                                      {inst.category}
+                                    </span>
+                                  </div>
+                                  {inst.instrument_type && (
+                                    <p className="text-[10px] text-gray-600">{inst.instrument_type}</p>
+                                  )}
+                                  {inst.service_description && (
+                                    <p className="text-[10px] text-gray-500 italic leading-snug">{inst.service_description}</p>
+                                  )}
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {inst.line_number && (
+                                      <span className="text-[9px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-100 font-mono">
+                                        Line: {inst.line_number}
+                                      </span>
+                                    )}
+                                    {inst.equipment_number && (
+                                      <span className="text-[9px] bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded border border-violet-100 font-mono">
+                                        Equip: {inst.equipment_number}
+                                      </span>
+                                    )}
+                                    {inst.set_point && (
+                                      <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-100 font-mono">
+                                        SP: {inst.set_point}
+                                      </span>
+                                    )}
+                                    {inst.fail_safe && (
+                                      <span className="text-[9px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded border border-red-100">
+                                        FS: {inst.fail_safe}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {/* Drawer footer */}
+                          <div className="px-4 py-2 border-t bg-gray-50 flex items-center justify-between text-[9px] text-gray-400">
+                            <span>{selectedCell.length} tag{selectedCell.length!==1?'s':''}</span>
+                            <button
+                              onClick={() => { setFilterCategory('All'); setFilterText(layoutSelected?.fn || ''); setActiveView('table'); }}
+                              className="text-[9px] font-bold text-purple-600 hover:text-purple-800">
+                              View in Table →
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-xl shadow-sm p-5 flex flex-col items-center text-center gap-3"
+                          style={{ minHeight:'140px' }}>
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                            style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
+                            <span className="text-2xl">🔬</span>
+                          </div>
+                          <p className="text-xs font-bold text-gray-600">Click any cell</p>
+                          <p className="text-[10px] text-gray-400 leading-snug">
+                            Select a matrix cell to see the tag list for that instrument function
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  {/* ── ISA Reference Quick Guide ── */}
+                  <div className="bg-white rounded-xl shadow-sm p-5 mt-4">
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">
+                      ISA 5.1 Quick Reference — Instrument Identification Letters
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {/* Soft-coded: ISA 5.1 first-letter meanings */}
+                      {[
+                        { letter:'F', desc:'Flow (measurement)'                },
+                        { letter:'P', desc:'Pressure (measurement)'            },
+                        { letter:'T', desc:'Temperature (measurement)'         },
+                        { letter:'L', desc:'Level (measurement)'               },
+                        { letter:'A', desc:'Analysis / Composition'            },
+                        { letter:'Z', desc:'Position, Dimension, Actuator'     },
+                        { letter:'S', desc:'Speed, Frequency, Safety shutdown' },
+                        { letter:'d', desc:'Differential (DP transmitter)'     },
+                        { letter:'W', desc:'Weight, Force'                     },
+                        { letter:'J', desc:'Power, Electrical'                 },
+                      ].map(item => {
+                        const mvDef = ISA_MEASURED.find(m => m.letter === item.letter);
+                        return (
+                          <div key={item.letter} className="flex items-start gap-2 p-2.5 rounded-lg border"
+                            style={{ background: mvDef?.light || '#f8fafc', borderColor: `${mvDef?.color || '#94a3b8'}25` }}>
+                            <span className="w-7 h-7 rounded-md flex items-center justify-center text-white text-sm font-black font-mono flex-shrink-0"
+                              style={{ background: mvDef?.color || '#94a3b8' }}>
+                              {item.letter}
+                            </span>
+                            <p className="text-[11px] text-gray-600 leading-snug">{item.desc}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Function letter quick reference */}
+                    <div className="mt-4 pt-3 border-t border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Function Suffix</p>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Soft-coded: ISA 5.1 second-letter function meanings */}
+                        {[
+                          ['T','Transmitter'], ['I','Indicator'], ['C','Controller'], ['V','Valve'],
+                          ['S','Switch'],      ['E','Element'],   ['G','Gauge'],     ['R','Recorder'],
+                          ['A','Alarm'],       ['Y','Relay/Compute'], ['H','High'],  ['L','Low'],
+                        ].map(([code, desc]) => (
+                          <span key={code}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-600">
+                            <code className="font-mono font-black text-indigo-600">{code}</code>
+                            <span>{desc}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
 
