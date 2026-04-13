@@ -10,6 +10,7 @@ import {
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
   Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
   Search, ExternalLink, Sparkles, Maximize2, Minimize2, Wind,
+  Gauge, CheckSquare,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1035,6 +1036,11 @@ const PIDVerification = () => {
   const [cmpCheckStates, setCmpCheckStates]   = useState({});          // { [checkId]: 'pass'|'fail'|'na' }
   const [cmpActiveView,  setCmpActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
   const [cmpSelectedTag, setCmpSelectedTag]   = useState(null);        // selected compressor tag on drawing
+  // Index panel — view switcher + valve tracking states
+  const [idxActiveTab,   setIdxActiveTab]    = useState('data');       // 'data'|'drawing'|'valves'
+  const [vlvCheckStates, setVlvCheckStates]  = useState({});           // { [checkId]: 'pass'|'fail'|'na' }
+  const [vlvSelectedTag, setVlvSelectedTag]  = useState(null);         // selected valve tag on drawing
+  const [vlvActiveView,  setVlvActiveView]   = useState('checklist');  // 'checklist'|'summary'|'drawing'
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
@@ -11319,7 +11325,7 @@ const PIDVerification = () => {
             })()}
             {/* ─── end CROSS-REF panel ─── */}
 
-            {/* ─── INDEX / TAGS / EQUIPMENT panel ─── */}
+            {/* ─── INDEX / TAGS / EQUIPMENT / DRAWING LAYOUT / VALVE TRACKING panel ─── */}
             {activePanel === 'index' && (() => {
               // ── Build data from all drawings — pure derivation, no API calls ──
               const allDrawings = results?.drawings ?? [];
@@ -11341,9 +11347,8 @@ const PIDVerification = () => {
               );
 
               // 2. Tag inventory: extract instrument/equipment tag IDs from evidence + issue text
-              // P&ID tags follow patterns like PT-1234, FV-001, LT-42A, TIC-101, etc.
               const TAG_RE = /\b([A-Z]{1,4}(?:[A-Z])?[-_]?\d{2,6}[A-Z]?)\b/g;
-              const tagMap = {}; // tagId → { drawings: Set, severities: Set, rules: Set }
+              const tagMap = {};
               allDrawings.forEach(d => {
                 (d.issues ?? []).forEach(f => {
                   const text = `${f.evidence || ''} ${f.issue_observed || ''}`;
@@ -11360,7 +11365,7 @@ const PIDVerification = () => {
                 .map(([id, m]) => ({ id, drawings: [...m.drawings], severities: [...m.severities], rules: [...m.rules] }))
                 .sort((a, b) => b.drawings.length - a.drawings.length || a.id.localeCompare(b.id));
 
-              // 3. Equipment list: findings with category === 'valve' or patterns like *-V-*, *-E-*, *-P-*, *-K-*
+              // 3. Equipment list
               const EQUIP_PREFIXES = /^([A-Z]+-)?([PVEKCTFD])[A-Z]?[-_]\d/;
               const equipMap = {};
               allDrawings.forEach(d => {
@@ -11377,17 +11382,1010 @@ const PIDVerification = () => {
                 .map(([id, m]) => ({ id, drawings: [...m.drawings], category: m.category }))
                 .sort((a, b) => a.id.localeCompare(b.id));
 
+              // ── Soft-coded: top-level tab definitions ─────────────────────────────
+              const IDX_TABS = [
+                { id:'data',    label:'Index / Tags', icon: ClipboardList },
+                { id:'drawing', label:'Drawing Layout', icon: MapPin },
+                { id:'valves',  label:'Valve Tracking', icon: Gauge },
+              ];
+
               return (
-              <IndexTagsEquipmentPanel
-                masterIndex={masterIndex}
-                tagList={tagList}
-                equipList={equipList}
-                CATEGORY_LABELS={CATEGORY_LABELS}
-                accent="#6366f1"
-              />
+              <div className="rounded-2xl overflow-hidden"
+                style={{ background:'#fff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', animation:'panelSlide 0.25s ease-out both' }}>
+
+                {/* ── Panel header ── */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3"
+                  style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.04))' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#6366f1,#818cf8)' }}>
+                      <ClipboardList className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">Index · Drawing Layout · Valve Tracking</h2>
+                      <p className="text-[10px] text-slate-500">
+                        {masterIndex.length} findings · {tagList.length} tags · Drawing overlay · IEC 61511 valve checks
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Top-level view switcher ── */}
+                <div className="flex border-b border-slate-100 bg-slate-50/60">
+                  {IDX_TABS.map(t => {
+                    const Icon   = t.icon;
+                    const active = idxActiveTab === t.id;
+                    return (
+                      <button key={t.id}
+                        onClick={() => setIdxActiveTab(t.id)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                          active ? 'text-indigo-600 border-indigo-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                        }`}>
+                        <Icon className="w-3.5 h-3.5" />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* ══ VIEW 1: Data Index (existing component) ══════════════════════ */}
+                {idxActiveTab === 'data' && (
+                  <IndexTagsEquipmentPanel
+                    masterIndex={masterIndex}
+                    tagList={tagList}
+                    equipList={equipList}
+                    CATEGORY_LABELS={CATEGORY_LABELS}
+                    accent="#6366f1"
+                  />
+                )}
+
+                {/* ══ VIEW 2: Drawing Layout — all critical findings on the P&ID ══ */}
+                {idxActiveTab === 'drawing' && (() => {
+                  // ── Soft-coded: severity colour map ────────────────────────────
+                  const IDX_SEV_COLOR = {
+                    critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                    major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                    minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                  };
+                  const IDX_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                  // All anchored finding nodes on active drawing (P1–P5 resolved)
+                  const allNodes   = overlayNodes.filter(n => n.anchored);
+                  const unanchored = overlayNodes.filter(n => !n.anchored);
+
+                  // Critical/major only for highlight
+                  const critNodes  = allNodes.filter(n => ['critical','major'].includes((n.finding?.severity||'').toLowerCase()));
+
+                  // Selected node detail
+                  const selNode = vlvSelectedTag
+                    ? allNodes.find(n => n.finding?.id === vlvSelectedTag) ||
+                      unanchored.find(n => n.finding?.id === vlvSelectedTag)
+                    : null;
+
+                  // Severity bar widths
+                  const sevBreakdown = ['critical','major','minor'].map(s => ({
+                    sev: s,
+                    count: overlayNodes.filter(n => (n.finding?.severity||'').toLowerCase() === s).length,
+                    color: IDX_SEV_COLOR[s]?.bg || '#94a3b8',
+                  }));
+                  const maxSev = Math.max(...sevBreakdown.map(s => s.count), 1);
+
+                  return (
+                    <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                      {/* No drawing guard */}
+                      {!drawingImageUrl && !drawingImageLoading && (
+                        <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                          style={{ background:'rgba(99,102,241,0.06)', borderColor:'rgba(99,102,241,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-500" />
+                          <div>
+                            <p className="text-[11px] font-bold text-indigo-700">No drawing loaded</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Process a P&amp;ID to see all findings plotted on the layout map.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {drawingImageLoading && (
+                        <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                          <Loader className="w-4 h-4 animate-spin text-indigo-500" /> Loading drawing…
+                        </div>
+                      )}
+
+                      {!drawingImageLoading && drawingImageUrl && (<>
+
+                        {/* Stats row */}
+                        <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                          {[
+                            { v: overlayNodes.length, label:'Total Findings',    color:'#6366f1', bg:'rgba(99,102,241,0.07)',  border:'rgba(99,102,241,0.2)' },
+                            { v: allNodes.length,     label:'Exact Location',    color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'  },
+                            { v: unanchored.length,   label:'Est. Location',     color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'},
+                            { v: critNodes.length,    label:'Critical / Major',  color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'  },
+                          ].map(c => (
+                            <div key={c.label} className="rounded-xl p-2.5 text-center"
+                              style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                              <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                              <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Severity distribution bars */}
+                        <div className="px-5 pb-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Severity Distribution</p>
+                          <div className="space-y-1.5">
+                            {sevBreakdown.map(s => (
+                              <div key={s.sev} className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold capitalize w-14 flex-shrink-0" style={{ color: s.color }}>{s.sev}</span>
+                                <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width:`${Math.round((s.count/maxSev)*100)}%`, background:s.color }} />
+                                </div>
+                                <span className="text-[9px] font-bold text-slate-600 w-6 text-right">{s.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center gap-x-4 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-600" />Critical</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-orange-500" />Major</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-yellow-400" />Minor</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 border-2 border-slate-300" style={{ background:'transparent' }} />Estimated</span>
+                          <span className="ml-auto font-medium" style={{ color:'#6366f1' }}>Solid = OCR-located · Dashed = estimated position · Click to inspect</span>
+                        </div>
+
+                        {/* Drawing + Overlay */}
+                        <div className="px-5 pb-3">
+                          <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                            <div className="overflow-auto" style={{ maxHeight:'60vh' }}>
+                              <div className="relative w-full" style={{ lineHeight:0 }}>
+                                <img
+                                  src={drawingImageUrl}
+                                  alt={activeDrawing}
+                                  draggable={false}
+                                  className="w-full block"
+                                  style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                />
+                                <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                  {/* Dim backdrop when a finding is selected */}
+                                  {vlvSelectedTag && (
+                                    <div className="absolute inset-0"
+                                      style={{ background:'rgba(15,23,42,0.50)', zIndex:5, pointerEvents:'none' }} />
+                                  )}
+
+                                  {/* ── All overlay nodes ── */}
+                                  {overlayNodes.map((n, ni) => {
+                                    const sev   = (n.finding?.severity || '').toLowerCase();
+                                    const sc    = IDX_SEV_COLOR[sev] || IDX_SEV_COLOR.minor;
+                                    const isSel = vlvSelectedTag === n.finding?.id;
+                                    const sz    = isSel ? 18 : 12;
+                                    return (
+                                      <React.Fragment key={`idx-node-${ni}`}>
+                                        {/* Pulse ring */}
+                                        {!isSel && n.anchored && (
+                                          <div aria-hidden="true" style={{
+                                            position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                            width:'18px', height:'18px', borderRadius:'50%',
+                                            border:`2px solid ${sc.bg}`,
+                                            transform:'translate(-50%,-50%)',
+                                            animation:`markerPing 2800ms ease-out infinite`,
+                                            animationDelay:`${ni * 60}ms`,
+                                            pointerEvents:'none', zIndex:8,
+                                          }} />
+                                        )}
+                                        <button
+                                          onClick={() => setVlvSelectedTag(p => p === n.finding?.id ? null : n.finding?.id)}
+                                          title={`${n.finding?.rule_id||'—'} · ${sev} · ${n.finding?.issue_observed?.slice(0,60)||''}`}
+                                          style={{
+                                            position:'absolute',
+                                            left:`${n.left}%`, top:`${n.top}%`,
+                                            width:`${sz}px`, height:`${sz}px`,
+                                            borderRadius:'50%',
+                                            backgroundColor: sc.bg,
+                                            border:`${n.anchored ? '2px solid' : '2px dashed'} ${sc.border}`,
+                                            transform:`translate(-50%,-50%) scale(${isSel ? 1.65 : 1})`,
+                                            boxShadow: isSel
+                                              ? `0 0 0 3px ${sc.bg}40, 0 2px 8px rgba(0,0,0,0.45)`
+                                              : `0 1px 3px rgba(0,0,0,0.3)`,
+                                            zIndex: isSel ? 20 : 10,
+                                            pointerEvents:'all', cursor:'pointer',
+                                          }}
+                                        />
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Selected finding detail */}
+                        {selNode && (() => {
+                          const sev = (selNode.finding?.severity||'').toLowerCase();
+                          const sc  = IDX_SEV_COLOR[sev] || IDX_SEV_COLOR.minor;
+                          return (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{ borderColor:sc.border, animation:'cardIn 0.2s ease-out both' }}>
+                              <div className="flex items-center gap-3 px-4 py-3" style={{ background:sc.light }}>
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                                  style={{ background:sc.bg }}>
+                                  {selNode.finding?.rule_id?.slice(-3) || '!'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-black text-slate-900">
+                                    <span className="mr-1.5" style={{ color:'#6366f1' }}>{selNode.finding?.rule_id}</span>
+                                    {selNode.finding?.issue_observed}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5 text-[9px] flex-wrap">
+                                    <span className="font-bold px-1.5 py-0.5 rounded text-white" style={{ background:sc.bg }}>{sev}</span>
+                                    <span className={`px-1.5 py-0.5 rounded font-bold ${selNode.anchored ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      {selNode.anchored ? `📍 ${selNode.tier}` : `≈ ${selNode.tier}`}
+                                    </span>
+                                    <span className="text-slate-400">X:{selNode.left?.toFixed(1)}% Y:{selNode.top?.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  <button
+                                    onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(selNode.finding?.id), 150); }}
+                                    className="text-[9px] font-bold px-2 py-1 rounded text-white"
+                                    style={{ background:'#6366f1' }}>
+                                    Locate
+                                  </button>
+                                  <button onClick={() => setVlvSelectedTag(null)}
+                                    className="text-slate-400 hover:text-slate-600 text-base font-bold">✕</button>
+                                </div>
+                              </div>
+                              {selNode.finding?.evidence && (
+                                <div className="px-4 py-2 bg-white flex items-center gap-2">
+                                  <span className="text-[9px] font-black text-slate-400 flex-shrink-0">EVIDENCE</span>
+                                  <span className="font-mono text-[10px] text-slate-600 truncate">{selNode.finding.evidence}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                      </>)}
+                    </div>
+                  );
+                })()}
+
+                {/* ══ VIEW 3: Valve Tracking ════════════════════════════════════════ */}
+                {idxActiveTab === 'valves' && (() => {
+
+                  // ── Soft-coded: valve tag prefixes ───────────────────────────────
+                  // Any tag whose letter prefix matches one of these is treated as a valve.
+                  const VLV_TAG_PREFIXES = new Set([
+                    'HV','FV','SDV','XV','BV','CV','RV','PSV','PRV','ISV',
+                    'PCV','TCV','FCV','LCV','BDV','ESDV','MOV','SOV','AOV',
+                    'PZV','NRV','BUV','TV',
+                  ]);
+                  const _isValveTag = (tag) => {
+                    const prefix = (tag.match(/^([A-Za-z]+)/) || [])[1] || '';
+                    return VLV_TAG_PREFIXES.has(prefix.toUpperCase());
+                  };
+
+                  // ── Soft-coded: 4 valve tracking checks ─────────────────────────
+                  // Based on: ISA 5.1, ASME B31.3, IEC 61511, API RP 14C
+                  const VLV_CHECKS = [
+                    {
+                      id: 'VLV-T01',
+                      category: 'Identification',
+                      label: 'Valve Tag Number Identification',
+                      desc: 'All valve items carry unique tag numbers formatted per ISA S5.1 and the project tagging philosophy.',
+                      refs: ['ISA 5.1', 'IEC 81714-3'],
+                      autoRules: ['VLV-001', 'VLV-002'],
+                    },
+                    {
+                      id: 'VLV-T02',
+                      category: 'Specification',
+                      label: 'Valve Type vs Pipe Spec & Legend P&ID',
+                      desc: 'Valve type symbols shown on the P&ID match the applicable piping class specification and the P&ID symbol legend sheet.',
+                      refs: ['ASME B31.3', 'ASME B16.34', 'ISO 10418'],
+                      autoRules: ['VLV-001', 'VLV-003', 'LSZ-001'],
+                    },
+                    {
+                      id: 'VLV-T03',
+                      category: 'Direction',
+                      label: 'Check Valve Directional Flow Identification',
+                      desc: 'Check (non-return) valves are oriented to match the designated process flow direction indicated by flow arrows on the P&ID.',
+                      refs: ['ASME B31.3', 'API 6D', 'ISO 14313'],
+                      autoRules: ['VLV-003', 'ANN-001'],
+                    },
+                    {
+                      id: 'VLV-T04',
+                      category: 'Isolation',
+                      label: 'Isolation Valve Consistency with Isolation Philosophy',
+                      desc: 'Isolation valves are provided in accordance with the project Isolation and Depressurisation Philosophy (IDP) — including double-block requirements, HIPPS, and PSV upstream isolation.',
+                      refs: ['IEC 61511', 'API RP 14C', 'EN 13463'],
+                      autoRules: ['VLV-002', 'VLV-004', 'VLV-005'],
+                    },
+                  ];
+
+                  // ── SEV colour scheme (shared) ───────────────────────────────────
+                  const VLV_SEV_COLOR = {
+                    critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                    major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                    minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                    info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                  };
+                  const VLV_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                  // ── Inline pickBestOcc for tag_positions ─────────────────────────
+                  const _vlvPickBest = (pos) => {
+                    if (!pos) return null;
+                    if (!pos.all || pos.all.length === 0)
+                      return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                    const inArea = pos.all.filter(o =>
+                      o.x_pct != null && o.y_pct != null &&
+                      o.x_pct >= 1 && o.x_pct <= 96 &&
+                      o.y_pct >= 1 && o.y_pct <= 87
+                    );
+                    const pool = inArea.length > 0 ? inArea : pos.all.filter(o => o.x_pct != null);
+                    if (!pool.length) return null;
+                    let best = pool[0]; let bestD = Infinity;
+                    for (const o of pool) {
+                      const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
+                      if (d < bestD) { bestD = d; best = o; }
+                    }
+                    return { xp: best.x_pct, yp: best.y_pct };
+                  };
+
+                  // ── VLV rule findings (from AI analysis) ────────────────────────
+                  const vlvRuleIssues = (activeDrawingData?.issues || []).filter(f =>
+                    !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
+                    (VLV_CHECKS.some(c => c.autoRules.includes(f.rule_id)) ||
+                     (f.category || '').toLowerCase() === 'valve')
+                  );
+
+                  // VLV finding nodes from overlayNodes (pre-calibrated positions)
+                  const vlvNodes = overlayNodes.filter(n => {
+                    const ruleId = n.finding?.rule_id || '';
+                    const cat    = (n.finding?.category || '').toLowerCase();
+                    return VLV_CHECKS.some(c => c.autoRules.includes(ruleId)) || cat === 'valve';
+                  });
+
+                  // ── Valve equipment markers from tag_positions ───────────────────
+                  const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                  const vlvTagMarkers = Object.entries(tagPositions)
+                    .filter(([tag]) => _isValveTag(tag))
+                    .map(([tag, pos]) => {
+                      const coord = _vlvPickBest(pos);
+                      if (!coord) return null;
+                      // Link VLV findings that mention this tag
+                      const linked = vlvNodes.filter(n => {
+                        const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                        return hay.includes(tag.toUpperCase());
+                      });
+                      const topSev = linked.reduce((best, n) => {
+                        const s = (n.finding?.severity||'').toLowerCase();
+                        return (VLV_SEV_ORDER[s]||0) > (VLV_SEV_ORDER[best]||0) ? s : best;
+                      }, null);
+                      return { tag, xp: coord.xp, yp: coord.yp, linked, topSev };
+                    })
+                    .filter(Boolean);
+
+                  // ── Auto-detect check status from findings ───────────────────────
+                  const _autoStatus = (check) => {
+                    const hits = vlvRuleIssues.filter(f => check.autoRules.includes(f.rule_id));
+                    if (!hits.length) return 'pass';
+                    const maxSev = hits.reduce((best,f) => {
+                      const s = (f.severity||'').toLowerCase();
+                      return (VLV_SEV_ORDER[s]||0) > (VLV_SEV_ORDER[best]||0) ? s : best;
+                    }, 'info');
+                    if (maxSev === 'critical' || maxSev === 'major') return 'fail';
+                    return 'warn';
+                  };
+
+                  const total   = VLV_CHECKS.length;
+                  const passing = VLV_CHECKS.filter(c => {
+                    const m = vlvCheckStates[c.id];
+                    const a = _autoStatus(c);
+                    return (m || a) === 'pass';
+                  }).length;
+                  const qcScore = Math.round((passing / total) * 100);
+
+                  // Inner 3-tab switcher for Valve Tracking: Checklist | Summary | Drawing
+                  const VLV_VIEW_TABS = [
+                    { id:'checklist', label:'Checklist', icon: CheckSquare },
+                    { id:'summary',   label:'Summary',   icon: BarChart2   },
+                    { id:'drawing',   label:'Drawing',   icon: MapPin      },
+                  ];
+
+                  return (
+                    <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                      {/* ── Inner view switcher ── */}
+                      <div className="flex border-b border-slate-100 bg-slate-50/50">
+                        {VLV_VIEW_TABS.map(t => {
+                          const Icon   = t.icon;
+                          const active = vlvActiveView === t.id;
+                          return (
+                            <button key={t.id}
+                              onClick={() => setVlvActiveView(t.id)}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold transition-all border-b-2 ${
+                                active ? 'text-emerald-700 border-emerald-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                              }`}>
+                              <Icon className="w-3 h-3" />
+                              {t.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* ── CHECKLIST view ── */}
+                      {vlvActiveView === 'checklist' && (
+                        <div className="overflow-y-auto" style={{ maxHeight:'65vh' }}>
+
+                          {/* QC score banner */}
+                          <div className="mx-5 mt-4 mb-3 rounded-xl p-3 flex items-center gap-3 border"
+                            style={{
+                              background: qcScore >= 100 ? 'rgba(34,197,94,0.07)' : qcScore >= 50 ? 'rgba(245,158,11,0.07)' : 'rgba(220,38,38,0.07)',
+                              borderColor: qcScore >= 100 ? 'rgba(34,197,94,0.3)' : qcScore >= 50 ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)',
+                            }}>
+                            <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-black text-xl text-white"
+                              style={{
+                                background: qcScore >= 100 ? '#22c55e' : qcScore >= 50 ? '#f59e0b' : '#dc2626',
+                                boxShadow: `0 4px 12px ${qcScore >= 100 ? '#22c55e' : qcScore >= 50 ? '#f59e0b' : '#dc2626'}40`,
+                              }}>
+                              {qcScore}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-black text-slate-900">Valve Compliance Score</p>
+                              <p className="text-[10px] text-slate-500">
+                                {passing} / {total} checks passed · {vlvTagMarkers.length} valve tags located · {vlvRuleIssues.length} AI findings
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Check rows */}
+                          {VLV_CHECKS.map(check => {
+                            const manual    = vlvCheckStates[check.id];
+                            const auto      = _autoStatus(check);
+                            const effective = manual || auto;
+                            const hits      = vlvRuleIssues.filter(f => check.autoRules.includes(f.rule_id));
+                            const isManual  = !!manual;
+                            const statusMeta = {
+                              pass: { color:'#22c55e', bg:'rgba(34,197,94,0.08)',  border:'rgba(34,197,94,0.25)',  icon:'✓', label:'Pass'    },
+                              warn: { color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.25)', icon:'△', label:'Warning' },
+                              fail: { color:'#dc2626', bg:'rgba(220,38,38,0.08)',  border:'rgba(220,38,38,0.25)',  icon:'✗', label:'Fail'    },
+                            };
+                            const sm = statusMeta[effective] || statusMeta.pass;
+                            return (
+                              <div key={check.id} className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                style={{ borderColor: sm.border, background: sm.bg }}>
+                                {/* Check header */}
+                                <div className="flex items-start gap-3 px-4 py-3">
+                                  <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-black text-white mt-0.5"
+                                    style={{ background: sm.color, boxShadow:`0 3px 8px ${sm.color}40` }}>
+                                    {sm.icon}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black text-slate-900 leading-snug">{check.label}</p>
+                                    <p className="text-[9px] font-mono text-indigo-600 mt-0.5">{check.id}</p>
+                                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.desc}</p>
+                                  </div>
+                                </div>
+                                {/* Refs + manual controls */}
+                                <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
+                                  <div className="flex flex-wrap gap-1 flex-1">
+                                    {check.refs.map(r => (
+                                      <span key={r} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">{r}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    {[{v:'pass',l:'✓ Pass',c:'#22c55e'},{v:'fail',l:'✗ Fail',c:'#dc2626'},{v:'na',l:'N/A',c:'#94a3b8'}].map(opt => {
+                                      const isActive = vlvCheckStates[check.id] === opt.v;
+                                      return (
+                                        <button key={opt.v}
+                                          onClick={() => setVlvCheckStates(prev => ({ ...prev, [check.id]: opt.v }))}
+                                          className="text-[9px] font-bold px-2 py-1 rounded-lg border transition-all"
+                                          style={{
+                                            background: isActive ? opt.c : 'white',
+                                            color:      isActive ? 'white' : opt.c,
+                                            borderColor: isActive ? opt.c : `${opt.c}50`,
+                                            boxShadow:   isActive ? `0 1px 6px ${opt.c}40` : 'none',
+                                          }}>
+                                          {opt.l}
+                                        </button>
+                                      );
+                                    })}
+                                    {vlvCheckStates[check.id] && (
+                                      <button
+                                        onClick={() => setVlvCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                        className="text-[9px] text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded border border-slate-200 bg-white">
+                                        ↺
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* AI findings for this check */}
+                                {hits.length > 0 && (
+                                  <div className="border-t border-slate-100 px-4 py-2 bg-white/70 space-y-1">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">AI Findings ({hits.length})</p>
+                                    {hits.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = VLV_SEV_COLOR[sev] || VLV_SEV_COLOR.info;
+                                      return (
+                                        <div key={fi} className="flex items-start gap-2 rounded py-1">
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style={{ background: sc2.bg }} />
+                                          <span className="text-[9px] font-black mr-1" style={{ color:'#6366f1' }}>{f.rule_id}</span>
+                                          <span className="text-[9px] font-bold mr-1 capitalize" style={{ color: sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-600 flex-1 truncate">{f.issue_observed}</span>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white flex-shrink-0"
+                                            style={{ background:'#6366f1' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {isManual && (
+                                  <div className="border-t border-slate-100 px-4 py-1.5 bg-amber-50/60 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                                    <span className="text-[9px] text-amber-700 font-bold">Manual override active — auto-detection result overridden</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                        </div>
+                      )}
+
+                      {/* ── SUMMARY view ── */}
+                      {vlvActiveView === 'summary' && (() => {
+                        const catGroups = {};
+                        VLV_CHECKS.forEach(c => {
+                          if (!catGroups[c.category]) catGroups[c.category] = [];
+                          catGroups[c.category].push(c);
+                        });
+                        const vlvPrefixList = [...VLV_TAG_PREFIXES].sort().join(', ');
+                        return (
+                          <div className="overflow-y-auto px-5 py-4" style={{ maxHeight:'65vh' }}>
+
+                            {/* Score card */}
+                            <div className="rounded-xl border p-4 mb-4 flex items-center gap-4"
+                              style={{ background: qcScore >= 75 ? 'rgba(34,197,94,0.06)' : 'rgba(245,158,11,0.06)', borderColor: qcScore >= 75 ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)' }}>
+                              <div>
+                                <p className="text-3xl font-black" style={{ color: qcScore >= 75 ? '#22c55e' : '#f59e0b' }}>{qcScore}%</p>
+                                <p className="text-[10px] text-slate-500 font-medium">{passing}/{total} checks passed</p>
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width:`${qcScore}%`, background: qcScore >= 75 ? '#22c55e' : '#f59e0b' }} />
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-400">
+                                  <span>{vlvTagMarkers.length} valve tags located</span>
+                                  <span>{vlvRuleIssues.length} AI findings</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Category progress */}
+                            {Object.entries(catGroups).map(([cat, checks]) => {
+                              const catPass  = checks.filter(c => (vlvCheckStates[c.id] || _autoStatus(c)) === 'pass').length;
+                              const catTotal = checks.length;
+                              const pct      = Math.round((catPass / catTotal) * 100);
+                              return (
+                                <div key={cat} className="mb-4">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-wider">{cat}</p>
+                                    <span className="text-[10px] font-bold" style={{ color: pct === 100 ? '#22c55e' : '#f59e0b' }}>{catPass}/{catTotal}</span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden mb-2">
+                                    <div className="h-full rounded-full" style={{ width:`${pct}%`, background: pct === 100 ? '#22c55e' : '#f59e0b', transition:'width 0.4s ease' }} />
+                                  </div>
+                                  {checks.map(c => {
+                                    const eff = vlvCheckStates[c.id] || _autoStatus(c);
+                                    const hits = vlvRuleIssues.filter(f => c.autoRules.includes(f.rule_id));
+                                    const colr = eff === 'pass' ? '#22c55e' : eff === 'fail' ? '#dc2626' : '#f59e0b';
+                                    return (
+                                      <div key={c.id} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
+                                        <span className="w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-black text-white"
+                                          style={{ background:colr }}>
+                                          {eff === 'pass' ? '✓' : eff === 'fail' ? '✗' : '△'}
+                                        </span>
+                                        <span className="flex-1 text-[10px] text-slate-700 font-medium">{c.label}</span>
+                                        {hits.length > 0 && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background:'#dc2626' }}>{hits.length}</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
+
+                            {/* Valve prefixes info */}
+                            <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50 mt-2">
+                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Valve Tag Prefixes Tracked</p>
+                              <p className="text-[10px] text-slate-600 font-mono leading-relaxed">{vlvPrefixList}</p>
+                            </div>
+
+                            {/* Reset manual overrides */}
+                            {Object.keys(vlvCheckStates).length > 0 && (
+                              <button onClick={() => setVlvCheckStates({})}
+                                className="mt-3 w-full py-2 rounded-xl border border-slate-200 text-[10px] font-bold text-slate-500 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all">
+                                Reset {Object.keys(vlvCheckStates).length} manual override{Object.keys(vlvCheckStates).length!==1?'s':''}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── DRAWING view (valve tags + VLV findings) ── */}
+                      {vlvActiveView === 'drawing' && (() => {
+                        const selVlvMarker = vlvSelectedTag
+                          ? vlvTagMarkers.find(m => m.tag === vlvSelectedTag)
+                          : null;
+                        const selVlvNode = vlvSelectedTag && !selVlvMarker
+                          ? vlvNodes.find(n => n.finding?.id === vlvSelectedTag)
+                          : null;
+
+                        return (
+                          <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                            {/* No drawing guard */}
+                            {!drawingImageUrl && !drawingImageLoading && (
+                              <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                                style={{ background:'rgba(34,197,94,0.06)', borderColor:'rgba(34,197,94,0.25)' }}>
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-500" />
+                                <div>
+                                  <p className="text-[11px] font-bold text-emerald-700">No drawing loaded</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">Process a P&amp;ID to see valve tag locations on the map.</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {drawingImageLoading && (
+                              <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                                <Loader className="w-4 h-4 animate-spin text-emerald-500" /> Loading drawing…
+                              </div>
+                            )}
+
+                            {!drawingImageLoading && drawingImageUrl && (<>
+
+                              {/* Stats */}
+                              <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                                {[
+                                  { v: vlvTagMarkers.length,                                              label:'Valves Located',   color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'   },
+                                  { v: vlvNodes.filter(n => n.anchored).length,                           label:'AI Findings',      color:'#f97316', bg:'rgba(249,115,22,0.07)', border:'rgba(249,115,22,0.2)' },
+                                  { v: vlvTagMarkers.filter(m => m.linked.length > 0).length,             label:'Tags w/ Issues',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                                  { v: vlvTagMarkers.filter(m => m.linked.length === 0).length,           label:'Compliant Tags',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',  border:'rgba(8,145,178,0.2)'  },
+                                ].map(c => (
+                                  <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                    style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                    <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                    <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Legend */}
+                              <div className="flex items-center gap-x-4 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" />Valve tag (OK)</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-600" />Valve tag (issue)</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rotate-45 inline-block bg-orange-500" />VLV finding</span>
+                                <span className="ml-auto font-medium" style={{ color:'#22c55e' }}>Click marker to inspect · IEC 61511 / ASME B31.3</span>
+                              </div>
+
+                              {/* No valve tags info */}
+                              {vlvTagMarkers.length === 0 && Object.keys(tagPositions).length > 0 && (
+                                <div className="mx-5 mb-3 p-3 rounded-xl border border-amber-200 bg-amber-50/70 text-[10px] text-amber-700 flex items-start gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                  <span>No standard valve tags (HV, FV, SDV, XV, CV, PSV…) found in drawing tag positions. Ensure the drawing was fully OCR-processed.</span>
+                                </div>
+                              )}
+
+                              {/* Filter chips */}
+                              {vlvTagMarkers.length > 0 && (
+                                <div className="px-5 pb-2">
+                                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth:'thin' }}>
+                                    <button onClick={() => setVlvSelectedTag(null)}
+                                      className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                      style={{
+                                        background: !vlvSelectedTag ? '#22c55e' : 'rgba(34,197,94,0.08)',
+                                        color:      !vlvSelectedTag ? 'white'   : '#22c55e',
+                                        border:     `1px solid ${!vlvSelectedTag ? '#22c55e' : 'rgba(34,197,94,0.25)'}`,
+                                      }}>
+                                      ◈ All
+                                    </button>
+                                    {[...vlvTagMarkers]
+                                      .sort((a,b) => b.linked.length - a.linked.length || a.tag.localeCompare(b.tag))
+                                      .map(m => {
+                                        const isSel = vlvSelectedTag === m.tag;
+                                        const cc    = m.linked.length > 0 ? '#dc2626' : '#22c55e';
+                                        return (
+                                          <button key={m.tag}
+                                            onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                            style={{
+                                              background: isSel ? cc : `${cc}12`,
+                                              color:      isSel ? 'white' : cc,
+                                              border:     `1px solid ${isSel ? cc : `${cc}35`}`,
+                                              boxShadow:  isSel ? `0 0 8px ${cc}50` : 'none',
+                                            }}>
+                                            <span className="font-mono truncate max-w-[90px]">{m.tag}</span>
+                                            {m.linked.length > 0 && (
+                                              <span className="text-[8px] font-black min-w-[14px] h-4 rounded-full flex items-center justify-center px-1"
+                                                style={{ background: isSel ? 'rgba(255,255,255,0.3)' : cc, color:'white' }}>
+                                                {m.linked.length}
+                                              </span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Drawing + overlay */}
+                              <div className="px-5 pb-3">
+                                <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                                  <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                    <div className="relative w-full" style={{ lineHeight:0 }}>
+                                      <img
+                                        src={drawingImageUrl}
+                                        alt={activeDrawing}
+                                        draggable={false}
+                                        className="w-full block"
+                                        style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                      />
+                                      <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                        {vlvSelectedTag && (
+                                          <div className="absolute inset-0"
+                                            style={{ background:'rgba(15,23,42,0.50)', zIndex:5, pointerEvents:'none' }} />
+                                        )}
+
+                                        {/* ── Layer A: Valve tag circles ── */}
+                                        {vlvTagMarkers
+                                          .filter(m => !vlvSelectedTag || m.tag === vlvSelectedTag)
+                                          .map(m => {
+                                            const isSel = vlvSelectedTag === m.tag;
+                                            const bg    = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()]?.bg || '#dc2626') : '#22c55e';
+                                            const bord  = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()]?.border || '#991b1b') : '#16a34a';
+                                            const sz    = isSel ? 20 : 14;
+                                            return (
+                                              <React.Fragment key={`vlv-eq-${m.tag}`}>
+                                                {!isSel && (
+                                                  <div aria-hidden="true" style={{
+                                                    position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                    width:'22px', height:'22px', borderRadius:'50%',
+                                                    border:`2px solid ${bg}`,
+                                                    transform:'translate(-50%,-50%)',
+                                                    animation:'markerPing 2800ms ease-out infinite',
+                                                    pointerEvents:'none', zIndex:9,
+                                                  }} />
+                                                )}
+                                                <button
+                                                  onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                  title={`${m.tag}${m.linked.length > 0 ? ` · ${m.linked.length} finding(s)` : ' · Compliant'}`}
+                                                  style={{
+                                                    position:'absolute',
+                                                    left:`${m.xp}%`, top:`${m.yp}%`,
+                                                    width:`${sz}px`, height:`${sz}px`,
+                                                    borderRadius:'50%',
+                                                    backgroundColor: bg,
+                                                    border:`2px solid ${bord}`,
+                                                    transform:`translate(-50%,-50%) scale(${isSel ? 1.6 : 1})`,
+                                                    boxShadow: isSel ? `0 0 0 3px ${bg}40, 0 2px 8px rgba(0,0,0,0.5)` : `0 1px 4px rgba(0,0,0,0.4)`,
+                                                    zIndex: isSel ? 20 : 11,
+                                                    pointerEvents:'all', cursor:'pointer',
+                                                    animation: !isSel ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                                  }}>
+                                                  {isSel && <span style={{ color:'white', fontSize:'7px', fontWeight:900 }}>▼</span>}
+                                                </button>
+                                                {(isSel || vlvTagMarkers.length <= 8) && (
+                                                  <div style={{
+                                                    position:'absolute',
+                                                    left:`calc(${m.xp}% + ${sz/2+4}px)`,
+                                                    top:`${m.yp}%`,
+                                                    transform:'translateY(-50%)',
+                                                    background: isSel ? bg : `${bg}ee`,
+                                                    color:'white', fontSize:'9px', fontWeight:900,
+                                                    padding:'1px 5px', borderRadius:'4px',
+                                                    whiteSpace:'nowrap', zIndex: isSel ? 21 : 12,
+                                                    pointerEvents:'none',
+                                                    boxShadow:'0 1px 4px rgba(0,0,0,0.35)',
+                                                  }}>
+                                                    {m.tag}{m.linked.length > 0 ? ` (${m.linked.length})` : ''}
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            );
+                                          })}
+
+                                        {/* ── Layer B: VLV-rule AI findings (diamonds, from overlayNodes) ── */}
+                                        {vlvNodes.filter(n => n.anchored)
+                                          .filter(n => {
+                                            if (!vlvSelectedTag) return true;
+                                            const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                                            return hay.includes(vlvSelectedTag.toUpperCase());
+                                          })
+                                          .map((n, ni) => {
+                                            const sev = (n.finding?.severity||'').toLowerCase();
+                                            const sc  = VLV_SEV_COLOR[sev] || VLV_SEV_COLOR.major;
+                                            const isHighl = vlvSelectedTag && `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase().includes(vlvSelectedTag.toUpperCase());
+                                            const sz  = isHighl ? 14 : 10;
+                                            return (
+                                              <React.Fragment key={`vlv-fn-${ni}`}>
+                                                <div aria-hidden="true" style={{
+                                                  position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                                  width:'16px', height:'16px',
+                                                  border:`2px solid ${sc.bg}`,
+                                                  transform:'translate(-50%,-50%) rotate(45deg)',
+                                                  animation:'markerPing 2200ms ease-out infinite',
+                                                  animationDelay:`${ni*100}ms`,
+                                                  pointerEvents:'none', zIndex:13,
+                                                }} />
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                                  title={`${n.finding?.rule_id}: ${n.finding?.issue_observed?.slice(0,60)||''}`}
+                                                  style={{
+                                                    position:'absolute',
+                                                    left:`${n.left}%`, top:`${n.top}%`,
+                                                    width:`${sz}px`, height:`${sz}px`,
+                                                    backgroundColor: sc.bg,
+                                                    border:`2px solid ${sc.border}`,
+                                                    transform:`translate(-50%,-50%) rotate(45deg) scale(${isHighl ? 1.5 : 1})`,
+                                                    boxShadow: isHighl ? `0 0 0 3px ${sc.bg}40, 0 2px 6px rgba(0,0,0,0.45)` : `0 1px 3px rgba(0,0,0,0.35)`,
+                                                    zIndex: isHighl ? 22 : 14,
+                                                    pointerEvents:'all', cursor:'pointer',
+                                                    animation: 'markerGlow 2200ms ease-in-out infinite',
+                                                  }}
+                                                />
+                                              </React.Fragment>
+                                            );
+                                          })}
+
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Selected valve detail card */}
+                              {selVlvMarker && (
+                                <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                  style={{
+                                    borderColor: selVlvMarker.linked.length > 0
+                                      ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.border || '#dc2626')
+                                      : '#22c55e',
+                                    animation:'cardIn 0.2s ease-out both',
+                                  }}>
+                                  <div className="flex items-center gap-3 px-4 py-3"
+                                    style={{ background: selVlvMarker.linked.length > 0 ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.light || '#fef2f2') : 'rgba(34,197,94,0.06)' }}>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-base"
+                                      style={{ background: selVlvMarker.linked.length > 0 ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.bg || '#dc2626') : '#22c55e' }}>
+                                      ▼
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-black text-slate-900 font-mono">{selVlvMarker.tag}</p>
+                                      <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[9px]">
+                                        <span className="font-bold px-1.5 py-0.5 rounded text-white" style={{ background:'#22c55e' }}>Valve</span>
+                                        {selVlvMarker.topSev && (
+                                          <span className="font-bold px-1.5 py-0.5 rounded" style={{
+                                            color: VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.text,
+                                            background:`${VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.bg}18`,
+                                          }}>{selVlvMarker.topSev} severity</span>
+                                        )}
+                                        <span className="text-slate-400">X:{selVlvMarker.xp?.toFixed(1)}% Y:{selVlvMarker.yp?.toFixed(1)}%</span>
+                                      </div>
+                                    </div>
+                                    <button onClick={() => setVlvSelectedTag(null)}
+                                      className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0">✕</button>
+                                  </div>
+                                  {selVlvMarker.linked.length > 0 ? (
+                                    <div className="px-4 py-3 bg-white space-y-1.5">
+                                      {selVlvMarker.linked.map((n, ni) => {
+                                        const sev2 = (n.finding?.severity||'').toLowerCase();
+                                        const sc2  = VLV_SEV_COLOR[sev2] || VLV_SEV_COLOR.info;
+                                        return (
+                                          <div key={ni} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                            style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                            <span className="text-[9px] font-black mr-1" style={{ color:'#6366f1' }}>{n.finding?.rule_id}</span>
+                                            <span className="text-[10px] text-slate-700 flex-1 truncate">{n.finding?.issue_observed}</span>
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                              className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white flex-shrink-0" style={{ background:'#6366f1' }}>
+                                              Locate
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="px-4 py-2 bg-emerald-50 flex items-center gap-2 text-[10px] text-emerald-700">
+                                      <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                      No VLV findings linked to this valve — appears compliant.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Valve register table */}
+                              {vlvTagMarkers.length > 0 && (
+                                <div className="mx-5 mb-5">
+                                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <Gauge className="w-3 h-3 text-emerald-500" />
+                                    Valve Register — {vlvTagMarkers.length} valve{vlvTagMarkers.length !== 1 ? 's' : ''} located
+                                  </p>
+                                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                    <div className="overflow-auto" style={{ maxHeight:'22vh' }}>
+                                      <table className="w-full text-[10px] border-collapse">
+                                        <thead>
+                                          <tr className="bg-slate-50 border-b border-slate-200">
+                                            {['Tag','Type','X%','Y%','Status','Issues'].map(h => (
+                                              <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {vlvTagMarkers.map(m => {
+                                            const isSel  = vlvSelectedTag === m.tag;
+                                            const valveType = (m.tag.match(/^([A-Za-z]+)/) || [])[1] || '?';
+                                            const sc = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()] || null) : null;
+                                            return (
+                                              <tr key={m.tag}
+                                                onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                className="border-b border-slate-100 hover:bg-emerald-50/40 cursor-pointer transition-all"
+                                                style={{ background: isSel ? 'rgba(34,197,94,0.07)' : 'white' }}>
+                                                <td className="px-3 py-1.5 font-mono font-bold text-slate-800">{m.tag}</td>
+                                                <td className="px-3 py-1.5 font-bold text-slate-500 text-[9px]">{valveType}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                                <td className="px-3 py-1.5">
+                                                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                    style={{ background: sc ? sc.bg : '#22c55e' }}>
+                                                    {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-1.5 font-bold" style={{ color: m.linked.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                                  {m.linked.length > 0 ? m.linked.length : '✓'}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                            </>)}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Footer */}
+                      <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                        <span style={{ color:'#22c55e' }}>
+                          {vlvActiveView === 'checklist'
+                            ? `${total} checks · ${Object.keys(vlvCheckStates).length} manual override${Object.keys(vlvCheckStates).length!==1?'s':''}`
+                            : vlvActiveView === 'drawing'
+                              ? `${vlvTagMarkers.length} valve tags · ${vlvNodes.filter(n=>n.anchored).length} AI findings · IEC 61511 / ASME B31.3`
+                              : `QC score: ${qcScore}%`}
+                        </span>
+                        <span>IEC 61511 · ASME B31.3 · API 6D · ISA 5.1 · API RP 14C</span>
+                      </div>
+
+                    </div>
+                  );
+                })()}
+
+              </div>
               );
             })()}
-            {/* ─── end INDEX / TAGS / EQUIPMENT panel ─── */}
+            {/* ─── end INDEX / TAGS / EQUIPMENT / DRAWING LAYOUT / VALVE TRACKING panel ─── */}
 
             {/* ═══════════════════════════════════════════════════════════ */}
             {/* PERFORMANCE & ACCURACY PANEL                               */}
