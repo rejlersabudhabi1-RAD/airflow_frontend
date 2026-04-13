@@ -499,6 +499,11 @@ const PERF_TOP_RULES_COUNT = 8;
 // PERF_TOP_CATS_COUNT: number of top categories shown in the category breakdown bar.
 const PERF_TOP_CATS_COUNT = 6;
 
+// DRAWING_QC_PANEL_OPEN_DEFAULT: controls whether the QC Summary panel above the
+// drawing canvas is expanded on first load.  Set to false so the drawing is
+// immediately visible in full height; user toggles it open when needed.
+const DRAWING_QC_PANEL_OPEN_DEFAULT = false;
+
 // PERF_MODEL_ACCURACY_PCT: the AI model's known precision rate (0–100).
 // This is the % of reported findings that are expected to be genuine defects.
 // Adjust this value as the model improves over time.
@@ -953,7 +958,13 @@ const PIDVerification = () => {
   const [savingOverrides, setSavingOverrides] = useState(false);
   const [overridesSaved,  setOverridesSaved]  = useState(false);  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
+  // recheckingDocId: tracks which history-list document is currently being re-queued.
+  // null means no recheck in flight.  Set to document_id while the POST is in progress.
+  const [recheckingDocId, setRecheckingDocId] = useState(null);
   const [lineTagsExpanded, setLineTagsExpanded] = useState(false);
+  // qcPanelOpen: collapses the dark-header + nav-cards above the drawing canvas so
+  // the full drawing is visible by default.  Toggle with the strip at the top.
+  const [qcPanelOpen, setQcPanelOpen] = useState(DRAWING_QC_PANEL_OPEN_DEFAULT);
   // Sub-tab within the Lines panel: 'qc' | 'designations'
   const [lineQcSubTab, setLineQcSubTab] = useState('qc');
   // QC Checks sub-tab filters
@@ -1716,6 +1727,42 @@ const PIDVerification = () => {
     setElapsedSec(0);
     setOverrides({}); setOverridesSaved(false);
     setComparison(null);
+  };
+
+  // recheckDocument — re-run the full P&ID quality check on an already-uploaded
+  // document without re-uploading the file.  Reuses the existing status-polling loop.
+  //
+  // docId    : document_id (UUID string) of the document to re-check
+  // fileName : display name used in flash messages only
+  const recheckDocument = async (docId, fileName) => {
+    if (recheckingDocId) return;          // prevent double-click
+    setRecheckingDocId(docId);
+    try {
+      // 1. Tell the backend to reset and re-queue
+      await axios.post(
+        `${API_PREFIX}/reprocess/${docId}/`,
+        {},
+        { headers: authHeader(), timeout: 20000 },
+      );
+      flash('success', `Re-check queued for "${fileName}" — results will update automatically.`);
+
+      // 2. Load this document as the active one so the user sees live progress
+      setResults(null);
+      setDocumentId(docId);
+      setDocStatus('uploaded');
+      setActiveDrawing(null);
+      setOverrides({});
+      setOverridesSaved(false);
+      setComparison(null);
+
+      // 3. Start the same polling loop used after a fresh upload
+      startPolling(docId);
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'Re-check failed — please try again.';
+      flash('error', msg);
+    } finally {
+      setRecheckingDocId(null);
+    }
   };
 
   const handleOverrideChange = (findingId, field, value) => {
@@ -3001,6 +3048,24 @@ const PIDVerification = () => {
                   ))}
                   {/* Spacer + action buttons */}
                   <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    {/* Re-check: re-run the quality check on the same file — no re-upload needed */}
+                    <button
+                      onClick={() => recheckDocument(documentId, results.file_name)}
+                      disabled={!!recheckingDocId || polling}
+                      title="Re-run quality check without re-uploading the file"
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px disabled:opacity-50"
+                      style={{
+                        background: '#f5f3ff',
+                        border: '1.5px solid #c4b5fd',
+                        color: '#7c3aed',
+                        boxShadow: '0 2px 8px rgba(124,58,237,0.12)',
+                      }}
+                    >
+                      {recheckingDocId === documentId
+                        ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Queuing…</>
+                        : <><RefreshCw className="w-3.5 h-3.5" /> Re-check</>
+                      }
+                    </button>
                     <button onClick={downloadExcel} disabled={downloadingXlsx}
                       className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
                       style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
@@ -3105,6 +3170,47 @@ const PIDVerification = () => {
                 };
                 return (
                   <>
+                  {/* ── QC toggle strip — always visible, left-anchored ────────── */}
+                  {/* Collapsed: this IS the entire header — drawing fills the card  */}
+                  {/* Expanded:  this sits on top so user can collapse again         */}
+                  <div
+                    role="button"
+                    onClick={() => setQcPanelOpen(v => !v)}
+                    className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none transition-all"
+                    title={qcPanelOpen ? 'Collapse — see full drawing' : 'Expand QC panel'}
+                    style={{
+                      background: REJLERS_DARK_HEADER_BG,
+                      borderBottom: qcPanelOpen ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                    }}
+                  >
+                    {/* Grade badge */}
+                    <span className="text-xs font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background:`${qGrade.color}25`, color:qGrade.color, border:`1px solid ${qGrade.color}50` }}>
+                      {qGrade.letter} · {qScore}%
+                    </span>
+                    {/* Drawing id */}
+                    <span className="text-xs font-bold text-white/80 truncate flex-1 min-w-0">{activeDrawing}</span>
+                    {/* Severity micro-chips */}
+                    {[{v:criticalCount,c:'#ef4444',l:'C'},{v:majorCount,c:'#f97316',l:'M'},{v:_minor,c:'#fbbf24',l:'m'}]
+                      .filter(x => x.v > 0)
+                      .map(x => (
+                        <span key={x.l} className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0"
+                          style={{ background:`${x.c}25`, color:x.c }}>{x.v} {x.l}</span>
+                      ))
+                    }
+                    {/* Hint text */}
+                    <span className="text-[9px] text-white/30 flex-shrink-0 hidden sm:block">
+                      {qcPanelOpen ? 'collapse' : 'expand QC panel'}
+                    </span>
+                    {/* Chevron rotates on open/close */}
+                    <span className="flex-shrink-0 transition-transform duration-200"
+                      style={{ transform: qcPanelOpen ? 'rotate(180deg)' : 'rotate(0deg)', color:'rgba(148,163,184,0.6)' }}>
+                      <ChevronDown className="w-4 h-4" />
+                    </span>
+                  </div>
+
+                  {/* ── Collapsible body: Section 1 (full header) + Section 2 (nav cards) ── */}
+                  {qcPanelOpen && <>
                   {/* ── Section 1: Quality score + drawing identity + save action ── */}
                   <div style={{ background: REJLERS_DARK_HEADER_BG, padding:'20px 20px 16px' }}>
                     <div className="flex items-start gap-4 flex-wrap">
@@ -3223,6 +3329,7 @@ const PIDVerification = () => {
                       })}
                     </div>
                   </div>
+                  </>} {/* end qcPanelOpen collapsible */}
                   </>
                 );
               })()}
@@ -11067,6 +11174,25 @@ const PIDVerification = () => {
                     {d.status === 'completed' && d.pdf_s3_url && (
                       <a href={d.pdf_s3_url} target="_blank" rel="noopener noreferrer"
                         className="text-xs text-red-600 hover:underline flex-shrink-0">PDF</a>
+                    )}
+                    {/* Re-check button — available for completed, failed and legend_pending docs */}
+                    {['completed', 'failed', 'legend_pending'].includes(d.status) && (
+                      <button
+                        onClick={() => recheckDocument(d.document_id, d.file_name)}
+                        disabled={recheckingDocId === d.document_id}
+                        title="Re-run quality check without re-uploading"
+                        className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all hover:-translate-y-px disabled:opacity-50 flex-shrink-0"
+                        style={{
+                          background: recheckingDocId === d.document_id ? '#f1f5f9' : '#f5f3ff',
+                          border: '1px solid #c4b5fd',
+                          color: '#7c3aed',
+                        }}
+                      >
+                        {recheckingDocId === d.document_id
+                          ? <><Loader className="w-3 h-3 animate-spin" /> Queuing…</>
+                          : <><RefreshCw className="w-3 h-3" /> Re-check</>
+                        }
+                      </button>
                     )}
                   </div>
                 ))}
