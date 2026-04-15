@@ -81,10 +81,11 @@ console.log('[LineList] Config loaded:', {
 // Soft-coded format options — add/remove formats here only, no JSX changes needed.
 // ---------------------------------------------------------------------------
 const FORMAT_OPTIONS = [
-  { value: 'onshore',  label: 'Onshore',               hint: 'SIZE-FLUID-SEQ-CLASS'         },
-  { value: 'offshore', label: 'Offshore',               hint: 'AREA-FLUID-SIZE-CLASS-SEQ'    },
-  { value: 'general',  label: 'General',                hint: 'Auto-detect'                  },
-  { value: 'adnoc',    label: 'SIZE\"-FLUID-CLASS-SEQ', hint: 'ADNOC / compact format'       },
+  { value: 'onshore',    label: 'Onshore',               hint: 'SIZE-FLUID-SEQ-CLASS'              },
+  { value: 'industrial', label: 'Industrial/Project',    hint: 'SIZE\"-UNIT-SERVICE-SEQ-CLASS'     },
+  { value: 'offshore',   label: 'Offshore',               hint: 'AREA-FLUID-SIZE-CLASS-SEQ'         },
+  { value: 'general',    label: 'General (Auto-detect)',  hint: 'Tries all formats automatically'   },
+  { value: 'adnoc',      label: 'SIZE\"-FLUID-CLASS-SEQ', hint: 'ADNOC / compact format'           },
 ];
 
 // Soft-coded table columns — key maps directly to row fields.
@@ -115,6 +116,14 @@ const COLUMNS = [
 // Soft-coded format reference examples shown in the info card.
 const FORMAT_EXAMPLES = [
   {
+    group: 'Industrial / Project',
+    color: '#b45309',
+    bg: 'rgba(180,83,9,0.06)',
+    border: 'rgba(180,83,9,0.25)',
+    examples: ['2"-2600-FL-352-32070R-E', '8"-2600-P-381-31051XR-E', '3/4"-2600-HD-430-32070R-E'],
+    note: 'Unit · Service · Seq · PipingClass · EndDesig  (Samsung/Foster Wheeler & similar)',
+  },
+  {
     group: 'Offshore',
     color: '#1d4ed8',
     bg: 'rgba(29,78,216,0.06)',
@@ -122,12 +131,12 @@ const FORMAT_EXAMPLES = [
     examples: ['604-LFG-3-AC2GA0-2012', '604-PW-2\"-AE2LOD-FA-2779'],
   },
   {
-    group: 'General',
+    group: 'General (Auto-detect)',
     color: '#7c3aed',
     bg: 'rgba(124,58,237,0.06)',
     border: 'rgba(124,58,237,0.2)',
     examples: ['4\"-41-SWR-64313-A2AU16-V', '16\"-41-SWS-65324-A2AU16-V'],
-    note: 'Tick "Include Area Code" for General only',
+    note: 'Tries all formats — useful when format is unknown',
   },
   {
     group: 'Onshore',
@@ -163,7 +172,7 @@ const LineList = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState(null);
-  const [formatType, setFormatType] = useState('onshore');
+  const [formatType, setFormatType] = useState('general');
   const [includeArea, setIncludeArea] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
