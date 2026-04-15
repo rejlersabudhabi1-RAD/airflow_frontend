@@ -526,6 +526,11 @@ const PERF_MODEL_HIGHCONF_TIERS = new Set(['P1', 'P2', 'CX']);
 // Change only this value to rename the tab across the entire UI — no other code changes needed.
 const DRAWING_PANEL_LABEL = 'General';
 
+// Soft-coded: minimum chars typed before the General findings search activates.
+const GENERAL_SEARCH_MIN_CHARS = 1;
+// Soft-coded: max results shown in the General search dropdown.
+const GENERAL_SEARCH_MAX_RESULTS = 12;
+
 // GENERAL_CHECKLIST_ITEMS: items shown in the General panel's drawing-level checklist.
 // Add, remove, or reorder entries here — the checklist renders automatically.
 const GENERAL_CHECKLIST_ITEMS = [
@@ -1096,6 +1101,10 @@ const PIDVerification = () => {
   // generalChecklist: tracks which GENERAL_CHECKLIST_ITEMS are ticked by the reviewer,
   // keyed by item id. Persists in component state; resets on new upload.
   const [generalChecklist, setGeneralChecklist] = useState({});
+  // genSearch: search across findings in the General (drawing) panel
+  const [genSearchQ,    setGenSearchQ]    = useState('');
+  const [genSearchOpen, setGenSearchOpen] = useState(false);
+  const genSearchRef = useRef(null);
   // ── Fullscreen ─────────────────────────────────────────────────────────────
   const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
@@ -3252,7 +3261,7 @@ const PIDVerification = () => {
                   {/* ── General checklist strip — always visible below the toggle bar ────── */}
                   {/* Items are defined in GENERAL_CHECKLIST_ITEMS; click to tick, click again to clear. */}
                   <div
-                    className="flex items-center gap-1 px-4 py-1.5 flex-wrap"
+                    className="flex items-center gap-1 px-4 py-1.5 flex-wrap relative"
                     style={{ background:'rgba(15,23,42,0.92)', borderBottom: qcPanelOpen ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
                     onClick={e => e.stopPropagation()} // prevent toggle strip click-through
                   >
@@ -3484,6 +3493,101 @@ const PIDVerification = () => {
                         />
                         Show low-confidence
                       </label>
+                      {/* ── Findings search — SOFT-CODED: GENERAL_SEARCH_MIN_CHARS, GENERAL_SEARCH_MAX_RESULTS ── */}
+                      <div className="relative flex-shrink-0">
+                        <button
+                          title="Search findings"
+                          onClick={() => { setGenSearchOpen(v => !v); setGenSearchQ(''); }}
+                          className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded border font-semibold transition-colors ${
+                            genSearchOpen
+                              ? 'bg-indigo-50 text-indigo-600 border-indigo-300'
+                              : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                          }`}
+                        >
+                          <Search size={11} strokeWidth={2.5} />
+                          Search findings
+                          {genSearchOpen && <X size={10} strokeWidth={2.5} className="ml-0.5" />}
+                        </button>
+                        {genSearchOpen && (
+                          <div
+                            className="absolute left-0 top-8 z-50 rounded-xl overflow-hidden shadow-2xl"
+                            style={{ width: 340, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(0,0,0,0.13)' }}
+                          >
+                            {/* Search input */}
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              <Search size={13} className="text-slate-400 flex-shrink-0" />
+                              <input
+                                ref={genSearchRef}
+                                autoFocus
+                                value={genSearchQ}
+                                onChange={e => setGenSearchQ(e.target.value)}
+                                placeholder="Search findings…"
+                                className="flex-1 bg-transparent outline-none text-xs text-slate-700 placeholder-slate-400"
+                              />
+                              {genSearchQ && (
+                                <button onClick={() => setGenSearchQ('')} className="text-slate-400 hover:text-slate-600">
+                                  <X size={11} />
+                                </button>
+                              )}
+                            </div>
+                            {/* Results list */}
+                            {(() => {
+                              const q = genSearchQ.trim().toLowerCase();
+                              if (q.length < GENERAL_SEARCH_MIN_CHARS) return (
+                                <div className="px-3 py-3 text-[11px] text-center text-slate-400">
+                                  Type to search findings for this drawing
+                                </div>
+                              );
+                              const allHits = (activeDrawingData?.issues ?? []).filter(f => {
+                                const haystack = [f.issue, f.evidence, f.rule_id, f.location, f.component].filter(Boolean).join(' ').toLowerCase();
+                                return haystack.includes(q);
+                              });
+                              const hits = allHits.slice(0, GENERAL_SEARCH_MAX_RESULTS);
+                              if (!hits.length) return (
+                                <div className="px-3 py-3 text-[11px] text-center text-slate-400">
+                                  No findings match &ldquo;{genSearchQ}&rdquo;
+                                </div>
+                              );
+                              return (
+                                <ul className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: 300 }}>
+                                  {hits.map(f => {
+                                    const sev = (f.severity||'').toLowerCase();
+                                    const sevColor = sev === 'critical' ? '#dc2626' : sev === 'major' ? '#f97316' : sev === 'minor' ? '#d97706' : '#64748b';
+                                    const sevBg   = sev === 'critical' ? '#fee2e2' : sev === 'major' ? '#ffedd5' : sev === 'minor' ? '#fef3c7' : '#f1f5f9';
+                                    return (
+                                      <li key={f.id}>
+                                        <button
+                                          className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-indigo-50 transition-colors"
+                                          onClick={() => {
+                                            setGenSearchOpen(false);
+                                            setGenSearchQ('');
+                                            setActivePanel('drawing');
+                                            setTimeout(() => jumpToFinding(f.id), 150);
+                                          }}
+                                        >
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: sevColor }} />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-[11px] font-semibold text-slate-800 truncate">{f.issue || f.rule_id || '—'}</p>
+                                            {f.evidence && (
+                                              <p className="text-[10px] text-slate-500 truncate mt-0.5">{f.evidence}</p>
+                                            )}
+                                          </div>
+                                          <span className="text-[9px] font-bold flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full" style={{ color: sevColor, background: sevBg }}>{f.severity}</span>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                  {allHits.length > GENERAL_SEARCH_MAX_RESULTS && (
+                                    <li className="px-3 py-2 text-[10px] text-center text-slate-400">
+                                      Showing first {GENERAL_SEARCH_MAX_RESULTS} of {allHits.length} results
+                                    </li>
+                                  )}
+                                </ul>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
                       {/* Correction mode controls + calibration data export */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
@@ -3975,6 +4079,120 @@ const PIDVerification = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Selected Marker Finding Card ─────────────────────────────────────── */}
+                    {/* Rendered when a dot marker is clicked (focusedFindingId is set).        */}
+                    {/* Mirrors the 'Selected line detail card' pattern from the PIPING panel.  */}
+                    {/* SOFT-CODED: SEV_CARD_COLORS defined inline below.                       */}
+                    {focusedFindingId && (() => {
+                      const ff = (activeDrawingData?.issues ?? []).find(f => f.id === focusedFindingId);
+                      if (!ff) return null;
+                      const sev = (ff.severity || '').toLowerCase();
+                      const SEV_CARD_COLORS = {
+                        critical: { bg:'#dc2626', border:'#fca5a5', light:'#fff1f2', text:'#991b1b' },
+                        major:    { bg:'#f97316', border:'#fdba74', light:'#fff7ed', text:'#9a3412' },
+                        minor:    { bg:'#d97706', border:'#fde68a', light:'#fffbeb', text:'#92400e' },
+                        info:     { bg:'#3b82f6', border:'#bfdbfe', light:'#eff6ff', text:'#1e40af' },
+                      };
+                      const sc = SEV_CARD_COLORS[sev] || SEV_CARD_COLORS.info;
+                      return (
+                        <div className="mt-3 rounded-xl border overflow-hidden"
+                          style={{ borderColor: sc.border, animation: 'cardIn 0.2s ease-out both' }}>
+                          {/* Card header */}
+                          <div className="flex items-center gap-3 px-4 py-3" style={{ background: sc.light }}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black uppercase"
+                              style={{ background: sc.bg, boxShadow: `0 4px 12px ${sc.bg}55` }}>
+                              {sev.slice(0, 3)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-slate-900 truncate">{ff.issue_observed || ff.issue || ff.rule_id}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white capitalize" style={{ background: sc.bg }}>{ff.severity}</span>
+                                {ff.rule_id && <span className="text-[9px] text-slate-500 font-mono">{ff.rule_id}</span>}
+                                {ff.category && <span className="text-[9px] text-slate-400 capitalize">{ff.category.replace(/_/g, ' ')}</span>}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setFocusedFindingId(null)}
+                              title="dismiss"
+                              className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                              ✕
+                            </button>
+                          </div>
+                          {/* Evidence */}
+                          {ff.evidence && (
+                            <div className="px-4 py-2.5 bg-white" style={{ borderTop: `1px solid ${sc.border}40` }}>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
+                              <p className="text-xs text-slate-700 font-mono break-all">{ff.evidence}</p>
+                            </div>
+                          )}
+                          {/* Footer action */}
+                          <div className="px-4 py-2 bg-slate-50 flex items-center gap-2 justify-between" style={{ borderTop: `1px solid ${sc.border}40` }}>
+                            <span className="text-[9px] text-slate-400">
+                              Marker at&nbsp;
+                              {(() => {
+                                const node = visibleOverlayNodes.find(n => n.finding.id === ff.id);
+                                return node ? `X ${node.left?.toFixed(1)}% · Y ${node.top?.toFixed(1)}%` : '—';
+                              })()}
+                            </span>
+                            <button
+                              onClick={() => { setActivePanel('findings'); setTimeout(() => jumpToFinding(ff.id), 150); }}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-lg text-white transition-all hover:opacity-80"
+                              style={{ background: '#0891b2' }}>
+                              View in Findings Panel →
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Findings Register — all visible markers on drawing ────────────── */}
+                    {/* Mirrors 'Piping Line Register' pattern. Rows are clickable to select  */}
+                    {/* the marker (sets focusedFindingId which triggers the card above).     */}
+                    {visibleOverlayNodes.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3 text-indigo-500" />
+                          Findings Register — {visibleOverlayNodes.length} marker{visibleOverlayNodes.length !== 1 ? 's' : ''} located on drawing
+                        </p>
+                        <div className="rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="overflow-auto" style={{ maxHeight: '28vh' }}>
+                            <table className="w-full text-[10px] border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                  {['Severity', 'Category', 'Finding', 'Rule', 'X%', 'Y%'].map(h => (
+                                    <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {visibleOverlayNodes.map((n) => {
+                                  const isSel = focusedFindingId === n.finding.id;
+                                  const sev   = (n.finding.severity || '').toLowerCase();
+                                  const sevBg = sev === 'critical' ? '#dc2626' : sev === 'major' ? '#f97316' : sev === 'minor' ? '#d97706' : '#3b82f6';
+                                  return (
+                                    <tr key={n.key}
+                                      onClick={() => jumpToFinding(n.finding.id)}
+                                      className="border-b border-slate-100 cursor-pointer transition-all hover:bg-indigo-50/40"
+                                      style={{ background: isSel ? '#eef2ff' : 'white' }}>
+                                      <td className="px-3 py-1.5">
+                                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white capitalize"
+                                          style={{ background: sevBg }}>{n.finding.severity}</span>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-slate-600 capitalize whitespace-nowrap">{(n.finding.category || '—').replace(/_/g, ' ')}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 max-w-[280px] truncate">{n.finding.issue_observed || n.finding.issue || n.finding.rule_id || '—'}</td>
+                                      <td className="px-3 py-1.5 font-mono text-slate-500 whitespace-nowrap">{n.finding.rule_id || '—'}</td>
+                                      <td className="px-3 py-1.5 text-slate-500">{n.left?.toFixed(1)}</td>
+                                      <td className="px-3 py-1.5 text-slate-500">{n.top?.toFixed(1)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
