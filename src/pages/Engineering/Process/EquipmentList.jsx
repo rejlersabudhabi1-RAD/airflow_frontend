@@ -469,6 +469,22 @@ const EquipmentList = () => {
     XLSX.writeFile(wb, fname);
   };
 
+  // ── Derived stats for KPI bar (shown after extraction) ──────────────────
+  const kpiStats = React.useMemo(() => {
+    if (!results?.equipment?.length) return null;
+    const eq = results.equipment;
+    const filled  = f => eq.filter(r => r[f] && r[f] !== '—' && r[f] !== '').length;
+    const types   = [...new Set(eq.map(r => (r.tag || '').split('-')[0]).filter(Boolean))];
+    const withMtr = eq.filter(r => r.motor_rating && !['No','N/A','no','n/a'].includes(String(r.motor_rating).trim())).length;
+    return {
+      total:   eq.length,
+      types:   types.length,
+      withMoc: filled('moc'),
+      withMtr,
+      withDim: filled('dimension_length'),
+    };
+  }, [results]);
+
   return (
     <>
       <style>{`
@@ -497,6 +513,10 @@ const EquipmentList = () => {
         @keyframes eq-fade-up {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes eq-kpi-count {
+          from { opacity: 0; transform: translateY(8px) scale(0.9); }
+          to   { opacity: 1; transform: translateY(0)   scale(1);   }
         }
         @keyframes eq-bar-glow {
           0%, 100% { filter: brightness(1); }
@@ -531,6 +551,25 @@ const EquipmentList = () => {
         }
         .eq-section { animation: eq-fade-up 0.5s ease both; }
         .eq-filter-input::placeholder { color: #94a3b8; }
+        .eq-th-sticky {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+        }
+        .eq-upload-zone:hover { border-color: rgba(5,150,105,0.55) !important; background: rgba(5,150,105,0.06) !important; }
+        .eq-action-btn:hover:not(:disabled) {
+          box-shadow: 0 6px 24px rgba(5,150,105,0.42) !important;
+          transform: translateY(-1px);
+        }
+        .eq-export-btn:hover {
+          background: rgba(5,150,105,0.14) !important;
+          border-color: rgba(5,150,105,0.4) !important;
+        }
+        .eq-kpi-card { animation: eq-kpi-count 0.45s ease both; }
+        .eq-info-card:hover {
+          border-color: rgba(5,150,105,0.28) !important;
+          background: rgba(5,150,105,0.03) !important;
+        }
       `}</style>
 
       {/* Light gradient background */}
@@ -595,7 +634,7 @@ const EquipmentList = () => {
           <div className="rounded-2xl p-6 mb-4 eq-section" style={{
             background: 'white',
             border: '1px solid rgba(5,150,105,0.15)',
-            boxShadow: '0 2px 16px rgba(5,150,105,0.07)',
+            boxShadow: '0 4px 24px rgba(5,150,105,0.08), 0 1px 4px rgba(0,0,0,0.04)',
             animationDelay: '0.08s',
           }}>
             <div className="flex items-center gap-2.5 mb-5">
@@ -603,15 +642,18 @@ const EquipmentList = () => {
                 background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
               }}>1</div>
               <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
+              <span className="ml-auto text-xs text-slate-400 font-medium px-2.5 py-1 rounded-full" style={{
+                background: '#f8fafc', border: '1px solid #e2e8f0',
+              }}>PDF only</span>
             </div>
 
             <div
-              className="relative rounded-xl cursor-pointer overflow-hidden"
+              className="eq-upload-zone relative rounded-xl cursor-pointer overflow-hidden"
               style={{
-                border: isDragging ? '2px solid rgba(5,150,105,0.75)' : file ? '2px solid rgba(5,150,105,0.45)' : '2px dashed rgba(5,150,105,0.25)',
+                border: isDragging ? '2px solid rgba(5,150,105,0.75)' : file ? '2px solid rgba(5,150,105,0.5)' : '2px dashed rgba(5,150,105,0.25)',
                 background: isDragging ? 'rgba(5,150,105,0.08)' : file ? 'rgba(5,150,105,0.04)' : 'rgba(5,150,105,0.015)',
                 minHeight: 148,
-                transition: 'border-color 0.3s, background 0.3s',
+                transition: 'border-color 0.25s, background 0.25s, box-shadow 0.25s',
               }}
               onClick={() => !isProcessing && fileRef.current?.click()}
               onDragOver={handleDragOver}
@@ -638,34 +680,45 @@ const EquipmentList = () => {
               <div className="flex flex-col items-center justify-center gap-3 py-9 px-6">
                 {file ? (
                   <>
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{
-                      background: 'rgba(5,150,105,0.1)',
-                      border: '2px solid rgba(5,150,105,0.35)',
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{
+                      background: 'linear-gradient(135deg, rgba(5,150,105,0.15), rgba(5,150,105,0.08))',
+                      border: '2px solid rgba(5,150,105,0.4)',
                       animation: 'eq-glow-light 2.2s ease infinite',
                     }}>
-                      <CheckCircleIcon className="h-7 w-7 text-emerald-600" />
+                      <CheckCircleIcon className="h-8 w-8 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-800 font-medium text-sm">{file.name}</p>
+                      <p className="text-slate-800 font-semibold text-sm">{file.name}</p>
                       <p className="text-slate-400 text-xs mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
                     </div>
-                    <div className="px-3 py-1 rounded-full text-xs font-semibold text-emerald-700" style={{
-                      background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.2)',
-                    }}>
-                      ✓ PDF Loaded
+                    <div className="flex items-center gap-2">
+                      <div className="px-3 py-1 rounded-full text-xs font-semibold text-emerald-700 flex items-center gap-1.5" style={{
+                        background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.2)',
+                      }}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"
+                          style={{ animation: 'eq-pulse-badge 1.6s ease infinite' }} />
+                        PDF Loaded
+                      </div>
+                      {!isProcessing && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setFile(null); setResults(null); setError(null); }}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-400 hover:text-red-500"
+                          style={{ background: '#f8fafc', border: '1px solid #e2e8f0', transition: 'color 0.2s' }}
+                        >✕ Remove</button>
+                      )}
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{
-                      background: 'rgba(5,150,105,0.06)',
-                      border: '1px solid rgba(5,150,105,0.15)',
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{
+                      background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(5,150,105,0.04))',
+                      border: '1.5px solid rgba(5,150,105,0.18)',
                     }}>
-                      <CloudArrowUpIcon className="h-8 w-8 text-emerald-500" />
+                      <CloudArrowUpIcon className="h-9 w-9 text-emerald-500" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-600 font-medium text-sm">Drop a P&amp;ID PDF or click to browse</p>
-                      <p className="text-slate-400 text-xs mt-1">Equipment List registers and P&amp;ID drawings · Auto-detects table vs drawing mode · Multi-angle OCR</p>
+                      <p className="text-slate-700 font-semibold text-sm">Drop a P&amp;ID PDF here <span className="text-slate-400 font-normal">or</span> <span className="text-emerald-600 font-semibold">click to browse</span></p>
+                      <p className="text-slate-400 text-xs mt-1.5">Equipment List registers &amp; P&amp;ID drawings · Auto-detects mode · Multi-angle OCR (0°/90°/180°/270°)</p>
                     </div>
                   </>
                 )}
@@ -674,25 +727,33 @@ const EquipmentList = () => {
           </div>
 
           {/* ── Action Buttons ── */}
-          <div className="flex gap-3 mb-4 eq-section" style={{ animationDelay: '0.15s' }}>
+          <div className="flex gap-3 mb-6 eq-section" style={{ animationDelay: '0.15s' }}>
             <button
               onClick={handleExtract}
               disabled={!file || isProcessing}
-              className="flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
+              className="eq-action-btn flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
               style={!file || isProcessing ? {
                 background: '#f1f5f9',
                 color: '#94a3b8',
                 cursor: 'not-allowed',
                 border: '1px solid #e2e8f0',
-                transition: 'all 0.3s',
+                transition: 'all 0.25s',
               } : {
                 background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                 color: 'white',
                 border: 'none',
                 boxShadow: '0 4px 18px rgba(5,150,105,0.32)',
-                transition: 'all 0.3s',
+                transition: 'all 0.25s',
+                cursor: 'pointer',
               }}
             >
+              {/* Shimmer on active */}
+              {file && !isProcessing && (
+                <div className="absolute inset-0 pointer-events-none" style={{
+                  background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%)',
+                  animation: 'eq-shimmer 2.8s linear infinite',
+                }} />
+              )}
               {isProcessing ? (
                 <span className="flex items-center justify-center gap-2.5">
                   <svg className="h-5 w-5 text-emerald-600" viewBox="0 0 24 24"
@@ -704,7 +765,9 @@ const EquipmentList = () => {
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2 relative z-10">
-                  <span>⚡</span> Extract Equipment List
+                  <span className="text-base">⚡</span>
+                  <span>Extract Equipment List</span>
+                  {file && <span className="ml-1 text-emerald-200 text-xs font-normal opacity-80">→ AI-powered</span>}
                 </span>
               )}
             </button>
@@ -712,12 +775,14 @@ const EquipmentList = () => {
             {results && (
               <button
                 onClick={handleExport}
-                className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm transition-all duration-300"
+                className="eq-export-btn flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm"
                 style={{
                   background: 'rgba(5,150,105,0.07)',
                   color: '#065f46',
                   border: '1px solid rgba(5,150,105,0.22)',
                   boxShadow: '0 2px 8px rgba(5,150,105,0.08)',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
                 }}
               >
                 <ArrowDownTrayIcon className="h-4 w-4" />
@@ -867,6 +932,51 @@ const EquipmentList = () => {
 
           </div>{/* end centered wrapper */}
 
+          {/* ── KPI Summary Bar (after extraction) ── */}
+          {kpiStats && (
+            <div className="max-w-7xl mx-auto px-6 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {[
+                  { label: 'Items Extracted', value: kpiStats.total, icon: '🏷️', delay: '0s'   },
+                  { label: 'Equipment Types', value: kpiStats.types,  icon: '🗂️', delay: '0.06s' },
+                  { label: 'With MOC',        value: kpiStats.withMoc, icon: '🧱', delay: '0.12s' },
+                  { label: 'With Dimensions', value: kpiStats.withDim, icon: '📐', delay: '0.18s' },
+                  { label: 'With Motor',      value: kpiStats.withMtr, icon: '⚡', delay: '0.24s' },
+                ].map(({ label, value, icon, delay }) => (
+                  <div key={label} className="eq-kpi-card rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{
+                    background: 'white',
+                    border: '1px solid rgba(5,150,105,0.13)',
+                    boxShadow: '0 2px 12px rgba(5,150,105,0.07)',
+                    animationDelay: delay,
+                  }}>
+                    <span className="text-2xl leading-none flex-shrink-0">{icon}</span>
+                    <div>
+                      <p className="text-2xl font-bold text-slate-800 leading-none tabular-nums">{value}</p>
+                      <p className="text-xs text-slate-400 mt-0.5 font-medium">{label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Visual divider before table ── */}
+          {results && (
+            <div className="max-w-7xl mx-auto px-6 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(5,150,105,0.25), transparent)' }} />
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-emerald-700" style={{
+                  background: 'rgba(5,150,105,0.07)', border: '1px solid rgba(5,150,105,0.18)',
+                }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+                    style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
+                  Extraction Results
+                </div>
+                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(5,150,105,0.25), transparent)' }} />
+              </div>
+            </div>
+          )}}
+
           {/* ── Results Table — full viewport width breakout ── */}
           {results && (
             <div className="px-4 mt-4">
@@ -938,7 +1048,7 @@ const EquipmentList = () => {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
-                    <thead>
+                    <thead className="eq-th-sticky">
                       <tr style={{ background: 'linear-gradient(90deg, #065f46, #047857)' }}>
                         {COLUMNS.map(col => (
                           <th
@@ -1064,10 +1174,11 @@ const EquipmentList = () => {
                   ['💬', 'Remarks',                      'Notes, holds, TBD items or other remarks from the last column'],
                   ['🔀', 'Multi-Angle OCR',              'Extracts text at 0°, 90°, 180°, 270° — handles landscape CAD title blocks'],
                 ].map(([icon, title, desc]) => (
-                  <div key={title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{
+                  <div key={title} className="eq-info-card flex items-start gap-3 p-3.5 rounded-xl" style={{
                     background: '#f8fafc',
                     border: '1px solid #e2e8f0',
                     transition: 'border-color 0.2s, background 0.2s',
+                    cursor: 'default',
                   }}>
                     <span className="text-lg flex-shrink-0 leading-none mt-0.5">{icon}</span>
                     <div>
