@@ -177,6 +177,48 @@ function renderNozzleBadges(nozzles) {
 }
 
 // ---------------------------------------------------------------------------
+// Soft-coded: condition column keys — temperature and pressure fields that
+// may contain normalised range values (e.g. "60 – 105 °F") from the backend.
+// _RANGE_SEP must match the backend _TEMP_RANGE_SEPARATOR constant.
+// ---------------------------------------------------------------------------
+const _RANGE_SEP = ' \u2013 ';  // en-dash with spaces
+const CONDITION_COLS = new Set([
+  'oper_pressure',
+  'oper_temperature',
+  'design_pressure_min',
+  'design_pressure_max',
+  'design_temp_min',
+  'design_temp_max',
+]);
+
+/**
+ * Render a temperature or pressure value with a visual indicator when the
+ * backend has normalised it to a MIN – MAX range (contains en-dash separator).
+ */
+function renderConditionValue(display) {
+  if (!display || display === '—') return <span style={{ color: '#94a3b8' }}>—</span>;
+  const str = String(display);
+  if (str.includes(_RANGE_SEP)) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+        <span
+          title="Range value (min – max)"
+          style={{
+            fontSize: '0.6rem',
+            fontWeight: 700,
+            color: '#6ee7b7',
+            letterSpacing: '-0.5px',
+            userSelect: 'none',
+          }}
+        >⇕</span>
+        <span>{str}</span>
+      </span>
+    );
+  }
+  return <span>{str}</span>;
+}
+
+// ---------------------------------------------------------------------------
 const EquipmentList = () => {
   const [file,           setFile]           = useState(null);
   const [isProcessing,   setIsProcessing]   = useState(false);
@@ -959,6 +1001,8 @@ const EquipmentList = () => {
                                   renderLineBadges(v)
                                 ) : col.key === 'nozzle_connections' ? (
                                   renderNozzleBadges(v)
+                                ) : CONDITION_COLS.has(col.key) ? (
+                                  renderConditionValue(display)
                                 ) : (
                                   <span className="block">{display}</span>
                                 )}
