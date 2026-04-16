@@ -106,6 +106,29 @@ const wrenchService = {
 
   /** Stop a running real-time S3 export job */
   stopS3Job: (id) => apiService.post(`${BASE}/s3-sync/${id}/stop/`),
+
+  // ── Token Injection ───────────────────────────────────────────────────────
+  /**
+   * Save a pre-shared Wrench session token directly — bypasses username/password login.
+   * Once saved, the backend uses this token for all Wrench API calls; the rolling-token
+   * refresh from each Wrench response keeps it current automatically.
+   * @param {string} token – raw Wrench session token string
+   */
+  injectToken: (token) => apiService.post(`${BASE}/config/inject-token/`, { token }),
+
+  // ── Document Download ─────────────────────────────────────────────────────
+  /**
+   * Download a Wrench document file (proxied through the backend for auth).
+   * Backend tries multiple Wrench download endpoints and streams the binary back.
+   * @param {string} idocId  – IDOC_ID of the document (required)
+   * @param {string} [docNo] – DOC_NO used as fallback filename hint (optional)
+   * Returns a blob response for direct save-as in the browser.
+   */
+  downloadDocument: (idocId, docNo) =>
+    apiService.get(`${BASE}/sync/document-download/`, {
+      params: { idoc_id: idocId, ...(docNo ? { doc_no: docNo } : {}) },
+      responseType: 'blob',
+    }),
 }
 
 export default wrenchService

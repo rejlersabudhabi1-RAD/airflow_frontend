@@ -28,6 +28,7 @@ import {
   Cog6ToothIcon,
   CloudArrowUpIcon,
   StopCircleIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -130,6 +131,101 @@ const Alert = ({ type = 'info', message }) => {
     <div className={`flex items-start gap-3 p-4 rounded-lg border ${styles[type]}`}>
       <Icon className="w-5 h-5 shrink-0 mt-0.5" />
       <p className="text-sm">{message}</p>
+    </div>
+  )
+}
+
+// ─── Soft-coded: minimum token length for basic sanity check (matches backend)
+const _MIN_TOKEN_LENGTH = 32
+
+// ─── Token Injection Section ──────────────────────────────────────────────────
+// Allows pasting a pre-shared token from the Wrench team directly, bypassing
+// username/password login. The rolling-token refresh from each API response
+// automatically keeps the token current once injected.
+
+const TokenInjectionSection = ({ onSaved }) => {
+  const [open, setOpen]       = useState(false)
+  const [token, setToken]     = useState('')
+  const [saving, setSaving]   = useState(false)
+  const [alert, setAlert]     = useState(null)
+
+  const handleSave = async () => {
+    const trimmed = token.replace(/\s+/g, '')   // strip all whitespace (shared tokens often contain newlines)
+    if (trimmed.length < _MIN_TOKEN_LENGTH) {
+      setAlert({ type: 'error', message: `Token appears too short (minimum ${_MIN_TOKEN_LENGTH} characters).` })
+      return
+    }
+    setSaving(true)
+    setAlert(null)
+    try {
+      const res = await wrenchService.injectToken(trimmed)
+      setAlert({ type: 'success', message: res.data?.message || 'Token saved.' })
+      setToken('')
+      onSaved?.()
+    } catch (err) {
+      setAlert({ type: 'error', message: err.response?.data?.detail || 'Failed to save token.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mx-6 mb-6 border border-amber-200 rounded-xl overflow-hidden">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); setAlert(null) }}
+        className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 hover:bg-amber-100 transition text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+          <KeyIcon className="w-4 h-4 text-amber-600" />
+          Inject Pre-shared Token
+          <span className="text-xs font-normal text-amber-600">(use when Wrench team shares a token directly)</span>
+        </span>
+        {open
+          ? <ChevronUpIcon className="w-4 h-4 text-amber-500" />
+          : <ChevronDownIcon className="w-4 h-4 text-amber-500" />}
+      </button>
+
+      {open && (
+        <div className="p-4 bg-white space-y-3">
+          <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+            <InformationCircleIcon className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" />
+            <p>
+              Paste the full token string below (spaces and line breaks are stripped automatically).
+              Once saved, all Wrench API calls bypass the normal login and use this token directly.
+              The rolling-token mechanism in each Wrench response keeps it refreshed.
+            </p>
+          </div>
+
+          {alert && <Alert type={alert.type} message={alert.message} />}
+
+          <textarea
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            rows={4}
+            placeholder="Paste the Wrench session token here…"
+            className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none transition resize-none"
+          />
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400">
+              {token.replace(/\s+/g, '').length > 0
+                ? `${token.replace(/\s+/g, '').length} characters (whitespace stripped)`
+                : 'Paste token above'}
+            </span>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || token.replace(/\s+/g, '').length < _MIN_TOKEN_LENGTH}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg shadow-sm transition-all duration-200"
+            >
+              {saving ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <KeyIcon className="w-4 h-4" />}
+              {saving ? 'Saving…' : 'Save Token'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -482,6 +578,9 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
           Last verified: {new Date(config.last_verified_at).toLocaleString()}
         </div>
       )}
+
+      {/* ── Pre-shared Token Injection ─────────────────────────────────────── */}
+      {config && <TokenInjectionSection onSaved={() => {}} />}
     </div>
   )
 }
@@ -803,6 +902,12 @@ const DOC_COLUMNS = [
   { key: 'IDOC_ID',          label: 'IDOC' },
 ]
 
+// Soft-coded: the document field used as the primary download identifier.
+// Change here if your Wrench instance uses a different key for the file ID.
+const _IDOC_KEY = 'IDOC_ID'
+// Soft-coded: candidate field names for a human-readable document number (used as filename hint).
+const _DOC_NO_KEYS = ['DOC_NO', 'DOCUMENT_NO']
+
 // Derive display columns from the first data row using the priority list
 function deriveColumns(rows, priorityList, maxCols) {
   if (!rows || rows.length === 0) return []
@@ -823,6 +928,53 @@ function deriveColumns(rows, priorityList, maxCols) {
     }
   }
   return cols
+}
+
+// ─── Shared download helper used by both the Transmittals sub-table and Document Search ──
+// Isolated into its own component so each row manages its own loading state independently.
+const TransDownloadButton = ({ doc }) => {
+  const [busy, setBusy] = useState(false)
+  const idocId = doc[_IDOC_KEY]
+  const docNo  = (_DOC_NO_KEYS.map((k) => doc[k]).find(Boolean) || idocId) ?? ''
+
+  const handleClick = async () => {
+    if (!idocId) return
+    setBusy(true)
+    try {
+      const res = await wrenchService.downloadDocument(String(idocId), String(docNo))
+      if (res.data instanceof Blob && res.data.type === 'application/json') {
+        const json = JSON.parse(await res.data.text())
+        if (json.download_url) { window.open(json.download_url, '_blank'); return }
+      }
+      const url = URL.createObjectURL(res.data)
+      const a   = document.createElement('a')
+      a.href    = url
+      a.download = `${docNo || idocId}.bin`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (_) {
+      // Silent — error surfaced by the parent alert if needed
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy}
+      title={`Download IDOC ${idocId}`}
+      className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition whitespace-nowrap"
+    >
+      {busy
+        ? <ArrowPathIcon className="w-3 h-3 animate-spin" />
+        : <ArrowDownTrayIcon className="w-3 h-3" />}
+      {busy ? '…' : 'DL'}
+    </button>
+  )
 }
 
 // ─── Transmittals browser ─────────────────────────────────────────────────────
@@ -1065,24 +1217,35 @@ const TransmittalsSection = ({ configured, onGoToConfig }) => {
                                               {c.label}
                                             </th>
                                           ))}
+                                          <th className="px-3 py-2 text-left font-semibold text-blue-700 whitespace-nowrap">Download</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-blue-100 bg-white">
-                                        {cache.documents.map((doc, di) => (
-                                          <tr key={di} className="hover:bg-blue-50 transition">
-                                            {cache.cols.map((c) => (
-                                              <td
-                                                key={c.key}
-                                                className="px-3 py-2 text-gray-700 max-w-[200px] truncate"
-                                                title={String(doc[c.key] ?? '')}
-                                              >
-                                                {doc[c.key] != null && doc[c.key] !== ''
-                                                  ? <span className={c.key === 'DOC_NO' || c.key === 'DOCUMENT_NO' ? 'font-mono font-semibold text-blue-700' : ''}>{String(doc[c.key])}</span>
-                                                  : <span className="text-gray-300">&mdash;</span>}
+                                        {cache.documents.map((doc, di) => {
+                                          const idocId = doc[_IDOC_KEY]
+                                          return (
+                                            <tr key={di} className="hover:bg-blue-50 transition">
+                                              {cache.cols.map((c) => (
+                                                <td
+                                                  key={c.key}
+                                                  className="px-3 py-2 text-gray-700 max-w-[200px] truncate"
+                                                  title={String(doc[c.key] ?? '')}
+                                                >
+                                                  {doc[c.key] != null && doc[c.key] !== ''
+                                                    ? <span className={c.key === 'DOC_NO' || c.key === 'DOCUMENT_NO' ? 'font-mono font-semibold text-blue-700' : ''}>{String(doc[c.key])}</span>
+                                                    : <span className="text-gray-300">&mdash;</span>}
+                                                </td>
+                                              ))}
+                                              <td className="px-3 py-2">
+                                                {idocId ? (
+                                                  <TransDownloadButton doc={doc} />
+                                                ) : (
+                                                  <span className="text-gray-300">&mdash;</span>
+                                                )}
                                               </td>
-                                            ))}
-                                          </tr>
-                                        ))}
+                                            </tr>
+                                          )
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>
@@ -1165,6 +1328,9 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   const [searching, setSearching] = useState(false)
   const [alert, setAlert]       = useState(null)
 
+  // Download state: tracks which IDOC_IDs are currently downloading
+  const [downloading, setDownloading] = useState({})
+
   // Derived: doc numbers shown in datalist — filtered by what user has typed
   const filteredDocNumbers = docNoInput.length >= 1
     ? choices.doc_numbers.filter((d) => d.toLowerCase().includes(docNoInput.toLowerCase())).slice(0, 100)
@@ -1177,6 +1343,37 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
 
   // needsSvcUrl is only true when the backend explicitly reports both REST and DocumentSearch failed
   const needsSvcUrl = Boolean(choices.svc_url_required)
+
+  // ── Download handler ─────────────────────────────────────────────────────
+  const handleDownload = useCallback(async (doc) => {
+    const idocId = doc[_IDOC_KEY]
+    if (!idocId) return
+    const docNo = _DOC_NO_KEYS.map((k) => doc[k]).find(Boolean) || idocId
+    setDownloading((prev) => ({ ...prev, [idocId]: true }))
+    try {
+      const res = await wrenchService.downloadDocument(String(idocId), String(docNo))
+      // When backend returns a redirect URL (JSON blob), open it directly
+      if (res.data instanceof Blob && res.data.type === 'application/json') {
+        const text = await res.data.text()
+        const json = JSON.parse(text)
+        if (json.download_url) { window.open(json.download_url, '_blank'); return }
+      }
+      // Binary blob — trigger browser save-as
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${docNo}.bin`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Download failed. Check server logs.'
+      setAlert({ type: 'error', message: `Download failed for ${docNo}: ${msg}` })
+    } finally {
+      setDownloading((prev) => ({ ...prev, [idocId]: false }))
+    }
+  }, [])
 
   // ── Load choices on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -1417,20 +1614,45 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
             <div className="overflow-x-auto">
               <table className="min-w-full text-xs">
                 <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-gray-200">
-                  <tr>{DOC_COLUMNS.map((col) => (
-                    <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
-                  ))}</tr>
+                  <tr>
+                    {DOC_COLUMNS.map((col) => (
+                      <th key={col.key} className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">{col.label}</th>
+                    ))}
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600 whitespace-nowrap">Download</th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {results.documents.map((doc, idx) => (
-                    <tr key={idx} className="hover:bg-blue-50/40 transition-colors duration-150">
-                      {DOC_COLUMNS.map((col) => (
-                        <td key={col.key} className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" title={doc[col.key] || ''}>
-                          {doc[col.key] || <span className="text-gray-300">&mdash;</span>}
+                  {results.documents.map((doc, idx) => {
+                    const idocId = doc[_IDOC_KEY]
+                    const isDownloading = Boolean(idocId && downloading[idocId])
+                    return (
+                      <tr key={idx} className="hover:bg-blue-50/40 transition-colors duration-150">
+                        {DOC_COLUMNS.map((col) => (
+                          <td key={col.key} className="px-4 py-2.5 text-gray-700 max-w-[200px] truncate" title={doc[col.key] || ''}>
+                            {doc[col.key] || <span className="text-gray-300">&mdash;</span>}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5">
+                          {idocId ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownload(doc)}
+                              disabled={isDownloading}
+                              title={`Download IDOC ${idocId}`}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition whitespace-nowrap"
+                            >
+                              {isDownloading
+                                ? <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                                : <ArrowDownTrayIcon className="w-3.5 h-3.5" />}
+                              {isDownloading ? 'Downloading…' : 'Download'}
+                            </button>
+                          ) : (
+                            <span className="text-gray-300">&mdash;</span>
+                          )}
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

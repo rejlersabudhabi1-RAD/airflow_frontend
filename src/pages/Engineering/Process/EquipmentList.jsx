@@ -189,6 +189,7 @@ const EquipmentList = () => {
   const [sortAsc,        setSortAsc]        = useState(true);
   const [filterText,     setFilterText]     = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isDragging,     setIsDragging]     = useState(false);
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -216,6 +217,39 @@ const EquipmentList = () => {
       setResults(null);
     } else {
       setError('Please select a valid PDF file');
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isProcessing) setIsDragging(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isProcessing) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (isProcessing) return;
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') {
+      setFile(f);
+      setError(null);
+      setResults(null);
+    } else {
+      setError('Please drop a valid PDF file');
     }
   };
 
@@ -376,9 +410,10 @@ const EquipmentList = () => {
     if (!displayRows.length) return;
     const wsData = [
       COLUMNS.map(c => c.label),
-      ...displayRows.map(row =>
+      ...displayRows.map((row, idx) =>
         COLUMNS.map(c => {
-          const v = row[c.key];
+          // sl_no: always sequential 1-based index regardless of backend value
+          const v = c.key === 'sl_no' ? idx + 1 : row[c.key];
           if (Array.isArray(v)) return v.join(', ') || '—';
           return v || '—';
         })
@@ -531,12 +566,16 @@ const EquipmentList = () => {
             <div
               className="relative rounded-xl cursor-pointer overflow-hidden"
               style={{
-                border: file ? '2px solid rgba(5,150,105,0.45)' : '2px dashed rgba(5,150,105,0.25)',
-                background: file ? 'rgba(5,150,105,0.04)' : 'rgba(5,150,105,0.015)',
+                border: isDragging ? '2px solid rgba(5,150,105,0.75)' : file ? '2px solid rgba(5,150,105,0.45)' : '2px dashed rgba(5,150,105,0.25)',
+                background: isDragging ? 'rgba(5,150,105,0.08)' : file ? 'rgba(5,150,105,0.04)' : 'rgba(5,150,105,0.015)',
                 minHeight: 148,
                 transition: 'border-color 0.3s, background 0.3s',
               }}
               onClick={() => !isProcessing && fileRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
               {/* Corner brackets */}
               {[
@@ -859,7 +898,6 @@ const EquipmentList = () => {
                   <table className="min-w-full">
                     <thead>
                       <tr style={{ background: 'linear-gradient(90deg, #065f46, #047857)' }}>
-                        <th className="px-3 py-3.5 text-left text-xs font-medium text-emerald-200 uppercase tracking-wider w-10">#</th>
                         {COLUMNS.map(col => (
                           <th
                             key={col.key}
@@ -893,9 +931,10 @@ const EquipmentList = () => {
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(5,150,105,0.05)'}
                           onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#f0fdf4'}
                         >
-                          <td className="px-3 py-3 text-xs text-slate-400">{idx + 1}</td>
                           {COLUMNS.map(col => {
-                            const v       = row[col.key];
+                            // sl_no: always sequential 1-based index regardless of backend value
+                            const raw     = row[col.key];
+                            const v       = col.key === 'sl_no' ? idx + 1 : raw;
                             const display = Array.isArray(v)
                               ? (v.length ? v.join(' · ') : '—')
                               : (v || '—');
