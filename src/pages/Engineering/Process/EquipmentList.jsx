@@ -41,7 +41,7 @@ const COLUMNS = [
   { key: 'dimension_diameter',  label: 'Diameter / Width (mm)',     width: 18 },
   { key: 'motor_rating',        label: 'Motor Rating (kW)',         width: 14 },
   { key: 'pid_no',              label: 'P&ID No.',                  width: 16 },
-  { key: 'quality_required',    label: 'Quality Required',          width: 16 },
+  { key: 'quality_required',    label: 'Quantity Required',         width: 18 },
   { key: 'phase',               label: 'Phase',                     width: 12 },
   { key: 'remarks',             label: 'Remarks',                   width: 24 },
 ];
@@ -97,6 +97,46 @@ const FLUID_COLOR_MAP = {
   MEG: { bg: 'rgba(239,68,68,0.08)',   text: '#7f1d1d', border: 'rgba(239,68,68,0.25)'   },
 };
 const FLUID_COLOR_DEFAULT = { bg: 'rgba(148,163,184,0.10)', text: '#475569', border: 'rgba(148,163,184,0.30)' };
+
+// ---------------------------------------------------------------------------
+// Soft-coded: equipment-type → quantity field semantic hint.
+// Key: uppercase prefix of the equipment tag (before first '-').
+// Value: { label, placeholder } — displayed as tooltip/helper in Quantity Required cell.
+// Add new prefixes here to extend dynamic behaviour for future P&IDs.
+// ---------------------------------------------------------------------------
+const EQUIPMENT_QUANTITY_HINTS = {
+  // Vessels / Separators / Tanks / Drums / Filters / Slug Catchers
+  V:   { label: 'Volume',            placeholder: 'e.g. 327 M³' },
+  T:   { label: 'Volume',            placeholder: 'e.g. 100 M³' },
+  TK:  { label: 'Volume',            placeholder: 'e.g. 500 M³' },
+  S:   { label: 'Volume',            placeholder: 'e.g. 50 M³'  },
+  D:   { label: 'Volume',            placeholder: 'e.g. 20 M³'  },
+  SC:  { label: 'Volume',            placeholder: 'e.g. 327 M³' },
+  F:   { label: 'Volume',            placeholder: 'e.g. 10 M³'  },
+  // Pumps / Compressors / Blowers / Fans
+  P:   { label: 'Design Flow Rate',  placeholder: 'e.g. 250 m³/h' },
+  C:   { label: 'Design Flow Rate',  placeholder: 'e.g. 1000 Nm³/h' },
+  K:   { label: 'Design Flow Rate',  placeholder: 'e.g. 5000 Nm³/h' },
+  B:   { label: 'Design Flow Rate',  placeholder: 'e.g. 2000 m³/h' },
+  // Heat Exchangers / Coolers / Heaters / Fired Heaters
+  E:   { label: 'Duty',              placeholder: 'e.g. 2.5 MMBtu/hr' },
+  H:   { label: 'Duty',              placeholder: 'e.g. 5 MMBtu/hr' },
+  A:   { label: 'Duty',              placeholder: 'e.g. 1.2 MMBtu/hr' },
+  // Columns / Towers
+  CO:  { label: 'Volume',            placeholder: 'e.g. 80 M³' },
+};
+
+/** Resolve quantity hint for an equipment tag string (e.g. "V-803-TF" → Volume) */
+function resolveQuantityHint(tag) {
+  if (!tag || tag === '—') return null;
+  const prefix = String(tag).split('-')[0].toUpperCase();
+  // Try longest match first (e.g. "SC" before "S", "TK" before "T", "CO" before "C")
+  const sorted = Object.keys(EQUIPMENT_QUANTITY_HINTS).sort((a, b) => b.length - a.length);
+  for (const k of sorted) {
+    if (prefix === k) return EQUIPMENT_QUANTITY_HINTS[k];
+  }
+  return null;
+}
 
 /**
  * Extract fluid code from a line tag.
@@ -219,6 +259,18 @@ function renderConditionValue(display) {
 }
 
 // ---------------------------------------------------------------------------
+// Soft-coded: blank manual observation row template.
+// Add/remove keys here to extend manual entry fields. Must match COLUMNS keys.
+// ---------------------------------------------------------------------------
+const MANUAL_OBS_BLANK = {
+  tag: '', description: '', design_flowrate: '', oper_pressure: '',
+  oper_temperature: '', design_pressure_min: '', design_pressure_max: '',
+  design_temp_min: '', design_temp_max: '', moc: '', insulation: '',
+  dimension_length: '', dimension_diameter: '', motor_rating: '',
+  pid_no: '', quality_required: '', phase: '', remarks: '', revision: '',
+};
+
+// ---------------------------------------------------------------------------
 const EquipmentList = () => {
   const [file,           setFile]           = useState(null);
   const [isProcessing,   setIsProcessing]   = useState(false);
@@ -232,6 +284,8 @@ const EquipmentList = () => {
   const [filterText,     setFilterText]     = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isDragging,     setIsDragging]     = useState(false);
+  const [manualObs,      setManualObs]      = useState([{ ...MANUAL_OBS_BLANK }]);
+  const [showManualForm, setShowManualForm] = useState(false);
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -250,6 +304,38 @@ const EquipmentList = () => {
   }, [isProcessing]);
 
   const formatElapsed = (s) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+
+  // Manual observation helpers
+  const handleManualFieldChange = (rowIdx, field, value) => {
+    setManualObs(prev => prev.map((r, i) => i === rowIdx ? { ...r, [field]: value } : r));
+  };
+
+  const handleAddManualRow = () => {
+    setManualObs(prev => [...prev, { ...MANUAL_OBS_BLANK }]);
+  };
+
+  const handleRemoveManualRow = (rowIdx) => {
+    setManualObs(prev => prev.length === 1 ? [{ ...MANUAL_OBS_BLANK }] : prev.filter((_, i) => i !== rowIdx));
+  };
+
+  /** Merge manual observations into results — appends non-empty tag rows */
+  const handleAddManualToResults = () => {
+    const valid = manualObs.filter(r => r.tag && r.tag.trim());
+    if (!valid.length) return;
+    const injected = valid.map((r, i) => ({ ...r, sl_no: (results?.equipment?.length || 0) + i + 1, _manual: true }));
+    if (results) {
+      setResults(prev => ({
+        ...prev,
+        equipment: [...(prev.equipment || []), ...injected],
+        total: (prev.total || 0) + injected.length,
+      }));
+    } else {
+      // No AI results yet — create a synthetic result set from manual entries only
+      setResults({ equipment: injected, total: injected.length, drawing_ref: 'Manual Entry' });
+    }
+    setManualObs([{ ...MANUAL_OBS_BLANK }]);
+    setShowManualForm(false);
+  };
 
   const handleFileSelect = (e) => {
     const f = e.target.files[0];
@@ -726,6 +812,216 @@ const EquipmentList = () => {
             </div>
           </div>
 
+          {/* ── Manual Observation Panel ── */}
+          <div className="rounded-2xl mb-4 eq-section overflow-hidden" style={{
+            background: 'white',
+            border: '1px solid rgba(5,150,105,0.15)',
+            boxShadow: '0 4px 24px rgba(5,150,105,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+            animationDelay: '0.12s',
+          }}>
+            {/* Collapsible header */}
+            <button
+              onClick={() => setShowManualForm(v => !v)}
+              className="w-full flex items-center gap-2.5 px-6 py-4"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+            >
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{
+                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+              }}>2</div>
+              <h2 className="text-sm font-semibold text-slate-700 tracking-wide flex-1">
+                Manual Observations
+                {manualObs.some(r => r.tag?.trim()) && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold text-emerald-700"
+                    style={{ background: 'rgba(5,150,105,0.1)', border: '1px solid rgba(5,150,105,0.2)' }}>
+                    {manualObs.filter(r => r.tag?.trim()).length} pending
+                  </span>
+                )}
+              </h2>
+              <span className="text-slate-400 text-xs font-medium mr-2">Enter equipment data manually from P&amp;ID drawing</span>
+              <span className="text-slate-400 text-sm">{showManualForm ? '▲' : '▼'}</span>
+            </button>
+
+            {showManualForm && (
+              <div className="px-6 pb-5" style={{ borderTop: '1px solid rgba(5,150,105,0.08)' }}>
+                {manualObs.map((row, rowIdx) => {
+                  const hint = resolveQuantityHint(row.tag);
+                  return (
+                    <div key={rowIdx} className="mb-5 pt-4" style={{ borderTop: rowIdx > 0 ? '1px dashed rgba(5,150,105,0.15)' : 'none' }}>
+                      {rowIdx > 0 && (
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-xs font-semibold text-slate-500">Entry #{rowIdx + 1}</span>
+                          <button onClick={() => handleRemoveManualRow(rowIdx)}
+                            className="text-xs text-red-400 hover:text-red-600 font-medium px-2 py-0.5 rounded"
+                            style={{ background: '#fef2f2', border: '1px solid rgba(239,68,68,0.15)' }}>
+                            ✕ Remove
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Row 1: Tag + Description + PID No */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                        {[
+                          { field: 'tag',         label: 'Equipment Tag No. *', placeholder: 'e.g. V-803-TF',     mono: true },
+                          { field: 'description', label: 'Description',          placeholder: 'e.g. MRD OIL SLUG CATCHER' },
+                          { field: 'pid_no',      label: 'P&ID No.',             placeholder: 'e.g. PJ6-EXD-MRI-BQDA-0023' },
+                        ].map(({ field, label, placeholder, mono }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input
+                              type="text"
+                              value={row[field]}
+                              onChange={e => handleManualFieldChange(rowIdx, field, e.target.value)}
+                              placeholder={placeholder}
+                              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                              style={{
+                                background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155',
+                                fontFamily: mono ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
+                                transition: 'border-color 0.2s, box-shadow 0.2s',
+                              }}
+                              onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                              onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Row 2: Quantity Required (dynamic label) + Design Flowrate + Phase */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">
+                            Quantity Required
+                            {hint && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded text-xs font-medium text-emerald-700"
+                                style={{ background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.18)' }}>
+                                {hint.label}
+                              </span>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            value={row.quality_required}
+                            onChange={e => handleManualFieldChange(rowIdx, 'quality_required', e.target.value)}
+                            placeholder={hint ? hint.placeholder : 'e.g. 327 M³'}
+                            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                            onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                            onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                          />
+                        </div>
+                        {[
+                          { field: 'design_flowrate',  label: 'Design Flowrate / Duty', placeholder: 'e.g. 2.5 MMBtu/hr' },
+                          { field: 'phase',             label: 'Phase',                  placeholder: 'e.g. Liquid / Gas / Mixed' },
+                        ].map(({ field, label, placeholder }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input
+                              type="text"
+                              value={row[field]}
+                              onChange={e => handleManualFieldChange(rowIdx, field, e.target.value)}
+                              placeholder={placeholder}
+                              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                              onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                              onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Row 3: Operating conditions */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        {[
+                          { field: 'oper_pressure',       label: 'Oper. Pressure (PSIG)',      placeholder: 'e.g. 150' },
+                          { field: 'oper_temperature',    label: 'Oper. Temp. (°F)',            placeholder: 'e.g. 105/60' },
+                          { field: 'design_pressure_min', label: 'Des. Press. Min (PSIG)',      placeholder: 'e.g. FV' },
+                          { field: 'design_pressure_max', label: 'Des. Press. Max (PSIG)',      placeholder: 'e.g. 195' },
+                        ].map(({ field, label, placeholder }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input type="text" value={row[field]} onChange={e => handleManualFieldChange(rowIdx, field, e.target.value)}
+                              placeholder={placeholder} className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                              onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                              onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Row 4: Design temps + MOC + Insulation + Dimensions */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        {[
+                          { field: 'design_temp_min',    label: 'Des. Temp. Min (°F)',   placeholder: 'e.g. -13.2' },
+                          { field: 'design_temp_max',    label: 'Des. Temp. Max (°F)',   placeholder: 'e.g. 185' },
+                          { field: 'moc',                label: 'MOC',                   placeholder: 'e.g. CS + LINING' },
+                          { field: 'insulation',         label: 'Insulation',            placeholder: 'e.g. HOT' },
+                        ].map(({ field, label, placeholder }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input type="text" value={row[field]} onChange={e => handleManualFieldChange(rowIdx, field, e.target.value)}
+                              placeholder={placeholder} className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                              onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                              onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Row 5: Dimensions + Motor + Revision + Remarks */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { field: 'dimension_length',   label: 'Length / Height (mm)',  placeholder: 'e.g. 15000' },
+                          { field: 'dimension_diameter', label: 'Diameter / Width (mm)', placeholder: 'e.g. 5000' },
+                          { field: 'motor_rating',       label: 'Motor Rating (kW)',      placeholder: 'e.g. N/A' },
+                          { field: 'revision',           label: 'Rev.',                   placeholder: 'e.g. 1' },
+                        ].map(({ field, label, placeholder }) => (
+                          <div key={field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                            <input type="text" value={row[field]} onChange={e => handleManualFieldChange(rowIdx, field, e.target.value)}
+                              placeholder={placeholder} className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', transition: 'border-color 0.2s, box-shadow 0.2s' }}
+                              onFocus={e => { e.target.style.borderColor='rgba(5,150,105,0.45)'; e.target.style.boxShadow='0 0 0 3px rgba(5,150,105,0.1)'; }}
+                              onBlur={e => { e.target.style.borderColor='#e2e8f0'; e.target.style.boxShadow='none'; }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Form action buttons */}
+                <div className="flex items-center gap-3 mt-4 pt-4" style={{ borderTop: '1px solid rgba(5,150,105,0.1)' }}>
+                  <button onClick={handleAddManualRow}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-emerald-700"
+                    style={{ background: 'rgba(5,150,105,0.06)', border: '1px solid rgba(5,150,105,0.2)', cursor: 'pointer' }}>
+                    + Add Another Entry
+                  </button>
+                  <button
+                    onClick={handleAddManualToResults}
+                    disabled={!manualObs.some(r => r.tag?.trim())}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                    style={manualObs.some(r => r.tag?.trim()) ? {
+                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      border: 'none', cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(5,150,105,0.32)',
+                    } : {
+                      background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', cursor: 'not-allowed',
+                    }}
+                  >
+                    ✓ Add to Equipment List
+                  </button>
+                  <button onClick={() => { setManualObs([{ ...MANUAL_OBS_BLANK }]); setShowManualForm(false); }}
+                    className="ml-auto text-xs text-slate-400 hover:text-slate-600 px-3 py-1.5 rounded-lg font-medium"
+                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Action Buttons ── */}
           <div className="flex gap-3 mb-6 eq-section" style={{ animationDelay: '0.15s' }}>
             <button
@@ -975,7 +1271,7 @@ const EquipmentList = () => {
                 <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(5,150,105,0.25), transparent)' }} />
               </div>
             </div>
-          )}}
+          )}
 
           {/* ── Results Table — full viewport width breakout ── */}
           {results && (
@@ -1107,6 +1403,20 @@ const EquipmentList = () => {
                                     style={{ background: 'rgba(5,150,105,0.08)', color: '#065f46', border: '1px solid rgba(5,150,105,0.15)' }}>
                                     {display}
                                   </span>
+                                ) : col.key === 'quality_required' ? (
+                                  <span className="flex flex-col gap-0.5">
+                                    {display !== '—' && <span>{display}</span>}
+                                    {(() => {
+                                      const h = resolveQuantityHint(row.tag);
+                                      return h ? (
+                                        <span className="text-xs font-medium px-1.5 py-0.5 rounded self-start"
+                                          style={{ background: 'rgba(5,150,105,0.07)', color: '#059669', border: '1px solid rgba(5,150,105,0.15)' }}
+                                          title={`Expected: ${h.label} (${h.placeholder})`}>
+                                          {h.label}
+                                        </span>
+                                      ) : (display === '—' ? <span style={{ color: '#94a3b8' }}>—</span> : null);
+                                    })()}
+                                  </span>
                                 ) : col.key === 'line_connections' ? (
                                   renderLineBadges(v)
                                 ) : col.key === 'nozzle_connections' ? (
@@ -1169,7 +1479,7 @@ const EquipmentList = () => {
                   ['⭕', 'Diameter / Width (mm)',         'Outside diameter or width from the dimension column (NOTE 1)'],
                   ['⚡', 'Motor Rating (kW)',             'Installed motor or driver power rating from the KW column'],
                   ['📋', 'P&ID No.',                     'P&ID reference number cross-linked to this equipment item'],
-                  ['✅', 'Quality Required',              'Quality inspection / testing requirement code'],
+                  ['✅', 'Quantity Required',             'Quantity or capacity requirement — Volume (Vessel/Tank), Design Flow Rate (Pump/Compressor), or Duty (Heat Exchanger). Resolved dynamically from equipment tag prefix.'],
                   ['🔄', 'Phase',                        'Process fluid phase (Gas, Liquid, Mixed, Vapour…)'],
                   ['💬', 'Remarks',                      'Notes, holds, TBD items or other remarks from the last column'],
                   ['🔀', 'Multi-Angle OCR',              'Extracts text at 0°, 90°, 180°, 270° — handles landscape CAD title blocks'],
