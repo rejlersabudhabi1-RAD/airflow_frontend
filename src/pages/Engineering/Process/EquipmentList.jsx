@@ -271,6 +271,188 @@ const MANUAL_OBS_BLANK = {
 };
 
 // ---------------------------------------------------------------------------
+// SOFT-CODED: All animation keyframes live in EQ_KEYFRAMES.
+// Visual theme constants (colours, gradients, decoration config) live in EQ_T.
+// JSX only references these — no magic values inline.
+// ---------------------------------------------------------------------------
+const EQ_KEYFRAMES = `
+  /* ── Orbit electrons (AI processing loader) ── */
+  @keyframes eqOrbitA {
+    from { transform: rotate(0deg)   translateX(30px) rotate(0deg);    }
+    to   { transform: rotate(360deg) translateX(30px) rotate(-360deg); }
+  }
+  @keyframes eqOrbitB {
+    from { transform: rotate(120deg) translateX(30px) rotate(-120deg); }
+    to   { transform: rotate(480deg) translateX(30px) rotate(-480deg); }
+  }
+  @keyframes eqOrbitC {
+    from { transform: rotate(240deg) translateX(30px) rotate(-240deg); }
+    to   { transform: rotate(600deg) translateX(30px) rotate(-600deg); }
+  }
+  /* ── Animated top gradient bar ── */
+  @keyframes eqGradShift {
+    0%   { background-position: 0%   50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0%   50%; }
+  }
+  /* ── Circuit trace on upload border ── */
+  @keyframes eqTraceH {
+    0%     { transform: scaleX(0); transform-origin: left;  }
+    48%    { transform: scaleX(1); transform-origin: left;  }
+    52%    { transform: scaleX(1); transform-origin: right; }
+    100%   { transform: scaleX(0); transform-origin: right; }
+  }
+  @keyframes eqTraceV {
+    0%     { transform: scaleY(0); transform-origin: top;    }
+    48%    { transform: scaleY(1); transform-origin: top;    }
+    52%    { transform: scaleY(1); transform-origin: bottom; }
+    100%   { transform: scaleY(0); transform-origin: bottom; }
+  }
+  /* ── Pipe flow dashes ── */
+  @keyframes eqPipeFlow {
+    from { stroke-dashoffset: 40; }
+    to   { stroke-dashoffset: 0;  }
+  }
+  /* ── Streaming data dots across pipe ── */
+  @keyframes eqStreamDot {
+    0%   { left: -6px;           opacity: 0; }
+    6%   { opacity: 1; }
+    94%  { opacity: 1; }
+    100% { left: calc(100% + 6px); opacity: 0; }
+  }
+  /* ── Node glow for KPI cards ── */
+  @keyframes eqNodeGlow {
+    0%, 100% { box-shadow: 0 0 10px rgba(5,150,105,0.12), 0 4px 16px rgba(5,150,105,0.07); }
+    50%       { box-shadow: 0 0 26px rgba(5,150,105,0.26), 0 4px 22px rgba(5,150,105,0.13); }
+  }
+  /* ── Badge / chip pop entrance ── */
+  @keyframes eqChipPop {
+    0%   { opacity: 0; transform: scale(0.72) translateY(5px); }
+    62%  { transform: scale(1.06) translateY(-1px); }
+    100% { opacity: 1; transform: scale(1)    translateY(0);   }
+  }
+  /* ── Slow reverse spin (rule ring inner) ── */
+  @keyframes eqSpinSlowRev {
+    from { transform: rotate(360deg); }
+    to   { transform: rotate(0deg);   }
+  }
+  /* ── Ambient blob floats ── */
+  @keyframes eqFloatA {
+    0%, 100% { transform: translateY(0)     scale(1);    }
+    50%       { transform: translateY(-24px) scale(1.04); }
+  }
+  @keyframes eqFloatB {
+    0%, 100% { transform: translateY(0)    scale(1);    }
+    50%       { transform: translateY(20px) scale(0.97); }
+  }
+  @keyframes eqFloatC {
+    0%, 100% { transform: translateY(0)     scale(1);    }
+    50%       { transform: translateY(-15px) scale(1.02); }
+  }
+  /* ── Legacy keyframes (kept for backward compat) ── */
+  @keyframes eq-scan-line {
+    0%   { top: 0%;   opacity: 0; }
+    5%   { opacity: 1; }
+    95%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+  @keyframes eq-float {
+    0%, 100% { transform: translateY(0)    scale(1);    opacity: 0.18; }
+    50%       { transform: translateY(-18px) scale(1.25); opacity: 0.42; }
+  }
+  @keyframes eq-glow-light {
+    0%, 100% { box-shadow: 0 0 6px  rgba(5,150,105,0.18); }
+    50%       { box-shadow: 0 0 18px rgba(5,150,105,0.38), 0 0 36px rgba(5,150,105,0.1); }
+  }
+  @keyframes eq-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+  @keyframes eq-row-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes eq-fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes eq-kpi-count {
+    from { opacity: 0; transform: translateY(8px) scale(0.9); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);   }
+  }
+  @keyframes eq-bar-glow {
+    0%, 100% { filter: brightness(1); }
+    50%       { filter: brightness(1.2) drop-shadow(0 0 5px rgba(5,150,105,0.5)); }
+  }
+  @keyframes eq-dot-wave {
+    0%, 100% { transform: scaleY(0.5); opacity: 0.4; }
+    50%       { transform: scaleY(1.5); opacity: 1; }
+  }
+  @keyframes eq-spin-slow {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes eq-pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+  }
+  /* ── CSS utility classes ── */
+  .eq-scan-line {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(5,150,105,0.45), transparent);
+    animation: eq-scan-line 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .eq-particle {
+    position: absolute; border-radius: 50%;
+    background: rgba(5,150,105,0.30);
+    animation: eq-float ease-in-out infinite;
+  }
+  .eq-row-animate       { animation: eq-row-in 0.3s ease forwards; opacity: 0; }
+  .eq-section           { animation: eq-fade-up 0.5s ease both; }
+  .eq-filter-input::placeholder { color: #94a3b8; }
+  .eq-th-sticky         { position: sticky; top: 0; z-index: 10; }
+  .eq-upload-zone:hover { border-color: rgba(5,150,105,0.55) !important; background: rgba(5,150,105,0.06) !important; }
+  .eq-action-btn:hover:not(:disabled) { box-shadow: 0 6px 24px rgba(5,150,105,0.42) !important; transform: translateY(-1px); }
+  .eq-export-btn:hover  { background: rgba(5,150,105,0.14) !important; border-color: rgba(5,150,105,0.4) !important; }
+  .eq-kpi-card          { animation: eq-kpi-count 0.45s ease both; }
+  .eq-info-card:hover   { border-color: rgba(5,150,105,0.28) !important; background: rgba(5,150,105,0.03) !important; }
+  .eq-chip              { animation: eqChipPop 0.4s ease both; }
+  .eq-kpi-node          { animation: eqNodeGlow 2.6s ease infinite; }
+`;
+
+// SOFT-CODED: visual theme constants for EquipmentList — colours, gradients, decoration
+const EQ_T = {
+  bg:      'linear-gradient(145deg, #f0fdf4 0%, #ecfdf5 40%, #f1f5f9 100%)',
+  gridDot: 'radial-gradient(circle, rgba(5,150,105,0.06) 1px, transparent 1px)',
+  gradBar: 'linear-gradient(90deg,#059669,#047857,#10b981,#34d399,#059669)',
+  blobs: [
+    { color:'rgba(5,150,105,0.09)',  size:'560px', top:'-80px',    left:'10%',    anim:'eqFloatA 14s ease-in-out infinite'     },
+    { color:'rgba(5,150,105,0.06)',  size:'440px', top:'30%',      right:'-60px', anim:'eqFloatB 17s ease-in-out infinite'     },
+    { color:'rgba(16,185,129,0.07)', size:'380px', bottom:'-60px', left:'35%',    anim:'eqFloatC 12s ease-in-out infinite'     },
+    { color:'rgba(5,150,105,0.05)',  size:'300px', top:'55%',      left:'-50px',  anim:'eqFloatA 10s ease-in-out infinite 3s'  },
+  ],
+  electrons: ['#059669', '#10b981', '#6ee7b7'],  // A / B / C orbit colours
+  // Capability chips in hero section
+  chips: [
+    { icon:'🏷️', label:'Equipment Tags'     },
+    { icon:'🌡️', label:'Process Conditions'  },
+    { icon:'🧱', label:'MOC & Insulation'   },
+    { icon:'📐', label:'Dimensions'         },
+    { icon:'⚡', label:'Motor Rating'       },
+    { icon:'📋', label:'P&ID Reference'     },
+  ],
+  // Stream dots for right-side SVG decoration
+  streamDots: [
+    { top:'22%', delay:'0s',   dur:'3.0s', color:'#059669' },
+    { top:'22%', delay:'1.0s', dur:'3.0s', color:'#10b981' },
+    { top:'22%', delay:'2.0s', dur:'3.0s', color:'#6ee7b7' },
+    { top:'62%', delay:'0.5s', dur:'2.7s', color:'#047857' },
+    { top:'62%', delay:'1.5s', dur:'2.7s', color:'#059669' },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 const EquipmentList = () => {
   const [file,           setFile]           = useState(null);
   const [isProcessing,   setIsProcessing]   = useState(false);
@@ -573,159 +755,165 @@ const EquipmentList = () => {
 
   return (
     <>
-      <style>{`
-        @keyframes eq-scan-line {
-          0%   { top: 0%;   opacity: 0; }
-          5%   { opacity: 1; }
-          95%  { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
-        }
-        @keyframes eq-float {
-          0%, 100% { transform: translateY(0)    scale(1);   opacity: 0.18; }
-          50%       { transform: translateY(-18px) scale(1.25); opacity: 0.42; }
-        }
-        @keyframes eq-glow-light {
-          0%, 100% { box-shadow: 0 0 6px  rgba(5,150,105,0.18); }
-          50%       { box-shadow: 0 0 18px rgba(5,150,105,0.38), 0 0 36px rgba(5,150,105,0.1); }
-        }
-        @keyframes eq-shimmer {
-          0%   { transform: translateX(-100%); }
-          100% { transform: translateX(300%); }
-        }
-        @keyframes eq-row-in {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes eq-fade-up {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes eq-kpi-count {
-          from { opacity: 0; transform: translateY(8px) scale(0.9); }
-          to   { opacity: 1; transform: translateY(0)   scale(1);   }
-        }
-        @keyframes eq-bar-glow {
-          0%, 100% { filter: brightness(1); }
-          50%       { filter: brightness(1.2) drop-shadow(0 0 5px rgba(5,150,105,0.5)); }
-        }
-        @keyframes eq-dot-wave {
-          0%, 100% { transform: scaleY(0.5); opacity: 0.4; }
-          50%       { transform: scaleY(1.5); opacity: 1; }
-        }
-        @keyframes eq-spin-slow {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        @keyframes eq-pulse-badge {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.55; }
-        }
-        .eq-scan-line {
-          position: absolute; left: 0; right: 0; height: 2px;
-          background: linear-gradient(90deg, transparent, rgba(5,150,105,0.45), transparent);
-          animation: eq-scan-line 3s ease-in-out infinite;
-          pointer-events: none;
-        }
-        .eq-particle {
-          position: absolute; border-radius: 50%;
-          background: rgba(5,150,105,0.35);
-          animation: eq-float ease-in-out infinite;
-        }
-        .eq-row-animate {
-          animation: eq-row-in 0.3s ease forwards;
-          opacity: 0;
-        }
-        .eq-section { animation: eq-fade-up 0.5s ease both; }
-        .eq-filter-input::placeholder { color: #94a3b8; }
-        .eq-th-sticky {
-          position: sticky;
-          top: 0;
-          z-index: 10;
-        }
-        .eq-upload-zone:hover { border-color: rgba(5,150,105,0.55) !important; background: rgba(5,150,105,0.06) !important; }
-        .eq-action-btn:hover:not(:disabled) {
-          box-shadow: 0 6px 24px rgba(5,150,105,0.42) !important;
-          transform: translateY(-1px);
-        }
-        .eq-export-btn:hover {
-          background: rgba(5,150,105,0.14) !important;
-          border-color: rgba(5,150,105,0.4) !important;
-        }
-        .eq-kpi-card { animation: eq-kpi-count 0.45s ease both; }
-        .eq-info-card:hover {
-          border-color: rgba(5,150,105,0.28) !important;
-          background: rgba(5,150,105,0.03) !important;
-        }
-      `}</style>
+      <style>{EQ_KEYFRAMES}</style>
 
-      {/* Light gradient background */}
-      <div className="min-h-screen relative overflow-x-hidden"
-        style={{ background: 'linear-gradient(145deg, #f0fdf4 0%, #ecfdf5 40%, #f1f5f9 100%)' }}>
+      {/* ── Full-page background ── */}
+      <div className="min-h-screen relative overflow-x-hidden" style={{ background: EQ_T.bg }}>
 
-        {/* Subtle grid */}
-        <div className="fixed inset-0 pointer-events-none" style={{
-          backgroundImage: 'linear-gradient(rgba(5,150,105,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(5,150,105,0.05) 1px, transparent 1px)',
-          backgroundSize: '52px 52px',
-        }} />
+        {/* Fine dot grid */}
+        <div className="fixed inset-0 pointer-events-none"
+          style={{ backgroundImage: EQ_T.gridDot, backgroundSize:'44px 44px' }} />
 
-        {/* Ambient particles */}
-        <div className="fixed inset-0 pointer-events-none overflow-hidden">
-          {[
-            { l: '4%',  t: '18%', s: 4, d: '0s',   dur: '3.4s' },
-            { l: '13%', t: '72%', s: 5, d: '0.7s', dur: '4.2s' },
-            { l: '68%', t: '12%', s: 3, d: '1.1s', dur: '3.9s' },
-            { l: '83%', t: '58%', s: 6, d: '0.3s', dur: '4.6s' },
-            { l: '47%', t: '82%', s: 4, d: '1.8s', dur: '3.6s' },
-            { l: '91%', t: '32%', s: 3, d: '2.0s', dur: '4.9s' },
-            { l: '56%', t: '44%', s: 5, d: '0.5s', dur: '5.2s' },
-          ].map((p, i) => (
-            <div key={i} className="eq-particle" style={{
-              left: p.l, top: p.t, width: p.s, height: p.s,
-              animationDelay: p.d, animationDuration: p.dur,
-            }} />
+        {/* Ambient gradient blobs */}
+        {EQ_T.blobs.map((b, i) => (
+          <div key={i} className="absolute rounded-full pointer-events-none"
+            style={{ width:b.size, height:b.size, top:b.top, bottom:b.bottom, left:b.left, right:b.right,
+              background:`radial-gradient(circle, ${b.color} 0%, transparent 70%)`, animation:b.anim }} />
+        ))}
+
+        {/* Right-side animated SVG pipe decoration */}
+        <div className="absolute right-0 top-0 bottom-0 w-52 pointer-events-none overflow-hidden opacity-25 hidden xl:block">
+          <svg width="208" height="100%" viewBox="0 0 208 800" preserveAspectRatio="none"
+            fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="0" y1="176" x2="208" y2="176" stroke="#059669" strokeWidth="2.5"
+              strokeDasharray="12 8" style={{ animation:'eqPipeFlow 2.4s linear infinite' }} />
+            <line x1="0" y1="496" x2="208" y2="496" stroke="#047857" strokeWidth="2.5"
+              strokeDasharray="12 8" style={{ animation:'eqPipeFlow 2.8s linear infinite 0.4s' }} />
+            <line x1="104" y1="176" x2="104" y2="496" stroke="#10b981" strokeWidth="1.5"
+              strokeDasharray="8 10" style={{ animation:'eqPipeFlow 3.2s linear infinite 0.8s' }} />
+            <rect x="32"  y="154" width="40" height="44" rx="5" fill="rgba(5,150,105,0.12)" stroke="#059669" strokeWidth="1.5"/>
+            <rect x="136" y="154" width="40" height="44" rx="5" fill="rgba(4,120,87,0.10)"  stroke="#047857" strokeWidth="1.5"/>
+            <rect x="84"  y="474" width="40" height="44" rx="5" fill="rgba(16,185,129,0.10)" stroke="#10b981" strokeWidth="1.5"/>
+            <text x="43"  y="180" fill="#059669" fontSize="8" fontFamily="monospace" fontWeight="700">V-101</text>
+            <text x="147" y="180" fill="#047857" fontSize="8" fontFamily="monospace" fontWeight="700">E-201</text>
+            <text x="91"  y="500" fill="#10b981" fontSize="8" fontFamily="monospace" fontWeight="700">P-301</text>
+            <text x="4"   y="170" fill="#059669" fontSize="7" fontFamily="monospace" opacity="0.65">S-01</text>
+            <text x="4"   y="490" fill="#047857" fontSize="7" fontFamily="monospace" opacity="0.65">S-03</text>
+          </svg>
+          {EQ_T.streamDots.map((d, i) => (
+            <div key={i} className="absolute w-2 h-2 rounded-full pointer-events-none"
+              style={{ top: d.top, left: 0, background: d.color,
+                boxShadow: `0 0 5px ${d.color}`, animation: `eqStreamDot ${d.dur} linear infinite ${d.delay}` }} />
           ))}
         </div>
+
+        {/* Animated top gradient bar */}
+        <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
+          style={{ backgroundImage: EQ_T.gradBar, backgroundSize:'300% auto', animation:'eqGradShift 3s linear infinite' }} />
 
         <div className="relative z-10 py-8">
 
           {/* ── Centered content wrapper ── */}
           <div className="max-w-7xl mx-auto px-6">
 
-          {/* ── Header ── */}
-          <div className="mb-8 eq-section" style={{ animationDelay: '0s' }}>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-4" style={{
-              background: 'rgba(5,150,105,0.08)',
-              border: '1px solid rgba(5,150,105,0.22)',
+          {/* ── Hero Header ── */}
+          <div className="mb-10 eq-section relative" style={{ animationDelay: '0s' }}>
+
+            {/* Rule ring decoration (right side, desktop only) */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden xl:block pointer-events-none" style={{ opacity: 0.20 }}>
+              <svg width="172" height="172" viewBox="0 0 172 172" fill="none">
+                <circle cx="86" cy="86" r="76" stroke="url(#eqRingGradOuter)" strokeWidth="1.5" strokeDasharray="4 7"
+                  style={{ animation: 'eq-spin-slow 24s linear infinite' }} />
+                <circle cx="86" cy="86" r="50" stroke="url(#eqRingGradInner)" strokeWidth="1" strokeDasharray="3 9"
+                  style={{ animation: 'eqSpinSlowRev 16s linear infinite' }} />
+                {Array.from({ length: 12 }, (_, i) => {
+                  const ang = (i * 30 * Math.PI) / 180;
+                  const x = 86 + 76 * Math.cos(ang);
+                  const y = 86 + 76 * Math.sin(ang);
+                  return <circle key={i} cx={x} cy={y} r="2.5" fill="#059669" opacity="0.8" />;
+                })}
+                <defs>
+                  <linearGradient id="eqRingGradOuter" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#059669" /><stop offset="100%" stopColor="#10b981" />
+                  </linearGradient>
+                  <linearGradient id="eqRingGradInner" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#047857" /><stop offset="100%" stopColor="#34d399" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+
+            {/* Badge pill */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-4 eq-chip" style={{
+              background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.22)', animationDelay: '0.04s',
             }}>
-              <span className="w-2 h-2 rounded-full bg-emerald-500"
-                style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
               <span className="text-emerald-700 text-xs font-semibold tracking-widest uppercase">AI-Powered · P&amp;ID Analysis</span>
             </div>
+
+            {/* Title */}
             <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
-              <div className="p-2.5 rounded-xl" style={{
-                background: 'rgba(5,150,105,0.1)',
+              <div className="p-2.5 rounded-xl relative overflow-hidden flex-shrink-0" style={{
+                background: 'linear-gradient(135deg, rgba(5,150,105,0.12) 0%, rgba(16,185,129,0.07) 100%)',
                 border: '1px solid rgba(5,150,105,0.22)',
                 animation: 'eq-glow-light 3s ease infinite',
               }}>
                 <Boxes className="h-7 w-7 text-emerald-600" />
               </div>
-              Equipment <span className="text-emerald-600 ml-2">List</span>
+              Equipment&nbsp;
+              <span style={{
+                background: 'linear-gradient(135deg, #059669 0%, #047857 60%, #10b981 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}>List</span>
             </h1>
-            <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
+
+            {/* Description */}
+            <p className="text-slate-500 text-base leading-relaxed max-w-2xl mb-6">
               Extract 18 engineering fields from Equipment List registers or P&amp;ID drawings using AI — Tag No., Description, Operating &amp; Design Conditions, MOC, Insulation, Dimensions, Motor Rating, P&amp;ID Ref and more
             </p>
+
+            {/* Capability chips */}
+            <div className="flex flex-wrap gap-2 mb-5">
+              {EQ_T.chips.map((chip, i) => (
+                <span key={chip.label} className="eq-chip inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+                  style={{
+                    background: 'rgba(5,150,105,0.06)', border: '1px solid rgba(5,150,105,0.18)',
+                    color: '#065f46', animationDelay: `${0.08 + i * 0.06}s`,
+                  }}>
+                  <span>{chip.icon}</span><span>{chip.label}</span>
+                </span>
+              ))}
+            </div>
+
+            {/* Workflow steps */}
+            <div className="flex flex-wrap gap-3">
+              {[
+                { n:'01', label:'Upload PDF',    desc:'P&ID drawing or Equipment Register', icon:'📄' },
+                { n:'02', label:'AI Extraction', desc:'18-field OCR + rule engine',          icon:'🤖' },
+                { n:'03', label:'Download Excel',desc:'Structured register ready to use',    icon:'📊' },
+              ].map((step, i) => (
+                <div key={step.n} className="eq-chip flex items-center gap-2.5 px-4 py-2.5 rounded-xl"
+                  style={{
+                    background: 'white',
+                    border: '1px solid rgba(5,150,105,0.12)',
+                    boxShadow: '0 1px 4px rgba(5,150,105,0.06)',
+                    animationDelay: `${0.45 + i * 0.07}s`,
+                  }}>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white"
+                    style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}>
+                    {step.n}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 leading-none mb-0.5">{step.label}</p>
+                    <p className="text-[10px] text-slate-400 leading-none">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ── Upload Card ── */}
           <div className="rounded-2xl p-6 mb-4 eq-section" style={{
             background: 'white',
             border: '1px solid rgba(5,150,105,0.15)',
-            boxShadow: '0 4px 24px rgba(5,150,105,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+            boxShadow: '0 4px 28px rgba(5,150,105,0.09), 0 1px 4px rgba(0,0,0,0.04)',
             animationDelay: '0.08s',
           }}>
             <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{
                 background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                boxShadow: '0 2px 8px rgba(5,150,105,0.35)',
               }}>1</div>
               <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
               <span className="ml-auto text-xs text-slate-400 font-medium px-2.5 py-1 rounded-full" style={{
@@ -747,6 +935,19 @@ const EquipmentList = () => {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
+              {/* Circuit trace border — top edge */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] pointer-events-none"
+                style={{ background: 'rgba(5,150,105,0.55)', animation: 'eqTraceH 2.8s ease-in-out infinite' }} />
+              {/* Circuit trace border — bottom edge (offset) */}
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] pointer-events-none"
+                style={{ background: 'rgba(5,150,105,0.40)', animation: 'eqTraceH 2.8s ease-in-out infinite 1.4s' }} />
+              {/* Circuit trace border — left edge */}
+              <div className="absolute top-0 bottom-0 left-0 w-[2px] pointer-events-none"
+                style={{ background: 'rgba(5,150,105,0.45)', animation: 'eqTraceV 2.8s ease-in-out infinite 0.7s' }} />
+              {/* Circuit trace border — right edge (offset) */}
+              <div className="absolute top-0 bottom-0 right-0 w-[2px] pointer-events-none"
+                style={{ background: 'rgba(5,150,105,0.35)', animation: 'eqTraceV 2.8s ease-in-out infinite 2.1s' }} />
+
               {/* Corner brackets */}
               {[
                 'top-0 left-0   border-t-2 border-l-2',
@@ -755,7 +956,7 @@ const EquipmentList = () => {
                 'bottom-0 right-0 border-b-2 border-r-2',
               ].map((cls, i) => (
                 <div key={i} className={`absolute ${cls} w-5 h-5 pointer-events-none`}
-                  style={{ borderColor: 'rgba(5,150,105,0.35)' }} />
+                  style={{ borderColor: 'rgba(5,150,105,0.45)' }} />
               ))}
 
               {/* Scan line (idle only) */}
@@ -797,8 +998,8 @@ const EquipmentList = () => {
                 ) : (
                   <>
                     <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{
-                      background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(5,150,105,0.04))',
-                      border: '1.5px solid rgba(5,150,105,0.18)',
+                      background: 'linear-gradient(135deg, rgba(5,150,105,0.10), rgba(5,150,105,0.04))',
+                      border: '1.5px solid rgba(5,150,105,0.20)',
                     }}>
                       <CloudArrowUpIcon className="h-9 w-9 text-emerald-500" />
                     </div>
@@ -1089,60 +1290,104 @@ const EquipmentList = () => {
 
           {/* ── Progress ── */}
           {isProcessing && (
-            <div className="rounded-2xl p-5 mb-4" style={{
+            <div className="rounded-2xl overflow-hidden mb-4" style={{
               background: 'white',
-              border: '1px solid rgba(5,150,105,0.18)',
-              boxShadow: '0 2px 12px rgba(5,150,105,0.08)',
+              border: '1px solid rgba(5,150,105,0.20)',
+              boxShadow: '0 4px 24px rgba(5,150,105,0.10)',
               animation: 'eq-fade-up 0.35s ease forwards',
             }}>
-              <div className="flex items-center gap-4 mb-3">
-                <div className="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center" style={{
-                  background: 'rgba(5,150,105,0.08)',
-                  border: '2px solid rgba(5,150,105,0.22)',
-                  animation: 'eq-glow-light 1.6s ease infinite',
-                }}>
-                  <svg className="w-5 h-5 text-emerald-600" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="1.5"
-                    style={{ animation: 'eq-spin-slow 3s linear infinite' }}>
-                    <path d="M12 2a10 10 0 1 0 10 10" strokeLinecap="round"/>
-                    <path d="M12 6v6l3 3" strokeLinecap="round"/>
-                  </svg>
-                </div>
+              {/* Gradient top strip */}
+              <div className="h-[3px]" style={{
+                backgroundImage: EQ_T.gradBar, backgroundSize:'300% auto',
+                animation: 'eqGradShift 2.5s linear infinite',
+              }} />
 
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium text-slate-700">{statusMessage || 'Processing…'}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
-                      <span className="text-sm font-bold text-emerald-600">{progress}%</span>
+              <div className="p-5">
+                <div className="flex items-start gap-5 mb-4">
+                  {/* Orbit electron AI loader */}
+                  <div className="relative flex-shrink-0 w-14 h-14" style={{ marginTop: '2px' }}>
+                    {/* Orbit ring */}
+                    <div className="absolute inset-0 rounded-full border border-dashed pointer-events-none"
+                      style={{ borderColor: 'rgba(5,150,105,0.18)' }} />
+                    {/* Core glow */}
+                    <div className="absolute inset-[14px] rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(5,150,105,0.09)', animation: 'eq-glow-light 1.8s ease infinite' }}>
+                      <svg className="w-5 h-5 text-emerald-600" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="1.5" style={{ animation: 'eq-spin-slow 6s linear infinite' }}>
+                        <path d="M12 2a10 10 0 1 0 10 10" strokeLinecap="round"/>
+                        <path d="M12 6v6l3 3" strokeLinecap="round"/>
+                      </svg>
+                    </div>
+                    {/* Orbit electrons A / B / C */}
+                    {EQ_T.electrons.map((color, i) => (
+                      <div key={i} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-2 h-2 rounded-full" style={{
+                          background: color,
+                          boxShadow: `0 0 6px ${color}`,
+                          animation: `eqOrbit${['A','B','C'][i]} ${['1.4s','1.8s','2.2s'][i]} linear infinite`,
+                        }} />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-slate-700">{statusMessage || 'AI Processing…'}</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs text-slate-400 tabular-nums font-mono">⏱ {formatElapsed(elapsedSeconds)}</span>
+                        <span className="text-sm font-bold text-emerald-600 tabular-nums">{progress}%</span>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="relative w-full rounded-full h-2.5 overflow-hidden" style={{ background: '#f1f5f9' }}>
+                      <div className="h-full rounded-full relative overflow-hidden" style={{
+                        width: `${Math.max(5, progress)}%`,
+                        background: 'linear-gradient(90deg, #047857, #059669, #34d399)',
+                        animation: 'eq-bar-glow 1.6s ease infinite',
+                        transition: 'width 0.7s ease',
+                      }}>
+                        <div className="absolute inset-0" style={{
+                          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%)',
+                          animation: 'eq-shimmer 2s linear infinite',
+                        }} />
+                      </div>
+                    </div>
+                    {/* Stage indicators */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
+                      {[
+                        { label:'OCR Extraction',  done: progress >= 20 },
+                        { label:'Tag Detection',   done: progress >= 40 },
+                        { label:'Field Mapping',   done: progress >= 65 },
+                        { label:'Post-processing', done: progress >= 85 },
+                      ].map(stage => (
+                        <div key={stage.label} className="flex items-center gap-1.5 text-[11px]">
+                          <div className="w-3 h-3 rounded-full border flex items-center justify-center" style={{
+                            background: stage.done ? '#059669' : 'transparent',
+                            borderColor: stage.done ? '#059669' : '#e2e8f0',
+                            transition: 'all 0.4s ease',
+                          }}>
+                            {stage.done && <span className="text-white font-bold" style={{ fontSize:'7px' }}>✓</span>}
+                          </div>
+                          <span style={{ color: stage.done ? '#059669' : '#94a3b8', fontWeight: stage.done ? 600 : 400 }}>
+                            {stage.label}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="relative w-full rounded-full h-2.5 overflow-hidden bg-slate-100">
-                    <div className="h-full rounded-full relative overflow-hidden" style={{
-                      width: `${Math.max(5, progress)}%`,
-                      background: 'linear-gradient(90deg, #047857, #059669, #34d399)',
-                      animation: 'eq-bar-glow 1.6s ease infinite',
-                      transition: 'width 0.7s ease',
-                    }}>
-                      <div className="absolute inset-0" style={{
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%)',
-                        animation: 'eq-shimmer 2s linear infinite',
-                      }} />
-                    </div>
-                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="text-xs text-slate-400">
-                  {elapsedSeconds > 20 ? 'OCR scanning P&ID drawing — large drawings may take 1–3 min' : 'AI scanning document'}
-                </span>
-                {[0, 1, 2].map(i => (
-                  <div key={i} className="w-1.5 h-4 rounded-full bg-emerald-400" style={{
-                    animation: 'eq-dot-wave 1.1s ease infinite',
-                    animationDelay: `${i * 0.18}s`,
-                  }} />
-                ))}
+                <div className="flex items-center gap-1.5 pt-3" style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <span className="text-xs text-slate-400 flex-1">
+                    {elapsedSeconds > 20 ? 'OCR scanning P&ID drawing — large drawings may take 1–3 min' : 'AI scanning document for equipment registers and tag numbers'}
+                  </span>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="w-1.5 h-4 rounded-full bg-emerald-400 flex-shrink-0" style={{
+                      animation: 'eq-dot-wave 1.1s ease infinite',
+                      animationDelay: `${i * 0.18}s`,
+                    }} />
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -1231,23 +1476,36 @@ const EquipmentList = () => {
           {/* ── KPI Summary Bar (after extraction) ── */}
           {kpiStats && (
             <div className="max-w-7xl mx-auto px-6 mb-6">
+              {/* Section label */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, transparent, rgba(5,150,105,0.2))' }} />
+                <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-widest px-3 py-1 rounded-full eq-chip"
+                  style={{ background:'rgba(5,150,105,0.06)', border:'1px solid rgba(5,150,105,0.16)', animationDelay:'0s' }}>
+                  Extraction Summary
+                </span>
+                <div className="h-px flex-1" style={{ background: 'linear-gradient(270deg, transparent, rgba(5,150,105,0.2))' }} />
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {[
-                  { label: 'Items Extracted', value: kpiStats.total, icon: '🏷️', delay: '0s'   },
-                  { label: 'Equipment Types', value: kpiStats.types,  icon: '🗂️', delay: '0.06s' },
-                  { label: 'With MOC',        value: kpiStats.withMoc, icon: '🧱', delay: '0.12s' },
-                  { label: 'With Dimensions', value: kpiStats.withDim, icon: '📐', delay: '0.18s' },
-                  { label: 'With Motor',      value: kpiStats.withMtr, icon: '⚡', delay: '0.24s' },
-                ].map(({ label, value, icon, delay }) => (
-                  <div key={label} className="eq-kpi-card rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{
+                  { label: 'Items Extracted', value: kpiStats.total,   icon: '🏷️', color: '#059669', delay: '0s'    },
+                  { label: 'Equipment Types', value: kpiStats.types,   icon: '🗂️', color: '#047857', delay: '0.06s' },
+                  { label: 'With MOC',        value: kpiStats.withMoc, icon: '🧱', color: '#065f46', delay: '0.12s' },
+                  { label: 'With Dimensions', value: kpiStats.withDim, icon: '📐', color: '#059669', delay: '0.18s' },
+                  { label: 'With Motor',      value: kpiStats.withMtr, icon: '⚡', color: '#047857', delay: '0.24s' },
+                ].map(({ label, value, icon, color, delay }) => (
+                  <div key={label} className="eq-kpi-card eq-kpi-node rounded-2xl px-4 py-4 flex items-center gap-3" style={{
                     background: 'white',
                     border: '1px solid rgba(5,150,105,0.13)',
-                    boxShadow: '0 2px 12px rgba(5,150,105,0.07)',
                     animationDelay: delay,
                   }}>
-                    <span className="text-2xl leading-none flex-shrink-0">{icon}</span>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl" style={{
+                      background: `linear-gradient(135deg, ${color}18 0%, ${color}0c 100%)`,
+                      border: `1px solid ${color}22`,
+                    }}>
+                      {icon}
+                    </div>
                     <div>
-                      <p className="text-2xl font-bold text-slate-800 leading-none tabular-nums">{value}</p>
+                      <p className="text-2xl font-bold leading-none tabular-nums" style={{ color }}>{value}</p>
                       <p className="text-xs text-slate-400 mt-0.5 font-medium">{label}</p>
                     </div>
                   </div>
@@ -1438,12 +1696,16 @@ const EquipmentList = () => {
 
               <div className="px-6 py-3 flex items-center justify-between text-xs" style={{
                 borderTop: '1px solid #f1f5f9',
-                background: '#f8fafc',
+                background: 'linear-gradient(90deg, #f8fafc, rgba(5,150,105,0.02))',
               }}>
-                <span className="text-slate-400">
-                  {filterText ? `${displayRows.length} of ${results.total} shown` : `${results.total} total items`}
-                </span>
-                <span className="text-slate-400">↑↓ Click column header to sort</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+                    style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
+                  <span className="text-slate-400 font-medium">
+                    {filterText ? `${displayRows.length} of ${results.total} shown` : `${results.total} equipment items`}
+                  </span>
+                </div>
+                <span className="text-slate-300 hidden sm:block">↑↓ Click column header to sort</span>
               </div>
             </div>
             </div>
@@ -1452,51 +1714,77 @@ const EquipmentList = () => {
           {/* ── Info Panel (idle) ── */}
           <div className="max-w-7xl mx-auto px-6">
           {!results && !isProcessing && (
-            <div className="rounded-2xl p-6 mt-4 eq-section" style={{
+            <div className="rounded-2xl overflow-hidden mt-4 eq-section" style={{
               background: 'white',
               border: '1px solid rgba(5,150,105,0.12)',
-              boxShadow: '0 2px 12px rgba(5,150,105,0.05)',
+              boxShadow: '0 4px 24px rgba(5,150,105,0.07)',
               animationDelay: '0.25s',
             }}>
-              <div className="flex items-center gap-2 mb-4">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"
-                  style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
-                <h3 className="text-sm font-semibold text-slate-700 tracking-wide">What Gets Extracted (18-Field Register)</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  ['🔢', 'SL No. & Revision',           'Row serial number and document revision extracted from the register table'],
-                  ['🏷️', 'Equipment Tag No.',            'ISA/project-style tag (V-101, P-201A, E-302…) from tag column'],
-                  ['📝', 'Description',                  'Equipment description as listed in the register'],
-                  ['💧', 'Design Flowrate / Duty',       'Design flow rate, duty, or volume capacity from the process column'],
-                  ['🌡️', 'Operating Pressure (PSIG)',    'Normal operating pressure extracted from oper. press. column'],
-                  ['🔥', 'Operating Temperature (°F)',   'Normal operating temperature from oper. temp. column'],
-                  ['⬆️', 'Design/Set Press. Min & Max',  'Minimum and maximum design or set pressure from the two PSIG columns'],
-                  ['⬆️', 'Design Temp. Min & Max (°F)',  'Minimum and maximum design temperature from the two Deg F columns'],
-                  ['🧱', 'MOC',                          'Material of Construction — shell, body or wetted-parts material'],
-                  ['🧊', 'Insulation',                   'Insulation type or code (PERS, PITS, ICS, CONS, HOT, COLD…)'],
-                  ['📐', 'Length / Height (mm)',          'Tangent-to-tangent length or overall height from the dimension column'],
-                  ['⭕', 'Diameter / Width (mm)',         'Outside diameter or width from the dimension column (NOTE 1)'],
-                  ['⚡', 'Motor Rating (kW)',             'Installed motor or driver power rating from the KW column'],
-                  ['📋', 'P&ID No.',                     'P&ID reference number cross-linked to this equipment item'],
-                  ['✅', 'Quantity Required',             'Quantity or capacity requirement — Volume (Vessel/Tank), Design Flow Rate (Pump/Compressor), or Duty (Heat Exchanger). Resolved dynamically from equipment tag prefix.'],
-                  ['🔄', 'Phase',                        'Process fluid phase (Gas, Liquid, Mixed, Vapour…)'],
-                  ['💬', 'Remarks',                      'Notes, holds, TBD items or other remarks from the last column'],
-                  ['🔀', 'Multi-Angle OCR',              'Extracts text at 0°, 90°, 180°, 270° — handles landscape CAD title blocks'],
-                ].map(([icon, title, desc]) => (
-                  <div key={title} className="eq-info-card flex items-start gap-3 p-3.5 rounded-xl" style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    transition: 'border-color 0.2s, background 0.2s',
-                    cursor: 'default',
+              {/* Gradient top strip */}
+              <div className="h-[3px]" style={{
+                backgroundImage: EQ_T.gradBar, backgroundSize:'300% auto',
+                animation: 'eqGradShift 4s linear infinite',
+              }} />
+
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{
+                    background: 'linear-gradient(135deg, rgba(5,150,105,0.12), rgba(16,185,129,0.06))',
+                    border: '1px solid rgba(5,150,105,0.20)',
                   }}>
-                    <span className="text-lg flex-shrink-0 leading-none mt-0.5">{icon}</span>
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-700 mb-0.5">{title}</p>
-                      <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
-                    </div>
+                    <span className="text-emerald-600 text-sm">📋</span>
                   </div>
-                ))}
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">What Gets Extracted</h3>
+                    <p className="text-xs text-slate-400">18-field engineering register · P&ID + Equipment List modes</p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"
+                      style={{ animation: 'eq-pulse-badge 2s ease infinite' }} />
+                    <span className="text-xs font-semibold text-emerald-600">AI-Ready</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    ['🔢', 'SL No. & Revision',           'Row serial number and document revision extracted from the register table',       '#059669'],
+                    ['🏷️', 'Equipment Tag No.',            'ISA/project-style tag (V-101, P-201A, E-302…) from tag column',                  '#047857'],
+                    ['📝', 'Description',                  'Equipment description as listed in the register',                                  '#065f46'],
+                    ['💧', 'Design Flowrate / Duty',       'Design flow rate, duty, or volume capacity from the process column',              '#059669'],
+                    ['🌡️', 'Operating Pressure (PSIG)',    'Normal operating pressure extracted from oper. press. column',                    '#047857'],
+                    ['🔥', 'Operating Temperature (°F)',   'Normal operating temperature from oper. temp. column',                            '#065f46'],
+                    ['⬆️', 'Design/Set Press. Min & Max',  'Minimum and maximum design or set pressure from the two PSIG columns',           '#059669'],
+                    ['⬆️', 'Design Temp. Min & Max (°F)',  'Minimum and maximum design temperature from the two Deg F columns',              '#047857'],
+                    ['🧱', 'MOC',                          'Material of Construction — shell, body or wetted-parts material',                 '#065f46'],
+                    ['🧊', 'Insulation',                   'Insulation type or code (PERS, PITS, ICS, CONS, HOT, COLD…)',                    '#059669'],
+                    ['📐', 'Length / Height (mm)',          'Tangent-to-tangent length or overall height from the dimension column',           '#047857'],
+                    ['⭕', 'Diameter / Width (mm)',         'Outside diameter or width from the dimension column',                             '#065f46'],
+                    ['⚡', 'Motor Rating (kW)',             'Installed motor or driver power rating from the KW column',                      '#059669'],
+                    ['📋', 'P&ID No.',                     'P&ID reference number cross-linked to this equipment item',                      '#047857'],
+                    ['✅', 'Quantity Required',             'Volume / Flow Rate / Duty — resolved dynamically from equipment tag prefix',      '#065f46'],
+                    ['🔄', 'Phase',                        'Process fluid phase (Gas, Liquid, Mixed, Vapour…)',                               '#059669'],
+                    ['💬', 'Remarks',                      'Notes, holds, TBD items or other remarks from the last column',                   '#047857'],
+                    ['🔀', 'Multi-Angle OCR',              'Extracts at 0°, 90°, 180°, 270° — handles landscape CAD title blocks',           '#065f46'],
+                  ].map(([icon, title, desc, color]) => (
+                    <div key={title} className="eq-info-card flex items-start gap-3 p-3.5 rounded-xl" style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      transition: 'border-color 0.2s, background 0.2s',
+                      cursor: 'default',
+                    }}>
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-base" style={{
+                        background: `linear-gradient(135deg, ${color}12 0%, ${color}07 100%)`,
+                        border: `1px solid ${color}1a`,
+                      }}>
+                        {icon}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold mb-0.5" style={{ color }}>{title}</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
