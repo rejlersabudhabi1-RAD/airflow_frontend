@@ -15,7 +15,8 @@ import {
   DocumentTextIcon,
   TableCellsIcon,
   DocumentChartBarIcon,
-  CircleStackIcon
+  CircleStackIcon,
+  DocumentMagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 
 // SOFT-CODED: P&ID Feature Naming Configuration
@@ -305,6 +306,16 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'Digital transformation datasheets and documentation',
         moduleCode: 'digitization_datasheet',
         badge: 'New'
+      },
+      {
+        id: 'nonTeffMetadata',
+        name: 'Non-TEFF Metadata',
+        fullName: 'Non-TEFF Metadata Extractor',
+        icon: DocumentMagnifyingGlassIcon,
+        path: '/engineering/digitization/non-teff-metadata',
+        description: 'Extract metadata from Non-TEFF documents (PDF, Excel, Word, AutoCAD)',
+        moduleCode: 'non_teff_metadata',
+        badge: 'AI'
       }
     ]
   }

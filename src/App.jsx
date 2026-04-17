@@ -114,6 +114,7 @@ import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
 // Digitization Components
 import SpecCustomizationPage from './pages/Engineering/Digitization/SpecCustomizationPage'
 import DigitizationDatasheetPage from './pages/Engineering/Digitization/DigitizationDatasheetPage'
+import NonTeffMetadataPage from './pages/Engineering/Digitization/NonTeffMetadataPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
@@ -939,6 +940,14 @@ function App() {
           element={
             <ProtectedRoute>
               <DigitizationDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/digitization/non-teff-metadata"
+          element={
+            <ProtectedRoute>
+              <NonTeffMetadataPage />
             </ProtectedRoute>
           }
         />
