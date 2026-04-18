@@ -468,6 +468,7 @@ const EquipmentList = () => {
   const [isDragging,     setIsDragging]     = useState(false);
   const [manualObs,      setManualObs]      = useState([{ ...MANUAL_OBS_BLANK }]);
   const [showManualForm, setShowManualForm] = useState(false);
+  const [selectedRows,   setSelectedRows]   = useState(new Set());
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -582,6 +583,7 @@ const EquipmentList = () => {
           apiClient.get(`/pid/equipment/results/${uploadId}/`)
             .then(({ data: r }) => {
               setResults({ equipment: r.equipment, total: r.total, drawing_ref: r.drawing_ref, upload_id: uploadId });
+              setSelectedRows(new Set());
               setProgress(100);
               setStatusMessage('Extraction complete!');
               setIsProcessing(false);
@@ -650,6 +652,7 @@ const EquipmentList = () => {
         // Synchronous result (HTTP 200)
         if (data.success && data.equipment !== undefined) {
           setResults({ equipment: data.equipment, total: data.total, drawing_ref: data.drawing_ref, upload_id: data.upload_id });
+          setSelectedRows(new Set());
           if (data.debug_info) setDebugInfo(data.debug_info);
           setProgress(100);
           setStatusMessage('Extraction complete!');
@@ -714,6 +717,45 @@ const EquipmentList = () => {
   const handleSort = (key) => {
     if (sortCol === key) setSortAsc(a => !a);
     else { setSortCol(key); setSortAsc(true); }
+  };
+
+  const getRowKey = (row, idx) => (row.tag && row.tag.trim() && row.tag !== '—' ? row.tag : `row-${idx}`);
+
+  const handleSelectRow = (key) => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedRows.size === displayRows.length && displayRows.length > 0) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(displayRows.map((row, idx) => getRowKey(row, idx))));
+    }
+  };
+
+  const handleExportSelected = () => {
+    const rowsToExport = displayRows.filter((row, idx) => selectedRows.has(getRowKey(row, idx)));
+    if (!rowsToExport.length) return;
+    const wsData = [
+      COLUMNS.map(c => c.label),
+      ...rowsToExport.map((row, idx) =>
+        COLUMNS.map(c => {
+          const v = c.key === 'sl_no' ? idx + 1 : row[c.key];
+          if (Array.isArray(v)) return v.join(', ') || '—';
+          return v || '—';
+        })
+      ),
+    ];
+    const ws    = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = COLUMNS.map(c => ({ wch: c.width || 18 }));
+    const wb    = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Equipment List');
+    const fname = `${(results?.drawing_ref || 'equipment_list').replace(/[^\w\-]/g, '_')}_equipment_list_selected.xlsx`;
+    XLSX.writeFile(wb, fname);
   };
 
   const handleExport = () => {
@@ -879,9 +921,10 @@ const EquipmentList = () => {
             {/* Workflow steps */}
             <div className="flex flex-wrap gap-3">
               {[
-                { n:'01', label:'Upload PDF',    desc:'P&ID drawing or Equipment Register', icon:'📄' },
-                { n:'02', label:'AI Extraction', desc:'18-field OCR + rule engine',          icon:'🤖' },
-                { n:'03', label:'Download Excel',desc:'Structured register ready to use',    icon:'📊' },
+                { n:'01', label:'Upload PDF',       desc:'P&ID drawing or Equipment Register',  icon:'📄' },
+                { n:'02', label:'AI Extraction',    desc:'18-field OCR + rule engine',            icon:'🤖' },
+                { n:'03', label:'Selection Record', desc:'Review & confirm extracted rows',       icon:'☑️'  },
+                { n:'04', label:'Download Excel',   desc:'Structured register ready to use',      icon:'📊' },
               ].map((step, i) => (
                 <div key={step.n} className="eq-chip flex items-center gap-2.5 px-4 py-2.5 rounded-xl"
                   style={{
@@ -1270,21 +1313,44 @@ const EquipmentList = () => {
             </button>
 
             {results && (
-              <button
-                onClick={handleExport}
-                className="eq-export-btn flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm"
-                style={{
-                  background: 'rgba(5,150,105,0.07)',
-                  color: '#065f46',
-                  border: '1px solid rgba(5,150,105,0.22)',
-                  boxShadow: '0 2px 8px rgba(5,150,105,0.08)',
-                  transition: 'all 0.2s',
-                  cursor: 'pointer',
-                }}
-              >
-                <ArrowDownTrayIcon className="h-4 w-4" />
-                Download Excel
-              </button>
+              <>
+                {selectedRows.size > 0 && (
+                  <button
+                    onClick={handleExportSelected}
+                    className="eq-export-btn flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm"
+                    style={{
+                      background: 'rgba(5,150,105,0.12)',
+                      color: '#065f46',
+                      border: '1px solid rgba(5,150,105,0.35)',
+                      boxShadow: '0 2px 8px rgba(5,150,105,0.12)',
+                      transition: 'all 0.2s',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                    Download Selected
+                    <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold text-white"
+                      style={{ background: '#059669' }}>
+                      {selectedRows.size}
+                    </span>
+                  </button>
+                )}
+                <button
+                  onClick={handleExport}
+                  className="eq-export-btn flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm"
+                  style={{
+                    background: 'rgba(5,150,105,0.07)',
+                    color: '#065f46',
+                    border: '1px solid rgba(5,150,105,0.22)',
+                    boxShadow: '0 2px 8px rgba(5,150,105,0.08)',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  Download Excel
+                </button>
+              </>
             )}
           </div>
 
@@ -1604,6 +1670,15 @@ const EquipmentList = () => {
                   <table className="min-w-full">
                     <thead className="eq-th-sticky">
                       <tr style={{ background: 'linear-gradient(90deg, #065f46, #047857)' }}>
+                        <th className="px-3 py-3.5 text-center" style={{ width: '40px' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedRows.size === displayRows.length && displayRows.length > 0}
+                            onChange={handleSelectAll}
+                            title="Select / deselect all"
+                            style={{ cursor: 'pointer', accentColor: '#10b981', width: '15px', height: '15px' }}
+                          />
+                        </th>
                         {COLUMNS.map(col => (
                           <th
                             key={col.key}
@@ -1624,19 +1699,31 @@ const EquipmentList = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayRows.map((row, idx) => (
+                      {displayRows.map((row, idx) => {
+                        const rowKey = getRowKey(row, idx);
+                        const isSelected = selectedRows.has(rowKey);
+                        return (
                         <tr
                           key={row.tag}
                           className="eq-row-animate"
                           style={{
                             animationDelay: `${Math.min(idx * 0.035, 0.5)}s`,
-                            background: idx % 2 === 0 ? 'white' : '#f0fdf4',
+                            background: isSelected ? 'rgba(5,150,105,0.08)' : idx % 2 === 0 ? 'white' : '#f0fdf4',
                             borderBottom: '1px solid #f1f5f9',
                             transition: 'background 0.15s',
+                            outline: isSelected ? '1px solid rgba(5,150,105,0.25)' : 'none',
                           }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(5,150,105,0.05)'}
-                          onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#f0fdf4'}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(5,150,105,0.05)'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#f0fdf4'; }}
                         >
+                          <td className="px-3 py-3 text-center" style={{ width: '40px' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleSelectRow(rowKey)}
+                              style={{ cursor: 'pointer', accentColor: '#059669', width: '15px', height: '15px' }}
+                            />
+                          </td>
                           {COLUMNS.map(col => {
                             // sl_no: always sequential 1-based index regardless of backend value
                             const raw     = row[col.key];
@@ -1688,7 +1775,7 @@ const EquipmentList = () => {
                             );
                           })}
                         </tr>
-                      ))}
+                      ); })}
                     </tbody>
                   </table>
                 </div>
