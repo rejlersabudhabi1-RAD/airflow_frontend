@@ -17,6 +17,7 @@ import {
   THEME,
   LOGIN_RESPONSIVE,
 } from '../config/login.config'
+import { REDIRECT_AFTER_LOGIN_KEY } from '../config/solutions.config'
 
 /**
  * Login Page
@@ -58,7 +59,18 @@ const Login = () => {
       
       dispatch(loginSuccess(userData))
       toast.success(SUCCESS_MESSAGES.login)
-      navigate(NAVIGATION.afterLogin)
+
+      // SOFT-CODED: If the user arrived here via a "Get Started" button on the
+      // Solutions page, redirect them directly to the feature they clicked.
+      // The destination is stored under REDIRECT_AFTER_LOGIN_KEY in sessionStorage.
+      // Clear the key after reading so subsequent logins use the default route.
+      const intendedPath = sessionStorage.getItem(REDIRECT_AFTER_LOGIN_KEY)
+      if (intendedPath) {
+        sessionStorage.removeItem(REDIRECT_AFTER_LOGIN_KEY)
+        navigate(intendedPath)
+      } else {
+        navigate(NAVIGATION.afterLogin)
+      }
     } catch (error) {
       // Comprehensive error logging - controlled by configuration
       if (LOGGING.enabled) {
