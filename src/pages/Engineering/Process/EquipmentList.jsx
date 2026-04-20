@@ -48,12 +48,13 @@ const COLUMNS = [
   { key: 'remarks',             label: 'Remarks',                   width: 24 },
 ];
 
-const UPLOAD_TIMEOUT_MS  = 600000;  // 10 min
-const POLL_INTERVAL_MS   = 3000;
-const POLL_MAX_WAIT_MS   = 3600000; // 60 min
-const POLL_REQ_TIMEOUT   = 10000;
-const MAX_POST_RETRIES   = 3;
-const POST_RETRY_BASE_MS = 4000;
+const UPLOAD_TIMEOUT_MS    = 600000;   // 10 min per upload
+const POLL_INTERVAL_MS     = 3000;
+const POLL_MAX_WAIT_MS     = 7200000;  // 2 h for large batch jobs
+const POLL_REQ_TIMEOUT     = 10000;
+const MAX_POST_RETRIES     = 3;
+const POST_RETRY_BASE_MS   = 4000;
+const MAX_BATCH_FILES      = 20;       // soft limit — configurable here
 
 // ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
@@ -477,7 +478,8 @@ const EQ_T = {
 
 // ---------------------------------------------------------------------------
 const EquipmentList = () => {
-  const [file,           setFile]           = useState(null);
+  const [files,          setFiles]          = useState([]);   // supports multi-file
+  const [file,           setFile]           = useState(null); // alias for single-file (compat)
   const [isProcessing,   setIsProcessing]   = useState(false);
   const [progress,       setProgress]       = useState(0);
   const [statusMessage,  setStatusMessage]  = useState('');
@@ -545,14 +547,13 @@ const EquipmentList = () => {
   };
 
   const handleFileSelect = (e) => {
-    const f = e.target.files[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError(null);
-      setResults(null);
-    } else {
-      setError('Please select a valid PDF file');
-    }
+    const selected = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf');
+    if (!selected.length) { setError('Please select at least one valid PDF file'); return; }
+    if (selected.length > MAX_BATCH_FILES) { setError(`Maximum ${MAX_BATCH_FILES} files per batch`); return; }
+    setFiles(selected);
+    setFile(selected[0]);   // keep single-file alias for backward compat
+    setError(null);
+    setResults(null);
   };
 
   const handleDragOver = (e) => {
@@ -578,14 +579,13 @@ const EquipmentList = () => {
     e.stopPropagation();
     setIsDragging(false);
     if (isProcessing) return;
-    const f = e.dataTransfer.files[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError(null);
-      setResults(null);
-    } else {
-      setError('Please drop a valid PDF file');
-    }
+    const dropped = Array.from(e.dataTransfer.files || []).filter(f => f.type === 'application/pdf');
+    if (!dropped.length) { setError('Please drop valid PDF file(s)'); return; }
+    if (dropped.length > MAX_BATCH_FILES) { setError(`Maximum ${MAX_BATCH_FILES} files per batch`); return; }
+    setFiles(dropped);
+    setFile(dropped[0]);
+    setError(null);
+    setResults(null);
   };
 
   // Polling - used when server returns 202 + upload_id
@@ -630,19 +630,24 @@ const EquipmentList = () => {
   }, []);
 
   const handleExtract = async () => {
-    if (!file) { setError('Please upload a P&ID document first'); return; }
+    if (!files.length) { setError('Please upload a P&ID document first'); return; }
     setIsProcessing(true);
     setError(null);
     setResults(null);
     setDebugInfo(null);
     setProgress(0);
-    setStatusMessage('Uploading P&ID…');
+    setStatusMessage(files.length > 1 ? `Uploading ${files.length} files…` : 'Uploading P&ID…');
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const isBatch   = files.length > 1;
+    const formData  = new FormData();
+    if (isBatch) {
+      files.forEach((f, i) => formData.append(`file_${i}`, f));
+    } else {
+      formData.append('file', files[0]);
+    }
 
     const token     = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    const uploadUrl = `${API_BASE}/pid/equipment/analyze/`;
+    const uploadUrl = isBatch ? `${API_BASE}/pid/equipment/analyze-batch/` : `${API_BASE}/pid/equipment/analyze/`;
     let lastErr     = null;
 
     for (let attempt = 1; attempt <= MAX_POST_RETRIES; attempt++) {
@@ -1011,7 +1016,7 @@ const EquipmentList = () => {
                 background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                 boxShadow: '0 2px 8px rgba(5,150,105,0.35)',
               }}>1</div>
-              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
+              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document(s)</h2>
               <span className="ml-auto text-xs text-slate-400 font-medium px-2.5 py-1 rounded-full" style={{
                 background: '#f8fafc', border: '1px solid #e2e8f0',
               }}>PDF only</span>
@@ -1056,12 +1061,12 @@ const EquipmentList = () => {
               ))}
 
               {/* Scan line (idle only) */}
-              {!file && !isProcessing && <div className="eq-scan-line" />}
+              {!files.length && !isProcessing && <div className="eq-scan-line" />}
 
-              <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" />
+              <input ref={fileRef} type="file" accept=".pdf" multiple onChange={handleFileSelect} className="hidden" />
 
               <div className="flex flex-col items-center justify-center gap-3 py-9 px-6">
-                {file ? (
+                {files.length ? (
                   <>
                     <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{
                       background: 'linear-gradient(135deg, rgba(5,150,105,0.15), rgba(5,150,105,0.08))',
@@ -1071,8 +1076,26 @@ const EquipmentList = () => {
                       <CheckCircleIcon className="h-8 w-8 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-800 font-semibold text-sm">{file.name}</p>
-                      <p className="text-slate-400 text-xs mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
+                      {files.length === 1 ? (
+                        <>
+                          <p className="text-slate-800 font-semibold text-sm">{files[0].name}</p>
+                          <p className="text-slate-400 text-xs mt-1">{(files[0].size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-slate-800 font-semibold text-sm">{files.length} files selected (batch mode)</p>
+                          <div className="mt-1 flex flex-wrap justify-center gap-1">
+                            {files.map((f, i) => (
+                              <span key={i} className="text-xs text-slate-500 px-2 py-0.5 rounded-full" style={{ background: 'rgba(5,150,105,0.06)', border: '1px solid rgba(5,150,105,0.15)' }}>
+                                {f.name}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-slate-400 text-xs mt-1">
+                            {(files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(2)} MB total · All pages will be combined
+                          </p>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="px-3 py-1 rounded-full text-xs font-semibold text-emerald-700 flex items-center gap-1.5" style={{
@@ -1080,11 +1103,11 @@ const EquipmentList = () => {
                       }}>
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"
                           style={{ animation: 'eq-pulse-badge 1.6s ease infinite' }} />
-                        PDF Loaded
+                        {files.length > 1 ? `${files.length} PDFs loaded` : 'PDF Loaded'}
                       </div>
                       {!isProcessing && (
                         <button
-                          onClick={e => { e.stopPropagation(); setFile(null); setResults(null); setError(null); }}
+                          onClick={e => { e.stopPropagation(); setFiles([]); setFile(null); setResults(null); setError(null); }}
                           className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-400 hover:text-red-500"
                           style={{ background: '#f8fafc', border: '1px solid #e2e8f0', transition: 'color 0.2s' }}
                         >✕ Remove</button>
@@ -1100,8 +1123,8 @@ const EquipmentList = () => {
                       <CloudArrowUpIcon className="h-9 w-9 text-emerald-500" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-700 font-semibold text-sm">Drop a P&amp;ID PDF here <span className="text-slate-400 font-normal">or</span> <span className="text-emerald-600 font-semibold">click to browse</span></p>
-                      <p className="text-slate-400 text-xs mt-1.5">Equipment List registers &amp; P&amp;ID drawings · Auto-detects mode · Multi-angle OCR (0°/90°/180°/270°)</p>
+                      <p className="text-slate-700 font-semibold text-sm">Drop P&amp;ID PDF(s) here <span className="text-slate-400 font-normal">or</span> <span className="text-emerald-600 font-semibold">click to browse</span></p>
+                      <p className="text-slate-400 text-xs mt-1.5">Single or multi-file · Equipment List registers &amp; P&amp;ID drawings · Auto-detects mode · Multi-angle OCR</p>
                     </div>
                   </>
                 )}
@@ -1323,9 +1346,9 @@ const EquipmentList = () => {
           <div className="flex gap-3 mb-6 eq-section" style={{ animationDelay: '0.15s' }}>
             <button
               onClick={handleExtract}
-              disabled={!file || isProcessing}
+              disabled={!files.length || isProcessing}
               className="eq-action-btn flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
-              style={!file || isProcessing ? {
+              style={!files.length || isProcessing ? {
                 background: '#f1f5f9',
                 color: '#94a3b8',
                 cursor: 'not-allowed',
