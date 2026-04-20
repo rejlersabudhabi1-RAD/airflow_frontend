@@ -29,7 +29,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 import envConfig from '../../../config/environment.config';
@@ -155,6 +155,20 @@ const FORMAT_EXAMPLES = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Soft-coded layout config — change widths/padding here without touching JSX.
+// ---------------------------------------------------------------------------
+const LAYOUT_CONFIG = {
+  // Normal mode: wider canvas usage (max-w-7xl = 80 rem = 1280 px)
+  normalMaxWidth:      '80rem',
+  normalPaddingX:      '1.5rem',   // px-6
+  normalPaddingY:      '2rem',     // py-8
+  // Fullscreen mode: fills the whole viewport
+  fullscreenMaxWidth:  '100%',
+  fullscreenPaddingX:  '2rem',
+  fullscreenPaddingY:  '2rem',
+};
+
 // Helper — returns patience message based on elapsed time.
 const getPatienceMsg = (secs) => {
   if (secs < 60)  return 'OCR extraction running in the background — usually 2–10 min for standard P&IDs.';
@@ -175,6 +189,7 @@ const LineList = () => {
   const [formatType, setFormatType] = useState('general');
   const [includeArea, setIncludeArea] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isFullscreen, setIsFullscreen]     = useState(false);
 
   const pidRef = useRef(null);
   const legendRef = useRef(null);
@@ -493,6 +508,15 @@ const LineList = () => {
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.55; }
         }
+        @keyframes ll-fs-in {
+          from { opacity: 0; transform: scale(0.98); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .ll-fullscreen-wrap {
+          position: fixed; inset: 0; z-index: 9990;
+          overflow-y: auto;
+          animation: ll-fs-in 0.2s ease both;
+        }
         .ll-scan-line {
           position: absolute; left: 0; right: 0; height: 2px;
           background: linear-gradient(90deg, transparent, rgba(37,99,235,0.4), transparent);
@@ -511,9 +535,11 @@ const LineList = () => {
         .ll-section { animation: ll-fade-up 0.5s ease both; }
       `}</style>
 
-      {/* Light blue/indigo gradient page */}
-      <div className="min-h-screen relative overflow-x-hidden"
-        style={{ background: 'linear-gradient(145deg, #eff6ff 0%, #eef2ff 45%, #f0f9ff 100%)' }}>
+      {/* Light blue/indigo gradient page — wraps in fixed overlay when fullscreen */}
+      <div
+        className={`min-h-screen relative overflow-x-hidden${isFullscreen ? ' ll-fullscreen-wrap' : ''}`}
+        style={{ background: 'linear-gradient(145deg, #eff6ff 0%, #eef2ff 45%, #f0f9ff 100%)' }}
+      >
 
         {/* Subtle dot grid */}
         <div className="fixed inset-0 pointer-events-none" style={{
@@ -538,7 +564,13 @@ const LineList = () => {
           ))}
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-6 py-8">
+        <div
+          className="relative z-10 mx-auto"
+          style={{
+            maxWidth:  isFullscreen ? LAYOUT_CONFIG.fullscreenMaxWidth : LAYOUT_CONFIG.normalMaxWidth,
+            padding:   `${isFullscreen ? LAYOUT_CONFIG.fullscreenPaddingY : LAYOUT_CONFIG.normalPaddingY} ${isFullscreen ? LAYOUT_CONFIG.fullscreenPaddingX : LAYOUT_CONFIG.normalPaddingX}`,
+          }}
+        >
 
           {/* ── Page Header ── */}
           <div className="mb-8 ll-section" style={{ animationDelay: '0s' }}>
@@ -550,16 +582,36 @@ const LineList = () => {
                 style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
               <span className="text-blue-700 text-xs font-semibold tracking-widest uppercase">AI-Powered · P&amp;ID Analysis</span>
             </div>
-            <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
-              <div className="p-2.5 rounded-xl" style={{
-                background: 'rgba(37,99,235,0.09)',
-                border: '1px solid rgba(37,99,235,0.2)',
-                animation: 'll-glow 3s ease infinite',
-              }}>
-                <DocumentTextIcon className="h-7 w-7 text-blue-600" />
-              </div>
-              Line <span className="text-blue-600 ml-2">List</span>
-            </h1>
+            <div className="flex items-center justify-between gap-4">
+              <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
+                <div className="p-2.5 rounded-xl" style={{
+                  background: 'rgba(37,99,235,0.09)',
+                  border: '1px solid rgba(37,99,235,0.2)',
+                  animation: 'll-glow 3s ease infinite',
+                }}>
+                  <DocumentTextIcon className="h-7 w-7 text-blue-600" />
+                </div>
+                Line <span className="text-blue-600 ml-2">List</span>
+              </h1>
+
+              {/* Fullscreen toggle — purely a layout control, no core logic */}
+              <button
+                onClick={() => setIsFullscreen(fs => !fs)}
+                title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0"
+                style={{
+                  background: isFullscreen ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.06)',
+                  border: '1px solid rgba(37,99,235,0.2)',
+                  color: '#1e40af',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {isFullscreen
+                  ? <><ArrowsPointingInIcon className="h-4 w-4" /> Exit Fullscreen</>
+                  : <><ArrowsPointingOutIcon className="h-4 w-4" /> Fullscreen</>
+                }
+              </button>
+            </div>
             <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
               Extract {COLUMNS.length} columns from P&amp;ID drawings — including line designation segments,
               service codes, piping specification, and department deviation.

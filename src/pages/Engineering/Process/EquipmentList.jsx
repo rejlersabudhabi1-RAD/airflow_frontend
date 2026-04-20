@@ -12,6 +12,8 @@ import {
   CloudArrowUpIcon,
   CheckCircleIcon,
   ArrowDownTrayIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from '@heroicons/react/24/outline';
 import { Boxes } from 'lucide-react';
 import apiClient from '../../../services/api.service';
@@ -52,6 +54,18 @@ const POLL_MAX_WAIT_MS   = 3600000; // 60 min
 const POLL_REQ_TIMEOUT   = 10000;
 const MAX_POST_RETRIES   = 3;
 const POST_RETRY_BASE_MS = 4000;
+
+// ---------------------------------------------------------------------------
+// Soft-coded layout config — change widths/padding here without touching JSX.
+// ---------------------------------------------------------------------------
+const LAYOUT_CONFIG = {
+  normalMaxWidth:     '80rem',    // max-w-7xl = 1280 px
+  normalPaddingX:     '1.5rem',
+  normalPaddingY:     '2rem',
+  fullscreenMaxWidth: '100%',
+  fullscreenPaddingX: '2rem',
+  fullscreenPaddingY: '2rem',
+};
 
 const API_BASE = getApiBaseUrl();
 
@@ -396,6 +410,15 @@ const EQ_KEYFRAMES = `
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.55; }
   }
+  @keyframes eq-fs-in {
+    from { opacity: 0; transform: scale(0.98); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .eq-fullscreen-wrap {
+    position: fixed; inset: 0; z-index: 9990;
+    overflow-y: auto;
+    animation: eq-fs-in 0.2s ease both;
+  }
   /* ── CSS utility classes ── */
   .eq-scan-line {
     position: absolute; left: 0; right: 0; height: 2px;
@@ -469,6 +492,7 @@ const EquipmentList = () => {
   const [manualObs,      setManualObs]      = useState([{ ...MANUAL_OBS_BLANK }]);
   const [showManualForm, setShowManualForm] = useState(false);
   const [selectedRows,   setSelectedRows]   = useState(new Set());
+  const [isFullscreen,   setIsFullscreen]   = useState(false);
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -799,8 +823,11 @@ const EquipmentList = () => {
     <>
       <style>{EQ_KEYFRAMES}</style>
 
-      {/* ── Full-page background ── */}
-      <div className="min-h-screen relative overflow-x-hidden" style={{ background: EQ_T.bg }}>
+      {/* ── Full-page background — wraps in fixed overlay when fullscreen ── */}
+      <div
+        className={`min-h-screen relative overflow-x-hidden${isFullscreen ? ' eq-fullscreen-wrap' : ''}`}
+        style={{ background: EQ_T.bg }}
+      >
 
         {/* Fine dot grid */}
         <div className="fixed inset-0 pointer-events-none"
@@ -843,10 +870,16 @@ const EquipmentList = () => {
         <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
           style={{ backgroundImage: EQ_T.gradBar, backgroundSize:'300% auto', animation:'eqGradShift 3s linear infinite' }} />
 
-        <div className="relative z-10 py-8">
+        <div className="relative z-10">
 
           {/* ── Centered content wrapper ── */}
-          <div className="max-w-7xl mx-auto px-6">
+          <div
+            className="mx-auto"
+            style={{
+              maxWidth: isFullscreen ? LAYOUT_CONFIG.fullscreenMaxWidth : LAYOUT_CONFIG.normalMaxWidth,
+              padding:  `${isFullscreen ? LAYOUT_CONFIG.fullscreenPaddingY : LAYOUT_CONFIG.normalPaddingY} ${isFullscreen ? LAYOUT_CONFIG.fullscreenPaddingX : LAYOUT_CONFIG.normalPaddingX}`,
+            }}
+          >
 
           {/* ── Hero Header ── */}
           <div className="mb-10 eq-section relative" style={{ animationDelay: '0s' }}>
@@ -883,22 +916,42 @@ const EquipmentList = () => {
               <span className="text-emerald-700 text-xs font-semibold tracking-widest uppercase">AI-Powered · P&amp;ID Analysis</span>
             </div>
 
-            {/* Title */}
-            <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
-              <div className="p-2.5 rounded-xl relative overflow-hidden flex-shrink-0" style={{
-                background: 'linear-gradient(135deg, rgba(5,150,105,0.12) 0%, rgba(16,185,129,0.07) 100%)',
-                border: '1px solid rgba(5,150,105,0.22)',
-                animation: 'eq-glow-light 3s ease infinite',
-              }}>
-                <Boxes className="h-7 w-7 text-emerald-600" />
-              </div>
-              Equipment&nbsp;
-              <span style={{
-                background: 'linear-gradient(135deg, #059669 0%, #047857 60%, #10b981 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}>List</span>
-            </h1>
+            {/* Title + Fullscreen toggle */}
+            <div className="flex items-center justify-between gap-4">
+              <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
+                <div className="p-2.5 rounded-xl relative overflow-hidden flex-shrink-0" style={{
+                  background: 'linear-gradient(135deg, rgba(5,150,105,0.12) 0%, rgba(16,185,129,0.07) 100%)',
+                  border: '1px solid rgba(5,150,105,0.22)',
+                  animation: 'eq-glow-light 3s ease infinite',
+                }}>
+                  <Boxes className="h-7 w-7 text-emerald-600" />
+                </div>
+                Equipment&nbsp;
+                <span style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 60%, #10b981 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>List</span>
+              </h1>
+
+              {/* Fullscreen toggle — layout-only control, no core logic */}
+              <button
+                onClick={() => setIsFullscreen(fs => !fs)}
+                title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0"
+                style={{
+                  background: isFullscreen ? 'rgba(5,150,105,0.14)' : 'rgba(5,150,105,0.07)',
+                  border: '1px solid rgba(5,150,105,0.22)',
+                  color: '#065f46',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {isFullscreen
+                  ? <><ArrowsPointingInIcon className="h-4 w-4" /> Exit Fullscreen</>
+                  : <><ArrowsPointingOutIcon className="h-4 w-4" /> Fullscreen</>
+                }
+              </button>
+            </div>
 
             {/* Description */}
             <p className="text-slate-500 text-base leading-relaxed max-w-2xl mb-6">
