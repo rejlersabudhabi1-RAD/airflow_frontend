@@ -48,22 +48,12 @@ const COLUMNS = [
   { key: 'remarks',             label: 'Remarks',                   width: 24 },
 ];
 
-const UPLOAD_TIMEOUT_MS    = 600000;   // 10 min per upload
-const POLL_INTERVAL_MS     = 3000;
-const POLL_MAX_WAIT_MS     = 7200000;  // 2 h for large batch jobs
-const POLL_REQ_TIMEOUT     = 10000;
-const MAX_POST_RETRIES     = 3;
-const POST_RETRY_BASE_MS   = 4000;
-const MAX_BATCH_FILES      = 20;       // soft limit — configurable here
-
-// Soft-coded: localStorage keys for persisting in-progress task across page refreshes.
-// Change these keys if a namespace collision arises.
-const EQ_PENDING_STORAGE_KEY = 'eq_pending_upload_id';
-const EQ_PENDING_START_KEY   = 'eq_pending_upload_start';
-
-// Soft-coded: ms before the "Confirm stop?" prompt auto-dismisses if the user does nothing.
-// Increase to give more time; decrease to make it feel snappier.
-const EQ_CANCEL_CONFIRM_TIMEOUT_MS = 8000;
+const UPLOAD_TIMEOUT_MS  = 600000;  // 10 min
+const POLL_INTERVAL_MS   = 3000;
+const POLL_MAX_WAIT_MS   = 3600000; // 60 min
+const POLL_REQ_TIMEOUT   = 10000;
+const MAX_POST_RETRIES   = 3;
+const POST_RETRY_BASE_MS = 4000;
 
 // ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
@@ -76,10 +66,6 @@ const LAYOUT_CONFIG = {
   fullscreenPaddingX: '2rem',
   fullscreenPaddingY: '2rem',
 };
-
-// Soft-coded: ms to wait before auto-scrolling to results after extraction.
-// Increase if the scroll fires before the section finishes mounting.
-const RESULTS_SCROLL_DELAY_MS = 120;
 
 const API_BASE = getApiBaseUrl();
 
@@ -491,8 +477,7 @@ const EQ_T = {
 
 // ---------------------------------------------------------------------------
 const EquipmentList = () => {
-  const [files,          setFiles]          = useState([]);   // supports multi-file
-  const [file,           setFile]           = useState(null); // alias for single-file (compat)
+  const [file,           setFile]           = useState(null);
   const [isProcessing,   setIsProcessing]   = useState(false);
   const [progress,       setProgress]       = useState(0);
   const [statusMessage,  setStatusMessage]  = useState('');
@@ -509,18 +494,10 @@ const EquipmentList = () => {
   const [selectedRows,   setSelectedRows]   = useState(new Set());
   const [isFullscreen,   setIsFullscreen]   = useState(false);
 
-  const fileRef               = useRef(null);
-  const pollTimerRef          = useRef(null);
-  const pollStartRef          = useRef(null);
-  const elapsedRef            = useRef(null);
-  const cancelConfirmTimerRef = useRef(null);
-  // Soft-coded: ref used to scroll to the results section automatically after extraction.
-  // Change RESULTS_SCROLL_DELAY_MS to tune how long we wait before scrolling
-  // (gives React time to paint the newly mounted results section).
-  const resultsRef            = useRef(null);
-
-  // Two-step cancel confirmation state — prevents accidental force-stops
-  const [cancelConfirmPending, setCancelConfirmPending] = useState(false);
+  const fileRef      = useRef(null);
+  const pollTimerRef = useRef(null);
+  const pollStartRef = useRef(null);
+  const elapsedRef   = useRef(null);
 
   // Elapsed timer
   useEffect(() => {
@@ -534,41 +511,6 @@ const EquipmentList = () => {
   }, [isProcessing]);
 
   const formatElapsed = (s) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
-
-  // ---------------------------------------------------------------------------
-  // Force-stop handlers — frontend-only disconnect.
-  // The backend Celery task continues running unaffected; this just stops
-  // the polling loop and resets the UI so the user is no longer blocked.
-  // ---------------------------------------------------------------------------
-
-  /** Step 1: ask for confirmation before stopping */
-  const handleRequestCancel = () => {
-    setCancelConfirmPending(true);
-    clearTimeout(cancelConfirmTimerRef.current);
-    // Auto-dismiss the confirmation prompt if user does nothing
-    cancelConfirmTimerRef.current = setTimeout(
-      () => setCancelConfirmPending(false),
-      EQ_CANCEL_CONFIRM_TIMEOUT_MS,
-    );
-  };
-
-  /** Step 2: confirmed — stop polling, clear localStorage, reset UI */
-  const handleForceCancel = () => {
-    clearTimeout(pollTimerRef.current);
-    clearTimeout(cancelConfirmTimerRef.current);
-    localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
-    localStorage.removeItem(EQ_PENDING_START_KEY);
-    setCancelConfirmPending(false);
-    setIsProcessing(false);
-    setProgress(0);
-    setStatusMessage('');
-  };
-
-  /** Dismiss confirmation without cancelling */
-  const handleCancelDismiss = () => {
-    clearTimeout(cancelConfirmTimerRef.current);
-    setCancelConfirmPending(false);
-  };
 
   // Manual observation helpers
   const handleManualFieldChange = (rowIdx, field, value) => {
@@ -603,13 +545,14 @@ const EquipmentList = () => {
   };
 
   const handleFileSelect = (e) => {
-    const selected = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf');
-    if (!selected.length) { setError('Please select at least one valid PDF file'); return; }
-    if (selected.length > MAX_BATCH_FILES) { setError(`Maximum ${MAX_BATCH_FILES} files per batch`); return; }
-    setFiles(selected);
-    setFile(selected[0]);   // keep single-file alias for backward compat
-    setError(null);
-    setResults(null);
+    const f = e.target.files[0];
+    if (f && f.type === 'application/pdf') {
+      setFile(f);
+      setError(null);
+      setResults(null);
+    } else {
+      setError('Please select a valid PDF file');
+    }
   };
 
   const handleDragOver = (e) => {
@@ -635,21 +578,20 @@ const EquipmentList = () => {
     e.stopPropagation();
     setIsDragging(false);
     if (isProcessing) return;
-    const dropped = Array.from(e.dataTransfer.files || []).filter(f => f.type === 'application/pdf');
-    if (!dropped.length) { setError('Please drop valid PDF file(s)'); return; }
-    if (dropped.length > MAX_BATCH_FILES) { setError(`Maximum ${MAX_BATCH_FILES} files per batch`); return; }
-    setFiles(dropped);
-    setFile(dropped[0]);
-    setError(null);
-    setResults(null);
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') {
+      setFile(f);
+      setError(null);
+      setResults(null);
+    } else {
+      setError('Please drop a valid PDF file');
+    }
   };
 
   // Polling - used when server returns 202 + upload_id
   const pollStatus = useCallback((uploadId) => {
     if (Date.now() - pollStartRef.current > POLL_MAX_WAIT_MS) {
       clearTimeout(pollTimerRef.current);
-      localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
-      localStorage.removeItem(EQ_PENDING_START_KEY);
       setError('Extraction timed out — please try again.');
       setIsProcessing(false);
       return;
@@ -662,8 +604,6 @@ const EquipmentList = () => {
         setStatusMessage(data.message || 'Processing…');
         if (s === 'completed') {
           clearTimeout(pollTimerRef.current);
-          localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
-          localStorage.removeItem(EQ_PENDING_START_KEY);
           apiClient.get(`/pid/equipment/results/${uploadId}/`)
             .then(({ data: r }) => {
               setResults({ equipment: r.equipment, total: r.total, drawing_ref: r.drawing_ref, upload_id: uploadId });
@@ -678,8 +618,6 @@ const EquipmentList = () => {
             });
         } else if (s === 'failed') {
           clearTimeout(pollTimerRef.current);
-          localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
-          localStorage.removeItem(EQ_PENDING_START_KEY);
           setError(data.message || 'Extraction failed on the server.');
           setIsProcessing(false);
         } else {
@@ -691,54 +629,20 @@ const EquipmentList = () => {
       });
   }, []);
 
-  // Resume polling for any in-progress task that survived a page refresh or navigation.
-  // Reads upload_id + start timestamp from localStorage; skips if task is already older
-  // than POLL_MAX_WAIT_MS (i.e. stale entry from a previous session).
-  useEffect(() => {
-    const savedId    = localStorage.getItem(EQ_PENDING_STORAGE_KEY);
-    const savedStart = localStorage.getItem(EQ_PENDING_START_KEY);
-    if (!savedId) return;
-    const startMs = savedStart ? parseInt(savedStart, 10) : Date.now();
-    if (Date.now() - startMs > POLL_MAX_WAIT_MS) {
-      localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
-      localStorage.removeItem(EQ_PENDING_START_KEY);
-      return;
-    }
-    setIsProcessing(true);
-    setStatusMessage('Reconnecting to background task…');
-    pollStartRef.current = startMs;
-    pollStatus(savedId);
-  }, [pollStatus]); // pollStatus is stable (useCallback with [] deps)
-
-  // Auto-scroll to the results section when results first become available.
-  // Gives a short delay so React has time to paint the newly mounted section.
-  useEffect(() => {
-    if (!results) return;
-    const timer = setTimeout(() => {
-      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, RESULTS_SCROLL_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [results]);
-
   const handleExtract = async () => {
-    if (!files.length) { setError('Please upload a P&ID document first'); return; }
+    if (!file) { setError('Please upload a P&ID document first'); return; }
     setIsProcessing(true);
     setError(null);
     setResults(null);
     setDebugInfo(null);
     setProgress(0);
-    setStatusMessage(files.length > 1 ? `Uploading ${files.length} files…` : 'Uploading P&ID…');
+    setStatusMessage('Uploading P&ID…');
 
-    const isBatch   = files.length > 1;
-    const formData  = new FormData();
-    if (isBatch) {
-      files.forEach((f, i) => formData.append(`file_${i}`, f));
-    } else {
-      formData.append('file', files[0]);
-    }
+    const formData = new FormData();
+    formData.append('file', file);
 
     const token     = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    const uploadUrl = isBatch ? `${API_BASE}/pid/equipment/analyze-batch/` : `${API_BASE}/pid/equipment/analyze/`;
+    const uploadUrl = `${API_BASE}/pid/equipment/analyze/`;
     let lastErr     = null;
 
     for (let attempt = 1; attempt <= MAX_POST_RETRIES; attempt++) {
@@ -782,8 +686,6 @@ const EquipmentList = () => {
 
         // Async result (HTTP 202 + upload_id)
         if (data.upload_id) {
-          localStorage.setItem(EQ_PENDING_STORAGE_KEY, data.upload_id);
-          localStorage.setItem(EQ_PENDING_START_KEY, String(Date.now()));
           setStatusMessage('Processing in background…');
           pollStartRef.current = Date.now();
           pollStatus(data.upload_id);
@@ -1109,7 +1011,7 @@ const EquipmentList = () => {
                 background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                 boxShadow: '0 2px 8px rgba(5,150,105,0.35)',
               }}>1</div>
-              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document(s)</h2>
+              <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
               <span className="ml-auto text-xs text-slate-400 font-medium px-2.5 py-1 rounded-full" style={{
                 background: '#f8fafc', border: '1px solid #e2e8f0',
               }}>PDF only</span>
@@ -1154,12 +1056,12 @@ const EquipmentList = () => {
               ))}
 
               {/* Scan line (idle only) */}
-              {!files.length && !isProcessing && <div className="eq-scan-line" />}
+              {!file && !isProcessing && <div className="eq-scan-line" />}
 
-              <input ref={fileRef} type="file" accept=".pdf" multiple onChange={handleFileSelect} className="hidden" />
+              <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" />
 
               <div className="flex flex-col items-center justify-center gap-3 py-9 px-6">
-                {files.length ? (
+                {file ? (
                   <>
                     <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{
                       background: 'linear-gradient(135deg, rgba(5,150,105,0.15), rgba(5,150,105,0.08))',
@@ -1169,26 +1071,8 @@ const EquipmentList = () => {
                       <CheckCircleIcon className="h-8 w-8 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                      {files.length === 1 ? (
-                        <>
-                          <p className="text-slate-800 font-semibold text-sm">{files[0].name}</p>
-                          <p className="text-slate-400 text-xs mt-1">{(files[0].size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-slate-800 font-semibold text-sm">{files.length} files selected (batch mode)</p>
-                          <div className="mt-1 flex flex-wrap justify-center gap-1">
-                            {files.map((f, i) => (
-                              <span key={i} className="text-xs text-slate-500 px-2 py-0.5 rounded-full" style={{ background: 'rgba(5,150,105,0.06)', border: '1px solid rgba(5,150,105,0.15)' }}>
-                                {f.name}
-                              </span>
-                            ))}
-                          </div>
-                          <p className="text-slate-400 text-xs mt-1">
-                            {(files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(2)} MB total · All pages will be combined
-                          </p>
-                        </>
-                      )}
+                      <p className="text-slate-800 font-semibold text-sm">{file.name}</p>
+                      <p className="text-slate-400 text-xs mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="px-3 py-1 rounded-full text-xs font-semibold text-emerald-700 flex items-center gap-1.5" style={{
@@ -1196,11 +1080,11 @@ const EquipmentList = () => {
                       }}>
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"
                           style={{ animation: 'eq-pulse-badge 1.6s ease infinite' }} />
-                        {files.length > 1 ? `${files.length} PDFs loaded` : 'PDF Loaded'}
+                        PDF Loaded
                       </div>
                       {!isProcessing && (
                         <button
-                          onClick={e => { e.stopPropagation(); setFiles([]); setFile(null); setResults(null); setError(null); }}
+                          onClick={e => { e.stopPropagation(); setFile(null); setResults(null); setError(null); }}
                           className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-400 hover:text-red-500"
                           style={{ background: '#f8fafc', border: '1px solid #e2e8f0', transition: 'color 0.2s' }}
                         >✕ Remove</button>
@@ -1216,8 +1100,8 @@ const EquipmentList = () => {
                       <CloudArrowUpIcon className="h-9 w-9 text-emerald-500" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-700 font-semibold text-sm">Drop P&amp;ID PDF(s) here <span className="text-slate-400 font-normal">or</span> <span className="text-emerald-600 font-semibold">click to browse</span></p>
-                      <p className="text-slate-400 text-xs mt-1.5">Single or multi-file · Equipment List registers &amp; P&amp;ID drawings · Auto-detects mode · Multi-angle OCR</p>
+                      <p className="text-slate-700 font-semibold text-sm">Drop a P&amp;ID PDF here <span className="text-slate-400 font-normal">or</span> <span className="text-emerald-600 font-semibold">click to browse</span></p>
+                      <p className="text-slate-400 text-xs mt-1.5">Equipment List registers &amp; P&amp;ID drawings · Auto-detects mode · Multi-angle OCR (0°/90°/180°/270°)</p>
                     </div>
                   </>
                 )}
@@ -1439,9 +1323,9 @@ const EquipmentList = () => {
           <div className="flex gap-3 mb-6 eq-section" style={{ animationDelay: '0.15s' }}>
             <button
               onClick={handleExtract}
-              disabled={!files.length || isProcessing}
+              disabled={!file || isProcessing}
               className="eq-action-btn flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
-              style={!files.length || isProcessing ? {
+              style={!file || isProcessing ? {
                 background: '#f1f5f9',
                 color: '#94a3b8',
                 cursor: 'not-allowed',
@@ -1480,58 +1364,6 @@ const EquipmentList = () => {
                 </span>
               )}
             </button>
-
-            {/* ── Force Stop — frontend-only disconnect, backend task keeps running ── */}
-            {isProcessing && !cancelConfirmPending && (
-              <button
-                onClick={handleRequestCancel}
-                title="Stop polling and reset UI — the background extraction task will continue on the server"
-                className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
-                style={{
-                  background: 'rgba(234,88,12,0.07)',
-                  color: '#9a3412',
-                  border: '1px solid rgba(234,88,12,0.25)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <span style={{ fontSize: '1rem', lineHeight: 1 }}>⊘</span>
-                Force Stop
-              </button>
-            )}
-
-            {/* ── Confirm stop — two-step guard ── */}
-            {isProcessing && cancelConfirmPending && (
-              <>
-                <button
-                  onClick={handleForceCancel}
-                  title="Disconnect from the background task and reset the UI"
-                  className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
-                  style={{
-                    background: 'rgba(239,68,68,0.10)',
-                    color: '#991b1b',
-                    border: '1px solid rgba(239,68,68,0.30)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <span>✕</span> Yes, Stop
-                </button>
-                <button
-                  onClick={handleCancelDismiss}
-                  className="flex items-center gap-2 px-4 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
-                  style={{
-                    background: '#f8fafc',
-                    color: '#64748b',
-                    border: '1px solid #e2e8f0',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  Keep Going
-                </button>
-              </>
-            )}
 
             {results && (
               <>
@@ -1760,9 +1592,6 @@ const EquipmentList = () => {
 
           </div>{/* end centered wrapper */}
 
-          {/* Scroll anchor — resultsRef targets this so auto-scroll lands at the top of results */}
-          {results && <div ref={resultsRef} style={{ scrollMarginTop: '16px' }} />}
-
           {/* ── KPI Summary Bar (after extraction) ── */}
           {kpiStats && (
             <div className="max-w-7xl mx-auto px-6 mb-6">
@@ -1844,10 +1673,8 @@ const EquipmentList = () => {
                   </div>
                   <div>
                     <h2 className="text-slate-800 font-semibold text-base">
-                      <span className="text-emerald-600 text-xl font-bold">
-                        {results.equipment?.length ?? results.total}
-                      </span>
-                      {' '}Equipment Item{(results.equipment?.length ?? results.total) !== 1 ? 's' : ''} Extracted
+                      <span className="text-emerald-600 text-xl font-bold">{results.total}</span>
+                      {' '}Equipment Item{results.total !== 1 ? 's' : ''} Extracted
                     </h2>
                     {results.drawing_ref && (
                       <p className="text-slate-400 text-xs mt-0.5">Drawing: {results.drawing_ref}</p>
@@ -1930,7 +1757,7 @@ const EquipmentList = () => {
                         const isSelected = selectedRows.has(rowKey);
                         return (
                         <tr
-                          key={rowKey}
+                          key={row.tag}
                           className="eq-row-animate"
                           style={{
                             animationDelay: `${Math.min(idx * 0.035, 0.5)}s`,
