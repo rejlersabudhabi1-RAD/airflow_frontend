@@ -56,6 +56,15 @@ const MAX_POST_RETRIES     = 3;
 const POST_RETRY_BASE_MS   = 4000;
 const MAX_BATCH_FILES      = 20;       // soft limit — configurable here
 
+// Soft-coded: localStorage keys for persisting in-progress task across page refreshes.
+// Change these keys if a namespace collision arises.
+const EQ_PENDING_STORAGE_KEY = 'eq_pending_upload_id';
+const EQ_PENDING_START_KEY   = 'eq_pending_upload_start';
+
+// Soft-coded: ms before the "Confirm stop?" prompt auto-dismisses if the user does nothing.
+// Increase to give more time; decrease to make it feel snappier.
+const EQ_CANCEL_CONFIRM_TIMEOUT_MS = 8000;
+
 // ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
 // ---------------------------------------------------------------------------
@@ -496,10 +505,14 @@ const EquipmentList = () => {
   const [selectedRows,   setSelectedRows]   = useState(new Set());
   const [isFullscreen,   setIsFullscreen]   = useState(false);
 
-  const fileRef      = useRef(null);
-  const pollTimerRef = useRef(null);
-  const pollStartRef = useRef(null);
-  const elapsedRef   = useRef(null);
+  const fileRef               = useRef(null);
+  const pollTimerRef          = useRef(null);
+  const pollStartRef          = useRef(null);
+  const elapsedRef            = useRef(null);
+  const cancelConfirmTimerRef = useRef(null);
+
+  // Two-step cancel confirmation state — prevents accidental force-stops
+  const [cancelConfirmPending, setCancelConfirmPending] = useState(false);
 
   // Elapsed timer
   useEffect(() => {
@@ -513,6 +526,41 @@ const EquipmentList = () => {
   }, [isProcessing]);
 
   const formatElapsed = (s) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+
+  // ---------------------------------------------------------------------------
+  // Force-stop handlers — frontend-only disconnect.
+  // The backend Celery task continues running unaffected; this just stops
+  // the polling loop and resets the UI so the user is no longer blocked.
+  // ---------------------------------------------------------------------------
+
+  /** Step 1: ask for confirmation before stopping */
+  const handleRequestCancel = () => {
+    setCancelConfirmPending(true);
+    clearTimeout(cancelConfirmTimerRef.current);
+    // Auto-dismiss the confirmation prompt if user does nothing
+    cancelConfirmTimerRef.current = setTimeout(
+      () => setCancelConfirmPending(false),
+      EQ_CANCEL_CONFIRM_TIMEOUT_MS,
+    );
+  };
+
+  /** Step 2: confirmed — stop polling, clear localStorage, reset UI */
+  const handleForceCancel = () => {
+    clearTimeout(pollTimerRef.current);
+    clearTimeout(cancelConfirmTimerRef.current);
+    localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
+    localStorage.removeItem(EQ_PENDING_START_KEY);
+    setCancelConfirmPending(false);
+    setIsProcessing(false);
+    setProgress(0);
+    setStatusMessage('');
+  };
+
+  /** Dismiss confirmation without cancelling */
+  const handleCancelDismiss = () => {
+    clearTimeout(cancelConfirmTimerRef.current);
+    setCancelConfirmPending(false);
+  };
 
   // Manual observation helpers
   const handleManualFieldChange = (rowIdx, field, value) => {
@@ -592,6 +640,8 @@ const EquipmentList = () => {
   const pollStatus = useCallback((uploadId) => {
     if (Date.now() - pollStartRef.current > POLL_MAX_WAIT_MS) {
       clearTimeout(pollTimerRef.current);
+      localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
+      localStorage.removeItem(EQ_PENDING_START_KEY);
       setError('Extraction timed out — please try again.');
       setIsProcessing(false);
       return;
@@ -604,6 +654,8 @@ const EquipmentList = () => {
         setStatusMessage(data.message || 'Processing…');
         if (s === 'completed') {
           clearTimeout(pollTimerRef.current);
+          localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
+          localStorage.removeItem(EQ_PENDING_START_KEY);
           apiClient.get(`/pid/equipment/results/${uploadId}/`)
             .then(({ data: r }) => {
               setResults({ equipment: r.equipment, total: r.total, drawing_ref: r.drawing_ref, upload_id: uploadId });
@@ -618,6 +670,8 @@ const EquipmentList = () => {
             });
         } else if (s === 'failed') {
           clearTimeout(pollTimerRef.current);
+          localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
+          localStorage.removeItem(EQ_PENDING_START_KEY);
           setError(data.message || 'Extraction failed on the server.');
           setIsProcessing(false);
         } else {
@@ -628,6 +682,25 @@ const EquipmentList = () => {
         pollTimerRef.current = setTimeout(() => pollStatus(uploadId), POLL_INTERVAL_MS * 2);
       });
   }, []);
+
+  // Resume polling for any in-progress task that survived a page refresh or navigation.
+  // Reads upload_id + start timestamp from localStorage; skips if task is already older
+  // than POLL_MAX_WAIT_MS (i.e. stale entry from a previous session).
+  useEffect(() => {
+    const savedId    = localStorage.getItem(EQ_PENDING_STORAGE_KEY);
+    const savedStart = localStorage.getItem(EQ_PENDING_START_KEY);
+    if (!savedId) return;
+    const startMs = savedStart ? parseInt(savedStart, 10) : Date.now();
+    if (Date.now() - startMs > POLL_MAX_WAIT_MS) {
+      localStorage.removeItem(EQ_PENDING_STORAGE_KEY);
+      localStorage.removeItem(EQ_PENDING_START_KEY);
+      return;
+    }
+    setIsProcessing(true);
+    setStatusMessage('Reconnecting to background task…');
+    pollStartRef.current = startMs;
+    pollStatus(savedId);
+  }, [pollStatus]); // pollStatus is stable (useCallback with [] deps)
 
   const handleExtract = async () => {
     if (!files.length) { setError('Please upload a P&ID document first'); return; }
@@ -691,6 +764,8 @@ const EquipmentList = () => {
 
         // Async result (HTTP 202 + upload_id)
         if (data.upload_id) {
+          localStorage.setItem(EQ_PENDING_STORAGE_KEY, data.upload_id);
+          localStorage.setItem(EQ_PENDING_START_KEY, String(Date.now()));
           setStatusMessage('Processing in background…');
           pollStartRef.current = Date.now();
           pollStatus(data.upload_id);
@@ -1387,6 +1462,58 @@ const EquipmentList = () => {
                 </span>
               )}
             </button>
+
+            {/* ── Force Stop — frontend-only disconnect, backend task keeps running ── */}
+            {isProcessing && !cancelConfirmPending && (
+              <button
+                onClick={handleRequestCancel}
+                title="Stop polling and reset UI — the background extraction task will continue on the server"
+                className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
+                style={{
+                  background: 'rgba(234,88,12,0.07)',
+                  color: '#9a3412',
+                  border: '1px solid rgba(234,88,12,0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span style={{ fontSize: '1rem', lineHeight: 1 }}>⊘</span>
+                Force Stop
+              </button>
+            )}
+
+            {/* ── Confirm stop — two-step guard ── */}
+            {isProcessing && cancelConfirmPending && (
+              <>
+                <button
+                  onClick={handleForceCancel}
+                  title="Disconnect from the background task and reset the UI"
+                  className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
+                  style={{
+                    background: 'rgba(239,68,68,0.10)',
+                    color: '#991b1b',
+                    border: '1px solid rgba(239,68,68,0.30)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span>✕</span> Yes, Stop
+                </button>
+                <button
+                  onClick={handleCancelDismiss}
+                  className="flex items-center gap-2 px-4 py-3.5 rounded-xl font-semibold text-sm flex-shrink-0"
+                  style={{
+                    background: '#f8fafc',
+                    color: '#64748b',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  Keep Going
+                </button>
+              </>
+            )}
 
             {results && (
               <>
