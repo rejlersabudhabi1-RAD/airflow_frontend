@@ -77,6 +77,10 @@ const LAYOUT_CONFIG = {
   fullscreenPaddingY: '2rem',
 };
 
+// Soft-coded: ms to wait before auto-scrolling to results after extraction.
+// Increase if the scroll fires before the section finishes mounting.
+const RESULTS_SCROLL_DELAY_MS = 120;
+
 const API_BASE = getApiBaseUrl();
 
 // ---------------------------------------------------------------------------
@@ -510,6 +514,10 @@ const EquipmentList = () => {
   const pollStartRef          = useRef(null);
   const elapsedRef            = useRef(null);
   const cancelConfirmTimerRef = useRef(null);
+  // Soft-coded: ref used to scroll to the results section automatically after extraction.
+  // Change RESULTS_SCROLL_DELAY_MS to tune how long we wait before scrolling
+  // (gives React time to paint the newly mounted results section).
+  const resultsRef            = useRef(null);
 
   // Two-step cancel confirmation state — prevents accidental force-stops
   const [cancelConfirmPending, setCancelConfirmPending] = useState(false);
@@ -701,6 +709,16 @@ const EquipmentList = () => {
     pollStartRef.current = startMs;
     pollStatus(savedId);
   }, [pollStatus]); // pollStatus is stable (useCallback with [] deps)
+
+  // Auto-scroll to the results section when results first become available.
+  // Gives a short delay so React has time to paint the newly mounted section.
+  useEffect(() => {
+    if (!results) return;
+    const timer = setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, RESULTS_SCROLL_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [results]);
 
   const handleExtract = async () => {
     if (!files.length) { setError('Please upload a P&ID document first'); return; }
@@ -1742,6 +1760,9 @@ const EquipmentList = () => {
 
           </div>{/* end centered wrapper */}
 
+          {/* Scroll anchor — resultsRef targets this so auto-scroll lands at the top of results */}
+          {results && <div ref={resultsRef} style={{ scrollMarginTop: '16px' }} />}
+
           {/* ── KPI Summary Bar (after extraction) ── */}
           {kpiStats && (
             <div className="max-w-7xl mx-auto px-6 mb-6">
@@ -1823,8 +1844,10 @@ const EquipmentList = () => {
                   </div>
                   <div>
                     <h2 className="text-slate-800 font-semibold text-base">
-                      <span className="text-emerald-600 text-xl font-bold">{results.total}</span>
-                      {' '}Equipment Item{results.total !== 1 ? 's' : ''} Extracted
+                      <span className="text-emerald-600 text-xl font-bold">
+                        {results.equipment?.length ?? results.total}
+                      </span>
+                      {' '}Equipment Item{(results.equipment?.length ?? results.total) !== 1 ? 's' : ''} Extracted
                     </h2>
                     {results.drawing_ref && (
                       <p className="text-slate-400 text-xs mt-0.5">Drawing: {results.drawing_ref}</p>
@@ -1907,7 +1930,7 @@ const EquipmentList = () => {
                         const isSelected = selectedRows.has(rowKey);
                         return (
                         <tr
-                          key={row.tag}
+                          key={rowKey}
                           className="eq-row-animate"
                           style={{
                             animationDelay: `${Math.min(idx * 0.035, 0.5)}s`,
