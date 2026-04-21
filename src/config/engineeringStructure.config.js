@@ -309,8 +309,8 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'nonTeffMetadata',
-        name: 'Non-TEFF Metadata',
-        fullName: 'Non-TEFF Metadata Extractor',
+        name: 'SPF-NON-TEF',
+        fullName: 'Non-TEF Metadata Generator',
         icon: DocumentMagnifyingGlassIcon,
         path: '/engineering/digitization/non-teff-metadata',
         description: 'Extract metadata from Non-TEFF documents (PDF, Excel, Word, AutoCAD)',

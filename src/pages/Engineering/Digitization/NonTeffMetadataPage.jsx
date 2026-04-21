@@ -398,7 +398,7 @@ const NonTeffMetadataPage = () => {
                 background: 'linear-gradient(90deg, #059669, #0891b2)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 margin: 0,
-              }}>Non-TEFF Metadata Extractor</h1>
+              }}>Non-TEF Metadata Generator</h1>
               <span style={{
                 background: 'linear-gradient(90deg, #059669, #0891b2)', color: '#fff',
                 fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
