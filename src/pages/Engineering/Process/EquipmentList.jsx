@@ -477,7 +477,7 @@ const EQ_T = {
 
 // ---------------------------------------------------------------------------
 const EquipmentList = () => {
-  const [file,           setFile]           = useState(null);
+  const [files,          setFiles]          = useState([]);
   const [isProcessing,   setIsProcessing]   = useState(false);
   const [progress,       setProgress]       = useState(0);
   const [statusMessage,  setStatusMessage]  = useState('');
@@ -545,14 +545,11 @@ const EquipmentList = () => {
   };
 
   const handleFileSelect = (e) => {
-    const f = e.target.files[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError(null);
-      setResults(null);
-    } else {
-      setError('Please select a valid PDF file');
-    }
+    const selected = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+    if (!selected.length) { setError('Please select valid PDF file(s)'); return; }
+    setFiles(selected);
+    setError(null);
+    setResults(null);
   };
 
   const handleDragOver = (e) => {
@@ -578,14 +575,11 @@ const EquipmentList = () => {
     e.stopPropagation();
     setIsDragging(false);
     if (isProcessing) return;
-    const f = e.dataTransfer.files[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError(null);
-      setResults(null);
-    } else {
-      setError('Please drop a valid PDF file');
-    }
+    const dropped = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+    if (!dropped.length) { setError('Please drop valid PDF file(s)'); return; }
+    setFiles(dropped);
+    setError(null);
+    setResults(null);
   };
 
   // Polling - used when server returns 202 + upload_id
@@ -630,20 +624,32 @@ const EquipmentList = () => {
   }, []);
 
   const handleExtract = async () => {
-    if (!file) { setError('Please upload a P&ID document first'); return; }
+    if (!files.length) { setError('Please upload a P&ID document first'); return; }
     setIsProcessing(true);
     setError(null);
     setResults(null);
     setDebugInfo(null);
     setProgress(0);
-    setStatusMessage('Uploading P&ID…');
 
+    const isBatch   = files.length > 1;
+    const uploadUrl = isBatch
+      ? `${API_BASE}/pid/equipment/analyze-batch/`
+      : `${API_BASE}/pid/equipment/analyze/`;
+
+    setStatusMessage(
+      isBatch ? `Uploading ${files.length} P&ID file(s)…` : 'Uploading P&ID…'
+    );
+
+    // Build FormData — single file uses field 'file'; batch uses 'file_0', 'file_1'…
     const formData = new FormData();
-    formData.append('file', file);
+    if (isBatch) {
+      files.forEach((f, i) => formData.append(`file_${i}`, f));
+    } else {
+      formData.append('file', files[0]);
+    }
 
-    const token     = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    const uploadUrl = `${API_BASE}/pid/equipment/analyze/`;
-    let lastErr     = null;
+    const token   = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    let lastErr   = null;
 
     for (let attempt = 1; attempt <= MAX_POST_RETRIES; attempt++) {
       if (attempt > 1) {
@@ -651,7 +657,11 @@ const EquipmentList = () => {
         setStatusMessage(`Retrying (attempt ${attempt}/${MAX_POST_RETRIES})…`);
         await new Promise(r => setTimeout(r, delay));
       }
-      setStatusMessage(attempt === 1 ? 'Uploading P&ID…' : `Sending (attempt ${attempt}/${MAX_POST_RETRIES})…`);
+      setStatusMessage(
+        attempt === 1
+          ? (isBatch ? `Uploading ${files.length} P&ID file(s)…` : 'Uploading P&ID…')
+          : `Sending (attempt ${attempt}/${MAX_POST_RETRIES})…`
+      );
 
       const controller = new AbortController();
       const abortTimer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
@@ -686,7 +696,11 @@ const EquipmentList = () => {
 
         // Async result (HTTP 202 + upload_id)
         if (data.upload_id) {
-          setStatusMessage('Processing in background…');
+          setStatusMessage(
+            isBatch
+              ? `Processing ${files.length} P&ID file(s) in background…`
+              : 'Processing in background…'
+          );
           pollStartRef.current = Date.now();
           pollStatus(data.upload_id);
           return;
@@ -811,11 +825,14 @@ const EquipmentList = () => {
     const types   = [...new Set(eq.map(r => (r.tag || '').split('-')[0]).filter(Boolean))];
     const withMtr = eq.filter(r => r.motor_rating && !['No','N/A','no','n/a'].includes(String(r.motor_rating).trim())).length;
     return {
-      total:   eq.length,
-      types:   types.length,
-      withMoc: filled('moc'),
+      total:    eq.length,
+      types:    types.length,
+      withMoc:  filled('moc'),
       withMtr,
-      withDim: filled('dimension_length'),
+      withDim:  filled('dimension_length'),
+      drawings: results?.drawing_ref
+        ? results.drawing_ref.split(',').map(s => s.trim()).filter(Boolean).length
+        : 1,
     };
   }, [results]);
 
@@ -1020,8 +1037,8 @@ const EquipmentList = () => {
             <div
               className="eq-upload-zone relative rounded-xl cursor-pointer overflow-hidden"
               style={{
-                border: isDragging ? '2px solid rgba(5,150,105,0.75)' : file ? '2px solid rgba(5,150,105,0.5)' : '2px dashed rgba(5,150,105,0.25)',
-                background: isDragging ? 'rgba(5,150,105,0.08)' : file ? 'rgba(5,150,105,0.04)' : 'rgba(5,150,105,0.015)',
+                border: isDragging ? '2px solid rgba(5,150,105,0.75)' : files.length ? '2px solid rgba(5,150,105,0.5)' : '2px dashed rgba(5,150,105,0.25)',
+                background: isDragging ? 'rgba(5,150,105,0.08)' : files.length ? 'rgba(5,150,105,0.04)' : 'rgba(5,150,105,0.015)',
                 minHeight: 148,
                 transition: 'border-color 0.25s, background 0.25s, box-shadow 0.25s',
               }}
@@ -1056,12 +1073,12 @@ const EquipmentList = () => {
               ))}
 
               {/* Scan line (idle only) */}
-              {!file && !isProcessing && <div className="eq-scan-line" />}
+              {!files.length && !isProcessing && <div className="eq-scan-line" />}
 
-              <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" />
+              <input ref={fileRef} type="file" accept=".pdf" multiple onChange={handleFileSelect} className="hidden" />
 
               <div className="flex flex-col items-center justify-center gap-3 py-9 px-6">
-                {file ? (
+                {files.length > 0 ? (
                   <>
                     <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{
                       background: 'linear-gradient(135deg, rgba(5,150,105,0.15), rgba(5,150,105,0.08))',
@@ -1071,8 +1088,21 @@ const EquipmentList = () => {
                       <CheckCircleIcon className="h-8 w-8 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                      <p className="text-slate-800 font-semibold text-sm">{file.name}</p>
-                      <p className="text-slate-400 text-xs mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
+                      {files.length === 1 ? (
+                        <>
+                          <p className="text-slate-800 font-semibold text-sm">{files[0].name}</p>
+                          <p className="text-slate-400 text-xs mt-1">{(files[0].size / 1024 / 1024).toFixed(2)} MB · Ready for extraction</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-slate-800 font-semibold text-sm">{files.length} PDF files selected</p>
+                          <div className="text-slate-400 text-xs mt-1 max-h-20 overflow-y-auto space-y-0.5">
+                            {files.map((f, i) => (
+                              <p key={i}>{f.name} &nbsp;<span className="text-slate-300">({(f.size / 1024 / 1024).toFixed(2)} MB)</span></p>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="px-3 py-1 rounded-full text-xs font-semibold text-emerald-700 flex items-center gap-1.5" style={{
@@ -1080,11 +1110,11 @@ const EquipmentList = () => {
                       }}>
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"
                           style={{ animation: 'eq-pulse-badge 1.6s ease infinite' }} />
-                        PDF Loaded
+                        {files.length === 1 ? 'PDF Loaded' : `${files.length} PDFs Loaded`}
                       </div>
                       {!isProcessing && (
                         <button
-                          onClick={e => { e.stopPropagation(); setFile(null); setResults(null); setError(null); }}
+                          onClick={e => { e.stopPropagation(); setFiles([]); setResults(null); setError(null); }}
                           className="px-2.5 py-1 rounded-full text-xs font-medium text-slate-400 hover:text-red-500"
                           style={{ background: '#f8fafc', border: '1px solid #e2e8f0', transition: 'color 0.2s' }}
                         >✕ Remove</button>
@@ -1323,9 +1353,9 @@ const EquipmentList = () => {
           <div className="flex gap-3 mb-6 eq-section" style={{ animationDelay: '0.15s' }}>
             <button
               onClick={handleExtract}
-              disabled={!file || isProcessing}
+              disabled={!files.length || isProcessing}
               className="eq-action-btn flex-1 py-3.5 px-6 rounded-xl font-semibold text-sm relative overflow-hidden"
-              style={!file || isProcessing ? {
+              style={!files.length || isProcessing ? {
                 background: '#f1f5f9',
                 color: '#94a3b8',
                 cursor: 'not-allowed',
@@ -1341,7 +1371,7 @@ const EquipmentList = () => {
               }}
             >
               {/* Shimmer on active */}
-              {file && !isProcessing && (
+              {files.length > 0 && !isProcessing && (
                 <div className="absolute inset-0 pointer-events-none" style={{
                   background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%)',
                   animation: 'eq-shimmer 2.8s linear infinite',
@@ -1360,7 +1390,7 @@ const EquipmentList = () => {
                 <span className="flex items-center justify-center gap-2 relative z-10">
                   <span className="text-base">⚡</span>
                   <span>Extract Equipment List</span>
-                  {file && <span className="ml-1 text-emerald-200 text-xs font-normal opacity-80">→ AI-powered</span>}
+                  {files.length > 0 && <span className="ml-1 text-emerald-200 text-xs font-normal opacity-80">→ AI-powered</span>}
                 </span>
               )}
             </button>
@@ -1604,13 +1634,14 @@ const EquipmentList = () => {
                 </span>
                 <div className="h-px flex-1" style={{ background: 'linear-gradient(270deg, transparent, rgba(5,150,105,0.2))' }} />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                 {[
-                  { label: 'Items Extracted', value: kpiStats.total,   icon: '🏷️', color: '#059669', delay: '0s'    },
-                  { label: 'Equipment Types', value: kpiStats.types,   icon: '🗂️', color: '#047857', delay: '0.06s' },
-                  { label: 'With MOC',        value: kpiStats.withMoc, icon: '🧱', color: '#065f46', delay: '0.12s' },
-                  { label: 'With Dimensions', value: kpiStats.withDim, icon: '📐', color: '#059669', delay: '0.18s' },
-                  { label: 'With Motor',      value: kpiStats.withMtr, icon: '⚡', color: '#047857', delay: '0.24s' },
+                  { label: 'P&ID Drawings',   value: kpiStats.drawings, icon: '📋', color: '#047857', delay: '0s'    },
+                  { label: 'Items Extracted', value: kpiStats.total,    icon: '🏷️', color: '#059669', delay: '0.05s' },
+                  { label: 'Equipment Types', value: kpiStats.types,    icon: '🗂️', color: '#047857', delay: '0.1s'  },
+                  { label: 'With MOC',        value: kpiStats.withMoc,  icon: '🧱', color: '#065f46', delay: '0.15s' },
+                  { label: 'With Dimensions', value: kpiStats.withDim,  icon: '📐', color: '#059669', delay: '0.2s'  },
+                  { label: 'With Motor',      value: kpiStats.withMtr,  icon: '⚡', color: '#047857', delay: '0.25s' },
                 ].map(({ label, value, icon, color, delay }) => (
                   <div key={label} className="eq-kpi-card eq-kpi-node rounded-2xl px-4 py-4 flex items-center gap-3" style={{
                     background: 'white',
