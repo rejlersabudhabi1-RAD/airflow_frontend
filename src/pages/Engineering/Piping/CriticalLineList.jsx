@@ -2258,8 +2258,6 @@ const CriticalLineList = () => {
 
           </div>
 
-          )}
-
 
 
         {/* Filter Panel */}

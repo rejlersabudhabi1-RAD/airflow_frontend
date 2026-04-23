@@ -19,6 +19,7 @@ import {
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import { getApiBaseUrl } from '../../../config/environment.config';
+import BulkMasterIndex from './BulkMasterIndex';
 
 // ---------------------------------------------------------------------------
 // Soft-coded column definitions — mirrors config/non_teff_fields.json
@@ -73,8 +74,9 @@ const SUPPORTED_FORMATS = [
 
 const ACCEPT_STRING = '.pdf,.xlsx,.xls,.docx,.doc,.dwg,.dxf';
 
-const API_BASE = getApiBaseUrl();
-const API_PREFIX = `${API_BASE}/non-teff`;
+// apiClient already has baseURL=API_BASE_URL ('/api/v1'), so use a relative
+// prefix — prepending getApiBaseUrl() here duplicates '/api/v1/api/v1/...'.
+const API_PREFIX = '/non-teff';
 
 // ---------------------------------------------------------------------------
 // Keyframes — shared EQ style, teal/emerald palette
@@ -153,6 +155,48 @@ const NT_KEYFRAMES = `
   .nt-upload-zone:hover { border-color: rgba(5,150,105,0.55) !important; background: rgba(5,150,105,0.06) !important; }
   .nt-action-btn:hover:not(:disabled) { box-shadow: 0 6px 24px rgba(5,150,105,0.42) !important; transform: translateY(-1px); }
   .nt-export-btn:hover { background: rgba(5,150,105,0.14) !important; border-color: rgba(5,150,105,0.4) !important; }
+
+  /* ─── Oil & Gas themed tab switcher ─── */
+  @keyframes ntPipelineFlow {
+    0%   { background-position:   0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+  @keyframes ntDropletRise {
+    0%   { transform: translateY(6px)  scale(0.85); opacity: 0; }
+    40%  { opacity: 1; }
+    100% { transform: translateY(-14px) scale(1);   opacity: 0; }
+  }
+  @keyframes ntTabGlow {
+    0%, 100% { box-shadow: 0 4px 18px rgba(5,150,105,0.28), inset 0 1px 0 rgba(255,255,255,0.35); }
+    50%       { box-shadow: 0 6px 26px rgba(8,145,178,0.45), inset 0 1px 0 rgba(255,255,255,0.45); }
+  }
+  @keyframes ntGaugeSweep {
+    0%   { transform: rotate(-60deg); }
+    50%  { transform: rotate(60deg);  }
+    100% { transform: rotate(-60deg); }
+  }
+  .nt-tab-inactive:hover {
+    background: rgba(255,255,255,0.85) !important;
+    color: #047857 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(5,150,105,0.15);
+  }
+  .nt-tab-active { animation: ntTabGlow 3s ease-in-out infinite; }
+  .nt-tab-pipeline {
+    background: linear-gradient(90deg,
+      rgba(5,150,105,0)    0%,
+      rgba(5,150,105,0.9) 20%,
+      rgba(8,145,178,0.9) 50%,
+      rgba(5,150,105,0.9) 80%,
+      rgba(5,150,105,0)   100%);
+    background-size: 200% 100%;
+    animation: ntPipelineFlow 2.8s linear infinite;
+  }
+  .nt-droplet { animation: ntDropletRise 1.8s ease-in-out infinite; }
+  .nt-gauge-needle {
+    transform-origin: 50% 100%;
+    animation: ntGaugeSweep 2.4s ease-in-out infinite;
+  }
 `;
 
 // Visual theme constants
@@ -178,9 +222,65 @@ const NT_T = {
 };
 
 // ---------------------------------------------------------------------------
+// Soft-coded tab switcher (oil & gas themed)
+// ---------------------------------------------------------------------------
+// Each tab has an SVG icon renderer so the visual intent stays in config.
+// Update this array to add/rename/reorder tabs without touching logic.
+const NT_TABS = [
+  {
+    id: 'single',
+    label: 'Single File',
+    hint: 'One document · focused extraction',
+    accent: '#059669',   // emerald — well-head
+    iconKind: 'pipe',
+  },
+  {
+    id: 'bulk',
+    label: 'Bulk Master Index',
+    hint: 'Folder → master index · drop & go',
+    accent: '#0891b2',   // cyan — pipeline
+    iconKind: 'gauge',
+  },
+];
+
+// Inline SVG icon set — themed for oil & gas.
+// `active` controls the animated accent (flow, needle sweep).
+const NtTabIcon = ({ kind, active, accent }) => {
+  if (kind === 'pipe') {
+    // Well-head / valve wheel + single drop
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="10" r="5" stroke={accent} strokeWidth="1.6" />
+        <path d="M12 5 V3 M12 17 V15 M7 10 H5 M19 10 H17 M8.5 6.5 L7 5 M15.5 6.5 L17 5 M8.5 13.5 L7 15 M15.5 13.5 L17 15"
+              stroke={accent} strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="12" cy="10" r="1.6" fill={accent} />
+        {active && (
+          <path className="nt-droplet" d="M12 18 C 13 19.2 13 20.4 12 21 C 11 20.4 11 19.2 12 18 Z" fill={accent} />
+        )}
+      </svg>
+    );
+  }
+  if (kind === 'gauge') {
+    // Pressure gauge — needle sweeps when active
+    return (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="12" r="8.5" stroke={accent} strokeWidth="1.6" />
+        <path d="M5 12 A7 7 0 0 1 19 12" stroke={accent} strokeWidth="1" strokeDasharray="1.5 2" opacity="0.5" />
+        <g className={active ? 'nt-gauge-needle' : ''} style={{ transformBox: 'fill-box', transformOrigin: '50% 100%' }}>
+          <line x1="12" y1="12" x2="12" y2="5.5" stroke={accent} strokeWidth="1.6" strokeLinecap="round" />
+        </g>
+        <circle cx="12" cy="12" r="1.4" fill={accent} />
+      </svg>
+    );
+  }
+  return null;
+};
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 const NonTeffMetadataPage = () => {
+  const [mode,         setMode]          = useState('single'); // 'single' | 'bulk'
   const [file,          setFile]          = useState(null);
   const [isProcessing,  setIsProcessing]  = useState(false);
   const [progress,      setProgress]      = useState(0);
@@ -335,9 +435,152 @@ const NonTeffMetadataPage = () => {
   const stageLabel = progress < 20 ? 'Uploading' : progress < 60 ? 'Analysing' : progress < 90 ? 'Extracting Fields' : 'Finalising';
 
   // ─── Render ──────────────────────────────────────────────────────────────
+  // Shared tab bar — oil & gas themed pill switcher with animated pipeline flow
+  const TabBar = () => {
+    const activeIndex = Math.max(0, NT_TABS.findIndex(t => t.id === mode));
+    const activeTab = NT_TABS[activeIndex];
+    return (
+      <div style={{
+        position: 'relative', zIndex: 3,
+        maxWidth: 1600, margin: '0 auto',
+        padding: '20px 24px 0 24px',
+      }}>
+        <style>{NT_KEYFRAMES}</style>
+
+        {/* Pill container — single rounded capsule with animated pipeline underlay */}
+        <div style={{
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'stretch',
+          gap: 4,
+          padding: 5,
+          background: 'rgba(255,255,255,0.75)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(5,150,105,0.18)',
+          borderRadius: 999,
+          boxShadow: '0 10px 30px -12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.6)',
+          overflow: 'hidden',
+        }}>
+          {/* Animated pipeline stripe — drifts horizontally behind the pill */}
+          <div className="nt-tab-pipeline" style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0,
+            height: 3, borderRadius: 3, opacity: 0.85, pointerEvents: 'none',
+          }} />
+
+          {NT_TABS.map((t) => {
+            const active = mode === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setMode(t.id)}
+                className={active ? 'nt-tab-active' : 'nt-tab-inactive'}
+                style={{
+                  position: 'relative',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 20px 10px 14px',
+                  minHeight: 46,
+                  border: 'none',
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: 0.1,
+                  cursor: 'pointer',
+                  transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
+                  background: active
+                    ? `linear-gradient(135deg, ${t.accent} 0%, #0891b2 100%)`
+                    : 'transparent',
+                  color: active ? '#ffffff' : '#475569',
+                }}
+              >
+                {/* Icon pod — circular well-head */}
+                <span style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 30, height: 30, borderRadius: '50%',
+                  background: active ? 'rgba(255,255,255,0.22)' : 'rgba(5,150,105,0.08)',
+                  border: active ? '1px solid rgba(255,255,255,0.4)' : '1px solid rgba(5,150,105,0.18)',
+                  flexShrink: 0,
+                }}>
+                  <NtTabIcon kind={t.iconKind} active={active} accent={active ? '#ffffff' : t.accent} />
+                </span>
+
+                {/* Label + hint stacked */}
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
+                  <span>{t.label}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 500, letterSpacing: 0.2,
+                    color: active ? 'rgba(255,255,255,0.85)' : '#94a3b8',
+                  }}>
+                    {t.hint}
+                  </span>
+                </span>
+
+                {/* Active indicator dot — pulses */}
+                {active && (
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#ffffff',
+                    marginLeft: 2,
+                    animation: 'ntPulse 1.6s ease-in-out infinite',
+                    boxShadow: '0 0 8px rgba(255,255,255,0.8)',
+                  }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active-tab breadcrumb strip */}
+        <div style={{
+          marginTop: 10,
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 11, color: '#64748b', letterSpacing: 0.2,
+        }}>
+          <span style={{ color: '#047857', fontWeight: 600 }}>
+            {activeTab.label}
+          </span>
+          <span style={{ width: 4, height: 4, borderRadius: '50%', background: activeTab.accent }} />
+          <span>{activeTab.hint}</span>
+        </div>
+      </div>
+    );
+  };
+
+  // Bulk Master Index workflow (early-return, uses its own chrome)
+  if (mode === 'bulk') {
+    return (
+      <div style={{ minHeight: '100vh', background: NT_T.bg, fontFamily: "'Inter', sans-serif", position: 'relative', overflow: 'hidden' }}>
+        <style>{NT_KEYFRAMES}</style>
+        {/* Animated background blobs — kept identical to Single mode for visual continuity */}
+        {NT_T.blobs.map((b, i) => (
+          <div key={i} style={{
+            position: 'absolute', borderRadius: '50%', background: b.color,
+            width: b.size, height: b.size,
+            top: b.top, bottom: b.bottom, left: b.left, right: b.right,
+            animation: b.anim, pointerEvents: 'none', zIndex: 0,
+          }} />
+        ))}
+        <TabBar />
+        <div style={{
+          position: 'relative', zIndex: 2,
+          maxWidth: 1600, margin: '16px auto 0',
+          padding: '24px',
+          background: 'rgba(255,255,255,0.88)',
+          backdropFilter: 'blur(8px)',
+          borderRadius: 16,
+          border: '1px solid rgba(5,150,105,0.12)',
+          boxShadow: '0 10px 40px -12px rgba(15,23,42,0.12)',
+          marginBottom: 32,
+        }}>
+          <BulkMasterIndex />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: NT_T.bg, fontFamily: "'Inter', sans-serif", position: 'relative', overflow: 'hidden' }}>
       <style>{NT_KEYFRAMES}</style>
+      <TabBar />
 
       {/* Animated background blobs */}
       {NT_T.blobs.map((b, i) => (
