@@ -10,12 +10,16 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   CloudArrowUpIcon,
   CheckCircleIcon,
   ArrowDownTrayIcon,
   DocumentMagnifyingGlassIcon,
   InformationCircleIcon,
+  SparklesIcon,
+  ArrowRightIcon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import { getApiBaseUrl } from '../../../config/environment.config';
@@ -197,6 +201,51 @@ const NT_KEYFRAMES = `
     transform-origin: 50% 100%;
     animation: ntGaugeSweep 2.4s ease-in-out infinite;
   }
+
+  /* ─── Engagement layer: sheen, tip rotator, reco cards ─── */
+  @keyframes ntSheen {
+    0%   { background-position: -150% 0; }
+    100% { background-position:  250% 0; }
+  }
+  @keyframes ntTipSlide {
+    0%   { opacity: 0; transform: translateY(8px); }
+    12%  { opacity: 1; transform: translateY(0);   }
+    88%  { opacity: 1; transform: translateY(0);   }
+    100% { opacity: 0; transform: translateY(-8px);}
+  }
+  @keyframes ntRecoPulse {
+    0%, 100% { transform: translateX(0);   }
+    50%      { transform: translateX(3px); }
+  }
+  @keyframes ntTrustCount {
+    from { opacity: 0; transform: translateY(6px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    }
+  }
+  .nt-hero-title-sheen {
+    background: linear-gradient(90deg, #059669 0%, #0891b2 40%, #ffffff 50%, #0891b2 60%, #059669 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: ntSheen 6s ease-in-out infinite;
+  }
+  .nt-reco-card {
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1),
+                box-shadow 0.25s cubic-bezier(0.4,0,0.2,1),
+                border-color 0.25s ease;
+    will-change: transform, box-shadow;
+  }
+  .nt-reco-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 32px -10px rgba(5,150,105,0.28), 0 6px 12px -6px rgba(15,23,42,0.12) !important;
+  }
+  .nt-reco-card:hover .nt-reco-arrow { animation: ntRecoPulse 0.9s ease-in-out infinite; }
+  .nt-trust-badge { animation: ntTrustCount 0.5s ease both; }
+  .nt-info-card:hover {
+    background: rgba(255,255,255,1) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px -6px rgba(5,150,105,0.18);
+  }
 `;
 
 // Visual theme constants
@@ -220,6 +269,58 @@ const NT_T = {
     { icon:'📁', label:'Multi-Format'       },
   ],
 };
+
+// ---------------------------------------------------------------------------
+// Soft-coded engagement content — edit freely, no logic depends on this.
+// ---------------------------------------------------------------------------
+
+// Rotating "Did you know?" tips shown under the hero chips.
+const PRO_TIPS = [
+  { icon: '💡', text: 'Drop a folder of drawings into Bulk Master Index — RAD AI merges them into a single registry.' },
+  { icon: '⚡', text: 'Extraction runs on a Celery worker, so you can keep reviewing earlier jobs while this one finishes.' },
+  { icon: '🔒', text: 'Every uploaded document is scoped to your project — nothing is shared across tenants.' },
+  { icon: '🎯', text: 'Ambiguous tags? Edit inline in the grid — RAD AI will re-learn your team\'s preferences.' },
+  { icon: '🧠', text: 'AI-extracted fields feed directly into Equipment List, Line List and Datasheet modules.' },
+];
+const PRO_TIP_ROTATE_MS = 5500;
+
+// Badges shown in the trust-strip beneath the chips.
+const TRUST_BADGES = [
+  { value: '12+',   label: 'Metadata fields'      },
+  { value: '4',     label: 'Document formats'     },
+  { value: '~30s',  label: 'Avg. extraction time' },
+  { value: '100%',  label: 'Project-scoped'       },
+];
+
+// Recommendation system — surfaces other RAD AI modules this user will benefit from.
+// Grouped by category; each item stays on-brand with its accent color.
+const RECOMMENDED_FEATURES = [
+  {
+    category: 'Process Engineering',
+    items: [
+      { to: '/engineering/process/equipment-list',   icon: '⚙️', title: 'Equipment List',        tagline: 'Auto-register equipment from P&IDs',   benefit: 'Saves ~6 hrs / drawing',  accent: '#7c3aed' },
+      { to: '/engineering/process/line-list',        icon: '🔢', title: 'Line List',             tagline: 'Piping line register with specs',      benefit: 'OCR-assisted',            accent: '#0891b2' },
+      { to: '/engineering/process/pid-verification', icon: '🔍', title: 'P&ID Verification',     tagline: 'AI rule-engine for P&ID quality',      benefit: 'Catches 40+ issue types', accent: '#059669' },
+      { to: '/engineering/process/pfd-quality-checker', icon: '📊', title: 'PFD Quality Checker', tagline: 'Five-stage PFD analysis',            benefit: 'Stream + mass balance',   accent: '#0284c7' },
+    ],
+  },
+  {
+    category: 'Piping & Datasheets',
+    items: [
+      { to: '/engineering/piping/critical-line-list',          icon: '🧪', title: 'Critical Line List',    tagline: 'Stress-critical piping inventory', benefit: 'Discipline-ready',     accent: '#b45309' },
+      { to: '/engineering/process/datasheet',                  icon: '📝', title: 'Process Datasheets',    tagline: 'Generate equipment datasheets',    benefit: 'One-click PDF',        accent: '#9d174d' },
+      { to: '/engineering/instrument/datasheet',               icon: '🎛️', title: 'Instrument Datasheets', tagline: 'AI-extract instrument specs',      benefit: 'From vendor PDFs',     accent: '#0f766e' },
+      { to: '/engineering/electrical/datasheet/smart',         icon: '⚡', title: 'Electrical Datasheets', tagline: 'Motor, transformer, cable specs',  benefit: 'Smart Excel editor',   accent: '#d97706' },
+    ],
+  },
+  {
+    category: 'Document Control',
+    items: [
+      { to: '/crs-documents',    icon: '🔄', title: 'Change Request System', tagline: 'Multi-revision document workflow', benefit: 'Chain review',       accent: '#1d4ed8' },
+      { to: '/wrench-integration', icon: '🔗', title: 'Wrench Integration',   tagline: 'Sync handover to Smart Project',   benefit: 'Transmittal-ready', accent: '#6d28d9' },
+    ],
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Soft-coded tab switcher (oil & gas themed)
@@ -280,6 +381,7 @@ const NtTabIcon = ({ kind, active, accent }) => {
 // Main component
 // ---------------------------------------------------------------------------
 const NonTeffMetadataPage = () => {
+  const navigate = useNavigate();
   const [mode,         setMode]          = useState('single'); // 'single' | 'bulk'
   const [file,          setFile]          = useState(null);
   const [isProcessing,  setIsProcessing]  = useState(false);
@@ -293,6 +395,7 @@ const NonTeffMetadataPage = () => {
   const [elapsedSecs,   setElapsedSecs]   = useState(0);
   const [isDragging,    setIsDragging]    = useState(false);
   const [jobId,         setJobId]         = useState(null);
+  const [tipIndex,      setTipIndex]      = useState(0);
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -309,6 +412,15 @@ const NonTeffMetadataPage = () => {
     }
     return () => clearInterval(elapsedRef.current);
   }, [isProcessing]);
+
+  // Rotating pro-tip ticker (hero engagement only — no side-effects on logic)
+  useEffect(() => {
+    const t = setInterval(
+      () => setTipIndex(i => (i + 1) % PRO_TIPS.length),
+      PRO_TIP_ROTATE_MS,
+    );
+    return () => clearInterval(t);
+  }, []);
 
   const formatElapsed = (s) => s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 
@@ -573,6 +685,9 @@ const NonTeffMetadataPage = () => {
         }}>
           <BulkMasterIndex />
         </div>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 1600, margin: '0 auto', padding: '0 24px 32px' }}>
+          <FeatureRecommendations navigate={navigate} />
+        </div>
       </div>
     );
   }
@@ -636,10 +751,8 @@ const NonTeffMetadataPage = () => {
           <div style={{ flex: 1 }}>
             {/* Title */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '4px' }}>
-              <h1 style={{
+              <h1 className="nt-hero-title-sheen" style={{
                 fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1,
-                background: 'linear-gradient(90deg, #059669, #0891b2)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 margin: 0,
               }}>Non-TEF Metadata Generator</h1>
               <span style={{
@@ -667,6 +780,46 @@ const NonTeffMetadataPage = () => {
                   {chip.label}
                 </span>
               ))}
+            </div>
+
+            {/* Trust strip — soft-coded numeric badges */}
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12,
+            }}>
+              {TRUST_BADGES.map((b, i) => (
+                <div key={b.label} className="nt-trust-badge" style={{
+                  animationDelay: `${0.15 + i * 0.08}s`,
+                  display: 'flex', alignItems: 'baseline', gap: 6,
+                  padding: '5px 12px', borderRadius: 8,
+                  background: 'linear-gradient(135deg, rgba(5,150,105,0.08), rgba(8,145,178,0.06))',
+                  border: '1px solid rgba(5,150,105,0.15)',
+                }}>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#047857', letterSpacing: '-0.02em' }}>
+                    {b.value}
+                  </span>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', letterSpacing: 0.2 }}>
+                    {b.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Rotating Pro-Tip banner */}
+            <div key={tipIndex} style={{
+              marginTop: 12, maxWidth: 640,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 14px', borderRadius: 10,
+              background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)',
+              border: '1px dashed rgba(8,145,178,0.28)',
+              animation: 'ntTipSlide 5.5s ease-in-out',
+            }}>
+              <LightBulbIcon style={{ width: 16, height: 16, color: '#0891b2', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.4 }}>
+                <span style={{ fontWeight: 700, color: '#047857', marginRight: 6 }}>
+                  {PRO_TIPS[tipIndex].icon} Pro Tip
+                </span>
+                {PRO_TIPS[tipIndex].text}
+              </span>
             </div>
           </div>
 
@@ -1108,9 +1261,150 @@ const NonTeffMetadataPage = () => {
             </div>
           </div>
         )}
+
+        {/* ── Recommendations — discover more RAD AI tools ── */}
+        <FeatureRecommendations navigate={navigate} />
       </div>
     </div>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Presentational recommendation panel — soft-coded from RECOMMENDED_FEATURES.
+// Receives navigate() so it never touches routing logic directly.
+// ---------------------------------------------------------------------------
+const FeatureRecommendations = ({ navigate }) => (
+  <div className="nt-section" style={{ animationDelay: '0.25s', marginTop: 28 }}>
+    <div style={{
+      background: 'rgba(255,255,255,0.78)', backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(5,150,105,0.14)', borderRadius: 18,
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '16px 22px',
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        background: 'linear-gradient(90deg, rgba(5,150,105,0.1), rgba(8,145,178,0.07))',
+        borderBottom: '1px solid rgba(5,150,105,0.1)',
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: 'linear-gradient(135deg, #059669, #0891b2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+        }}>
+          <SparklesIcon style={{ width: 20, height: 20, color: '#fff' }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+            Discover more RAD AI modules
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+            Extracted metadata flows straight into these connected tools — one click away.
+          </div>
+        </div>
+        <span style={{
+          background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(5,150,105,0.2)',
+          borderRadius: 999, padding: '4px 12px',
+          fontSize: '0.65rem', fontWeight: 700, color: '#047857', letterSpacing: 0.6,
+        }}>
+          RECOMMENDED FOR YOU
+        </span>
+      </div>
+
+      {/* Category groups */}
+      <div style={{ padding: '18px 22px 22px' }}>
+        {RECOMMENDED_FEATURES.map((group) => (
+          <div key={group.category} style={{ marginBottom: 18 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+            }}>
+              <span style={{
+                fontSize: '0.72rem', fontWeight: 700, color: '#047857',
+                textTransform: 'uppercase', letterSpacing: 0.8,
+              }}>
+                {group.category}
+              </span>
+              <span style={{ flex: 1, height: 1, background: 'rgba(5,150,105,0.12)' }} />
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: 12,
+            }}>
+              {group.items.map((item) => (
+                <button
+                  key={item.to}
+                  onClick={() => navigate(item.to)}
+                  className="nt-reco-card"
+                  style={{
+                    textAlign: 'left', cursor: 'pointer',
+                    background: 'rgba(255,255,255,0.95)',
+                    border: `1px solid ${item.accent}26`,
+                    borderLeft: `3px solid ${item.accent}`,
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    boxShadow: '0 2px 6px -3px rgba(15,23,42,0.06)',
+                  }}
+                >
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                    background: `${item.accent}14`,
+                    border: `1px solid ${item.accent}30`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.15rem',
+                  }}>
+                    {item.icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2,
+                    }}>
+                      <span style={{
+                        fontWeight: 700, color: '#1f2937', fontSize: '0.87rem',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {item.title}
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: '0.74rem', color: '#64748b', lineHeight: 1.45, marginBottom: 6,
+                    }}>
+                      {item.tagline}
+                    </div>
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      background: `${item.accent}12`,
+                      color: item.accent,
+                      fontSize: '0.65rem', fontWeight: 700, letterSpacing: 0.3,
+                      padding: '2px 8px', borderRadius: 999,
+                      textTransform: 'uppercase',
+                    }}>
+                      {item.benefit}
+                    </div>
+                  </div>
+                  <ArrowRightIcon
+                    className="nt-reco-arrow"
+                    style={{ width: 18, height: 18, color: item.accent, flexShrink: 0, marginTop: 4 }}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div style={{
+          marginTop: 6,
+          textAlign: 'center',
+          fontSize: '0.72rem', color: '#94a3b8',
+        }}>
+          💎 All modules included in your RAD AI subscription — no extra setup required.
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default NonTeffMetadataPage;
