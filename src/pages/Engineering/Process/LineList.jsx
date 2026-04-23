@@ -156,6 +156,63 @@ const FORMAT_EXAMPLES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Soft-coded hero/visual theme — edit freely, no core logic depends on this.
+// Pure styling constants consumed by the header + feature tiles. Changing any
+// value here only affects looks, never extraction / polling / export behaviour.
+// ---------------------------------------------------------------------------
+const LL_HERO = {
+  gradient:    'linear-gradient(135deg, #1e40af 0%, #2563eb 40%, #4f46e5 75%, #7c3aed 100%)',
+  accentGlow:  'radial-gradient(circle at 20% 20%, rgba(96,165,250,0.35), transparent 55%), radial-gradient(circle at 80% 30%, rgba(167,139,250,0.3), transparent 50%)',
+  chipBg:      'rgba(255,255,255,0.12)',
+  chipBorder:  '1px solid rgba(255,255,255,0.25)',
+};
+
+// Hero capability chips — short, marketing-style.
+const LL_HERO_CHIPS = [
+  { icon: '🤖', label: 'AI-Powered OCR' },
+  { icon: '🔀', label: 'Async Processing' },
+  { icon: '🧭', label: '5 Format Profiles' },
+  { icon: '📥', label: 'Excel Export' },
+  { icon: '🧠', label: 'Vision FROM-TO' },
+];
+
+// Pipeline stages shown during processing — keyed to percent bands that the
+// backend task already emits.  Pure display layer; status messages still flow
+// from the backend unchanged.
+const LL_PIPELINE_STAGES = [
+  { key: 'upload',   label: 'Upload',    icon: '📤', from: 0,  to: 10  },
+  { key: 'ocr',      label: 'OCR',       icon: '🔍', from: 10, to: 45  },
+  { key: 'parse',    label: 'Parse',     icon: '🧩', from: 45, to: 75  },
+  { key: 'fromto',   label: 'From → To', icon: '🧠', from: 75, to: 95  },
+  { key: 'finalize', label: 'Finalize',  icon: '✅', from: 95, to: 100 },
+];
+
+// Feature tiles displayed in the idle state — each has an accent colour so the
+// grid feels alive. Descriptions are computed at render time from COLUMNS /
+// FORMAT_OPTIONS so nothing goes stale if those lists change.
+const LL_FEATURE_ACCENTS = [
+  { bg: 'rgba(37,99,235,0.07)',  border: 'rgba(37,99,235,0.22)',  fg: '#1d4ed8' },
+  { bg: 'rgba(16,185,129,0.07)', border: 'rgba(16,185,129,0.22)', fg: '#047857' },
+  { bg: 'rgba(139,92,246,0.07)', border: 'rgba(139,92,246,0.22)', fg: '#6d28d9' },
+  { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', fg: '#b45309' },
+  { bg: 'rgba(236,72,153,0.07)', border: 'rgba(236,72,153,0.22)', fg: '#be185d' },
+  { bg: 'rgba(14,165,233,0.07)', border: 'rgba(14,165,233,0.22)', fg: '#0369a1' },
+  { bg: 'rgba(217,70,239,0.07)', border: 'rgba(217,70,239,0.22)', fg: '#a21caf' },
+];
+
+// Rotating tips shown during processing — educate the user while they wait.
+// Soft-coded: add/remove freely, component rotates them on an interval.
+const LL_PROC_TIPS = [
+  '💡 Multi-page P&IDs are OCR-scanned in sequence — keep this tab open.',
+  '🧠 AI detects line numbers in any format: hyphens, spaces, periods.',
+  '📐 Computer Vision correlates text with line geometries to infer FROM→TO.',
+  '🔍 Embedded vector text is preferred over OCR for speed on CAD-native PDFs.',
+  '⚙️ Optional legend sheets unlock service-code & insulation descriptions.',
+  '✨ Complex drawings (like this one) may take longer — quality stays high.',
+];
+const LL_PROC_TIP_ROTATE_MS = 5000;
+
+// ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
 // ---------------------------------------------------------------------------
 const LAYOUT_CONFIG = {
@@ -190,6 +247,11 @@ const LineList = () => {
   const [includeArea, setIncludeArea] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isFullscreen, setIsFullscreen]     = useState(false);
+  // Per-page progress from backend (null until backend reports the first page)
+  // Shape: { currentPage, totalPages, linesSoFar, phase }
+  const [pageInfo, setPageInfo] = useState(null);
+  // Rotating tip index for processing card
+  const [procTipIdx, setProcTipIdx] = useState(0);
 
   const pidRef = useRef(null);
   const legendRef = useRef(null);
@@ -242,6 +304,16 @@ const LineList = () => {
     return `${Math.floor(secs / 60)}m ${secs % 60}s`;
   };
 
+  // Rotate tips while processing
+  useEffect(() => {
+    if (!isProcessing) return;
+    const id = setInterval(
+      () => setProcTipIdx(i => (i + 1) % LL_PROC_TIPS.length),
+      LL_PROC_TIP_ROTATE_MS,
+    );
+    return () => clearInterval(id);
+  }, [isProcessing]);
+
   // -------------------------------------------------------------------------
   // Polling helper
   // -------------------------------------------------------------------------
@@ -279,6 +351,17 @@ const LineList = () => {
           // PENDING or PROGRESS — keep polling
           setProgress(data.percent || 0);
           setStatusMessage(data.status || 'Processing…');
+          // Capture richer backend fields (per-page tracker). Optional — only
+          // set when the backend actually reports them, so we never flash an
+          // empty tracker on an older server.
+          if (data.current_page && data.total_pages) {
+            setPageInfo({
+              currentPage: data.current_page,
+              totalPages:  data.total_pages,
+              linesSoFar:  data.lines_so_far ?? 0,
+              phase:       data.phase || 'start',
+            });
+          }
           pollTimerRef.current = setTimeout(() => pollStatus(taskId), POLL_INTERVAL_MS);
         }
       })
@@ -304,6 +387,7 @@ const LineList = () => {
     setError(null);
     setExtractedData(null);
     setProgress(0);
+    setPageInfo(null);
     setStatusMessage('Uploading P&ID…');
 
     // Build FormData (same fields used by the backend)
@@ -512,6 +596,24 @@ const LineList = () => {
           from { opacity: 0; transform: scale(0.98); }
           to   { opacity: 1; transform: scale(1); }
         }
+        @keyframes ll-hero-shift {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes ll-orbit {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes ll-blob {
+          0%, 100% { transform: translate(0,0) scale(1); }
+          33%      { transform: translate(18px,-12px) scale(1.08); }
+          66%      { transform: translate(-14px,10px) scale(0.95); }
+        }
+        .ll-hero-animated {
+          background-size: 240% 240%;
+          animation: ll-hero-shift 12s ease infinite;
+        }
         .ll-fullscreen-wrap {
           position: fixed; inset: 0; z-index: 9990;
           overflow-y: auto;
@@ -572,51 +674,91 @@ const LineList = () => {
           }}
         >
 
-          {/* ── Page Header ── */}
+          {/* ── Page Header — Hero banner (gradient + animated halo + chips) ── */}
           <div className="mb-8 ll-section" style={{ animationDelay: '0s' }}>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-4" style={{
-              background: 'rgba(37,99,235,0.08)',
-              border: '1px solid rgba(37,99,235,0.2)',
-            }}>
-              <span className="w-2 h-2 rounded-full bg-blue-500"
-                style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
-              <span className="text-blue-700 text-xs font-semibold tracking-widest uppercase">AI-Powered · P&amp;ID Analysis</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-4 mb-3">
-                <div className="p-2.5 rounded-xl" style={{
-                  background: 'rgba(37,99,235,0.09)',
-                  border: '1px solid rgba(37,99,235,0.2)',
-                  animation: 'll-glow 3s ease infinite',
-                }}>
-                  <DocumentTextIcon className="h-7 w-7 text-blue-600" />
-                </div>
-                Line <span className="text-blue-600 ml-2">List</span>
-              </h1>
+            <div
+              className="ll-hero-animated relative overflow-hidden rounded-3xl px-7 py-8 text-white"
+              style={{
+                background: LL_HERO.gradient,
+                boxShadow: '0 18px 48px -16px rgba(37,99,235,0.45)',
+              }}
+            >
+              {/* Ambient glow blobs */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: LL_HERO.accentGlow }} />
+              <div className="absolute -top-10 -left-8 w-52 h-52 rounded-full pointer-events-none"
+                style={{ background: 'rgba(96,165,250,0.35)', filter: 'blur(42px)', animation: 'll-blob 10s ease infinite' }} />
+              <div className="absolute -bottom-12 right-4 w-60 h-60 rounded-full pointer-events-none"
+                style={{ background: 'rgba(167,139,250,0.3)', filter: 'blur(52px)', animation: 'll-blob 13s ease-in-out infinite reverse' }} />
 
-              {/* Fullscreen toggle — purely a layout control, no core logic */}
-              <button
-                onClick={() => setIsFullscreen(fs => !fs)}
-                title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0"
-                style={{
-                  background: isFullscreen ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.06)',
-                  border: '1px solid rgba(37,99,235,0.2)',
-                  color: '#1e40af',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {isFullscreen
-                  ? <><ArrowsPointingInIcon className="h-4 w-4" /> Exit Fullscreen</>
-                  : <><ArrowsPointingOutIcon className="h-4 w-4" /> Fullscreen</>
-                }
-              </button>
+              {/* Badge */}
+              <div className="relative flex items-center justify-between gap-4 flex-wrap">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
+                  style={{ background: LL_HERO.chipBg, border: LL_HERO.chipBorder, backdropFilter: 'blur(6px)' }}>
+                  <span className="w-2 h-2 rounded-full bg-white" style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
+                  <span className="text-[10px] font-semibold tracking-[0.22em] uppercase">AI-Powered · P&amp;ID Analysis</span>
+                </div>
+                <button
+                  onClick={() => setIsFullscreen(fs => !fs)}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Expand to fullscreen'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+                  style={{
+                    background: LL_HERO.chipBg,
+                    border: LL_HERO.chipBorder,
+                    color: 'white',
+                    backdropFilter: 'blur(6px)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {isFullscreen
+                    ? <><ArrowsPointingInIcon className="h-4 w-4" /> Exit Fullscreen</>
+                    : <><ArrowsPointingOutIcon className="h-4 w-4" /> Fullscreen</>
+                  }
+                </button>
+              </div>
+
+              {/* Title + description */}
+              <div className="relative mt-5 flex items-center gap-4">
+                <div className="p-3 rounded-2xl flex-shrink-0"
+                  style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', animation: 'll-glow 3s ease infinite' }}>
+                  <DocumentTextIcon className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
+                    Line <span className="text-amber-300">List</span>
+                  </h1>
+                  <p className="text-white/80 text-sm md:text-base leading-relaxed max-w-2xl mt-1">
+                    Extract <span className="font-semibold text-white">{COLUMNS.length} columns</span> from P&amp;ID drawings —
+                    line designation, service codes, piping spec, and FROM→TO flow. Upload an optional legend sheet to resolve code descriptions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Capability chips */}
+              <div className="relative mt-6 flex flex-wrap gap-2">
+                {LL_HERO_CHIPS.map(chip => (
+                  <span key={chip.label}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+                    style={{ background: LL_HERO.chipBg, border: LL_HERO.chipBorder, backdropFilter: 'blur(6px)' }}>
+                    <span>{chip.icon}</span>{chip.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Quick stats strip */}
+              <div className="relative mt-6 grid grid-cols-3 gap-3 max-w-md">
+                {[
+                  { k: COLUMNS.length, v: 'Columns' },
+                  { k: FORMAT_OPTIONS.length, v: 'Formats' },
+                  { k: '≤ 60m', v: 'Time Budget' },
+                ].map((s, i) => (
+                  <div key={i} className="px-3 py-2 rounded-xl text-center"
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.22)', backdropFilter: 'blur(6px)' }}>
+                    <div className="text-xl font-bold tabular-nums">{s.k}</div>
+                    <div className="text-[10px] tracking-wider uppercase opacity-80">{s.v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <p className="text-slate-500 text-base leading-relaxed max-w-2xl">
-              Extract {COLUMNS.length} columns from P&amp;ID drawings — including line designation segments,
-              service codes, piping specification, and department deviation.
-              Upload an optional legend sheet to resolve code descriptions per project.
-            </p>
           </div>
 
           {/* ── Supported Formats Reference card ── */}
@@ -889,63 +1031,185 @@ const LineList = () => {
             )}
           </div>
 
-          {/* ── Progress ── */}
+          {/* ── Processing Card — cosmic multi-page visualization ── */}
           {isProcessing && (
-            <div className="rounded-2xl p-5 mb-4 ll-section" style={{
-              background: 'white',
-              border: '1px solid rgba(37,99,235,0.16)',
-              boxShadow: '0 2px 12px rgba(37,99,235,0.07)',
+            <div className="relative rounded-3xl p-6 mb-4 overflow-hidden ll-section" style={{
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 55%, #312e81 100%)',
+              border: '1px solid rgba(99,102,241,0.28)',
+              boxShadow: '0 20px 60px -20px rgba(79,70,229,0.5)',
               animationDelay: '0s',
             }}>
-              <div className="flex items-center gap-4 mb-3">
-                <div className="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center" style={{
-                  background: 'rgba(37,99,235,0.07)',
-                  border: '2px solid rgba(37,99,235,0.2)',
-                  animation: 'll-glow 1.7s ease infinite',
-                }}>
-                  <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="1.5"
-                    style={{ animation: 'll-spin-slow 3s linear infinite' }}>
-                    <path d="M12 2a10 10 0 1 0 10 10" strokeLinecap="round" />
-                    <path d="M12 6v6l3 3" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium text-slate-700">{statusMessage || 'Processing…'}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-400 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
-                      <span className="text-sm font-bold text-blue-600">{progress}%</span>
+              {/* Ambient gradient blobs */}
+              <div className="absolute -top-10 -left-8 w-60 h-60 rounded-full pointer-events-none"
+                style={{ background: 'rgba(96,165,250,0.28)', filter: 'blur(50px)', animation: 'll-blob 10s ease infinite' }} />
+              <div className="absolute -bottom-12 -right-8 w-72 h-72 rounded-full pointer-events-none"
+                style={{ background: 'rgba(167,139,250,0.3)', filter: 'blur(60px)', animation: 'll-blob 13s ease-in-out infinite reverse' }} />
+
+              <div className="relative flex items-start gap-5">
+                {/* ── LEFT: Animated percent dial with orbital ring ── */}
+                <div className="relative flex-shrink-0 w-32 h-32">
+                  <div className="absolute inset-0 rounded-full"
+                    style={{
+                      background: 'conic-gradient(from 0deg, rgba(96,165,250,0.7), rgba(167,139,250,0.7), rgba(236,72,153,0.7), rgba(96,165,250,0.7))',
+                      animation: 'll-orbit 6s linear infinite',
+                      filter: 'blur(2px)',
+                    }} />
+                  <div className="absolute inset-1.5 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div className="text-center">
+                      <div className="text-4xl font-extrabold text-white tabular-nums leading-none">{progress}%</div>
+                      <div className="text-[10px] text-blue-200 tracking-[0.2em] uppercase mt-1">processing</div>
                     </div>
                   </div>
-                  <div className="relative w-full rounded-full h-2.5 overflow-hidden bg-slate-100">
+                </div>
+
+                {/* ── RIGHT: Status block ── */}
+                <div className="flex-1 min-w-0 text-white">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"
+                        style={{ animation: 'll-pulse-badge 1.4s ease infinite' }} />
+                      <span className="text-[10px] font-semibold tracking-[0.25em] uppercase text-blue-200">
+                        live extraction
+                      </span>
+                    </div>
+                    <span className="text-xs text-blue-200 tabular-nums">⏱ {formatElapsed(elapsedSeconds)}</span>
+                  </div>
+
+                  <div className="mt-2 text-base font-semibold">{statusMessage || 'Processing…'}</div>
+
+                  {/* Live stats row (populated only when backend reports them) */}
+                  {pageInfo && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)' }}>
+                        📄 Page <span className="tabular-nums">{pageInfo.currentPage}/{pageInfo.totalPages}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)' }}>
+                        🧩 <span className="tabular-nums">{pageInfo.linesSoFar}</span> lines so far
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Shimmering progress bar */}
+                  <div className="mt-4 relative w-full rounded-full h-2.5 overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.1)' }}>
                     <div className="h-full rounded-full relative overflow-hidden" style={{
                       width: `${Math.max(5, progress)}%`,
-                      background: 'linear-gradient(90deg, #1d4ed8, #2563eb, #60a5fa)',
-                      animation: 'll-bar-glow 1.6s ease infinite',
+                      background: 'linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6)',
+                      animation: 'll-bar-glow 1.8s ease infinite',
                       transition: 'width 0.7s ease',
                     }}>
                       <div className="absolute inset-0" style={{
-                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%)',
-                        animation: 'll-shimmer 2s linear infinite',
+                        background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%)',
+                        animation: 'll-shimmer 1.6s linear infinite',
                       }} />
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between mt-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">AI scanning document</span>
+
+              {/* ── Per-page tracker strip (shown when backend reports pages) ── */}
+              {pageInfo && pageInfo.totalPages > 0 && (
+                <div className="relative mt-5">
+                  <div className="text-[10px] text-blue-200 tracking-[0.22em] uppercase mb-2">Page Pipeline</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from({ length: Math.min(pageInfo.totalPages, 40) }).map((_, i) => {
+                      const pageN = i + 1;
+                      const isDone    = pageN < pageInfo.currentPage;
+                      const isCurrent = pageN === pageInfo.currentPage;
+                      const accent    = isDone ? '#10b981' : isCurrent ? '#a78bfa' : 'rgba(255,255,255,0.18)';
+                      return (
+                        <div key={pageN}
+                          title={`Page ${pageN}${isDone ? ' — done' : isCurrent ? ' — processing' : ''}`}
+                          className="rounded-md flex items-center justify-center text-[10px] font-bold tabular-nums"
+                          style={{
+                            width: 28, height: 24,
+                            background: isDone
+                              ? 'rgba(16,185,129,0.2)'
+                              : isCurrent
+                                ? 'rgba(167,139,250,0.25)'
+                                : 'rgba(255,255,255,0.06)',
+                            border: `1px solid ${accent}`,
+                            color: isDone ? '#34d399' : isCurrent ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            transition: 'all 0.35s ease',
+                          }}>
+                          {isCurrent && (
+                            <div className="absolute inset-0 pointer-events-none" style={{
+                              background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.35), transparent)',
+                              animation: 'll-shimmer 1.4s linear infinite',
+                            }} />
+                          )}
+                          <span className="relative">{isDone ? '✓' : pageN}</span>
+                        </div>
+                      );
+                    })}
+                    {pageInfo.totalPages > 40 && (
+                      <span className="text-[10px] text-blue-200 self-center ml-1">
+                        +{pageInfo.totalPages - 40} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Pipeline stages tracker (purely visual) ── */}
+              <div className="relative mt-5 grid grid-cols-5 gap-2">
+                {LL_PIPELINE_STAGES.map(stage => {
+                  const isActive = progress >= stage.from && progress < stage.to;
+                  const isDone   = progress >= stage.to;
+                  return (
+                    <div key={stage.key}
+                      className="rounded-xl px-2 py-2 text-center relative overflow-hidden"
+                      style={{
+                        background: isDone
+                          ? 'rgba(16,185,129,0.15)'
+                          : isActive
+                            ? 'rgba(167,139,250,0.2)'
+                            : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${isDone ? 'rgba(16,185,129,0.45)' : isActive ? 'rgba(167,139,250,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                        transition: 'all 0.35s ease',
+                      }}>
+                      {isActive && (
+                        <div className="absolute inset-0 pointer-events-none" style={{
+                          background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.25), transparent)',
+                          animation: 'll-shimmer 1.6s linear infinite',
+                        }} />
+                      )}
+                      <div className="relative text-lg leading-none mb-1">
+                        {isDone ? '✅' : stage.icon}
+                      </div>
+                      <div className="relative text-[10px] font-semibold tracking-wide uppercase"
+                        style={{ color: isDone ? '#6ee7b7' : isActive ? '#c4b5fd' : 'rgba(255,255,255,0.5)' }}>
+                        {stage.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── Rotating tip + patience hint ── */}
+              <div className="relative mt-5 flex items-start gap-3 rounded-xl p-3"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <div className="flex items-center gap-1">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="w-1.5 h-4 rounded-full bg-blue-400" style={{
+                    <div key={i} className="w-1 h-4 rounded-full bg-blue-300" style={{
                       animation: 'll-dot-wave 1.1s ease infinite',
                       animationDelay: `${i * 0.18}s`,
                     }} />
                   ))}
                 </div>
-                <span className="text-xs text-slate-400 max-w-sm text-right leading-relaxed">
-                  {getPatienceMsg(elapsedSeconds)}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-blue-100 leading-relaxed">
+                    {LL_PROC_TIPS[procTipIdx]}
+                  </div>
+                  <div className="text-[10px] text-blue-300/70 mt-1 leading-relaxed">
+                    {getPatienceMsg(elapsedSeconds)}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1073,7 +1337,7 @@ const LineList = () => {
             </div>
           )}
 
-          {/* ── Info Panel (idle) ── */}
+          {/* ── Info Panel (idle) — coloured feature tiles with hover lift ── */}
           {!extractedData && !isProcessing && (
             <div className="rounded-2xl p-6 mt-4 ll-section" style={{
               background: 'white',
@@ -1085,27 +1349,41 @@ const LineList = () => {
                 <span className="w-2 h-2 rounded-full bg-blue-500"
                   style={{ animation: 'll-pulse-badge 2s ease infinite' }} />
                 <h3 className="text-sm font-semibold text-slate-700 tracking-wide">What Gets Extracted</h3>
+                <span className="ml-auto text-[10px] text-slate-400 tracking-wider uppercase">7 capabilities</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
-                  ['📄', 'P&ID Only',            'Upload a single P&ID PDF — no HMB, PMS, NACE or Stress docs needed'],
+                  ['📄', 'P&ID Only',                     'Upload a single P&ID PDF — no HMB, PMS, NACE or Stress docs needed'],
                   ['📊', `${COLUMNS.length} Base Columns`, COLUMNS.map(c => c.label).join(', ')],
-                  ['�', 'Legend Sheet (optional)', 'Upload a project legend PDF to resolve service codes, insulation classes, and piping spec descriptions'],
-                  ['�🔄', 'Background Processing', 'Job runs async on the server — no browser timeout. Progress polling every 3 s.'],
-                  ['🧠', 'AI FROM-TO',            'Computer Vision + OpenAI detects flow direction for every line'],
-                  ['⚡', 'Multi-Format Support',  FORMAT_OPTIONS.map(f => f.label).join(', ')],
-                  ['📥', 'Excel Export',           'Download all extracted rows as a formatted XLSX workbook'],
-                ].map(([icon, title, desc]) => (
-                  <div key={title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{
-                    background: '#f8fafc', border: '1px solid #e2e8f0',
-                  }}>
-                    <span className="text-lg flex-shrink-0 leading-none mt-0.5">{icon}</span>
-                    <div>
-                      <p className="text-xs font-semibold text-blue-700 mb-0.5">{title}</p>
-                      <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                  ['📋', 'Legend Sheet (optional)',        'Upload a project legend PDF to resolve service codes, insulation classes, and piping spec descriptions'],
+                  ['🔄', 'Background Processing',          'Job runs async on the server — no browser timeout. Progress polling every 3 s.'],
+                  ['🧠', 'AI FROM-TO',                     'Computer Vision + OpenAI detects flow direction for every line'],
+                  ['⚡', 'Multi-Format Support',           FORMAT_OPTIONS.map(f => f.label).join(', ')],
+                  ['📥', 'Excel Export',                   'Download all extracted rows as a formatted XLSX workbook'],
+                ].map(([icon, title, desc], idx) => {
+                  const accent = LL_FEATURE_ACCENTS[idx % LL_FEATURE_ACCENTS.length];
+                  return (
+                    <div key={title}
+                      className="flex items-start gap-3 p-3.5 rounded-xl cll-stat-card"
+                      style={{
+                        background: accent.bg,
+                        border: `1px solid ${accent.border}`,
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 10px 24px -10px ${accent.border}`; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+                    >
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
+                        style={{ background: 'white', border: `1px solid ${accent.border}` }}>
+                        {icon}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold mb-0.5" style={{ color: accent.fg }}>{title}</p>
+                        <p className="text-xs text-slate-600 leading-relaxed">{desc}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
