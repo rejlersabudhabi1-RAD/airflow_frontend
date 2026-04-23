@@ -20,7 +20,6 @@ import {
   XCircleIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
-import { getApiBaseUrl } from '../../../config/environment.config';
 
 // ---------------------------------------------------------------------------
 // SOFT-CODED constants
@@ -427,10 +426,37 @@ const BulkMasterIndex = () => {
     }
   };
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     if (!batch) return;
-    const url = `${getApiBaseUrl()}${BULK_API}/${batch.batch_id}/export/`;
-    window.open(url, '_blank');
+    try {
+      // Use apiClient so the JWT Authorization header is attached.
+      // window.open() would open a new tab without auth → backend returns
+      // 401/redirect to login instead of streaming the .xlsx file.
+      const res = await apiClient.get(
+        `${BULK_API}/${batch.batch_id}/export/`,
+        { responseType: 'blob', timeout: 60000 }
+      );
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      // Derive filename from Content-Disposition when the server provides it.
+      let filename = `Master_Index_${(batch.plant || 'BATCH').replace(/\s+/g, '_')}.xlsx`;
+      const cd = res.headers?.['content-disposition'] || res.headers?.['Content-Disposition'];
+      if (cd) {
+        const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+        if (m && m[1]) filename = decodeURIComponent(m[1]);
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e?.response?.data?.error || e.message || 'Export failed');
+    }
   };
 
   const resetBatch = () => {
