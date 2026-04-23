@@ -56,6 +56,14 @@ const MAX_POST_RETRIES   = 3;
 const POST_RETRY_BASE_MS = 4000;
 
 // ---------------------------------------------------------------------------
+// Soft-coded export filenames — change here only.
+// Kept short per user request; previous form
+// `${drawing_ref}_equipment_list.xlsx` produced very lengthy file names.
+// ---------------------------------------------------------------------------
+const EXPORT_FILENAME          = 'Equipment_list.xlsx';
+const EXPORT_FILENAME_SELECTED = 'Equipment_list_selected.xlsx';
+
+// ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
 // ---------------------------------------------------------------------------
 const LAYOUT_CONFIG = {
@@ -792,8 +800,7 @@ const EquipmentList = () => {
     ws['!cols'] = COLUMNS.map(c => ({ wch: c.width || 18 }));
     const wb    = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Equipment List');
-    const fname = `${(results?.drawing_ref || 'equipment_list').replace(/[^\w\-]/g, '_')}_equipment_list_selected.xlsx`;
-    XLSX.writeFile(wb, fname);
+    XLSX.writeFile(wb, EXPORT_FILENAME_SELECTED);
   };
 
   const handleExport = () => {
@@ -813,8 +820,7 @@ const EquipmentList = () => {
     ws['!cols'] = COLUMNS.map(c => ({ wch: c.width || 18 }));
     const wb    = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Equipment List');
-    const fname = `${(results?.drawing_ref || 'equipment_list').replace(/[^\w\-]/g, '_')}_equipment_list.xlsx`;
-    XLSX.writeFile(wb, fname);
+    XLSX.writeFile(wb, EXPORT_FILENAME);
   };
 
   // ── Derived stats for KPI bar (shown after extraction) ──────────────────
