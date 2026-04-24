@@ -329,42 +329,58 @@ const InstrumentIndex = () => {
   // RENDER
   // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/40 p-6">
       <div className="max-w-7xl mx-auto">
 
-        {/* ── Page Header ───────────────────────────────────────────── */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <ListBulletIcon className="h-8 w-8 text-purple-600" />
-              Instrument Index
-            </h1>
-            <p className="mt-1 text-gray-600">
-              Extract all instrument Tag Numbers from any P&ID — Flow, Pressure,
-              Temperature, Level, SDV/BDV, MOV, Safety valves and more. When
-              available, symbol and control convention data may also be enriched
-              from uploaded legend sheets and related legend PDFs found in AWS S3.
-            </p>
+        {/* ── Hero Header ───────────────────────────────────────────── */}
+        <div className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 shadow-lg">
+          {/* Decorative blobs */}
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-pink-300/20 blur-3xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 p-6 sm:p-8">
+            <div className="flex items-start gap-4 flex-1">
+              <div className="shrink-0 h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-inner">
+                <ListBulletIcon className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Instrument Index</h1>
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white border border-white/30">
+                    AI · ISA 5.1
+                  </span>
+                </div>
+                <p className="text-sm text-purple-100 max-w-3xl leading-relaxed">
+                  Extract every instrument tag from any P&amp;ID — Flow, Pressure, Temperature, Level,
+                  SDV/BDV, MOV, Safety valves and more. Cross-verified against legend sheets and
+                  enriched with ISA 5.1 intelligence.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/engineering/process/line-list')}
+              className="shrink-0 px-4 py-2 text-sm font-semibold text-white bg-white/15 backdrop-blur-sm border border-white/30 rounded-lg hover:bg-white/25 transition-all shadow-sm"
+            >
+              → Line List Extraction
+            </button>
           </div>
-          <button
-            onClick={() => navigate('/engineering/process/line-list')}
-            className="shrink-0 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            → Also try: Line List Extraction
-          </button>
         </div>
 
         {/* ── Upload + Metadata ──────────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            1. Upload P&ID Drawing (PDF)
+        <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <span className="h-6 w-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">1</span>
+            Upload P&amp;ID Drawing (PDF)
           </h2>
 
           {/* Drop zone */}
           <div
             onDrop={handleDrop}
             onDragOver={e => e.preventDefault()}
-            className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-purple-400 transition-colors cursor-pointer mb-4"
+            className={`border-2 border-dashed rounded-xl p-8 transition-all cursor-pointer mb-4 ${
+              pidFile
+                ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50'
+                : 'border-purple-200 bg-gradient-to-br from-purple-50/40 to-indigo-50/40 hover:border-purple-400 hover:from-purple-50 hover:to-indigo-50 hover:shadow-inner'
+            }`}
             onClick={() => fileInputRef.current?.click()}
           >
             <input
@@ -457,10 +473,10 @@ const InstrumentIndex = () => {
           <button
             onClick={handleExtract}
             disabled={!pidFile || isProcessing}
-            className={`flex-1 sm:flex-none px-8 py-3 rounded-lg font-semibold text-white transition-all shadow-md ${
+            className={`flex-1 sm:flex-none px-8 py-3.5 rounded-xl font-semibold text-white transition-all shadow-md ${
               !pidFile || isProcessing
                 ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-purple-600 hover:bg-purple-700 hover:shadow-lg'
+                : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 hover:shadow-xl hover:-translate-y-0.5'
             }`}
           >
             {isProcessing ? (
@@ -472,7 +488,10 @@ const InstrumentIndex = () => {
                 Extracting Instruments…
               </span>
             ) : (
-              '⚡ Extract Instrument Index'
+              <span className="flex items-center gap-2 justify-center">
+                <span className="text-lg">⚡</span>
+                Extract Instrument Index
+              </span>
             )}
           </button>
 
@@ -480,7 +499,7 @@ const InstrumentIndex = () => {
             <>
               <button
                 onClick={handleDownloadClientExcel}
-                className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all shadow-md hover:shadow-lg"
+                className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-semibold hover:from-emerald-600 hover:to-green-700 transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5"
               >
                 <ArrowDownTrayIcon className="h-5 w-5" />
                 Download Excel
@@ -551,30 +570,39 @@ const InstrumentIndex = () => {
             )}
             {/* Stats bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-                <p className="text-3xl font-bold text-purple-700">{result.total}</p>
-                <p className="text-xs text-purple-600 mt-1 font-medium">Total Instruments</p>
+              <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg bg-gradient-to-br from-purple-600 to-indigo-700">
+                <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative">
+                  <p className="text-[11px] uppercase tracking-wider text-purple-100 font-semibold">Total Instruments</p>
+                  <p className="text-4xl font-black mt-1 tabular-nums">{result.total}</p>
+                  <p className="text-[10px] text-purple-200 mt-1">across {Object.keys(result.category_summary || {}).length} categor{Object.keys(result.category_summary||{}).length===1?'y':'ies'}</p>
+                </div>
               </div>
               {Object.entries(result.category_summary || {})
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3)
                 .map(([cat, cnt]) => {
                   const style = categoryStyle(cat);
+                  const pct = result.total > 0 ? (cnt / result.total) * 100 : 0;
                   return (
                     <div
                       key={cat}
-                      className="rounded-xl p-4 text-center border"
-                      style={{ backgroundColor: style.bg, borderColor: style.bg }}
+                      className="relative overflow-hidden rounded-2xl p-5 border shadow-sm hover:shadow-md transition-shadow"
+                      style={{ backgroundColor: style.bg, borderColor: style.text + '30' }}
                     >
-                      <p className="text-3xl font-bold" style={{ color: style.text }}>{cnt}</p>
-                      <p className="text-xs mt-1 font-medium" style={{ color: style.text }}>{cat}</p>
+                      <p className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: style.text, opacity: 0.75 }}>{cat}</p>
+                      <p className="text-4xl font-black mt-1 tabular-nums" style={{ color: style.text }}>{cnt}</p>
+                      <div className="w-full h-1.5 rounded-full mt-2 bg-white/60 overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: style.text, opacity: 0.6 }} />
+                      </div>
+                      <p className="text-[10px] mt-1" style={{ color: style.text, opacity: 0.7 }}>{pct.toFixed(1)}% of total</p>
                     </div>
                   );
                 })}
             </div>
 
             {/* View tabs */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 p-1 bg-white rounded-xl shadow-sm border border-gray-100 w-fit">
               {[
                 { id: 'table',   icon: <ListBulletIcon className="h-4 w-4" />,  label: 'Instrument Table' },
                 { id: 'summary', icon: <ChartBarIcon   className="h-4 w-4" />,  label: 'Category Summary' },
@@ -583,10 +611,10 @@ const InstrumentIndex = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveView(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activeView === tab.id
-                      ? 'bg-purple-600 text-white shadow'
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   {tab.icon}{tab.label}
@@ -596,34 +624,48 @@ const InstrumentIndex = () => {
 
             {/* ── TABLE VIEW ─────────────────────────────────────────── */}
             {activeView === 'table' && (
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
                 {/* Filters */}
-                <div className="px-5 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-3 items-center">
-                  <h3 className="text-base font-semibold text-gray-800 mr-2">
-                    {filteredInstruments.length} Instrument{filteredInstruments.length !== 1 ? 's' : ''}
-                    {filterCategory !== 'All' ? ` · ${filterCategory}` : ''}
+                <div className="px-5 py-4 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200 flex flex-wrap gap-3 items-center">
+                  <h3 className="text-base font-semibold text-gray-800 mr-2 flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-black tabular-nums">
+                      {filteredInstruments.length}
+                    </span>
+                    Instrument{filteredInstruments.length !== 1 ? 's' : ''}
+                    {filterCategory !== 'All' ? <span className="text-gray-400 font-normal"> · {filterCategory}</span> : ''}
                   </h3>
-                  <input
-                    type="text"
-                    placeholder="Filter by tag / service / type…"
-                    value={filterText}
-                    onChange={e => setFilterText(e.target.value)}
-                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-400 w-56"
-                  />
+                  <div className="relative flex-1 min-w-[200px] max-w-xs">
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
+                    <input
+                      type="text"
+                      placeholder="Filter by tag / service / type…"
+                      value={filterText}
+                      onChange={e => setFilterText(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                    />
+                  </div>
                   <select
                     value={filterCategory}
                     onChange={e => setFilterCategory(e.target.value)}
-                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-400"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 bg-white"
                   >
                     {uniqueCategories.map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
+                  {(filterText || filterCategory !== 'All') && (
+                    <button
+                      onClick={() => { setFilterText(''); setFilterCategory('All'); }}
+                      className="text-xs px-2 py-1 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-100 text-xs uppercase tracking-wider text-gray-600">
+                    <thead className="bg-gradient-to-b from-gray-100 to-gray-50 text-xs uppercase tracking-wider text-gray-600">
                       <tr>
                         {['#', 'Tag Number', 'CS Tag', 'Instrument Type', 'Category', 'Service Description',
                           'Line No.', 'Equipment No.', 'Loop No.', 'Fail Safe', 'Signal',
@@ -637,8 +679,11 @@ const InstrumentIndex = () => {
                     <tbody className="divide-y divide-gray-100">
                       {filteredInstruments.length === 0 ? (
                         <tr>
-                          <td colSpan={15} className="px-4 py-8 text-center text-gray-400">
-                            No instruments match the current filter.
+                          <td colSpan={15} className="px-4 py-12 text-center">
+                            <div className="flex flex-col items-center gap-2 text-gray-400">
+                              <svg className="h-12 w-12 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
+                              <p className="text-sm font-medium">No instruments match the current filter.</p>
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -650,16 +695,45 @@ const InstrumentIndex = () => {
                             ? { bg: '#ECFEFF', text: '#155E75' }  // cyan — legend-assisted
                             : note.startsWith('AI')
                             ? { bg: '#EEF2FF', text: '#3730A3' }  // indigo — AI
+                            : note.startsWith('Inferred')
+                            ? { bg: '#FDF4FF', text: '#86198F' }  // fuchsia — inferred accessory
                             : note.startsWith('OCR circle')
                             ? { bg: '#FFF7ED', text: '#C2410C' }  // orange — OCR circle
                             : note.startsWith('OCR')
                             ? { bg: '#FEF9C3', text: '#713F12' }  // yellow — OCR plain
                             : { bg: '#F0FDF4', text: '#166534' }; // green  — PDF text
+                          const hasWarnings = Array.isArray(inst.warnings) && inst.warnings.length > 0;
+                          const isInferred  = inst.inferred === true;
+                          const rowBg = isInferred
+                            ? 'bg-fuchsia-50/30'
+                            : hasWarnings
+                              ? 'bg-amber-50/40'
+                              : '';
                           return (
-                            <tr key={idx} className="hover:brightness-95 transition-all">
+                            <tr key={idx} className={`${rowBg} hover:bg-purple-50/40 transition-colors`}>
                               <td className="px-3 py-2.5 text-gray-500 tabular-nums">{inst.index_no ?? idx + 1}</td>
                               <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: style.text }}>
-                                {inst.tag_number || '—'}
+                                <div className="flex items-center gap-1.5">
+                                  <span>{inst.tag_number || '—'}</span>
+                                  {isInferred && (
+                                    <span title={`Inferred accessory of ${inst.parent_tag || 'parent'}`}
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200">
+                                      INFERRED
+                                    </span>
+                                  )}
+                                  {hasWarnings && (
+                                    <span title={inst.warnings.join(' · ')}
+                                      className="inline-flex items-center justify-center h-4 w-4 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 cursor-help">
+                                      !
+                                    </span>
+                                  )}
+                                  {inst.is_inline && (
+                                    <span title="Inline instrument"
+                                      className="inline-flex items-center justify-center h-4 w-4 rounded-full text-[9px] font-black bg-blue-100 text-blue-700 border border-blue-200">
+                                      •
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-indigo-700">{inst.control_system_tag || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-700 max-w-xs">{inst.instrument_type || '—'}</td>
@@ -675,10 +749,18 @@ const InstrumentIndex = () => {
                               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.line_number      || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.equipment_number  || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.loop_number       || '—'}</td>
-                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.fail_safe         || '—'}</td>
-                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.signal_type       || '—'}</td>
-                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.set_point         || '—'}</td>
-                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{inst.pid_no            || '—'}</td>
+                              <td className="px-3 py-2.5 whitespace-nowrap">
+                                {inst.fail_safe && inst.fail_safe !== 'N/A' ? (
+                                  <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                    inst.fail_safe === 'FC' ? 'bg-red-100 text-red-700'
+                                    : inst.fail_safe === 'FO' ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                  }`}>{inst.fail_safe}</span>
+                                ) : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">{inst.signal_type       || '—'}</td>
+                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">{inst.set_point         || '—'}</td>
+                              <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap font-mono text-xs">{inst.pid_no            || '—'}</td>
                               <td className="px-3 py-2.5 text-gray-600 text-center">{inst.revision || '0'}</td>
                               <td className="px-3 py-2.5 whitespace-nowrap">
                                 {note && (
