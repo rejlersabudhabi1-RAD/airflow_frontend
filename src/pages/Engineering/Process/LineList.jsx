@@ -109,8 +109,7 @@ const COLUMNS = [
   { key: 'dept_deviation',     label: 'Dept Deviation',          width: 14 },
   { key: 'insulation',         label: 'Insulation',              width: 12 },
   { key: 'insulation_desc',    label: 'Insulation Description',  width: 22 },
-  { key: 'from',               label: 'From',                    width: 20 },
-  { key: 'to',                 label: 'To',                      width: 20 },
+  { key: 'pid_no',             label: 'P&ID No.',                width: 24 },
 ];
 
 // Soft-coded format reference examples shown in the info card.
@@ -1314,8 +1313,11 @@ const LineList = () => {
                                   style={{ background: 'rgba(37,99,235,0.07)', color: '#1e40af', border: '1px solid rgba(37,99,235,0.14)' }}>
                                   {display}
                                 </span>
-                              ) : (col.key === 'from' || col.key === 'to') ? (
-                                <span className="text-xs text-slate-500 block truncate max-w-[11rem]" title={display}>{display}</span>
+                              ) : (col.key === 'pid_no') ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-semibold"
+                                  style={{ background: 'rgba(16,185,129,0.07)', color: '#047857', border: '1px solid rgba(16,185,129,0.14)' }}>
+                                  {display}
+                                </span>
                               ) : (
                                 <span className="text-slate-700">{display}</span>
                               )}
