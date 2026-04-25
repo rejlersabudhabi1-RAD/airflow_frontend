@@ -99,6 +99,10 @@ const FORMAT_OPTIONS = [
 //   dept_deviation     → X         (department deviation / modifier)
 //   insulation         → N         (insulation class)
 //   insulation_desc    → No Insul. (from legend sheet, if uploaded)
+// `fallbackKeys` (optional) lets a single column resolve from the first
+// non-empty backend field — useful for From/To which the backend exposes as
+// `from_line`/`from_equipment` (and `to_line`/`to_equipment`) depending on
+// whether spatial matching produced a line tag or an equipment tag.
 const COLUMNS = [
   { key: 'original_detection', label: 'Line Designation',        width: 36 },
   { key: 'size',               label: 'Size',                    width: 8  },
@@ -109,8 +113,21 @@ const COLUMNS = [
   { key: 'dept_deviation',     label: 'Dept Deviation',          width: 14 },
   { key: 'insulation',         label: 'Insulation',              width: 12 },
   { key: 'insulation_desc',    label: 'Insulation Description',  width: 22 },
+  { key: 'from_line',          label: 'From',                    width: 22, fallbackKeys: ['from_equipment', 'from'] },
+  { key: 'to_line',            label: 'To',                      width: 22, fallbackKeys: ['to_equipment', 'to'] },
   { key: 'pid_no',             label: 'P&ID No.',                width: 24 },
 ];
+
+// Soft-coded value resolver — returns first non-empty value across primary
+// key + optional fallbackKeys. Used by both the table render and Excel export.
+const resolveCellValue = (row, col) => {
+  const keys = [col.key, ...(col.fallbackKeys || [])];
+  for (const k of keys) {
+    const v = row?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return '';
+};
 
 // Soft-coded format reference examples shown in the info card.
 const FORMAT_EXAMPLES = [
@@ -522,7 +539,7 @@ const LineList = () => {
     const wsData = [
       headers,
       ...extractedData.data.map(item =>
-        COLUMNS.map(c => item[c.key] || '')
+        COLUMNS.map(c => resolveCellValue(item, c) || '')
       ),
     ];
 
@@ -1304,7 +1321,7 @@ const LineList = () => {
                       >
                         <td className="px-3 py-3 text-xs text-slate-400">{idx + 1}</td>
                         {COLUMNS.map(col => {
-                          const val = line[col.key];
+                          const val = resolveCellValue(line, col);
                           const display = val || '—';
                           return (
                             <td key={col.key} className="px-4 py-3 text-sm">
