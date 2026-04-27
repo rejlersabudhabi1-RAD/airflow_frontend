@@ -17,6 +17,7 @@ import {
   CloudArrowUpIcon,
   DocumentDuplicateIcon,
   FolderOpenIcon,
+  PaperAirplaneIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
@@ -80,6 +81,110 @@ const AUTO_DERIVE_RULES = {
 };
 
 const ACCEPTED_EXT = ['.pdf', '.xlsx', '.xls', '.docx', '.doc', '.dwg', '.dxf'];
+
+// ─── Coverage / Completeness banner (soft-coded) ─────────────────────────
+// Mirrors the backend completeness_analyzer thresholds so the UI rating
+// stays consistent with the JSON report.
+const COVERAGE_CONFIG = {
+  enabled:   true,
+  endpoints: {
+    coverage:  (id) => `/non-teff/batch/${id}/coverage/`,
+    reconcile: (id) => `/non-teff/batch/${id}/reconcile/`,
+  },
+  // Same numbers as backend COMPLETENESS_CONFIG.coverage_thresholds.
+  thresholds: { good: 0.85, fair: 0.65 },
+  ratingStyles: {
+    good: { bg: '#ecfdf5', border: '#34d399', fg: '#047857', label: 'High coverage' },
+    fair: { bg: '#fffbeb', border: '#fbbf24', fg: '#b45309', label: 'Partial coverage' },
+    poor: { bg: '#fef2f2', border: '#f87171', fg: '#b91c1c', label: 'Low coverage' },
+  },
+  // How many weakest items to render under the banner.
+  weakestVisible: 5,
+  // Auto-refresh interval after a reconcile run (single fire-once delay).
+  refreshAfterMs: 500,
+};
+
+// ─── Direct-link config (record ↔ drawing → exact location) ──────────────
+// Soft-coded so we can tune without touching component code.  Two endpoints:
+//   * `file/`     — streams the original drawing/record blob (PDF, image, etc.)
+//   * `location/` — JSON metadata (relative_path, mime, size) for tooltip use
+const LINK_CONFIG = {
+  enabled: true,
+  endpoints: {
+    file:     (bid, iid) => `/non-teff/batch/${bid}/items/${iid}/file/`,
+    location: (bid, iid) => `/non-teff/batch/${bid}/items/${iid}/location/`,
+  },
+  // Field keys (in priority order) whose cell content should also be a clickable
+  // record-link.  Whichever key exists in the current template wins.
+  recordKeyPriority: [
+    'document_no', 'document_number', 'tag', 'instrument_tag_no',
+    'equipment_no', 'line_number',
+  ],
+  // Open the original file in a new browser tab.  Passing the auth token via
+  // header is impossible for `target=_blank`, so we fetch as blob and open
+  // an object URL — same trick already used by DocumentSearchCanvas for page
+  // images.  Object URL is revoked after a generous TTL so the new tab has
+  // time to render large PDFs.
+  blobUrlTtlMs: 5 * 60 * 1000,
+  // CSS color tokens (kept in sync with COVERAGE_CONFIG so the UI feels of one).
+  styles: {
+    recordLink: { color: '#0f766e', textDecoration: 'underline dotted' },
+    openPill:   'text-sky-600 hover:text-sky-800 text-[10px] font-semibold underline decoration-dotted',
+    pathPill:   'text-slate-500 text-[10px] font-mono truncate max-w-[260px]',
+  },
+};
+
+// Open the original drawing/record in a new browser tab.  Returns false if
+// blocked (popup-blocker) or the file is missing — caller can show a toast.
+const openItemFileInNewTab = async (apiClient, batch_id, item_id) => {
+  try {
+    const url = LINK_CONFIG.endpoints.file(batch_id, item_id);
+    const res = await apiClient.get(url, { responseType: 'blob' });
+    const blob = res?.data;
+    if (!(blob instanceof Blob)) return false;
+    const objectUrl = URL.createObjectURL(blob);
+    const win = window.open(objectUrl, '_blank', 'noopener');
+    // Revoke later so the new tab finishes rendering first.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), LINK_CONFIG.blobUrlTtlMs);
+    return !!win;
+  } catch (err) {
+    // Fall through — caller will surface the error message.
+    if (err?.response?.status === 404) {
+      throw new Error('Original file is not on the server anymore.');
+    }
+    throw err;
+  }
+};
+
+// ─── SmartPlant Foundation push (soft-coded) ──────────────────────────────
+// One-click handover from the finished master file to SmartPlant Foundation
+// (or any compatible document-control system).  All transports, mappings and
+// retry behaviour live server-side in `config/smartplant_config.json`; this
+// block only handles the UI plumbing.  The default backend mode is `dry_run`
+// so the button works end-to-end before SPF credentials exist.
+const SMARTPLANT_CONFIG = {
+  enabled: true,
+  endpoints: {
+    status: (bid) => (bid
+      ? `/non-teff/batch/${bid}/smartplant/status/`
+      : `/non-teff/smartplant/status/`),
+    push:   (bid) => `/non-teff/batch/${bid}/smartplant/push/`,
+  },
+  // Modes the user can pick from in the modal.  Server still validates this.
+  modes: [
+    { value: 'dry_run',        label: 'Dry run (no transmission)', tone: 'slate' },
+    { value: 'rest_api',       label: 'SPF REST API',              tone: 'emerald' },
+    { value: 'webhook',        label: 'Webhook (Power Automate / n8n)', tone: 'sky' },
+    { value: 's3_dropzone',    label: 'S3 dropzone',               tone: 'amber' },
+    { value: 'local_dropzone', label: 'Server folder (SPF Adapter)', tone: 'violet' },
+  ],
+  // How long to keep the result toast visible.
+  resultStickyMs: 12_000,
+  // CSS classes for the button (kept in sync with the Export Excel pill).
+  styles: {
+    button: 'flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-40',
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -180,12 +285,18 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
 
   const [error, setError] = useState(null);
 
+  // ── Coverage / Completeness banner state ───────────────────────────────
+  const [coverage, setCoverage] = useState(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [reconcileBusy, setReconcileBusy] = useState(false);
+
   const folderInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
 
   const columns = tpl?.template?.columns || [];
   const reviewReady = batch && ['ready', 'exported', 'failed'].includes(batch.status);
+
 
   // Pre-fill defaults from template hints
   useEffect(() => {
@@ -455,6 +566,48 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
     }
   };
 
+  // ── Coverage report fetch + Reconcile action ───────────────────────────
+  const fetchCoverage = useCallback(async () => {
+    if (!COVERAGE_CONFIG.enabled || !batch?.batch_id) return;
+    setCoverageLoading(true);
+    try {
+      const res = await apiClient.get(COVERAGE_CONFIG.endpoints.coverage(batch.batch_id));
+      setCoverage(res?.data?.report || null);
+    } catch (e) {
+      // Non-fatal — hide banner instead of blocking the page.
+      setCoverage(null);
+    } finally {
+      setCoverageLoading(false);
+    }
+  }, [batch?.batch_id]);
+
+  // Refresh coverage whenever review becomes ready or items change count.
+  useEffect(() => {
+    if (reviewReady) fetchCoverage();
+  }, [reviewReady, total, fetchCoverage]);
+
+  const runReconcile = async () => {
+    if (!batch?.batch_id || reconcileBusy) return;
+    setReconcileBusy(true);
+    try {
+      const res = await apiClient.post(COVERAGE_CONFIG.endpoints.reconcile(batch.batch_id));
+      const applied = res?.data?.applied_cells || 0;
+      const touched = res?.data?.touched_items || 0;
+      if (applied > 0) {
+        // Reload the items grid so the user sees the back-filled values.
+        await loadItems(page);
+      }
+      setError(applied > 0
+        ? `Reconciled ${applied} cell(s) across ${touched} row(s).`
+        : 'Nothing to reconcile — coverage already maximised for constant-across-batch columns.');
+      setTimeout(fetchCoverage, COVERAGE_CONFIG.refreshAfterMs);
+    } catch (e) {
+      setError(e?.response?.data?.detail || e.message || 'Reconcile failed');
+    } finally {
+      setReconcileBusy(false);
+    }
+  };
+
   const exportExcel = async () => {
     if (!batch) return;
     try {
@@ -485,6 +638,65 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
       URL.revokeObjectURL(url);
     } catch (e) {
       setError(e?.response?.data?.error || e.message || 'Export failed');
+    }
+  };
+
+  // ─── SmartPlant Foundation push ─────────────────────────────────────────
+  const [spfStatus, setSpfStatus] = useState(null);     // { enabled, mode, missing_env_vars }
+  const [spfModalOpen, setSpfModalOpen] = useState(false);
+  const [spfMode, setSpfMode] = useState('');           // user-selected override
+  const [spfBusy, setSpfBusy] = useState(false);
+  const [spfResult, setSpfResult] = useState(null);
+
+  // Pull connector status whenever a batch is loaded so the button reflects
+  // current readiness.  Cheap call — pure config inspection on the backend.
+  useEffect(() => {
+    if (!SMARTPLANT_CONFIG.enabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get(SMARTPLANT_CONFIG.endpoints.status(batch?.batch_id));
+        if (!cancelled) {
+          setSpfStatus(res.data || null);
+          setSpfMode((res.data?.mode || '').toLowerCase());
+        }
+      } catch (e) {
+        if (!cancelled) setSpfStatus({ enabled: false, mode: 'disabled' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [batch?.batch_id]);
+
+  // Auto-clear the result toast after the configured TTL.
+  useEffect(() => {
+    if (!spfResult) return;
+    const t = setTimeout(() => setSpfResult(null), SMARTPLANT_CONFIG.resultStickyMs);
+    return () => clearTimeout(t);
+  }, [spfResult]);
+
+  const pushToSmartPlant = async () => {
+    if (!batch) return;
+    setSpfBusy(true);
+    setSpfResult(null);
+    try {
+      const res = await apiClient.post(
+        SMARTPLANT_CONFIG.endpoints.push(batch.batch_id),
+        spfMode ? { mode: spfMode } : {},
+        { timeout: 120000 },
+      );
+      setSpfResult(res.data || { status: 'ok', message: 'Done.' });
+      setSpfModalOpen(false);
+    } catch (e) {
+      setSpfResult({
+        status:  'error',
+        mode:    spfMode || (spfStatus?.mode || 'unknown'),
+        message: e?.response?.data?.message
+              || e?.response?.data?.error
+              || e.message
+              || 'SmartPlant push failed',
+      });
+    } finally {
+      setSpfBusy(false);
     }
   };
 
@@ -567,8 +779,127 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
             <ArrowDownTrayIcon className="h-4 w-4" />
             Export Excel
           </button>
+          {SMARTPLANT_CONFIG.enabled && spfStatus?.enabled && (
+            <button
+              onClick={() => setSpfModalOpen(true)}
+              disabled={!reviewReady || spfBusy}
+              title={`Push to SmartPlant Foundation (mode: ${spfStatus.mode})`}
+              className={SMARTPLANT_CONFIG.styles.button}
+            >
+              <PaperAirplaneIcon className="h-4 w-4" />
+              {spfBusy ? 'Pushing…' : 'Push to SmartPlant'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* SmartPlant push result toast */}
+      {spfResult && (
+        <div className={`flex items-start gap-2 px-4 py-3 rounded-lg text-sm border ${
+          spfResult.status === 'ok'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          {spfResult.status === 'ok'
+            ? <CheckCircleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            : <XCircleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />}
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold">
+              SmartPlant {spfResult.status === 'ok' ? 'push succeeded' : 'push failed'}
+              {spfResult.mode ? ` · ${spfResult.mode}` : ''}
+              {typeof spfResult.document_count === 'number' ? ` · ${spfResult.document_count} document(s)` : ''}
+            </div>
+            <div className="text-xs opacity-90 break-words">{spfResult.message || ''}</div>
+            {spfResult.transmittal_id && (
+              <div className="text-[10px] font-mono opacity-70 mt-0.5">
+                transmittal: {spfResult.transmittal_id}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setSpfResult(null)}
+            className="text-xs font-medium opacity-70 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* SmartPlant mode-picker modal */}
+      {spfModalOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 flex items-center justify-center p-4"
+          onClick={() => !spfBusy && setSpfModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <PaperAirplaneIcon className="h-5 w-5 text-indigo-600" />
+                Push to SmartPlant Foundation
+              </h3>
+              <button
+                onClick={() => !spfBusy && setSpfModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <XCircleIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Choose how the master file should reach SmartPlant. The connector mode,
+              endpoints and field mapping are server-side soft-coded — no code changes
+              are required to add a new transport.
+            </p>
+
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-600 block mb-1">Transport mode</span>
+              <select
+                value={spfMode}
+                onChange={(e) => setSpfMode(e.target.value)}
+                disabled={spfBusy}
+                className="w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                {SMARTPLANT_CONFIG.modes
+                  .filter((m) => (spfStatus?.supported_modes || []).includes(m.value))
+                  .map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+              </select>
+            </label>
+
+            {Array.isArray(spfStatus?.missing_env_vars) && spfStatus.missing_env_vars.length > 0 && spfMode !== 'dry_run' && (
+              <div className="text-xs px-3 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded">
+                Missing environment variables: {spfStatus.missing_env_vars.join(', ')}.
+                Use Dry run, or set these on the backend before pushing.
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => !spfBusy && setSpfModalOpen(false)}
+                disabled={spfBusy}
+                className="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={pushToSmartPlant}
+                disabled={spfBusy}
+                className={SMARTPLANT_CONFIG.styles.button}
+              >
+                {spfBusy
+                  ? <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                  : <PaperAirplaneIcon className="h-4 w-4" />}
+                {spfBusy ? 'Pushing…' : 'Push now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -577,6 +908,92 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
           <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs font-medium">Dismiss</button>
         </div>
       )}
+
+      {/* Coverage / Completeness banner — read-only summary + reconcile CTA */}
+      {COVERAGE_CONFIG.enabled && reviewReady && coverage && coverage.items_total > 0 && (() => {
+        const style = COVERAGE_CONFIG.ratingStyles[coverage.rating] || COVERAGE_CONFIG.ratingStyles.poor;
+        const pct = Math.round((coverage.overall_pct || 0) * 100);
+        const planRows = coverage.reconcile_plan || [];
+        const fillable = planRows.reduce((a, p) => a + (p.fillable_rows || 0), 0);
+        return (
+          <div
+            className="rounded-xl border px-4 py-3"
+            style={{ background: style.bg, borderColor: style.border }}
+          >
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="flex flex-col items-center justify-center rounded-lg px-3 py-2 font-bold"
+                  style={{ background: 'white', color: style.fg, border: `2px solid ${style.border}`, minWidth: 78 }}
+                >
+                  <span style={{ fontSize: 22, lineHeight: 1 }}>{pct}%</span>
+                  <span style={{ fontSize: 9, letterSpacing: 0.6, fontWeight: 700, opacity: 0.8 }}>COVERAGE</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold" style={{ color: style.fg }}>{style.label}</span>
+                    <span className="text-xs text-slate-500">
+                      {coverage.items_full}/{coverage.items_total} rows fully extracted
+                    </span>
+                    {coverage.items_weak > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                        {coverage.items_weak} weak
+                      </span>
+                    )}
+                  </div>
+                  {(coverage.suggestions || []).slice(0, 2).map((s, i) => (
+                    <div key={i} className="text-xs text-slate-600 mt-0.5">{s}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchCoverage}
+                  disabled={coverageLoading}
+                  className="px-3 py-1.5 text-xs border border-slate-300 bg-white rounded-lg hover:bg-slate-50 disabled:opacity-40 inline-flex items-center gap-1"
+                  title="Refresh coverage report"
+                >
+                  <ArrowPathIcon className={clsx('h-3.5 w-3.5', coverageLoading && 'animate-spin')} />
+                  Refresh
+                </button>
+                <button
+                  onClick={runReconcile}
+                  disabled={reconcileBusy || planRows.length === 0}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white inline-flex items-center gap-1 disabled:opacity-40"
+                  style={{ background: planRows.length > 0 ? '#0d9488' : '#94a3b8' }}
+                  title={planRows.length === 0 ? 'No reconcilable fields detected' : `Back-fill ${fillable} cell(s) across ${planRows.length} column(s)`}
+                >
+                  <CheckCircleIcon className="h-3.5 w-3.5" />
+                  {reconcileBusy ? 'Reconciling…' : `Reconcile ${fillable > 0 ? `(${fillable})` : ''}`}
+                </button>
+              </div>
+            </div>
+
+            {/* Per-column fill bars — show top 6 weakest important columns */}
+            {(coverage.per_column || []).filter((c) => c.weight >= 2).slice(0, 6).length > 0 && (
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1.5">
+                {(coverage.per_column || []).filter((c) => c.weight >= 2).slice(0, 6).map((c) => {
+                  const p = Math.round((c.pct || 0) * 100);
+                  const barColor = p >= 85 ? '#10b981' : p >= 65 ? '#f59e0b' : '#ef4444';
+                  return (
+                    <div key={c.key} className="flex items-center gap-2 min-w-0">
+                      <span className="text-[11px] text-slate-700 truncate" style={{ minWidth: 110 }} title={c.label}>
+                        {c.label}
+                      </span>
+                      <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${p}%`, background: barColor }} />
+                      </div>
+                      <span className="text-[10px] text-slate-500 tabular-nums" style={{ minWidth: 28, textAlign: 'right' }}>
+                        {p}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Plant quick-input — the single required field, always visible */}
       <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
@@ -768,6 +1185,27 @@ const ReviewGrid = ({
     prev.size === items.length ? new Set() : new Set(items.map((i) => i.item_id)),
   );
 
+  // Soft-coded "record key" — first key from LINK_CONFIG.recordKeyPriority
+  // that exists in the active template; that column's cells double as
+  // clickable shortcuts to the canvas locator.
+  const recordKey = useMemo(() => {
+    if (!LINK_CONFIG.enabled) return '';
+    const colKeys = new Set(columns.map((c) => c.key));
+    return LINK_CONFIG.recordKeyPriority.find((k) => colKeys.has(k)) || '';
+  }, [columns]);
+
+  // Open the original drawing/record for an item in a new browser tab.
+  const handleOpenOriginal = useCallback(async (it) => {
+    const bid = it.batch_id || (batch && batch.batch_id);
+    if (!bid || !it?.item_id) return;
+    try {
+      await openItemFileInNewTab(apiClient, bid, it.item_id);
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      window.alert(err?.message || 'Could not open the original file.');
+    }
+  }, [batch]);
+
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -879,12 +1317,28 @@ const ReviewGrid = ({
                         locate
                       </button>
                     )}
+                    {LINK_CONFIG.enabled && it.status === 'ready' && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenOriginal(it)}
+                        title={`Open original drawing — ${it.relative_path || it.file_name || ''}`}
+                        className={LINK_CONFIG.styles.openPill}
+                      >
+                        open
+                      </button>
+                    )}
                   </div>
                 </td>
                 {columns.map((col) => {
                   const value = it.fields?.[col.key] ?? '';
                   const isEditing = editingCell?.itemId === it.item_id && editingCell?.colKey === col.key;
                   const editable = col.class !== 'auto_serial' && col.class !== 'derived';
+                  const isRecordCell = LINK_CONFIG.enabled
+                    && col.key === recordKey
+                    && it.status === 'ready'
+                    && value
+                    && value !== 'NA'
+                    && !!onSelectItem;
                   return (
                     <td key={col.key}
                         className="px-3 py-1.5 border-b border-slate-100"
@@ -900,6 +1354,27 @@ const ReviewGrid = ({
                           }}
                           className="w-full px-1 py-0.5 border border-emerald-400 rounded text-xs"
                         />
+                      ) : isRecordCell ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectItem({
+                            batch_id: it.batch_id || (batch && batch.batch_id),
+                            item_id:  it.item_id,
+                            file_name: it.file_name,
+                            query: (value || it.fields?.tag || it.file_name || '').trim(),
+                            fields: it.fields || {},
+                          })}
+                          onDoubleClick={(e) => {
+                            // Preserve double-click-to-edit on the record cell.
+                            e.preventDefault();
+                            if (editable) setEditingCell({ itemId: it.item_id, colKey: col.key });
+                          }}
+                          title={`Open in canvas — ${it.relative_path || it.file_name || value}`}
+                          style={LINK_CONFIG.styles.recordLink}
+                          className="truncate text-left w-full font-medium hover:opacity-80"
+                        >
+                          {value}
+                        </button>
                       ) : (
                         <div
                           onDoubleClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}

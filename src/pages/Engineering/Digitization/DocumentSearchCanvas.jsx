@@ -42,6 +42,8 @@ const SEARCH_CFG = {
     search:    '/non-teff/search/',
     locate:    (batchId, itemId) => `/non-teff/batch/${batchId}/items/${itemId}/locate/`,
     pageImage: (batchId, itemId, page) => `/non-teff/batch/${batchId}/items/${itemId}/page/${page}/image/`,
+    recommend: (batchId, itemId) => `/non-teff/batch/${batchId}/items/${itemId}/recommend/`,
+    yellow:    (batchId, itemId) => `/non-teff/batch/${batchId}/items/${itemId}/yellow/`,
   },
   // Debounce keystrokes before firing /search.
   debounceMs: 350,
@@ -70,6 +72,37 @@ const SEARCH_CFG = {
     failed:     { bg: 'rgba(220,38,38,0.10)',  fg: '#b91c1c' },
     uploaded:   { bg: 'rgba(124,58,237,0.10)', fg: '#6d28d9' },
     pending:    { bg: 'rgba(107,114,128,0.10)',fg: '#374151' },
+  },
+  // Smart hover recommendations (AI advisor) ------------------------------
+  reco: {
+    enabled: true,
+    // Dwell time before AI fetch fires (ms). Prevents accidental hover spam.
+    hoverDwellMs: 450,
+    // Minimum hover-card delay so the card does not flash as the mouse moves.
+    showAfterMs: 200,
+    // Tooltip dimensions (clamped to viewport in render).
+    cardWidthPx: 320,
+    cardOffsetPx: 14,
+    // Max bullets shown per section (server already caps to 5).
+    maxBullets: 5,
+    // Confidence colour mapping.
+    confidenceColors: {
+      high:   { bg: 'rgba(5,150,105,0.10)', fg: '#047857' },
+      medium: { bg: 'rgba(217,119,6,0.10)', fg: '#b45309' },
+      low:    { bg: 'rgba(107,114,128,0.10)',fg: '#374151' },
+    },
+  },
+  // Yellow-highlight detection overlay ------------------------------------
+  yellow: {
+    enabled: true,
+    // Rect outline + fill for detected highlight regions.
+    borderColor: '#ca8a04',
+    fillColor:   'rgba(250,204,21,0.18)',
+    activeBorder:'#a16207',
+    activeFill:  'rgba(250,204,21,0.35)',
+    borderWidth: 2,
+    // Toggle button visibility on the toolbar.
+    showToggle:  true,
   },
 };
 
@@ -107,6 +140,127 @@ const Spinner = () => (
 );
 
 // ---------------------------------------------------------------------------
+// Smart Recommendations hover card
+// ---------------------------------------------------------------------------
+const RecoHoverCard = ({ pos, loading, error, data }) => {
+  const cfg = SEARCH_CFG.reco;
+  // Position the card near the cursor but clamp to keep it on-screen.
+  const left = Math.max(8, pos.x + cfg.cardOffsetPx);
+  const top  = Math.max(8, pos.y + cfg.cardOffsetPx);
+
+  const confKey = (data?.confidence || 'medium').toLowerCase();
+  const confPalette = cfg.confidenceColors[confKey] || cfg.confidenceColors.medium;
+
+  const renderList = (items, color) => (
+    <ul style={{ margin: '4px 0 0 0', paddingLeft: 16 }}>
+      {(items || []).slice(0, cfg.maxBullets).map((it, i) => (
+        <li key={i} style={{ fontSize: 11.5, color, marginBottom: 2 }}>{it}</li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left, top,
+        width: cfg.cardWidthPx,
+        maxWidth: '92%',
+        background: 'white',
+        border: '1px solid rgba(0,0,0,0.08)',
+        borderRadius: 10,
+        boxShadow: '0 12px 32px rgba(15,23,42,0.18)',
+        padding: 12,
+        zIndex: 50,
+        pointerEvents: 'none',
+        fontSize: 12,
+        color: '#0f172a',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+            color: 'white', fontWeight: 700, fontSize: 10,
+            padding: '2px 8px', borderRadius: 999, letterSpacing: 0.4,
+          }}
+        >AI</span>
+        <span style={{ fontWeight: 700, fontSize: 12.5 }}>Smart Recommendations</span>
+        <span style={{ marginLeft: 'auto' }}>
+          {loading && <Spinner />}
+        </span>
+      </div>
+
+      {error && !loading && (
+        <div style={{ color: '#b91c1c', fontSize: 11.5 }}>{error}</div>
+      )}
+
+      {!loading && !error && !data && (
+        <div style={{ color: '#6b7280', fontSize: 11.5 }}>Hold to load suggestions…</div>
+      )}
+
+      {data && (
+        <>
+          {data.summary && (
+            <div style={{ fontSize: 12, color: '#1f2937', marginBottom: 6, lineHeight: 1.4 }}>
+              {data.summary}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+            {data.inferred_type && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 7px', borderRadius: 999,
+                background: 'rgba(8,145,178,0.10)', color: '#0e7490', fontWeight: 600,
+              }}>{data.inferred_type}</span>
+            )}
+            {data.discipline && data.discipline !== 'other' && (
+              <span style={{
+                fontSize: 10.5, padding: '2px 7px', borderRadius: 999,
+                background: 'rgba(124,58,237,0.10)', color: '#6d28d9', fontWeight: 600,
+                textTransform: 'capitalize',
+              }}>{data.discipline}</span>
+            )}
+            <span style={{
+              fontSize: 10.5, padding: '2px 7px', borderRadius: 999,
+              background: confPalette.bg, color: confPalette.fg, fontWeight: 600,
+            }}>confidence: {confKey}</span>
+          </div>
+
+          {(data.missing_fields || []).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 11, color: '#b45309' }}>Likely missing</div>
+              {renderList(data.missing_fields, '#92400e')}
+            </div>
+          )}
+
+          {(data.quality_flags || []).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 11, color: '#b91c1c' }}>Quality flags</div>
+              {renderList(data.quality_flags, '#991b1b')}
+            </div>
+          )}
+
+          {(data.next_actions || []).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 11, color: '#047857' }}>Next actions</div>
+              {renderList(data.next_actions, '#065f46')}
+            </div>
+          )}
+
+          {data.provider && (
+            <div style={{ marginTop: 8, fontSize: 10, color: '#9ca3af' }}>
+              via {data.provider}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 const DocumentSearchCanvas = ({ preselect = null } = {}) => {
@@ -128,6 +282,24 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
+
+  // ── Smart hover recommendations (AI advisor) ──────────────────────────
+  const [reco, setReco] = useState(null);          // { provider, summary, ... }
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoError, setRecoError] = useState(null);
+  const [hoverPos, setHoverPos] = useState(null);  // { x, y }
+  const [showCard, setShowCard] = useState(false);
+  const recoCacheRef = useRef(new Map());          // item_id → reco payload
+  const hoverTimerRef = useRef(null);
+  const fetchTimerRef = useRef(null);
+
+  // ── Yellow-region detection (highlight stamps) ──────────────────────────
+  const [yellowRegions, setYellowRegions] = useState([]);
+  const [yellowLoading, setYellowLoading] = useState(false);
+  const [yellowError, setYellowError] = useState(null);
+  const [showYellow, setShowYellow] = useState(true);
+  const [activeYellowIdx, setActiveYellowIdx] = useState(-1);
+  const yellowCacheRef = useRef(new Map());
 
   // ── Auto-select when parent passes a preselect target (row-click bridge) ─
   useEffect(() => {
@@ -249,6 +421,100 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
     return () => { cancelled = true; };
   }, [selected, activePage]);
 
+  // ── Smart Recommendations: fetch lazily on first hover (cached) ─────────
+  const ensureRecommendations = useCallback(() => {
+    if (!SEARCH_CFG.reco.enabled) return;
+    if (!selected || selected.kind !== 'batch') return;
+    const cacheKey = `${selected.batch_id}:${selected.item_id}`;
+    const cached = recoCacheRef.current.get(cacheKey);
+    if (cached) {
+      setReco(cached); setRecoError(null); setRecoLoading(false);
+      return;
+    }
+    if (recoLoading) return;
+    setRecoLoading(true);
+    setRecoError(null);
+    apiClient
+      .get(SEARCH_CFG.endpoints.recommend(selected.batch_id, selected.item_id))
+      .then((res) => {
+        const payload = res?.data?.recommendations || null;
+        if (payload) recoCacheRef.current.set(cacheKey, payload);
+        setReco(payload);
+      })
+      .catch((err) => {
+        setRecoError(err?.response?.data?.detail || 'Recommendations unavailable');
+        setReco(null);
+      })
+      .finally(() => setRecoLoading(false));
+  }, [selected, recoLoading]);
+
+  // Reset hover + reco state when selection changes.
+  useEffect(() => {
+    setReco(null); setRecoError(null); setShowCard(false);
+    setHoverPos(null);
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+  }, [selected?.batch_id, selected?.item_id]);
+
+  // Hover handlers on the rendered diagram.
+  const handleDiagramMouseMove = useCallback((e) => {
+    if (!SEARCH_CFG.reco.enabled) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    // Debounced "dwell" detection — fetch once dwell threshold passes.
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    fetchTimerRef.current = setTimeout(() => {
+      ensureRecommendations();
+    }, SEARCH_CFG.reco.hoverDwellMs);
+    // Show card after a tiny delay so flicker is suppressed.
+    if (!showCard) {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = setTimeout(() => setShowCard(true), SEARCH_CFG.reco.showAfterMs);
+    }
+  }, [ensureRecommendations, showCard]);
+
+  const handleDiagramMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    setShowCard(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+  }, []);
+
+  // ── Fetch yellow-region detections lazily once selection changes ────────
+  useEffect(() => {
+    if (!SEARCH_CFG.yellow.enabled) return;
+    if (!selected || selected.kind !== 'batch') {
+      setYellowRegions([]); setActiveYellowIdx(-1); return;
+    }
+    const cacheKey = `${selected.batch_id}:${selected.item_id}`;
+    const cached = yellowCacheRef.current.get(cacheKey);
+    if (cached) {
+      setYellowRegions(cached); setYellowError(null); setYellowLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setYellowLoading(true); setYellowError(null);
+    apiClient
+      .get(SEARCH_CFG.endpoints.yellow(selected.batch_id, selected.item_id))
+      .then((res) => {
+        if (cancelled) return;
+        const regs = res?.data?.regions || [];
+        yellowCacheRef.current.set(cacheKey, regs);
+        setYellowRegions(regs);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setYellowError(err?.response?.data?.detail || 'Yellow detection unavailable');
+        setYellowRegions([]);
+      })
+      .finally(() => { if (!cancelled) setYellowLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected?.batch_id, selected?.item_id]);  // eslint-disable-line
+
   // Cleanup blob URLs on unmount.
   useEffect(() => () => { if (pageImageUrl) URL.revokeObjectURL(pageImageUrl); }, []); // eslint-disable-line
 
@@ -263,6 +529,7 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
   }, []);
 
   const matchesOnActivePage = matchesByPage.get(activePage) || [];
+  const yellowOnActivePage = (yellowRegions || []).filter((r) => r.page === activePage);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -413,6 +680,38 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
                 </div>
               </div>
 
+              {/* Yellow-stamps toggle */}
+              {SEARCH_CFG.yellow.enabled && SEARCH_CFG.yellow.showToggle && (
+                <button
+                  onClick={() => setShowYellow((v) => !v)}
+                  title={showYellow ? 'Hide yellow stamps' : 'Show yellow stamps'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 999,
+                    fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+                    border: `1px solid ${showYellow ? '#ca8a04' : 'rgba(0,0,0,0.10)'}`,
+                    background: showYellow ? 'rgba(250,204,21,0.18)' : 'white',
+                    color: showYellow ? '#854d0e' : '#374151',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2,
+                    background: '#facc15', border: '1px solid #ca8a04',
+                  }} />
+                  Yellow stamps
+                  {yellowLoading
+                    ? <Spinner />
+                    : (yellowRegions.length > 0
+                        ? <span style={{
+                            background: '#ca8a04', color: 'white',
+                            borderRadius: 999, padding: '0 6px', fontSize: 10,
+                          }}>{yellowRegions.length}</span>
+                        : null)
+                  }
+                </button>
+              )}
+
               {/* Page nav */}
               {pagesWithHits.length > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -466,7 +765,11 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
               )}
 
               {!locating && pageImageUrl && (
-                <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                <div
+                  style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}
+                  onMouseMove={handleDiagramMouseMove}
+                  onMouseLeave={handleDiagramMouseLeave}
+                >
                   <img
                     ref={imgRef}
                     src={pageImageUrl}
@@ -500,6 +803,66 @@ const DocumentSearchCanvas = ({ preselect = null } = {}) => {
                       />
                     );
                   })}
+
+                  {/* Yellow-highlight overlay (revision/approval/hold stamps) */}
+                  {SEARCH_CFG.yellow.enabled && showYellow && imgSize.w > 0 &&
+                    yellowOnActivePage.map((r, i) => {
+                      const isActive = i === activeYellowIdx;
+                      const [x, y, w, h] = r.rect_pct || [0, 0, 0, 0];
+                      return (
+                        <div
+                          key={`y-${i}`}
+                          onClick={(e) => { e.stopPropagation(); setActiveYellowIdx(isActive ? -1 : i); }}
+                          style={{
+                            position: 'absolute',
+                            left:   `${x * 100}%`,
+                            top:    `${y * 100}%`,
+                            width:  `${w * 100}%`,
+                            height: `${h * 100}%`,
+                            border: `${SEARCH_CFG.yellow.borderWidth}px dashed ${
+                              isActive ? SEARCH_CFG.yellow.activeBorder : SEARCH_CFG.yellow.borderColor
+                            }`,
+                            background: isActive ? SEARCH_CFG.yellow.activeFill : SEARCH_CFG.yellow.fillColor,
+                            borderRadius: 3,
+                            cursor: 'pointer',
+                            boxSizing: 'border-box',
+                          }}
+                          title={r.text || 'Yellow stamp'}
+                        >
+                          {isActive && r.text && (
+                            <div style={{
+                              position: 'absolute',
+                              left: 0, top: '100%',
+                              marginTop: 4,
+                              background: 'white',
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              boxShadow: '0 8px 18px rgba(15,23,42,0.18)',
+                              borderRadius: 8, padding: '6px 10px',
+                              fontSize: 11.5, color: '#1f2937',
+                              maxWidth: 360, zIndex: 60,
+                              whiteSpace: 'pre-wrap',
+                              pointerEvents: 'none',
+                            }}>
+                              <div style={{ fontWeight: 700, color: '#a16207', marginBottom: 2 }}>
+                                Yellow stamp{r.label ? ` · ${r.label}` : ''}
+                              </div>
+                              {r.text}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  }
+
+                  {/* Smart Recommendation hover card */}
+                  {SEARCH_CFG.reco.enabled && showCard && hoverPos && (
+                    <RecoHoverCard
+                      pos={hoverPos}
+                      loading={recoLoading}
+                      error={recoError}
+                      data={reco}
+                    />
+                  )}
                 </div>
               )}
             </div>

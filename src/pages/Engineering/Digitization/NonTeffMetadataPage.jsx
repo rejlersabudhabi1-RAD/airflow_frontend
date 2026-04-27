@@ -1039,6 +1039,19 @@ const NonTeffMetadataPage = () => {
   // Target for the embedded Document Search Canvas (set when user clicks
   // 'locate' on a bulk-table row). Cleared whenever the user changes mode.
   const [canvasTarget, setCanvasTarget] = useState(null);
+  // Ref on the canvas wrapper so we can scroll it into view whenever the
+  // user picks a new record — saves them from manually scrolling down.
+  const canvasSectionRef = useRef(null);
+  // Soft-coded scroll behaviour. Tunable without touching component code.
+  const CANVAS_SCROLL_CONFIG = { behavior: 'smooth', block: 'start' };
+
+  // Scroll the canvas into view whenever the user clicks a record/locate link.
+  useEffect(() => {
+    if (!canvasTarget || !canvasSectionRef.current) return;
+    try { canvasSectionRef.current.scrollIntoView(CANVAS_SCROLL_CONFIG); }
+    catch { /* older browsers — silent fallback */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasTarget?.item_id, canvasTarget?.batch_id]);
 
   const handleHistoryOpen = useCallback((item, payload) => {
     const kind = (payload?.kind) || (item?.kind) || 'job';
@@ -1122,7 +1135,7 @@ const NonTeffMetadataPage = () => {
         }}>
           <BulkMasterIndex loadBatchId={historyBatchId} onSelectItem={setCanvasTarget} />
         </div>
-        <div style={{ position: 'relative', zIndex: 2, maxWidth: 1600, margin: '0 auto', padding: '0 24px 32px' }}>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 1600, margin: '0 auto', padding: '0 24px 32px' }} ref={canvasSectionRef}>
           <DocumentSearchCanvasView preselect={canvasTarget} />
         </div>
       </div>
