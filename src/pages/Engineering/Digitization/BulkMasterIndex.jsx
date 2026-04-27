@@ -155,7 +155,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Main component
 // ---------------------------------------------------------------------------
 
-const BulkMasterIndex = () => {
+const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
   const { tpl, error: tplError } = useTemplate();
 
   // Batch / files / progress
@@ -193,6 +193,35 @@ const BulkMasterIndex = () => {
       setDefaults((prev) => ({ ...tpl.template.batch_default_hints, ...prev }));
     }
   }, [tpl]);
+
+  // ── Re-open from History ────────────────────────────────────────────────
+  // When the parent passes a `loadBatchId`, hydrate the bulk view by fetching
+  // the batch status and item list — exactly the same data flow as a fresh
+  // extraction would produce, so columns/template stay in sync.
+  useEffect(() => {
+    if (!loadBatchId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get(`${BULK_API}/${loadBatchId}/status/`);
+        if (cancelled) return;
+        if (res.data?.batch) {
+          setBatch(res.data.batch);
+          if (res.data.batch.batch_defaults) setDefaults((prev) => ({ ...prev, ...res.data.batch.batch_defaults }));
+        }
+        const itemsRes = await apiClient.get(`${BULK_API}/${loadBatchId}/items/`, {
+          params: { page: 1, page_size: PAGE_SIZE },
+        });
+        if (cancelled) return;
+        setItems(itemsRes.data.items || []);
+        setTotal(itemsRes.data.total || 0);
+        setPage(1);
+      } catch (e) {
+        if (!cancelled) setError(e?.response?.data?.error || e.message || 'Failed to load batch from history.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loadBatchId]);
 
   // --- File acceptance -----------------------------------------------------
   const acceptFiles = useCallback((list) => {
@@ -712,6 +741,8 @@ const BulkMasterIndex = () => {
           saveCell={saveCell}
           loadItems={loadItems}
           counts={counts}
+          batch={batch}
+          onSelectItem={onSelectItem}
         />
       )}
     </div>
@@ -726,6 +757,7 @@ const ReviewGrid = ({
   columns, items, total, page, statusFilter, setStatusFilter,
   selectedIds, setSelectedIds, editingCell, setEditingCell,
   bulkValue, setBulkValue, applyBulk, saveCell, loadItems, counts,
+  batch, onSelectItem,
 }) => {
   const toggleId = (id) => setSelectedIds((prev) => {
     const next = new Set(prev);
@@ -821,14 +853,33 @@ const ReviewGrid = ({
                   />
                 </td>
                 <td className="px-2 py-1.5 border-b border-slate-100">
-                  <span className={clsx(
-                    'px-1.5 py-0.5 rounded text-[10px] font-medium',
-                    it.status === 'ready' && 'bg-emerald-100 text-emerald-700',
-                    it.status === 'failed' && 'bg-red-100 text-red-700',
-                    it.status === 'extracting' && 'bg-amber-100 text-amber-700',
-                  )}>
-                    {it.status}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className={clsx(
+                      'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                      it.status === 'ready' && 'bg-emerald-100 text-emerald-700',
+                      it.status === 'failed' && 'bg-red-100 text-red-700',
+                      it.status === 'extracting' && 'bg-amber-100 text-amber-700',
+                    )}>
+                      {it.status}
+                    </span>
+                    {onSelectItem && it.status === 'ready' && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectItem({
+                          batch_id: it.batch_id || (batch && batch.batch_id),
+                          item_id:  it.item_id,
+                          file_name: it.file_name,
+                          // Best initial query: tag, then doc number, then file name.
+                          query: (it.fields?.tag || it.fields?.document_number || it.file_name || '').trim(),
+                          fields: it.fields || {},
+                        })}
+                        title="Locate in canvas"
+                        className="text-violet-600 hover:text-violet-800 text-[10px] font-semibold underline decoration-dotted"
+                      >
+                        locate
+                      </button>
+                    )}
+                  </div>
                 </td>
                 {columns.map((col) => {
                   const value = it.fields?.[col.key] ?? '';

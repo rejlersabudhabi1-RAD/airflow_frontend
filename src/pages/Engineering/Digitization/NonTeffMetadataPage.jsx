@@ -20,10 +20,17 @@ import {
   SparklesIcon,
   ArrowRightIcon,
   LightBulbIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DocumentTextIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import BulkMasterIndex from './BulkMasterIndex';
+import DocumentSearchCanvasView from './DocumentSearchCanvas';
 
 // ---------------------------------------------------------------------------
 // Soft-coded column definitions — mirrors config/non_teff_fields.json
@@ -342,7 +349,69 @@ const NT_TABS = [
     accent: '#0891b2',   // cyan — pipeline
     iconKind: 'gauge',
   },
+  {
+    id: 'history',
+    label: 'History',
+    hint: 'Past extractions · re-open & re-test',
+    accent: '#7c3aed',   // violet — archive
+    iconKind: 'pipe',
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// HISTORY_CONFIG — every knob for the History tab in one place
+// Mirrors the backend service so frontend & backend evolve together.
+// ---------------------------------------------------------------------------
+const HISTORY_CONFIG = {
+  endpoints: {
+    list:   '/non-teff/history/',
+    load:   (id) => `/non-teff/history/${id}/`,
+    update: (id) => `/non-teff/history/${id}/update/`,
+    remove: (id) => `/non-teff/history/${id}/delete/`,
+    // Re-uses the existing batch/single export endpoints — no new logic.
+    exportJob:   (id) => `/non-teff/export/${id}/`,
+    exportBatch: (id) => `/non-teff/batch/${id}/export/`,
+  },
+  pageSize:        50,
+  refreshMs:       0,             // 0 = manual refresh only
+  // Status badge colours — soft-coded so a new status code just needs a row.
+  statusColors: {
+    completed:  { bg: '#ecfdf5', fg: '#047857', label: 'Completed'  },
+    ready:      { bg: '#ecfdf5', fg: '#047857', label: 'Ready'      },
+    exported:   { bg: '#dbeafe', fg: '#1e40af', label: 'Exported'   },
+    processing: { bg: '#eff6ff', fg: '#1d4ed8', label: 'Processing' },
+    extracting: { bg: '#eff6ff', fg: '#1d4ed8', label: 'Extracting' },
+    uploading:  { bg: '#fef3c7', fg: '#b45309', label: 'Uploading'  },
+    pending:    { bg: '#fef3c7', fg: '#b45309', label: 'Pending'    },
+    draft:      { bg: '#f1f5f9', fg: '#475569', label: 'Draft'      },
+    failed:     { bg: '#fee2e2', fg: '#b91c1c', label: 'Failed'     },
+  },
+  // Columns rendered in the table — pure config.
+  columns: [
+    { key: 'file_name',   label: 'Document',   flex: 2,   align: 'left'   },
+    { key: 'file_format', label: 'Format',     flex: 0.6, align: 'center' },
+    { key: 'total_items', label: 'Records',    flex: 0.6, align: 'center' },
+    { key: 'status',      label: 'Status',     flex: 0.8, align: 'center' },
+    { key: 'created_by',  label: 'User',       flex: 1,   align: 'left', adminOnly: true },
+    { key: 'created_at',  label: 'Extracted',  flex: 1.2, align: 'left'   },
+    { key: '__actions',   label: '',           flex: 1.6, align: 'right'  },
+  ],
+  // Soft-coded row actions — add/remove a row to add/remove a button.
+  // `enabledFor` lists statuses where the button is clickable; `null` = always.
+  // `requiresWrite`: hidden for users without write access (RBAC).
+  actions: [
+    { id: 'open',     label: 'Open',     icon: '↗',  variant: 'primary',
+      enabledFor: ['completed', 'ready', 'exported'], requiresWrite: false },
+    { id: 'modify',   label: 'Modify',   icon: '✎',  variant: 'ghost',
+      enabledFor: null, requiresWrite: true },
+    { id: 'download', label: 'Download', icon: '⬇',  variant: 'ghost',
+      enabledFor: ['completed', 'ready', 'exported'], requiresWrite: false },
+    { id: 'delete',   label: 'Delete',   icon: '✕',  variant: 'danger',
+      enabledFor: null, requiresWrite: true, confirm: 'Delete this extraction permanently?' },
+  ],
+  emptyMessage: 'No past extractions yet. Upload a document to get started.',
+  loadFailMsg:  'Could not load history. Please retry.',
+};
 
 // Inline SVG icon set — themed for oil & gas.
 // `active` controls the animated accent (flow, needle sweep).
@@ -375,6 +444,267 @@ const NtTabIcon = ({ kind, active, accent }) => {
     );
   }
   return null;
+};
+
+// ---------------------------------------------------------------------------
+// HistoryPanel — role-based list of past extractions, with re-open action.
+// Pure presentation: receives `onOpen(item, payload)` and bubbles results up
+// to the parent which sets state and switches back to the Single tab. The
+// core extraction pipeline is untouched.
+// ---------------------------------------------------------------------------
+const HistoryPanel = ({ onOpen }) => {
+  const [items,    setItems]    = React.useState([]);
+  const [role,     setRole]     = React.useState('');
+  const [loading,  setLoading]  = React.useState(false);
+  const [error,    setError]    = React.useState(null);
+  const [busyId,   setBusyId]   = React.useState(null);
+  const [busyAct,  setBusyAct]  = React.useState(null);   // 'open' | 'modify' | 'download' | 'delete'
+  const [editId,   setEditId]   = React.useState(null);   // row currently being renamed
+  const [editName, setEditName] = React.useState('');
+
+  const fetchHistory = React.useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiClient.get(HISTORY_CONFIG.endpoints.list, {
+        params: { limit: HISTORY_CONFIG.pageSize },
+        timeout: 15000,
+      });
+      setItems(Array.isArray(res.data?.items) ? res.data.items : []);
+      setRole(res.data?.role || '');
+    } catch (e) {
+      setError(HISTORY_CONFIG.loadFailMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  // Soft-coded action dispatcher — switch on action.id
+  const runAction = async (action, item) => {
+    if (action.confirm && !window.confirm(action.confirm)) return;
+    setBusyId(item.job_id); setBusyAct(action.id); setError(null);
+    try {
+      if (action.id === 'open') {
+        const res = await apiClient.get(HISTORY_CONFIG.endpoints.load(item.job_id), { timeout: 20000 });
+        onOpen?.(item, res.data);
+      } else if (action.id === 'modify') {
+        setEditId(item.job_id);
+        setEditName(item.file_name || '');
+      } else if (action.id === 'download') {
+        const isBatch = item.kind === 'batch';
+        const url = isBatch
+          ? HISTORY_CONFIG.endpoints.exportBatch(item.job_id)
+          : HISTORY_CONFIG.endpoints.exportJob(item.job_id);
+        const res = await apiClient.get(url, { responseType: 'blob', timeout: 60000 });
+        const blob = new Blob([res.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${(item.file_name || 'extraction').replace(/[^\w.-]+/g, '_')}.xlsx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } else if (action.id === 'delete') {
+        await apiClient.delete(HISTORY_CONFIG.endpoints.remove(item.job_id), { timeout: 15000 });
+        setItems(prev => prev.filter(i => i.job_id !== item.job_id));
+      }
+    } catch (e) {
+      setError(`Could not ${action.label.toLowerCase()} this entry.`);
+    } finally {
+      setBusyId(null); setBusyAct(null);
+    }
+  };
+
+  const submitRename = async (item) => {
+    const next = (editName || '').trim();
+    if (!next || next === item.file_name) { setEditId(null); return; }
+    setBusyId(item.job_id); setBusyAct('modify'); setError(null);
+    try {
+      const res = await apiClient.patch(
+        HISTORY_CONFIG.endpoints.update(item.job_id),
+        { name: next },
+        { timeout: 15000 },
+      );
+      const updatedName = res.data?.entry?.file_name || next;
+      setItems(prev => prev.map(i => i.job_id === item.job_id ? { ...i, file_name: updatedName } : i));
+      setEditId(null); setEditName('');
+    } catch (e) {
+      setError('Could not rename this entry.');
+    } finally {
+      setBusyId(null); setBusyAct(null);
+    }
+  };
+
+  const isAdmin = role === 'admin';
+  const visibleCols = HISTORY_CONFIG.columns.filter(c => !c.adminOnly || isAdmin);
+
+  // Soft-coded button styling per variant.
+  const variantStyle = (variant, disabled) => {
+    if (disabled) {
+      return { background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', cursor: 'not-allowed' };
+    }
+    if (variant === 'primary') return { background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: '#fff', border: '1px solid #6d28d9', cursor: 'pointer' };
+    if (variant === 'danger')  return { background: '#fff', color: '#b91c1c', border: '1px solid #fecaca', cursor: 'pointer' };
+    return { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer' };
+  };
+
+  const fmtCell = (item, col) => {
+    if (col.key === '__actions') {
+      // Inline rename mode wins over normal action cluster
+      if (editId === item.job_id) {
+        return (
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitRename(item);
+                if (e.key === 'Escape') { setEditId(null); setEditName(''); }
+              }}
+              style={{
+                padding: '4px 8px', fontSize: 12, borderRadius: 6,
+                border: '1px solid #c4b5fd', minWidth: 180,
+              }}
+            />
+            <button onClick={() => submitRename(item)}
+              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #6d28d9', background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+              Save
+            </button>
+            <button onClick={() => { setEditId(null); setEditName(''); }}
+              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontSize: 11, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        );
+      }
+
+      // Standard action cluster — driven by HISTORY_CONFIG.actions
+      const writeAllowed = isAdmin || (item.created_by && role && role !== 'guest' && role !== 'viewer');
+      return (
+        <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+          {HISTORY_CONFIG.actions.map(a => {
+            if (a.requiresWrite && !writeAllowed) return null;
+            const enabled = !a.enabledFor || a.enabledFor.includes(item.status);
+            const busy = busyId === item.job_id && busyAct === a.id;
+            const disabled = !enabled || busy;
+            return (
+              <button
+                key={a.id}
+                title={a.label}
+                onClick={() => runAction(a, item)}
+                disabled={disabled}
+                style={{
+                  padding: '5px 10px', borderRadius: 6,
+                  fontSize: 11, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  ...variantStyle(a.variant, disabled),
+                }}
+              >
+                <span style={{ fontSize: 12, lineHeight: 1 }}>{a.icon}</span>
+                <span>{busy ? '…' : a.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    if (col.key === 'status') {
+      const s = HISTORY_CONFIG.statusColors[item.status] || { bg: '#f1f5f9', fg: '#475569', label: item.status };
+      return (
+        <span style={{
+          display: 'inline-block', padding: '3px 10px', borderRadius: 999,
+          background: s.bg, color: s.fg, fontSize: 11, fontWeight: 600,
+        }}>{s.label}</span>
+      );
+    }
+    if (col.key === 'created_at' && item.created_at) {
+      const d = new Date(item.created_at);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+    }
+    if (col.key === 'file_format') {
+      return <span style={{ textTransform: 'uppercase', fontSize: 11, fontWeight: 600, color: '#475569' }}>{item.file_format || '—'}</span>;
+    }
+    return item[col.key] ?? '—';
+  };
+
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.94)',
+      borderRadius: 16,
+      border: '1px solid rgba(124,58,237,0.18)',
+      boxShadow: '0 10px 40px -12px rgba(15,23,42,0.12)',
+      padding: 24,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e293b', letterSpacing: 0.2 }}>
+            Extraction History
+          </h2>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b' }}>
+            {isAdmin
+              ? 'Showing extractions from all users (admin view).'
+              : 'Your past extractions — Open, Modify, Download or Delete each entry below.'}
+            {role && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#ede9fe', color: '#6d28d9', borderRadius: 999, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Role: {role}</span>}
+          </p>
+        </div>
+        <button
+          onClick={fetchHistory}
+          disabled={loading}
+          style={{
+            padding: '8px 16px', borderRadius: 8,
+            border: '1px solid #c4b5fd', background: '#fff', color: '#6d28d9',
+            fontSize: 12, fontWeight: 600, cursor: loading ? 'wait' : 'pointer',
+          }}
+        >
+          {loading ? 'Refreshing…' : '↻ Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{
+          display: 'flex', background: '#f8fafc', borderBottom: '1px solid #e5e7eb',
+          padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569',
+          textTransform: 'uppercase', letterSpacing: 0.5,
+        }}>
+          {visibleCols.map(c => (
+            <div key={c.key} style={{ flex: c.flex, textAlign: c.align }}>{c.label}</div>
+          ))}
+        </div>
+        {!loading && items.length === 0 && (
+          <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+            {HISTORY_CONFIG.emptyMessage}
+          </div>
+        )}
+        {items.map((it) => (
+          <div key={it.job_id} style={{
+            display: 'flex', alignItems: 'center',
+            padding: '12px 14px', borderBottom: '1px solid #f1f5f9',
+            fontSize: 13, color: '#1e293b',
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#faf5ff'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            {visibleCols.map(c => (
+              <div key={c.key} style={{ flex: c.flex, textAlign: c.align, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {fmtCell(it, c)}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 // ---------------------------------------------------------------------------
@@ -479,14 +809,45 @@ const NonTeffMetadataPage = () => {
     if (!file || isProcessing) return;
     setIsProcessing(true);
     setProgress(0);
-    setStatusMessage('Uploading file…');
+    setStatusMessage('Reading file…');
     setError(null);
     setResults(null);
     setJobId(null);
 
     try {
+      // ---------------------------------------------------------------------
+      // Pre-read the selected file into an in-memory Blob BEFORE posting.
+      //
+      // Why: Chrome streams a File object lazily during multipart upload. If
+      // the file lives on OneDrive (cloud-only stub), is open in another app
+      // (VS Code PDF preview holds a Windows lock), or hits an antivirus
+      // scan mid-stream, the OS denies the lazy read and Chrome aborts with
+      // `net::ERR_ACCESS_DENIED` — the request never reaches Django, so we
+      // see "Network Error" with no response.
+      //
+      // By forcing a synchronous full-buffer read first, we either:
+      //   a) succeed → upload an in-memory Blob (no further OS reads needed)
+      //   b) fail fast with a clean, actionable error message.
+      //
+      // Pure browser API, soft-coded — no extra deps, no backend changes.
+      // ---------------------------------------------------------------------
+      let uploadBlob;
+      try {
+        const buf = await file.arrayBuffer();
+        uploadBlob = new Blob([buf], { type: file.type || 'application/octet-stream' });
+      } catch (readErr) {
+        throw new Error(
+          `Cannot read "${file.name}" from disk. ` +
+          `Likely causes: file is open in another app (e.g. VS Code PDF preview), ` +
+          `OneDrive has it as a cloud-only stub, or antivirus is blocking access. ` +
+          `Close it elsewhere, right-click → "Always keep on this device", ` +
+          `or copy it to C:\\Temp and try again.`
+        );
+      }
+
+      setStatusMessage('Uploading file…');
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadBlob, file.name);
       const res = await apiClient.post(`${API_PREFIX}/upload/`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: UPLOAD_TIMEOUT_MS,
@@ -498,7 +859,19 @@ const NonTeffMetadataPage = () => {
       pollStartRef.current = Date.now();
       pollStatus(id);
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Upload failed.';
+      // Soft-coded diagnostic — distinguishes auth, network, and disk errors.
+      const code   = err?.code;
+      const status = err?.response?.status;
+      let msg;
+      if (err?.message?.startsWith('Cannot read "')) {
+        msg = err.message;                                                // disk/OS
+      } else if (status === 401 || status === 403) {
+        msg = 'Your session has expired — please log in again to upload.'; // auth
+      } else if (code === 'ERR_NETWORK' && !err?.response) {
+        msg = `Cannot reach the backend. Check that the API container is running at ${apiClient.defaults.baseURL}.`;
+      } else {
+        msg = err.response?.data?.error || err.message || 'Upload failed.';
+      }
       setError(msg);
       setIsProcessing(false);
     }
@@ -657,6 +1030,70 @@ const NonTeffMetadataPage = () => {
     );
   };
 
+  // History tab — soft-coded re-open hook. Routes by entry kind so the
+  // user sees the SAME view & SAME columns as the original extraction:
+  //   • kind='batch' → Bulk Master Index (template-driven dynamic columns)
+  //   • kind='job'   → Single-file canvas (NT_COLUMNS schema)
+  // The core extraction pipeline is untouched.
+  const [historyBatchId, setHistoryBatchId] = useState(null);
+  // Target for the embedded Document Search Canvas (set when user clicks
+  // 'locate' on a bulk-table row). Cleared whenever the user changes mode.
+  const [canvasTarget, setCanvasTarget] = useState(null);
+
+  const handleHistoryOpen = useCallback((item, payload) => {
+    const kind = (payload?.kind) || (item?.kind) || 'job';
+    if (kind === 'batch') {
+      // Bulk view will fetch its own items via the batch endpoints, which
+      // guarantees the same columns the user saw at extraction time.
+      setHistoryBatchId(payload?.job_id || item?.job_id);
+      setError(null);
+      setIsProcessing(false);
+      setMode('bulk');
+      return;
+    }
+    // Single-file job: hydrate the Single-mode canvas as before.
+    const result = payload?.result || {};
+    setFile(null);
+    setResults({
+      job_id:    payload.job_id || item.job_id,
+      file_name: payload.file_name || item.file_name,
+      total:     result.total ?? (result.items?.length ?? 0),
+      items:     result.items || [],
+    });
+    setError(null);
+    setIsProcessing(false);
+    setMode('single');
+  }, []);
+
+  // Clear the preloaded batch id whenever the user manually leaves the bulk
+  // tab so a subsequent fresh extraction starts clean.
+  useEffect(() => { if (mode !== 'bulk') setHistoryBatchId(null); }, [mode]);
+  useEffect(() => { if (mode !== 'bulk') setCanvasTarget(null); }, [mode]);
+
+  if (mode === 'history') {
+    return (
+      <div style={{ minHeight: '100vh', background: NT_T.bg, fontFamily: "'Inter', sans-serif", position: 'relative', overflow: 'hidden' }}>
+        <style>{NT_KEYFRAMES}</style>
+        {NT_T.blobs.map((b, i) => (
+          <div key={i} style={{
+            position: 'absolute', borderRadius: '50%', background: b.color,
+            width: b.size, height: b.size,
+            top: b.top, bottom: b.bottom, left: b.left, right: b.right,
+            animation: b.anim, pointerEvents: 'none', zIndex: 0,
+          }} />
+        ))}
+        <TabBar />
+        <div style={{
+          position: 'relative', zIndex: 2,
+          maxWidth: 1600, margin: '16px auto 0',
+          padding: '0 24px 32px',
+        }}>
+          <HistoryPanel onOpen={handleHistoryOpen} />
+        </div>
+      </div>
+    );
+  }
+
   // Bulk Master Index workflow (early-return, uses its own chrome)
   if (mode === 'bulk') {
     return (
@@ -683,10 +1120,10 @@ const NonTeffMetadataPage = () => {
           boxShadow: '0 10px 40px -12px rgba(15,23,42,0.12)',
           marginBottom: 32,
         }}>
-          <BulkMasterIndex />
+          <BulkMasterIndex loadBatchId={historyBatchId} onSelectItem={setCanvasTarget} />
         </div>
         <div style={{ position: 'relative', zIndex: 2, maxWidth: 1600, margin: '0 auto', padding: '0 24px 32px' }}>
-          <FeatureRecommendations navigate={navigate} />
+          <DocumentSearchCanvasView preselect={canvasTarget} />
         </div>
       </div>
     );
@@ -1185,85 +1622,641 @@ const NonTeffMetadataPage = () => {
           </div>
         )}
 
-        {/* ── Info panel (idle) ── */}
-        {!results && !isProcessing && (
-          <div className="nt-section" style={{ animationDelay: '0.2s', marginTop: '8px' }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(5,150,105,0.14)', borderRadius: '16px',
-              overflow: 'hidden',
-            }}>
-              {/* Info header */}
-              <div style={{
-                padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '10px',
-                background: 'linear-gradient(90deg, rgba(5,150,105,0.08), rgba(8,145,178,0.05))',
-                borderBottom: '1px solid rgba(5,150,105,0.1)',
-              }}>
-                <InformationCircleIcon style={{ width: 18, height: 18, color: '#059669' }} />
-                <span style={{ fontWeight: 700, color: '#065f46', fontSize: '0.88rem' }}>
-                  Extracted Metadata Fields
-                </span>
-                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#94a3b8' }}>
-                  {FIELD_INFO.length} fields
-                </span>
-              </div>
+        {/* ── Info panel (idle) — collapsed by default to keep canvas clean ── */}
+        {!results && !isProcessing && <IdleInfoPanel />}
 
-              {/* Field grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1px', background: 'rgba(5,150,105,0.06)' }}>
-                {FIELD_INFO.map((field, i) => (
-                  <div key={field.key} className="nt-info-card" style={{
-                    background: 'rgba(255,255,255,0.9)', padding: '14px 18px',
-                    display: 'flex', alignItems: 'flex-start', gap: '12px',
-                    transition: 'all 0.15s ease',
-                  }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-                      background: `${field.color}18`,
-                      border: `1px solid ${field.color}30`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      marginTop: '1px',
-                    }}>
-                      <span style={{ fontSize: '0.65rem', fontWeight: 800, color: field.color, fontFamily: 'monospace' }}>
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.82rem', marginBottom: '2px' }}>
-                        {field.label}
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: '0.73rem', lineHeight: 1.4 }}>
-                        {field.desc}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* ── Document Search Canvas (replaces "Discover more RAD AI modules") ── */}
+        <DocumentSearchCanvas results={results} file={file} navigate={navigate} />
+      </div>
+    </div>
+  );
+};
 
-              {/* Format support strip */}
-              <div style={{
-                padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
-                background: 'rgba(5,150,105,0.03)', borderTop: '1px solid rgba(5,150,105,0.08)',
+// ---------------------------------------------------------------------------
+// Idle Info Panel — soft-coded, collapsed by default.
+// Replaces the always-on "Extracted Metadata Fields" 12-card grid that
+// previously dominated the idle screen. Keeps the supported-formats strip
+// always visible, but hides the field catalogue behind a single toggle.
+// All data still comes from the existing FIELD_INFO and SUPPORTED_FORMATS
+// constants — no duplication.
+// ---------------------------------------------------------------------------
+const IDLE_PANEL_CONFIG = {
+  defaultExpanded: false,   // tweak here to default-open the field grid
+  maxFileSizeLabel: '50 MB',
+};
+
+const IdleInfoPanel = () => {
+  const [open, setOpen] = useState(IDLE_PANEL_CONFIG.defaultExpanded);
+
+  return (
+    <div className="nt-section" style={{ animationDelay: '0.2s', marginTop: '8px' }}>
+      <div style={{
+        background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(5,150,105,0.14)', borderRadius: '16px',
+        overflow: 'hidden',
+      }}>
+        {/* Toggle header */}
+        <button
+          onClick={() => setOpen((s) => !s)}
+          style={{
+            width: '100%', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '10px',
+            background: 'linear-gradient(90deg, rgba(5,150,105,0.08), rgba(8,145,178,0.05))',
+            borderBottom: open ? '1px solid rgba(5,150,105,0.1)' : 'none',
+          }}
+        >
+          <InformationCircleIcon style={{ width: 18, height: 18, color: '#059669' }} />
+          <span style={{ fontWeight: 700, color: '#065f46', fontSize: '0.88rem' }}>
+            What gets extracted?
+          </span>
+          <span style={{
+            fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600,
+            background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(5,150,105,0.18)',
+            borderRadius: 999, padding: '2px 10px',
+          }}>
+            {FIELD_INFO.length} fields · {SUPPORTED_FORMATS.length} formats
+          </span>
+          <span style={{ flex: 1 }} />
+          {open
+            ? <ChevronUpIcon style={{ width: 16, height: 16, color: '#94a3b8' }} />
+            : <ChevronDownIcon style={{ width: 16, height: 16, color: '#94a3b8' }} />}
+        </button>
+
+        {/* Collapsible field grid */}
+        {open && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1px', background: 'rgba(5,150,105,0.06)' }}>
+            {FIELD_INFO.map((field, i) => (
+              <div key={field.key} className="nt-info-card" style={{
+                background: 'rgba(255,255,255,0.9)', padding: '14px 18px',
+                display: 'flex', alignItems: 'flex-start', gap: '12px',
+                transition: 'all 0.15s ease',
               }}>
-                <span style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>Supported formats:</span>
-                {SUPPORTED_FORMATS.map(f => (
-                  <span key={f.ext} style={{
-                    background: `${f.color}15`, border: `1px solid ${f.color}35`,
-                    color: f.color, borderRadius: '6px', padding: '2px 10px',
-                    fontSize: '0.72rem', fontWeight: 700,
-                  }}>
-                    {f.label}
+                <div style={{
+                  width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+                  background: `${field.color}18`,
+                  border: `1px solid ${field.color}30`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginTop: '1px',
+                }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 800, color: field.color, fontFamily: 'monospace' }}>
+                    {String(i + 1).padStart(2, '0')}
                   </span>
-                ))}
-                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#94a3b8' }}>
-                  Max file size: 50 MB
-                </span>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.82rem', marginBottom: '2px' }}>
+                    {field.label}
+                  </div>
+                  <div style={{ color: '#64748b', fontSize: '0.73rem', lineHeight: 1.4 }}>
+                    {field.desc}
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
 
-        {/* ── Recommendations — discover more RAD AI tools ── */}
-        <FeatureRecommendations navigate={navigate} />
+        {/* Always-visible format support strip */}
+        <div style={{
+          padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+          background: 'rgba(5,150,105,0.03)', borderTop: '1px solid rgba(5,150,105,0.08)',
+        }}>
+          <span style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 600 }}>Supported formats:</span>
+          {SUPPORTED_FORMATS.map(f => (
+            <span key={f.ext} style={{
+              background: `${f.color}15`, border: `1px solid ${f.color}35`,
+              color: f.color, borderRadius: '6px', padding: '2px 10px',
+              fontSize: '0.72rem', fontWeight: 700,
+            }}>
+              {f.label}
+            </span>
+          ))}
+          <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#94a3b8' }}>
+            Max file size: {IDLE_PANEL_CONFIG.maxFileSizeLabel}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Document Search Canvas
+// ---------------------------------------------------------------------------
+// Soft-coded, self-contained search/preview panel that replaces the old
+// "Discover more RAD AI modules" block. It is purely presentational —
+// no extraction/upload/poll logic is touched. All knobs are in DSC_CONFIG.
+//
+// - Searches across the metadata rows already extracted on this page.
+// - Inline preview pane for the source document (PDF/image/native browser view).
+// - Recommendation list collapsed into a small footer link, preserved for
+//   discoverability without consuming canvas space.
+// ---------------------------------------------------------------------------
+const DSC_CONFIG = {
+  // Which extracted-row fields participate in the full-text search.
+  searchableKeys: [
+    'document_no', 'document_title', 'revision', 'discipline',
+    'instrument_tag_no', 'line_number', 'equipment_no',
+    'mechanical_component', 'status', 'date', 'originator', 'remarks',
+  ],
+  // Visual fields shown on each result card (key → label).
+  resultCardFields: [
+    { key: 'document_no',    label: 'Doc No.'   },
+    { key: 'revision',       label: 'Rev'       },
+    { key: 'discipline',     label: 'Discipline'},
+    { key: 'status',         label: 'Status'    },
+  ],
+  // Highest-impact field for the result heading.
+  titleKey: 'document_title',
+  subtitleKey: 'document_no',
+  // Maximum results rendered (paginate beyond this).
+  maxResults: 50,
+  // Theme — mirrors NT_T emerald/teal palette already used on the page.
+  accent: '#059669',
+  accentSoft: 'rgba(5,150,105,0.08)',
+  accentBorder: 'rgba(5,150,105,0.18)',
+  // File extensions the inline preview pane can render natively.
+  inlinePreviewExt: ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
+};
+
+// ---------------------------------------------------------------------------
+// Locator config — drives the "jump to coordinates" experience when a result
+// row is clicked. Everything is soft-coded so the same canvas can power
+// future extractors that emit different page / bbox shapes.
+//
+// • searchTermPriority: which row keys to try (in order) as the highlight term
+// • pageKeys: which row keys may carry a page reference
+// • pagePattern: regex to pull a 1-based page number out of a free-text label
+//   (the current extractor stores values like "Page 3" in `remarks`)
+// • bboxKeys: keys to inspect for explicit [x0,y0,x1,y1] / {x,y,w,h} payloads,
+//   ready for future extractors that emit real coordinates
+// • previewFragment: builds the URL hash for the browser's native PDF viewer
+//   so it auto-jumps to the page and highlights every match.
+// ---------------------------------------------------------------------------
+const LOCATOR_CONFIG = {
+  searchTermPriority: [
+    'instrument_tag_no', 'equipment_no', 'line_number',
+    'document_no', 'document_title', 'mechanical_component',
+  ],
+  pageKeys: ['_page', 'page', 'page_number', 'source', 'remarks'],
+  pagePattern: /\bpage\s*[:#]?\s*(\d+)/i,
+  bboxKeys: ['bbox', 'coordinates', 'coords', 'rect', 'region'],
+  previewFragment: ({ page, term }) => {
+    const parts = [];
+    if (page) parts.push(`page=${page}`);
+    if (term) parts.push(`search=${encodeURIComponent(term)}`);
+    return parts.length ? `#${parts.join('&')}` : '';
+  },
+};
+
+// Pure helper — derives { term, page, bbox, label } from a row using the
+// soft-coded LOCATOR_CONFIG. Returns null when no useful locator info exists.
+function buildLocator(row) {
+  if (!row || typeof row !== 'object') return null;
+
+  // 1. Search term — first non-empty value from priority list
+  let term = '';
+  let termKey = '';
+  for (const k of LOCATOR_CONFIG.searchTermPriority) {
+    const v = row[k];
+    if (v != null && String(v).trim() !== '') {
+      term = String(v).trim();
+      termKey = k;
+      break;
+    }
+  }
+
+  // 2. Page number — first key that yields a parseable page
+  let page = null;
+  let pageSource = '';
+  for (const k of LOCATOR_CONFIG.pageKeys) {
+    const v = row[k];
+    if (v == null || v === '') continue;
+    if (typeof v === 'number' && Number.isFinite(v)) { page = Math.max(1, Math.round(v)); pageSource = k; break; }
+    const m = String(v).match(LOCATOR_CONFIG.pagePattern);
+    if (m) { page = parseInt(m[1], 10); pageSource = k; break; }
+  }
+
+  // 3. Explicit bbox — supported now in case the extractor adds it later
+  let bbox = null;
+  for (const k of LOCATOR_CONFIG.bboxKeys) {
+    const v = row[k];
+    if (!v) continue;
+    if (Array.isArray(v) && v.length >= 4) {
+      bbox = { x0: +v[0], y0: +v[1], x1: +v[2], y1: +v[3] };
+      break;
+    }
+    if (typeof v === 'object') {
+      if ('x0' in v && 'y0' in v) { bbox = { x0: +v.x0, y0: +v.y0, x1: +v.x1, y1: +v.y1 }; break; }
+      if ('x' in v && 'y' in v)   { bbox = { x0: +v.x,  y0: +v.y,  x1: +v.x + (+v.w || +v.width || 0), y1: +v.y + (+v.h || +v.height || 0) }; break; }
+    }
+  }
+
+  if (!term && !page && !bbox) return null;
+  return { term, termKey, page, pageSource, bbox };
+}
+
+const DocumentSearchCanvas = ({ results, file, navigate }) => {
+  const [query, setQuery]       = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showRecs, setShowRecs] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Build a flat searchable row list from `results`.
+  const allRows = React.useMemo(() => {
+    if (!results) return [];
+    if (Array.isArray(results)) return results;
+    if (Array.isArray(results.rows)) return results.rows;
+    if (Array.isArray(results.data)) return results.data;
+    if (typeof results === 'object') return [results];
+    return [];
+  }, [results]);
+
+  // Soft-coded fuzzy search across DSC_CONFIG.searchableKeys.
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allRows.slice(0, DSC_CONFIG.maxResults);
+    return allRows.filter((row) =>
+      DSC_CONFIG.searchableKeys.some((k) => {
+        const v = row?.[k];
+        if (v == null) return false;
+        return String(v).toLowerCase().includes(q);
+      })
+    ).slice(0, DSC_CONFIG.maxResults);
+  }, [allRows, query]);
+
+  // Generate / revoke an object URL when a file is available so the preview
+  // pane can render PDFs and images inline. Browser handles the rendering.
+  useEffect(() => {
+    if (!file) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const fileName = file?.name || (results?.original_filename ?? '');
+  const fileExt  = fileName ? `.${fileName.split('.').pop().toLowerCase()}` : '';
+  const canInlinePreview = previewUrl && DSC_CONFIG.inlinePreviewExt.includes(fileExt);
+
+  // Soft-coded locator — pure derivation from the selected row. Drives the
+  // PDF preview's #page=N&search=… fragment so the native viewer jumps and
+  // auto-highlights every occurrence. Falls back gracefully when no row is
+  // selected or the row carries no locator hints.
+  const selectedRow = selected != null ? filtered[selected] : null;
+  const locator     = React.useMemo(() => buildLocator(selectedRow), [selectedRow]);
+  const previewSrc  = React.useMemo(() => {
+    if (!previewUrl) return null;
+    if (!locator || fileExt !== '.pdf') return previewUrl;
+    return `${previewUrl}${LOCATOR_CONFIG.previewFragment(locator)}`;
+  }, [previewUrl, locator, fileExt]);
+
+  const hasData = allRows.length > 0;
+
+  // Highlight the matched substring inside a value.
+  const highlight = (val) => {
+    const text = String(val ?? '');
+    const q = query.trim();
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark style={{ background: 'rgba(5,150,105,0.22)', color: '#065f46', padding: '0 2px', borderRadius: 3 }}>
+          {text.slice(idx, idx + q.length)}
+        </mark>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  return (
+    <div className="nt-section" style={{ animationDelay: '0.25s', marginTop: 28 }}>
+      <div style={{
+        background: 'rgba(255,255,255,0.78)', backdropFilter: 'blur(10px)',
+        border: `1px solid ${DSC_CONFIG.accentBorder}`, borderRadius: 18,
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '16px 22px',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: 'linear-gradient(90deg, rgba(5,150,105,0.10), rgba(8,145,178,0.07))',
+          borderBottom: `1px solid ${DSC_CONFIG.accentBorder}`,
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'linear-gradient(135deg, #059669, #0891b2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+          }}>
+            <DocumentMagnifyingGlassIcon style={{ width: 20, height: 20, color: '#fff' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+              Document Search Canvas
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+              Search the extracted metadata · click a result to preview the source document.
+            </div>
+          </div>
+          <span style={{
+            background: 'rgba(255,255,255,0.9)', border: `1px solid ${DSC_CONFIG.accentBorder}`,
+            borderRadius: 999, padding: '4px 12px',
+            fontSize: '0.65rem', fontWeight: 700, color: '#047857', letterSpacing: 0.6,
+          }}>
+            {hasData ? `${allRows.length} ROW${allRows.length === 1 ? '' : 'S'} INDEXED` : 'WAITING FOR EXTRACTION'}
+          </span>
+        </div>
+
+        {/* Search bar */}
+        <div style={{
+          padding: '14px 22px', borderBottom: `1px solid ${DSC_CONFIG.accentBorder}`,
+          background: 'rgba(255,255,255,0.55)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: '#fff', border: `1px solid ${DSC_CONFIG.accentBorder}`,
+            borderRadius: 10, padding: '8px 12px',
+            boxShadow: '0 2px 6px -3px rgba(15,23,42,0.06)',
+          }}>
+            <MagnifyingGlassIcon style={{ width: 18, height: 18, color: DSC_CONFIG.accent, flexShrink: 0 }} />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={hasData ? 'Search by tag, document no., line number, status, originator…' : 'Upload and extract a document to enable search'}
+              disabled={!hasData}
+              style={{
+                flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                fontSize: '0.9rem', color: '#0f172a', fontFamily: 'inherit',
+              }}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                title="Clear"
+                style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  padding: 2, display: 'flex', alignItems: 'center',
+                }}
+              >
+                <XMarkIcon style={{ width: 16, height: 16, color: '#94a3b8' }} />
+              </button>
+            )}
+          </div>
+          {query && (
+            <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#64748b' }}>
+              {filtered.length} match{filtered.length === 1 ? '' : 'es'} found
+              {filtered.length === DSC_CONFIG.maxResults ? ` (showing first ${DSC_CONFIG.maxResults})` : ''}
+            </div>
+          )}
+        </div>
+
+        {/* Body — split: results list + preview pane */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(280px, 0.9fr) minmax(300px, 1.1fr)',
+          minHeight: 320, maxHeight: 540,
+        }}>
+          {/* Results list */}
+          <div style={{
+            borderRight: `1px solid ${DSC_CONFIG.accentBorder}`,
+            overflow: 'auto', background: 'rgba(248,250,252,0.4)',
+          }}>
+            {!hasData && (
+              <div style={{
+                padding: '40px 22px', textAlign: 'center',
+                color: '#94a3b8', fontSize: '0.85rem',
+              }}>
+                <DocumentTextIcon style={{ width: 36, height: 36, color: '#cbd5e1', margin: '0 auto 10px' }} />
+                Upload a document above and run extraction.<br/>
+                Searchable results will appear here.
+              </div>
+            )}
+
+            {hasData && filtered.length === 0 && (
+              <div style={{
+                padding: '40px 22px', textAlign: 'center',
+                color: '#94a3b8', fontSize: '0.85rem',
+              }}>
+                No results match <strong style={{ color: '#475569' }}>"{query}"</strong>
+              </div>
+            )}
+
+            {filtered.map((row, idx) => {
+              const isSelected = selected === idx;
+              return (
+                <button
+                  key={`${row[DSC_CONFIG.subtitleKey] || 'row'}-${idx}`}
+                  onClick={() => setSelected(isSelected ? null : idx)}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: isSelected ? DSC_CONFIG.accentSoft : 'transparent',
+                    border: 'none',
+                    borderLeft: `3px solid ${isSelected ? DSC_CONFIG.accent : 'transparent'}`,
+                    borderBottom: `1px solid ${DSC_CONFIG.accentBorder}`,
+                    padding: '12px 16px', cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(5,150,105,0.04)'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{
+                    fontWeight: 700, color: '#0f172a', fontSize: '0.86rem',
+                    marginBottom: 4, lineHeight: 1.3,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {highlight(row[DSC_CONFIG.titleKey] || row[DSC_CONFIG.subtitleKey] || '(untitled)')}
+                  </div>
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 6,
+                  }}>
+                    {DSC_CONFIG.resultCardFields.map((f) => {
+                      const v = row[f.key];
+                      if (v == null || v === '') return null;
+                      return (
+                        <span key={f.key} style={{
+                          fontSize: '0.68rem',
+                          background: 'rgba(255,255,255,0.85)',
+                          border: `1px solid ${DSC_CONFIG.accentBorder}`,
+                          borderRadius: 6, padding: '2px 8px',
+                          color: '#475569',
+                        }}>
+                          <span style={{ color: '#94a3b8', marginRight: 4 }}>{f.label}:</span>
+                          <strong style={{ color: '#1f2937' }}>{highlight(v)}</strong>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Preview pane */}
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            background: '#fff', minHeight: 0,
+          }}>
+            <div style={{
+              padding: '10px 16px',
+              borderBottom: `1px solid ${DSC_CONFIG.accentBorder}`,
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'rgba(248,250,252,0.6)',
+            }}>
+              <EyeIcon style={{ width: 16, height: 16, color: DSC_CONFIG.accent }} />
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>
+                Preview
+              </span>
+              {fileName && (
+                <span style={{
+                  fontSize: '0.72rem', color: '#94a3b8',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  flex: 1, minWidth: 0,
+                }} title={fileName}>
+                  · {fileName}
+                </span>
+              )}
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              {/* Selected row detail */}
+              {selected != null && filtered[selected] && (
+                <div style={{ padding: '14px 16px', borderBottom: `1px solid ${DSC_CONFIG.accentBorder}` }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+                    Extracted fields
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px' }}>
+                    {DSC_CONFIG.searchableKeys.map((k) => {
+                      const v = filtered[selected][k];
+                      if (v == null || v === '') return null;
+                      return (
+                        <div key={k} style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                            {k.replace(/_/g, ' ')}
+                          </div>
+                          <div style={{
+                            fontSize: '0.82rem', color: '#1f2937', fontWeight: 600,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }} title={String(v)}>
+                            {highlight(v)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Locator strip — "exact coordinates" readout. Visible only when a
+                  row is selected and we managed to derive at least one hint. */}
+              {locator && (
+                <div style={{
+                  margin: '12px 16px 0', padding: '10px 12px',
+                  background: 'linear-gradient(90deg, rgba(5,150,105,0.10), rgba(8,145,178,0.06))',
+                  border: `1px solid ${DSC_CONFIG.accentBorder}`, borderRadius: 10,
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  fontSize: '0.74rem',
+                }}>
+                  <span style={{
+                    background: DSC_CONFIG.accent, color: '#fff',
+                    fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
+                    borderRadius: 6, padding: '3px 8px', fontSize: '0.62rem',
+                  }}>Locator</span>
+                  {locator.page != null && (
+                    <span style={{ color: '#065f46', fontWeight: 700 }}>
+                      📄 Page <strong style={{ color: '#0f172a' }}>{locator.page}</strong>
+                    </span>
+                  )}
+                  {locator.term && (
+                    <span style={{ color: '#065f46', fontWeight: 700 }}>
+                      🎯 Term <code style={{
+                        background: '#fff', border: `1px solid ${DSC_CONFIG.accentBorder}`,
+                        borderRadius: 4, padding: '1px 6px', color: '#0f172a',
+                        fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                      }}>{locator.term}</code>
+                      <span style={{ color: '#94a3b8', fontWeight: 500, marginLeft: 4 }}>
+                        (from {locator.termKey.replace(/_/g, ' ')})
+                      </span>
+                    </span>
+                  )}
+                  {locator.bbox && (
+                    <span style={{ color: '#065f46', fontWeight: 700, fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
+                      📐 [{Math.round(locator.bbox.x0)}, {Math.round(locator.bbox.y0)}, {Math.round(locator.bbox.x1)}, {Math.round(locator.bbox.y1)}]
+                    </span>
+                  )}
+                  <span style={{ flex: 1 }} />
+                  {previewSrc && (
+                    <a
+                      href={previewSrc}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{
+                        background: '#fff', border: `1px solid ${DSC_CONFIG.accentBorder}`,
+                        color: DSC_CONFIG.accent, fontWeight: 700,
+                        borderRadius: 6, padding: '3px 10px', textDecoration: 'none',
+                        fontSize: '0.7rem',
+                      }}
+                      title="Open the document in a new tab — the browser viewer will auto-jump to this location"
+                    >
+                      Open ↗
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Inline document preview — `key` forces the iframe to reload
+                  the URL fragment when the locator changes, so Chrome / Edge
+                  re-run their internal page-jump + highlight pipeline. */}
+              {canInlinePreview ? (
+                <iframe
+                  key={previewSrc}
+                  src={previewSrc}
+                  title="Document preview"
+                  style={{ width: '100%', height: selected != null ? 280 : 460, border: 'none', display: 'block' }}
+                />
+              ) : (
+                <div style={{
+                  padding: '40px 22px', textAlign: 'center',
+                  color: '#94a3b8', fontSize: '0.82rem',
+                }}>
+                  <DocumentTextIcon style={{ width: 36, height: 36, color: '#cbd5e1', margin: '0 auto 10px' }} />
+                  {file
+                    ? <>Inline preview not supported for <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{fileExt}</code> files.<br/>Search results above stay fully interactive.</>
+                    : <>Upload a document and run extraction to enable preview.</>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Collapsible footer — preserves "Discover more modules" without consuming space */}
+        <div style={{
+          borderTop: `1px solid ${DSC_CONFIG.accentBorder}`,
+          background: 'rgba(248,250,252,0.5)',
+        }}>
+          <button
+            onClick={() => setShowRecs((s) => !s)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 22px', border: 'none', background: 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <SparklesIcon style={{ width: 16, height: 16, color: DSC_CONFIG.accent }} />
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>
+              Discover more RAD AI modules
+            </span>
+            <span style={{ flex: 1 }} />
+            {showRecs
+              ? <ChevronUpIcon style={{ width: 16, height: 16, color: '#94a3b8' }} />
+              : <ChevronDownIcon style={{ width: 16, height: 16, color: '#94a3b8' }} />}
+          </button>
+          {showRecs && (
+            <div style={{ padding: '0 22px 18px' }}>
+              <FeatureRecommendations navigate={navigate} embedded />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1272,48 +2265,13 @@ const NonTeffMetadataPage = () => {
 // ---------------------------------------------------------------------------
 // Presentational recommendation panel — soft-coded from RECOMMENDED_FEATURES.
 // Receives navigate() so it never touches routing logic directly.
+// `embedded` strips the outer wrapper when nested inside another panel.
 // ---------------------------------------------------------------------------
-const FeatureRecommendations = ({ navigate }) => (
-  <div className="nt-section" style={{ animationDelay: '0.25s', marginTop: 28 }}>
-    <div style={{
-      background: 'rgba(255,255,255,0.78)', backdropFilter: 'blur(10px)',
-      border: '1px solid rgba(5,150,105,0.14)', borderRadius: 18,
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '16px 22px',
-        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-        background: 'linear-gradient(90deg, rgba(5,150,105,0.1), rgba(8,145,178,0.07))',
-        borderBottom: '1px solid rgba(5,150,105,0.1)',
-      }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: 'linear-gradient(135deg, #059669, #0891b2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
-        }}>
-          <SparklesIcon style={{ width: 20, height: 20, color: '#fff' }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
-            Discover more RAD AI modules
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-            Extracted metadata flows straight into these connected tools — one click away.
-          </div>
-        </div>
-        <span style={{
-          background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(5,150,105,0.2)',
-          borderRadius: 999, padding: '4px 12px',
-          fontSize: '0.65rem', fontWeight: 700, color: '#047857', letterSpacing: 0.6,
-        }}>
-          RECOMMENDED FOR YOU
-        </span>
-      </div>
-
-      {/* Category groups */}
-      <div style={{ padding: '18px 22px 22px' }}>
+const FeatureRecommendations = ({ navigate, embedded = false }) => {
+  // Soft-coded: when embedded inside another panel (e.g. DocumentSearchCanvas
+  // collapsible footer), skip the outer card chrome and header strip.
+  const Body = (
+    <div style={{ padding: embedded ? '4px 0 0' : '18px 22px 22px' }}>
         {RECOMMENDED_FEATURES.map((group) => (
           <div key={group.category} style={{ marginBottom: 18 }}>
             <div style={{
@@ -1403,8 +2361,52 @@ const FeatureRecommendations = ({ navigate }) => (
           💎 All modules included in your RAD AI subscription — no extra setup required.
         </div>
       </div>
+  );
+
+  if (embedded) return Body;
+
+  return (
+    <div className="nt-section" style={{ animationDelay: '0.25s', marginTop: 28 }}>
+      <div style={{
+        background: 'rgba(255,255,255,0.78)', backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(5,150,105,0.14)', borderRadius: 18,
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '16px 22px',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          background: 'linear-gradient(90deg, rgba(5,150,105,0.1), rgba(8,145,178,0.07))',
+          borderBottom: '1px solid rgba(5,150,105,0.1)',
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'linear-gradient(135deg, #059669, #0891b2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(5,150,105,0.3)',
+          }}>
+            <SparklesIcon style={{ width: 20, height: 20, color: '#fff' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+              Discover more RAD AI modules
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+              Extracted metadata flows straight into these connected tools — one click away.
+            </div>
+          </div>
+          <span style={{
+            background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(5,150,105,0.2)',
+            borderRadius: 999, padding: '4px 12px',
+            fontSize: '0.65rem', fontWeight: 700, color: '#047857', letterSpacing: 0.6,
+          }}>
+            RECOMMENDED FOR YOU
+          </span>
+        </div>
+        {Body}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default NonTeffMetadataPage;
