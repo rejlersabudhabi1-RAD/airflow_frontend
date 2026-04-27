@@ -422,6 +422,28 @@ const PressureInstrumentPage = () => {
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
                       {uploadResult.message || 'Pressure instruments detected and analyzed successfully'}
                     </p>
+                    {/* Soft-coded validator summary (returned by backend post-processor) */}
+                    {uploadResult.validation && (uploadResult.validation.dropped > 0 || uploadResult.validation.kept > 0) && (
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-3 border border-indigo-200 dark:border-indigo-800">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+                            🛡️ Validation: {uploadResult.validation.kept} kept · {uploadResult.validation.dropped} dropped
+                          </p>
+                          {uploadResult.validation.dropped > 0 && uploadResult.validation.reasons && (
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(uploadResult.validation.reasons)
+                                .filter(([reason]) => reason !== 'ok')
+                                .slice(0, 6)
+                                .map(([reason, count]) => (
+                                  <span key={reason} className="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">
+                                    {reason}: {count}
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {uploadResult.instruments_detected !== undefined && (
                       <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 mb-4">
                         <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-3">
