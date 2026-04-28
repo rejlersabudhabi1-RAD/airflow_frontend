@@ -19,7 +19,8 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import NotificationPanel from './pages/NotificationPanel'
 import UsageDashboard from './pages/UsageDashboard'
-import PIDUpload from './pages/PIDUpload'
+// SOFT-CODED: /pid/upload disabled — replaced by Engineering > Process > P&ID Verification
+// import PIDUpload from './pages/PIDUpload'
 import PIDReport from './pages/PIDReport'
 import PIDHistory from './pages/PIDHistory'
 // Soft-coded PFD Upload - Use different components based on environment
@@ -67,13 +68,13 @@ import DataGovernanceService from './pages/DataGovernanceService'
 import SecurityService from './pages/SecurityService'
 import About from './pages/About'
 import NotFound from './pages/NotFound'
-// DesignIQ Components
-import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
-import DesignIQLists from './pages/DesignIQ/DesignIQLists'
-import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
-import PFDVerification from './pages/DesignIQ/PFDVerification'
-import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
-import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
+// DesignIQ Components — SOFT-DISABLED: routes and sidebar hidden; source files untouched
+// import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
+// import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+// import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
+// import PFDVerification from './pages/DesignIQ/PFDVerification'
+// import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
+// import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
@@ -83,6 +84,7 @@ import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
+import PFDGeneratorPage from './pages/ProcessDatasheet/PFDAnalysis'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import SDVStreamsPage from './pages/ProcessDatasheet/SDVStreamsPage'
@@ -90,6 +92,9 @@ import MOVEquipmentPage from './pages/ProcessDatasheet/MOVEquipmentPage'
 import SmartDatasheetPage from './pages/ProcessDatasheet/SmartDatasheetPage'
 import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipmentDatasheet'
 import LineList from './pages/Engineering/Process/LineList'
+import EquipmentList from './pages/Engineering/Process/EquipmentList'
+import PIDVerification from './pages/Engineering/Process/PIDVerification'
+import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
 import ElectricalDocumentsHub from './pages/Engineering/Electrical/ElectricalDocumentsHub'
@@ -99,6 +104,7 @@ import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/Electric
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
 import UnifiedElectricalQualityChecker from './pages/Engineering/Electrical/UnifiedElectricalQualityChecker'
+import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartElectricalDatasheetPage'
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
@@ -109,10 +115,11 @@ import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
 // Digitization Components
 import SpecCustomizationPage from './pages/Engineering/Digitization/SpecCustomizationPage'
 import DigitizationDatasheetPage from './pages/Engineering/Digitization/DigitizationDatasheetPage'
+import NonTeffMetadataPage from './pages/Engineering/Digitization/NonTeffMetadataPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
-import PipingMaterialSpecification from './pages/Engineering/Piping/PipingMaterialSpecification'
+import ValveMTO from './pages/Engineering/Piping/ValveMTO'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -401,15 +408,17 @@ function App() {
           }
         />
         
-        {/* Feature Routes - PID Analysis */}
-        <Route
+        {/* SOFT-CODED: /pid/upload disabled — replaced by /engineering/process/pid-verification */}
+        {/* <Route
           path="pid/upload"
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDUpload />
             </ModuleProtectedRoute>
           }
-        />
+        /> */}
+        {/* Redirect old /pid/upload path to new location */}
+        <Route path="pid/upload" element={<Navigate to="/engineering/process/pid-verification" replace />} />
         <Route
           path="pid/report/:id"
           element={
@@ -571,55 +580,15 @@ function App() {
           }
         />
 
-        {/* DesignIQ Routes */}
-        <Route
-          path="designiq"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQDashboard />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/new"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQNewProject />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/lists"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQLists />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/stress-critical-line-list"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <StressCriticalLineList />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/pfd-verification"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <PFDVerification />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/projects/:id"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQProjectDetail />
-            </ModuleProtectedRoute>
-          }
-        />
+        {/* DesignIQ Routes — SOFT-DISABLED: all DesignIQ routes commented out;
+             source files in pages/DesignIQ/ are untouched and can be re-enabled here.
+        <Route path="designiq" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQDashboard /></ModuleProtectedRoute>} />
+        <Route path="designiq/new" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQNewProject /></ModuleProtectedRoute>} />
+        <Route path="designiq/lists" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQLists /></ModuleProtectedRoute>} />
+        <Route path="designiq/stress-critical-line-list" element={<ModuleProtectedRoute moduleCode="designiq"><StressCriticalLineList /></ModuleProtectedRoute>} />
+        <Route path="designiq/pfd-verification" element={<ModuleProtectedRoute moduleCode="designiq"><PFDVerification /></ModuleProtectedRoute>} />
+        <Route path="designiq/projects/:id" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQProjectDetail /></ModuleProtectedRoute>} />
+        */}
 
         {/* Procurement Routes */}
         <Route
@@ -668,19 +637,19 @@ function App() {
         <Route
           path="engineering/process/datasheet"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <ProcessDatasheetPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
-        {/* Process Data Sheet - Pump Hydraulic Calculation Sub-Page */}
+        {/* Process Data Sheet - PFD Generator from P&ID */}
         <Route
           path="engineering/process/datasheet/pfd"
           element={
-            <ProtectedRoute>
-              <ComprehensivePumpForm />
-            </ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
+              <PFDGeneratorPage />
+            </ModuleProtectedRoute>
           }
         />
 
@@ -688,9 +657,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/view/:id"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <PumpDataSheetView />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -698,26 +667,26 @@ function App() {
         <Route
           path="engineering/process/datasheet/streams"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <SDVStreamsPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />          {/* Smart Datasheet - Unified AI Tool for All 4 Datasheet Types */}
           <Route
             path="engineering/process/datasheet/smart"
             element={
-              <ProtectedRoute>
+              <ModuleProtectedRoute moduleCode="process_datasheet">
                 <SmartDatasheetPage />
-              </ProtectedRoute>
+              </ModuleProtectedRoute>
             }
           />
         {/* Process Data Sheet - MOV Equipment P&ID Upload */}
         <Route
           path="engineering/process/datasheet/equipment"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <MOVEquipmentPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -726,9 +695,9 @@ function App() {
         <Route
           path="engineering/process/datasheet/pressure-instrument"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <PressureInstrumentPage />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
@@ -736,20 +705,49 @@ function App() {
         <Route
           path="engineering/process/datasheet/equipment"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="process_datasheet">
               <ProcessEquipmentDatasheet />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
           }
         />
 
+
+        {/* P&ID Verification */}
+        <Route
+          path="engineering/process/pid-verification"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <PIDVerification />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* PFD Quality Checker */}
+        <Route
+          path="engineering/process/pfd-quality-checker"
+          element={
+            <ProtectedRoute>
+              <PFDQualityChecker />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Line List - Base Extraction (P&ID Only) */}
         <Route
           path="engineering/process/line-list"
           element={
-            <ProtectedRoute>
+            <ModuleProtectedRoute moduleCode="pid_analysis">
               <LineList />
-            </ProtectedRoute>
+            </ModuleProtectedRoute>
+          }
+        />
+        {/* Equipment List - P&ID Equipment Extraction */}
+        <Route
+          path="engineering/process/equipment-list"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <EquipmentList />
+            </ModuleProtectedRoute>
           }
         />
         {/* Critical Line List - Full Enrichment (5 Documents) */}
@@ -762,12 +760,12 @@ function App() {
           }
         />
           {/* Piping Routes */}
-          {/* Piping Material Specification - Coming Soon */}
+          {/* Valve MTO (Material Take-Off) */}
           <Route
             path="engineering/piping/pms"
             element={
               <ProtectedRoute>
-                <PipingMaterialSpecification />
+                <ValveMTO />
               </ProtectedRoute>
             }
           />
@@ -862,6 +860,15 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
+        {/* Smart Electrical Datasheet Generator - 6 Equipment Types (Transformer, DG Set, MV/LV Switchgear, AC/DC UPS) */}
+        <Route
+          path="engineering/electrical/datasheet/smart-generator"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_datasheet">
+              <SmartElectricalDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
         <Route
           path="engineering/electrical/datasheet/create"
           element={
@@ -934,6 +941,14 @@ function App() {
           element={
             <ProtectedRoute>
               <DigitizationDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/digitization/non-teff-metadata"
+          element={
+            <ProtectedRoute>
+              <NonTeffMetadataPage />
             </ProtectedRoute>
           }
         />

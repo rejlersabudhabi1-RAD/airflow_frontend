@@ -59,6 +59,8 @@ const UserManagement = ({ pageControls }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [showAccessToAllModal, setShowAccessToAllModal] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Local state - Data
@@ -87,6 +89,15 @@ const UserManagement = ({ pageControls }) => {
       '(Optional) Select an organization for all users',
       'Upload the completed CSV file'
     ]
+  };
+
+  // Soft-coded configuration for user export
+  const EXPORT_CONFIG = {
+    formats: [
+      { label: 'Export as CSV', value: 'csv', ext: 'csv' },
+      { label: 'Export as Excel', value: 'xlsx', ext: 'xlsx' },
+    ],
+    filenamePrefix: 'users_export',
   };
   
   // Local state - Forms
@@ -328,6 +339,18 @@ const UserManagement = ({ pageControls }) => {
   };
 
   // ========== LIFECYCLE: AUTHENTICATION & DATA LOADING ==========
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    if (!showExportDropdown) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-export-dropdown]')) {
+        setShowExportDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportDropdown]);
+
   useEffect(() => {
     let isMounted = true;
     
@@ -1149,6 +1172,30 @@ const UserManagement = ({ pageControls }) => {
       });
     }
   };
+
+  const handleExportUsers = async (format) => {
+    setShowExportDropdown(false);
+    setIsExporting(true);
+    try {
+      const response = await rbacService.exportUsers(format);
+      const ext = EXPORT_CONFIG.formats.find(f => f.value === format)?.ext || format;
+      const filename = `${EXPORT_CONFIG.filenamePrefix}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setNotification({ show: true, type: 'success', message: `${users.length} users exported as ${ext.toUpperCase()} successfully!` });
+    } catch (error) {
+      console.error('[Export] Export error:', error);
+      setNotification({ show: true, type: 'error', message: 'Export failed. Please try again.' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
   
   // ========== RENDER: LOADING STATE ==========
   if (!isAuthenticated || !isDataLoaded) {
@@ -1298,6 +1345,62 @@ const UserManagement = ({ pageControls }) => {
               </svg>
               Bulk Upload
             </button>
+
+            {/* Export Users Dropdown */}
+            <div className="relative" data-export-dropdown>
+              <button
+                onClick={() => setShowExportDropdown(prev => !prev)}
+                disabled={isExporting}
+                className={`group relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white overflow-hidden shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed
+                  ${isExporting
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-400/30 hover:shadow-emerald-400/50 hover:-translate-y-0.5'}`}
+              >
+                {/* animated shine */}
+                <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-500 bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12 pointer-events-none" />
+                {isExporting ? (
+                  <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+                <span>{isExporting ? 'Exporting…' : 'Export Users'}</span>
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${showExportDropdown ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showExportDropdown && (
+                <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-[fadeDown_0.15s_ease-out]">
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Choose Format</p>
+                  </div>
+                  {EXPORT_CONFIG.formats.map(({ label, value, ext }) => (
+                    <button
+                      key={value}
+                      onClick={() => handleExportUsers(value)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 transition-colors group"
+                    >
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-transform duration-150 group-hover:scale-110
+                        ${ext === 'csv' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                        {ext?.toUpperCase()}
+                      </span>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-800 group-hover:text-emerald-700 transition-colors">{label}</p>
+                        <p className="text-xs text-gray-400">{ext === 'csv' ? 'Comma-separated values' : 'Excel workbook (.xlsx)'}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => setShowAccessToAllModal(true)}

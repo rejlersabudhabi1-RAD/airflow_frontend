@@ -15,7 +15,8 @@ import {
   DocumentTextIcon,
   TableCellsIcon,
   DocumentChartBarIcon,
-  CircleStackIcon
+  CircleStackIcon,
+  DocumentMagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 
 // SOFT-CODED: P&ID Feature Naming Configuration
@@ -42,26 +43,53 @@ export const ENGINEERING_DISCIPLINES = {
     gradient: 'from-blue-500 to-blue-600',
     order: 1,
     subFeatures: [
+      // SOFT-CODED: Old /pid/upload sidebar entry removed — replaced by pid-verification below
+      // {
+      //   id: 'pid',
+      //   name: PID_NAMING_CONFIG.displayName,
+      //   fullName: PID_NAMING_CONFIG.fullName,
+      //   icon: DocumentChartBarIcon,
+      //   path: '/pid/upload',
+      //   description: PID_NAMING_CONFIG.shortDescription,
+      //   moduleCode: 'pid_analysis',
+      //   badge: 'AI'
+      // },
+      // SOFT-CODED: P&ID Verification feature entry — add/remove here only
+      // SOFT-CODED: display name changed from 'P&ID Verification' → 'P&ID QC'
       {
-        id: 'pid',
-        name: PID_NAMING_CONFIG.displayName,
-        fullName: PID_NAMING_CONFIG.fullName,
+        id: 'pidVerification',
+        name: 'P&ID QC',
+        fullName: 'P&ID Quality Control',
+
         icon: DocumentChartBarIcon,
-        path: '/pid/upload',
-        description: PID_NAMING_CONFIG.shortDescription,
+        path: '/engineering/process/pid-verification',
+        description: 'AI-powered P&ID drawing verification and tag validation',
         moduleCode: 'pid_analysis',
-        badge: 'AI'
-      },
-      {
-        id: 'pfdVerification',
-        name: 'PFD Verification',
-        fullName: 'Process Flow Diagram Verification',
-        icon: DocumentTextIcon,
-        path: '/designiq/pfd-verification',
-        description: 'AI-powered PFD design verification with reference documents',
-        moduleCode: 'designiq',
         badge: 'NEW'
       },
+      // SOFT-CODED: PFD Quality Checker — deterministic rule engine
+      // SOFT-CODED: display name changed from 'PFD Quality Checker' → 'PFD QC'
+      {
+        id: 'pfdQualityChecker',
+        name: 'PFD QC',
+        fullName: 'PFD Quality Control',
+        icon: DocumentChartBarIcon,
+        path: '/engineering/process/pfd-quality-checker',
+        description: 'Deterministic PFD quality checks — equipment tags, streams, title block & safety',
+        moduleCode: 'pfd_quality',
+        badge: 'NEW'
+      },
+      // SOFT-CODED: PFD Verification disabled — source files preserved
+      // {
+      //   id: 'pfdVerification',
+      //   name: 'PFD Verification',
+      //   fullName: 'Process Flow Diagram Verification',
+      //   icon: DocumentTextIcon,
+      //   path: '/designiq/pfd-verification',
+      //   description: 'AI-powered PFD design verification with reference documents',
+      //   moduleCode: 'designiq',
+      //   badge: 'NEW'
+      // },
       {
         id: 'processDataSheet',
         name: 'Datasheets',
@@ -79,6 +107,17 @@ export const ENGINEERING_DISCIPLINES = {
         path: '/engineering/process/line-list',
         description: 'Extract 8 base columns from P&ID (P&ID-only, no enrichment)',
         moduleCode: 'pid_analysis'
+      }
+      ,
+      {
+        id: 'equipmentList',
+        name: 'Equipment List',
+        fullName: 'Equipment List - P&ID Extraction',
+        icon: TableCellsIcon,
+        path: '/engineering/process/equipment-list',
+        description: 'Extract equipment tags (Vessels, Pumps, HE, Reactors…) from P&ID with type classification and line connections',
+        moduleCode: 'pid_analysis',
+        badge: 'NEW'
       }
     ]
   },
@@ -105,11 +144,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'pms',
-        name: 'PMS',
-        fullName: 'Piping Material Specification',
+        name: 'Valve MTO',
+        fullName: 'Valve Material Take-Off',
         icon: TableCellsIcon,
         path: '/engineering/piping/pms',
-        description: 'Piping material specification management',
+        description: 'Valve material take-off list — quantities, specs and project rollup',
         moduleCode: 'piping_pms',
         badge: 'New'
       },
@@ -267,6 +306,16 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'Digital transformation datasheets and documentation',
         moduleCode: 'digitization_datasheet',
         badge: 'New'
+      },
+      {
+        id: 'nonTeffMetadata',
+        name: 'SPF-NON-TEF',
+        fullName: 'Non-TEF Metadata Generator',
+        icon: DocumentMagnifyingGlassIcon,
+        path: '/engineering/digitization/non-teff-metadata',
+        description: 'Extract metadata from Non-TEFF documents (PDF, Excel, Word, AutoCAD)',
+        moduleCode: 'non_teff_metadata',
+        badge: 'AI'
       }
     ]
   }

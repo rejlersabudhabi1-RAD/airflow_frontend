@@ -20,6 +20,13 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, CartesianGrid, Legend,
 } from 'recharts';
+import {
+  ChartBarIcon, UsersIcon, BoltIcon, BanknotesIcon, TrophyIcon,
+  ArrowTrendingUpIcon, ArrowTrendingDownIcon, SparklesIcon,
+  PlusIcon, ArrowDownTrayIcon,
+  PresentationChartLineIcon, RocketLaunchIcon, SignalIcon,
+  BuildingOffice2Icon,
+} from '@heroicons/react/24/outline';
 import internalSalesService from '../services/internalSales.service';
 import salesService          from '../services/sales.service';
 
@@ -122,25 +129,71 @@ const safeArr  = v => (Array.isArray(v) ? v : v?.results ?? v?.data ?? []);
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ MICRO-COMPONENTS (shared across all tabs)
 // ─────────────────────────────────────────────────────────────────────────────
-function KpiCard({ icon, label, value, sub, pulse }) {
+
+// Soft-coded KPI accent palette — cycles based on `tone` prop
+const KPI_TONES = {
+  indigo:  { from: 'from-indigo-500',  to: 'to-purple-600',  icon: 'bg-indigo-50 text-indigo-600',  bar: 'bg-gradient-to-r from-indigo-500 to-purple-500' },
+  emerald: { from: 'from-emerald-500', to: 'to-teal-600',    icon: 'bg-emerald-50 text-emerald-600', bar: 'bg-gradient-to-r from-emerald-500 to-teal-500' },
+  amber:   { from: 'from-amber-500',   to: 'to-orange-600',  icon: 'bg-amber-50 text-amber-600',    bar: 'bg-gradient-to-r from-amber-500 to-orange-500' },
+  rose:    { from: 'from-rose-500',    to: 'to-pink-600',    icon: 'bg-rose-50 text-rose-600',      bar: 'bg-gradient-to-r from-rose-500 to-pink-500' },
+  sky:     { from: 'from-sky-500',     to: 'to-blue-600',    icon: 'bg-sky-50 text-sky-600',        bar: 'bg-gradient-to-r from-sky-500 to-blue-500' },
+  violet:  { from: 'from-violet-500',  to: 'to-fuchsia-600', icon: 'bg-violet-50 text-violet-600',  bar: 'bg-gradient-to-r from-violet-500 to-fuchsia-500' },
+};
+
+function KpiCard({ icon, label, value, sub, pulse, tone = 'indigo', delta, Icon }) {
+  const t = KPI_TONES[tone] ?? KPI_TONES.indigo;
+  const deltaUp = typeof delta === 'number' && delta > 0;
+  const deltaDown = typeof delta === 'number' && delta < 0;
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-start gap-4">
-      <div className={`text-3xl mt-0.5 select-none ${pulse ? 'animate-pulse' : ''}`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{label}</p>
-        <p className="text-2xl font-black text-gray-900 leading-none">{value}</p>
-        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+      {/* Top accent bar */}
+      <div className={`absolute inset-x-0 top-0 h-1 ${t.bar}`} />
+      <div className="p-5 flex items-start gap-4">
+        <div className={`h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 ${t.icon} ${pulse ? 'animate-pulse' : ''} group-hover:scale-105 transition-transform`}>
+          {Icon ? <Icon className="h-5 w-5" /> : <span className="text-xl select-none">{icon}</span>}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{label}</p>
+          <p className="text-2xl font-black text-gray-900 leading-none tabular-nums">{value}</p>
+          <div className="flex items-center gap-2 mt-1.5">
+            {sub && <p className="text-xs text-gray-400 truncate">{sub}</p>}
+            {deltaUp && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                <ArrowTrendingUpIcon className="h-3 w-3" />{Math.abs(delta).toFixed(1)}%
+              </span>
+            )}
+            {deltaDown && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-full">
+                <ArrowTrendingDownIcon className="h-3 w-3" />{Math.abs(delta).toFixed(1)}%
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function SectionHeader({ icon, title, subtitle }) {
+function SectionHeader({ icon, title, subtitle, Icon, accent = 'indigo' }) {
+  const accentBg = {
+    indigo:  'bg-indigo-50 text-indigo-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber:   'bg-amber-50 text-amber-600',
+    rose:    'bg-rose-50 text-rose-600',
+    sky:     'bg-sky-50 text-sky-600',
+    violet:  'bg-violet-50 text-violet-600',
+  }[accent] ?? 'bg-indigo-50 text-indigo-600';
   return (
     <div className="flex items-center gap-3 mb-4">
-      <span className="text-2xl select-none">{icon}</span>
+      {Icon ? (
+        <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${accentBg}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      ) : (
+        <span className="text-2xl select-none">{icon}</span>
+      )}
       <div>
-        <h2 className="text-lg font-bold text-gray-900 leading-tight">{title}</h2>
+        <h2 className="text-base font-bold text-gray-900 leading-tight">{title}</h2>
         {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
       </div>
     </div>
@@ -175,6 +228,127 @@ function ErrorBanner({ message, onRetry }) {
         </button>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ③b UNIQUE WIDGETS — SalesHealthRing + QuickActionsBar + MiniSparkline
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Soft-coded health-score weights — tune without code change
+const HEALTH_WEIGHTS = {
+  winRate:       0.35,   // pipeline win %
+  pipelineFill:  0.25,   // deals > 0 normalised
+  activity:      0.20,   // active users today / total users
+  clientHealth:  0.20,   // avg top-client health
+};
+
+function computeSalesHealth({ pipeline, overview, clients, activeNow }) {
+  const winRate   = Math.min(100, pipeline?.win_rate ?? 0);
+  const deals     = pipeline?.total_deals ?? pipeline?.deal_count ?? 0;
+  const pipelineFill = Math.min(100, deals * 5);  // 20 deals = 100%
+  const totalUsers = overview?.total_users || 1;
+  const activityPct = Math.min(100, (activeNow?.length ?? 0) / totalUsers * 100 * 10);
+  const topClients = clients?.top ?? [];
+  const avgClientHealth = topClients.length
+    ? topClients.reduce((s, c) => s + (c.health_score ?? 0), 0) / topClients.length
+    : 50;
+  const score =
+    winRate        * HEALTH_WEIGHTS.winRate      +
+    pipelineFill   * HEALTH_WEIGHTS.pipelineFill +
+    activityPct    * HEALTH_WEIGHTS.activity     +
+    avgClientHealth* HEALTH_WEIGHTS.clientHealth;
+  return Math.round(Math.max(0, Math.min(100, score)));
+}
+
+function SalesHealthRing({ score, label = 'Sales Health' }) {
+  const R = 54, C = 2 * Math.PI * R;
+  const dash = (score / 100) * C;
+  const tier = score >= 75 ? { txt: 'Excellent', cls: 'text-emerald-600', stroke: '#10b981', bg: 'from-emerald-500 to-teal-500' }
+             : score >= 50 ? { txt: 'Healthy',   cls: 'text-sky-600',     stroke: '#0ea5e9', bg: 'from-sky-500 to-blue-500' }
+             : score >= 25 ? { txt: 'Needs Focus', cls: 'text-amber-600', stroke: '#f59e0b', bg: 'from-amber-500 to-orange-500' }
+             :               { txt: 'Critical',  cls: 'text-rose-600',    stroke: '#ef4444', bg: 'from-rose-500 to-red-500' };
+  return (
+    <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-5 flex items-center gap-5">
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${tier.bg}`} />
+      <div className="relative h-32 w-32 flex-shrink-0">
+        <svg viewBox="0 0 128 128" className="h-32 w-32 -rotate-90">
+          <circle cx="64" cy="64" r={R} fill="none" stroke="#f1f5f9" strokeWidth="10" />
+          <circle
+            cx="64" cy="64" r={R} fill="none"
+            stroke={tier.stroke} strokeWidth="10" strokeLinecap="round"
+            strokeDasharray={`${dash} ${C}`}
+            style={{ transition: 'stroke-dasharray 900ms ease' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-3xl font-black text-gray-900 tabular-nums">{score}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">score</span>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
+        <p className={`text-xl font-black mt-0.5 ${tier.cls}`}>{tier.txt}</p>
+        <p className="text-xs text-gray-500 mt-1.5 leading-snug">
+          Composite of win rate, pipeline depth,<br/>activity & client health.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Soft-coded quick actions — add an entry, it shows up; nothing else to wire
+const QUICK_ACTIONS = [
+  { key: 'new_deal',     label: 'New Deal',     Icon: PlusIcon,           tone: 'indigo',  tab: 'pipeline' },
+  { key: 'new_client',   label: 'New Client',   Icon: BuildingOffice2Icon, tone: 'violet',  tab: 'pipeline' },
+  { key: 'export',       label: 'Export CSV',   Icon: ArrowDownTrayIcon,  tone: 'emerald', tab: 'pipeline' },
+  { key: 'insights',     label: 'AI Insights',  Icon: SparklesIcon,       tone: 'amber',   tab: 'pipeline' },
+  { key: 'usage',        label: 'Platform Usage', Icon: PresentationChartLineIcon, tone: 'sky', tab: 'usage' },
+];
+
+function QuickActionsBar({ onAction, activeTab }) {
+  const toneBg = {
+    indigo:  'hover:bg-indigo-50  hover:text-indigo-700  hover:border-indigo-200',
+    violet:  'hover:bg-violet-50  hover:text-violet-700  hover:border-violet-200',
+    emerald: 'hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200',
+    amber:   'hover:bg-amber-50   hover:text-amber-700   hover:border-amber-200',
+    sky:     'hover:bg-sky-50     hover:text-sky-700     hover:border-sky-200',
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <BoltIcon className="h-4 w-4 text-indigo-500" />
+        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Quick Actions</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {QUICK_ACTIONS.map(a => (
+          <button
+            key={a.key}
+            onClick={() => onAction?.(a)}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 transition-all ${toneBg[a.tone]}`}
+            title={`Go to ${a.label}`}
+          >
+            <a.Icon className="h-4 w-4" />
+            {a.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Compact inline sparkline (pure SVG — no deps)
+function MiniSparkline({ data = [], color = '#6366f1', height = 28, width = 88 }) {
+  if (!data.length) return null;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const span = Math.max(1, max - min);
+  const step = data.length > 1 ? width / (data.length - 1) : width;
+  const points = data.map((v, i) => `${i * step},${height - ((v - min) / span) * height}`).join(' ');
+  return (
+    <svg width={width} height={height} className="inline-block">
+      <polyline fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" points={points} />
+    </svg>
   );
 }
 
@@ -1134,23 +1308,44 @@ function TabContent({ tab, state, actions }) {
   if (tab === 'overview') {
     const topDiscipline  = disciplines[0]?.discipline_label ?? '—';
     const byStage        = pipeline?.by_stage ?? [];
+    const healthScore    = computeSalesHealth({ pipeline, overview, clients, activeNow });
+    const trendReq       = (trends ?? []).map(t => t.requests || 0);
+    const trendUsers     = (trends ?? []).map(t => t.users || 0);
 
     return (
       <div className="space-y-6">
 
-        {/* KPI row — usage + pipeline */}
+        {/* Health Ring + Quick Actions (2-col hero strip) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <SalesHealthRing score={healthScore} label="Sales Health Score" />
+          <div className="lg:col-span-2">
+            <QuickActionsBar onAction={actions.onQuickAction} activeTab={tab} />
+          </div>
+        </div>
+
+        {/* KPI row — usage + pipeline (icon-based, tone-coded) */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <KpiCard icon="🟢" label="Active Now"     value={fmt(activeNow.length)}                     sub="last 15 min" pulse />
-          <KpiCard icon="👤" label="Users Today"    value={fmt(overview?.today_users)}                sub={`${fmt(overview?.total_users)} in period`} />
-          <KpiCard icon="⚡" label="Requests"       value={fmt(overview?.today_requests)}             sub={`${fmt(overview?.total_requests)} in period`} />
-          <KpiCard icon="💰" label="Pipeline Value" value={fmtCurr(pipeline?.total_pipeline_value ?? pipeline?.total_value)} sub={`${fmt(pipeline?.total_deals ?? pipeline?.deal_count)} deals`} />
-          <KpiCard icon="🏆" label="Win Rate"       value={pct(pipeline?.win_rate ?? 0)}              sub={topDiscipline} />
+          <KpiCard Icon={SignalIcon}    tone="emerald" label="Active Now"     value={fmt(activeNow.length)}                                           sub="last 15 min" pulse />
+          <KpiCard Icon={UsersIcon}     tone="sky"     label="Users Today"    value={fmt(overview?.today_users)}                                     sub={`${fmt(overview?.total_users)} in period`} />
+          <KpiCard Icon={BoltIcon}      tone="indigo"  label="Requests"       value={fmt(overview?.today_requests)}                                  sub={`${fmt(overview?.total_requests)} in period`} />
+          <KpiCard Icon={BanknotesIcon} tone="violet"  label="Pipeline Value" value={fmtCurr(pipeline?.total_pipeline_value ?? pipeline?.total_value)} sub={`${fmt(pipeline?.total_deals ?? pipeline?.deal_count)} deals`} />
+          <KpiCard Icon={TrophyIcon}    tone="amber"   label="Win Rate"       value={pct(pipeline?.win_rate ?? 0)}                                   sub={topDiscipline} />
         </div>
 
         {/* Trends + Active Now */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <SectionHeader icon="📈" title="Usage Trends" subtitle="Daily requests & active users" />
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-start justify-between mb-4">
+              <SectionHeader Icon={PresentationChartLineIcon} title="Usage Trends" subtitle="Daily requests & active users" accent="indigo" />
+              {trendReq.length > 1 && (
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500"/>Requests</span>
+                  <MiniSparkline data={trendReq} color="#6366f1" />
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"/>Users</span>
+                  <MiniSparkline data={trendUsers} color="#10b981" />
+                </div>
+              )}
+            </div>
             {trends.length === 0 ? (
               <EmptyState icon="📈" message="Not enough data to show trends yet." />
             ) : (
@@ -1178,21 +1373,24 @@ function TabContent({ tab, state, actions }) {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col">
-            <SectionHeader icon="🟢" title="Active Right Now" subtitle="Users active in last 15 min" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">
+            <SectionHeader Icon={SignalIcon} title="Active Right Now" subtitle={`${activeNow.length} user${activeNow.length !== 1 ? 's' : ''} · last 15 min`} accent="emerald" />
             <div className="flex-1 overflow-y-auto space-y-2 max-h-64">
               {activeNow.length === 0 ? (
                 <EmptyState icon="😴" message="No users active right now" />
               ) : activeNow.map((u, i) => (
-                <div key={u.user_email ?? i} className="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 hover:bg-indigo-50 transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">
-                    {u.user_full_name?.[0] || u.user_email?.[0] || '?'}
+                <div key={u.user_email ?? i} className="flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-emerald-50/50 to-transparent hover:from-emerald-50 hover:to-emerald-50/30 transition-all">
+                  <div className="relative flex-shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                      {u.user_full_name?.[0] || u.user_email?.[0] || '?'}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{u.user_full_name || u.user_email}</p>
                     <p className="text-xs text-gray-500 truncate">{u.last_discipline}</p>
                   </div>
-                  <span className="ml-auto text-xs text-gray-400 font-medium flex-shrink-0">{fmt(u.requests)} req</span>
+                  <span className="ml-auto text-xs text-gray-400 font-medium flex-shrink-0 tabular-nums">{fmt(u.requests)} req</span>
                 </div>
               ))}
             </div>
@@ -1200,8 +1398,8 @@ function TabContent({ tab, state, actions }) {
         </div>
 
         {/* Pipeline snapshot (bar chart, soft-rendered from CONFIG.pipelineStages) */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <SectionHeader icon="🚀" title="Pipeline Snapshot" subtitle="Deal counts by stage" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <SectionHeader Icon={RocketLaunchIcon} title="Pipeline Snapshot" subtitle="Deal counts by stage" accent="violet" />
           {pipelineError ? <ErrorBanner message={pipelineError} onRetry={fetchPipeline} /> :
            byStage.length === 0 ? <EmptyState icon="🚀" message="No pipeline data. Visit Sales Pipeline tab to manage deals." /> : (
             <ResponsiveContainer width="100%" height={180}>
@@ -1223,8 +1421,8 @@ function TabContent({ tab, state, actions }) {
 
         {/* AI Insights preview */}
         {aiInsights.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <SectionHeader icon="🤖" title="AI Insights" subtitle="Top recommendations from your CRM engine" />
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <SectionHeader Icon={SparklesIcon} title="AI Insights" subtitle="Top recommendations from your CRM engine" accent="amber" />
             <AIInsightsPanel insights={aiInsights.slice(0, 3)} />
           </div>
         )}
@@ -1608,73 +1806,86 @@ export default function InternalSalesDashboard() {
     pipeline, clients, aiInsights, activities,
     pipelineLoading, pipelineError,
   };
-  const tabActions = { setUserSearch, setEvtCategory, fetchPipeline, fetchUsage };
+  const onQuickAction = useCallback((action) => {
+    // Soft-routed quick-action: jump to the relevant tab
+    if (action?.tab) setActiveTab(action.tab);
+  }, []);
+  const tabActions = { setUserSearch, setEvtCategory, fetchPipeline, fetchUsage, onQuickAction };
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="w-full min-h-full bg-gray-50">
+    <div className="w-full min-h-full bg-gradient-to-br from-slate-50 via-indigo-50/20 to-purple-50/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        {/* ── Header card ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* ── Hero banner (gradient, icon-based) ── */}
+        <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 rounded-2xl shadow-lg overflow-hidden">
+          {/* Decorative blur blobs */}
+          <div className="absolute -top-12 -right-12 h-44 w-44 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 left-1/3 h-56 w-56 rounded-full bg-fuchsia-400/20 blur-3xl pointer-events-none" />
 
-            {/* Logo + title */}
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl shadow-md select-none">
-                📊
-              </div>
-              <div>
-                <h1 className="text-2xl font-black text-gray-900 leading-tight">
-                  Internal Sales Intelligence
-                </h1>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  Platform analytics · CRM pipeline · live user activity
-                </p>
-              </div>
-            </div>
+          <div className="relative px-6 py-6">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
 
-            {/* Time range + live indicator */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
-                {CONFIG.timeRanges.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => setRange(key)}
-                    className={`px-4 py-2 text-sm font-semibold transition-colors ${
-                      range === key ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="text-right text-xs text-gray-400">
-                <div className="flex items-center gap-1.5 justify-end">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
-                  Live
+              {/* Logo + title */}
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
+                  <ChartBarIcon className="h-7 w-7 text-white" />
                 </div>
-                <div>{lastRefresh.toLocaleTimeString()}</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight tracking-tight">
+                      Sales Intelligence
+                    </h1>
+                    <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 backdrop-blur text-[10px] font-bold text-white ring-1 ring-white/20 uppercase tracking-wider">
+                      <SparklesIcon className="h-3 w-3" /> AI · Live
+                    </span>
+                  </div>
+                  <p className="text-sm text-white/80 mt-0.5">
+                    Platform analytics · CRM pipeline · live user activity
+                  </p>
+                </div>
+              </div>
+
+              {/* Time range + live indicator */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex rounded-xl overflow-hidden bg-white/10 backdrop-blur ring-1 ring-white/20">
+                  {CONFIG.timeRanges.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setRange(key)}
+                      className={`px-3.5 py-1.5 text-xs font-bold transition-all ${
+                        range === key ? 'bg-white text-indigo-700 shadow-sm' : 'text-white/80 hover:bg-white/10'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur ring-1 ring-white/20">
+                  <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse inline-block" />
+                  <span className="text-[11px] font-bold text-white">LIVE</span>
+                  <span className="text-[10px] text-white/70 ml-1 tabular-nums">{lastRefresh.toLocaleTimeString()}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Tab bar — auto-rendered from CONFIG.tabs */}
-          <div className="flex gap-1 mt-5 pt-4 border-t border-gray-100">
-            {CONFIG.tabs.map(({ key, label, icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all select-none ${
-                  activeTab === key
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <span>{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
+            {/* Tab bar — segmented, glass */}
+            <div className="flex gap-1 mt-5 p-1 rounded-xl bg-white/10 backdrop-blur ring-1 ring-white/20 w-fit">
+              {CONFIG.tabs.map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-all select-none ${
+                    activeTab === key
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-white/85 hover:bg-white/10'
+                  }`}
+                >
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

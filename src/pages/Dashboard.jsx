@@ -308,6 +308,69 @@ const PRIORITY_COLORS = {
   Low:      'bg-gray-100 text-gray-600',
 }
 
+// ── Soft-coded layout dimensions — tune here, no JSX changes needed ────────────
+// maxWidth:       overall page cap — '1600px' fills wide monitors without overflow
+// sidebarWidth:   right panel fixed width
+// heroColSpan:    hero card col-span inside the top 5-col grid (1–4; donut takes 5-heroColSpan)
+// outerPaddingX:  horizontal gutters (Tailwind classes)
+// outerPaddingY:  vertical top/bottom padding (Tailwind class)
+const LAYOUT = {
+  maxWidth:      '1600px',
+  sidebarWidth:  '300px',
+  heroColSpan:   3,           // hero card takes 3 of 5 cols; donut gets 2
+  outerPaddingX: 'px-4 sm:px-8 lg:px-12 xl:px-16',
+  outerPaddingY: 'py-8',
+  sectionGap:    'gap-7',
+  innerGap:      'space-y-6',
+}
+
+// ── Soft-coded animation config — adjust durations/delays without touching JSX ──
+// Increase staggerMs to slow card entrance; set enabled:false to disable all
+const ANIM = {
+  enabled:       true,
+  staggerMs:     80,    // ms between each staggered card
+  fadeInMs:      520,   // fade + slide-up duration for section entry
+  pulseMs:       2800,  // hero number counter pulse period
+  shimmerMs:     2200,  // shimmer sweep on hero card
+  kpiHoverScale: 1.025, // scale factor on KPI card hover
+}
+
+// Inject keyframes once (idempotent)
+const _STYLE_ID = 'radai-dash-anim'
+if (typeof document !== 'undefined' && !document.getElementById(_STYLE_ID)) {
+  const s = document.createElement('style')
+  s.id = _STYLE_ID
+  s.textContent = `
+    @keyframes radai-fadein {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+    @keyframes radai-shimmer {
+      0%   { transform: translateX(-100%) skewX(-15deg); }
+      100% { transform: translateX(220%)  skewX(-15deg); }
+    }
+    @keyframes radai-scalein {
+      from { opacity: 0; transform: scale(0.94); }
+      to   { opacity: 1; transform: scale(1);    }
+    }
+    @keyframes radai-slidein-right {
+      from { opacity: 0; transform: translateX(22px); }
+      to   { opacity: 1; transform: translateX(0);    }
+    }
+    @keyframes radai-countup {
+      0%   { opacity: 0.3; transform: scale(0.92); }
+      60%  { opacity: 1;   transform: scale(1.04); }
+      100% { opacity: 1;   transform: scale(1);    }
+    }
+    .radai-fadein   { animation: radai-fadein  ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
+    .radai-scalein  { animation: radai-scalein ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
+    .radai-slidein  { animation: radai-slidein-right ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
+    .radai-countup  { animation: radai-countup ${ANIM.pulseMs}ms ease both; }
+    .radai-kpi:hover { transform: scale(${ANIM.kpiHoverScale}) translateY(-2px); box-shadow: 0 6px 24px -4px rgba(249,115,22,0.15); transition: transform 0.22s ease, box-shadow 0.22s ease; }
+  `
+  document.head.appendChild(s)
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 const Dashboard = () => {
   const { user }              = useSelector(s => s.auth)
@@ -500,7 +563,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #f8f7f4 0%, #f2f1ee 60%, #ede9e3 100%)' }}>
-      <div className="max-w-[1300px] mx-auto px-4 sm:px-6 py-7 space-y-5">
+      <div className={`mx-auto ${LAYOUT.outerPaddingX} ${LAYOUT.outerPaddingY} ${LAYOUT.innerGap}`} style={{ maxWidth: LAYOUT.maxWidth }}>
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
@@ -548,21 +611,33 @@ const Dashboard = () => {
         </div>
 
         {/* ── Main layout: left + right sidebar ────────────────────────────── */}
-        <div className="flex gap-5 items-start">
+        <div className={`flex ${LAYOUT.sectionGap} items-start`}>
 
           {/* ── Left content ─────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-5">
+          <div className={`flex-1 min-w-0 ${LAYOUT.innerGap}`}>
 
             {/* Top row: Hero card + Donut card */}
-            <div className="grid grid-cols-5 gap-5">
+            <div className={`grid grid-cols-5 gap-5 ${ANIM.enabled ? 'radai-fadein' : ''}`}
+              style={ANIM.enabled ? { animationDelay: `${ANIM.staggerMs}ms` } : {}}>
 
               {/* Hero gradient card */}
-              <div className="col-span-3 relative overflow-hidden rounded-2xl p-6 text-white shadow-lg shadow-orange-200/40"
+              <div className={`col-span-${LAYOUT.heroColSpan} relative overflow-hidden rounded-2xl p-6 text-white shadow-lg shadow-orange-200/40`}
                 style={{ background: 'linear-gradient(135deg, #ea580c 0%, #f97316 30%, #e11d48 75%, #db2777 100%)' }}>
 
                 {/* Blurred glow blobs */}
                 <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full opacity-20" style={{ background: 'radial-gradient(circle, white, transparent)' }} />
                 <div className="absolute -bottom-6 left-10 w-28 h-28 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #fbbf24, transparent)' }} />
+                {/* Shimmer sweep — soft-coded via ANIM.shimmerMs */}
+                {ANIM.enabled && (
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, width: '40%', height: '100%',
+                      background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%)',
+                      animation: `radai-shimmer ${ANIM.shimmerMs}ms ease-in-out infinite`,
+                      animationDelay: '1.2s',
+                    }} />
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="flex items-start justify-between mb-1">
@@ -612,7 +687,7 @@ const Dashboard = () => {
               </div>
 
               {/* Donut card */}
-              <div className="col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
+              <div className={`col-span-${5 - LAYOUT.heroColSpan} bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col`}>
                 <div className="flex items-start justify-between mb-1">
                   <div>
                     <span className="text-sm font-bold text-gray-800">Document Pipeline</span>
@@ -647,7 +722,8 @@ const Dashboard = () => {
             </div>
 
             {/* ── AI Insight chips ──────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid grid-cols-3 gap-3 ${ANIM.enabled ? 'radai-fadein' : ''}`}
+              style={ANIM.enabled ? { animationDelay: `${ANIM.staggerMs * 2}ms` } : {}}>
               {AI_INSIGHTS.map(ins => (
                 <div key={ins.id}
                   className={`relative overflow-hidden rounded-xl p-3.5 bg-gradient-to-br ${ins.color} border ${ins.border} flex items-start gap-3`}
@@ -668,7 +744,8 @@ const Dashboard = () => {
             </div>
 
             {/* ── Feature Activity / Roadmap ─────────────────────────────── */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ${ANIM.enabled ? 'radai-fadein' : ''}`}
+              style={ANIM.enabled ? { animationDelay: `${ANIM.staggerMs * 3}ms` } : {}}>
 
               {/* Tabs */}
               <div className="px-5 pt-4 pb-0 flex items-center gap-6 border-b border-gray-100">
@@ -804,7 +881,9 @@ const Dashboard = () => {
                   {/* KPI cards row */}
                   <div className="grid grid-cols-4 gap-3">
                     {kpiCards.map((kpi, i) => (
-                      <div key={i} className="bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3.5 border border-gray-100 hover:border-orange-200 transition">
+                      <div key={i}
+                        className={`radai-kpi bg-gradient-to-br from-white to-gray-50/80 rounded-xl p-3.5 border border-gray-100 hover:border-orange-200 transition ${ANIM.enabled ? 'radai-scalein' : ''}`}
+                        style={ANIM.enabled ? { animationDelay: `${i * ANIM.staggerMs}ms` } : {}}>
                         <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{kpi.label}</div>
                         <div className="text-xl font-extrabold text-gray-900 leading-none mb-1">{kpi.value}</div>
                         <div className={`text-[10px] font-semibold ${kpi.good ? 'text-green-600' : 'text-red-500'}`}>{kpi.sub}</div>
@@ -1000,8 +1079,11 @@ const Dashboard = () => {
 
             {/* ── Quick Launch ─────────────────────────────────────────────── */}
             {(loading || featureActivity.length > 0) && (
-              <div className="rounded-2xl overflow-hidden border border-orange-100 shadow-sm"
-                style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #fff1e6 50%, #fce7f3 100%)' }}>
+              <div className={`rounded-2xl overflow-hidden border border-orange-100 shadow-sm ${ANIM.enabled ? 'radai-fadein' : ''}`}
+                style={{
+                  background: 'linear-gradient(135deg, #fff7ed 0%, #fff1e6 50%, #fce7f3 100%)',
+                  ...(ANIM.enabled ? { animationDelay: `${ANIM.staggerMs * 4}ms` } : {}),
+                }}>
 
                 {/* Header */}
                 <div className="px-5 py-3.5 flex items-center justify-between border-b border-orange-100/80">
@@ -1101,7 +1183,8 @@ const Dashboard = () => {
           </div>
 
           {/* ── Right sidebar ─────────────────────────────────────────────── */}
-          <div className="w-[220px] flex-shrink-0 space-y-4">
+          <div className={`flex-shrink-0 space-y-4 ${ANIM.enabled ? 'radai-slidein' : ''}`}
+            style={{ width: LAYOUT.sidebarWidth, ...(ANIM.enabled ? { animationDelay: `${ANIM.staggerMs * 2}ms` } : {}) }}>
 
             {/* AI Model Status card */}
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 overflow-hidden">

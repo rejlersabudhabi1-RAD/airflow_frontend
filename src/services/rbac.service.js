@@ -100,6 +100,15 @@ class RBACService {
     });
   }
 
+  async exportUsers(format = 'csv') {
+    // Param is 'file_format', NOT 'format' — DRF intercepts ?format= as a content-negotiation
+    // override and raises Http404 when no renderer matches (csv/xlsx have no DRF renderer).
+    return apiService.get(`${RBAC_BASE_URL}/users/export/`, {
+      params: { file_format: format },
+      responseType: 'blob'
+    });
+  }
+
   // ==================== Roles ====================
   async getRoles() {
     return apiService.get(`${RBAC_BASE_URL}/roles/`);

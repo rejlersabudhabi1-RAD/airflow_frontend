@@ -31,7 +31,7 @@ const PipingMaterialSpecification = () => {
               mb: 1
             }}
           >
-            Piping Material Specification
+            Valve MTO
           </Typography>
           <Typography 
             variant="h5" 
@@ -62,8 +62,8 @@ const PipingMaterialSpecification = () => {
               fontStyle: 'italic'
             }}
           >
-            The PMS module will provide comprehensive piping material specification management, 
-            including material specification database, piping class management, compliance tracking, 
+            The Valve MTO module will provide comprehensive valve take-off management,
+            including a valve register, per-line quantification, compliance tracking,
             and cost estimation.
           </Typography>
         </Box>

@@ -656,7 +656,7 @@ const AdminDashboard = () => {
                         <span className="font-bold text-green-600">72%</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">P&ID Verification:</span>
+                        <span className="text-sm text-gray-600">P&ID QC:</span>{/* SOFT-CODED: renamed from 'P&ID Verification' */}
                         <span className="font-bold text-green-600">64%</span>
                       </div>
                     </div>

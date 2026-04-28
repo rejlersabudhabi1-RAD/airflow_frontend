@@ -9,11 +9,31 @@ import {
   ArrowLeft,
   FileText,
   Download,
-  Sparkles
+  Sparkles,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 import apiClient from '../../services/api.service';
 import * as XLSX from 'xlsx';
+
+// ─── Soft-coded extraction config ────────────────────────────────────────
+// Endpoint, accepted file types and provenance colours all live here so the
+// UI behaviour can be tweaked without touching the form / calculation logic.
+const PUMP_EXTRACTION_CONFIG = {
+  enabled: true,
+  endpoint: '/process-datasheet/datasheets/extract-pump-hydraulic/',
+  fileFieldName: 'pump_file',                  // multipart field name
+  acceptedTypes: '.pdf,application/pdf',
+  maxFileSizeMB: 50,
+  // Maps backend provenance -> badge styling
+  provenanceBadge: {
+    text:   { label: 'PDF text',    className: 'bg-emerald-100 text-emerald-700' },
+    vision: { label: 'AI Vision',   className: 'bg-indigo-100 text-indigo-700' },
+  },
+  // Field labels shown in the "extracted fields" summary list
+  resultListPreview: 8,
+};
 
 const PumpHydraulicPage = () => {
   const navigate = useNavigate();
@@ -123,6 +143,73 @@ const PumpHydraulicPage = () => {
 
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState('');
+
+  // ─── Soft-coded extraction state (additive to the form) ───────────────
+  const [extracting, setExtracting] = useState(false);
+  const [extractInfo, setExtractInfo] = useState(null);   // { engine, page_count, source_filename, fields, provenance, warnings }
+  const [extractError, setExtractError] = useState('');
+
+  const handlePumpExtract = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';                              // allow re-selecting the same file
+    if (!file) return;
+
+    if (file.size > PUMP_EXTRACTION_CONFIG.maxFileSizeMB * 1024 * 1024) {
+      setExtractError(`File too large (max ${PUMP_EXTRACTION_CONFIG.maxFileSizeMB} MB).`);
+      return;
+    }
+
+    setExtracting(true);
+    setExtractError('');
+    setExtractInfo(null);
+
+    try {
+      const fd = new FormData();
+      fd.append(PUMP_EXTRACTION_CONFIG.fileFieldName, file);
+      const res = await apiClient.post(
+        PUMP_EXTRACTION_CONFIG.endpoint,
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 },
+      );
+
+      const data = res.data || {};
+      if (data.status !== 'ok') {
+        setExtractError(data.message || 'Extraction failed.');
+        return;
+      }
+
+      // Merge extracted fields into the form, but never overwrite a value the
+      // user has already typed.  This keeps "manual entry" the source of truth.
+      const fields = data.fields || {};
+      setPumpFormData(prev => {
+        const merged = { ...prev };
+        Object.entries(fields).forEach(([k, v]) => {
+          if (k in merged && (merged[k] === '' || merged[k] === null || merged[k] === undefined)) {
+            merged[k] = String(v);
+          }
+        });
+        return merged;
+      });
+
+      setExtractInfo({
+        engine:          data.engine,
+        page_count:      data.page_count,
+        source_filename: data.source_filename || file.name,
+        fields,
+        provenance:      data.provenance || {},
+        warnings:        data.warnings || [],
+      });
+    } catch (e) {
+      setExtractError(
+        e?.response?.data?.message
+        || e?.response?.data?.error
+        || e.message
+        || 'Extraction failed',
+      );
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -473,7 +560,120 @@ const PumpHydraulicPage = () => {
           <>
             {/* Pump Form - All 10 Sections */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
-              
+
+              {/* ───── Smart PDF prefill (additive, soft-coded) ───── */}
+              {PUMP_EXTRACTION_CONFIG.enabled && (
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-dashed border-indigo-300 rounded-lg p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 bg-white rounded-lg shadow-sm">
+                      <Upload className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <h3 className="font-semibold text-indigo-900 flex items-center gap-2">
+                            <SparklesIcon className="h-4 w-4" />
+                            Auto-fill from PFD / pump data PDF
+                          </h3>
+                          <p className="text-xs text-indigo-700/80 mt-0.5">
+                            Upload the source drawing — extracted values populate empty fields only.
+                            Already-typed values are preserved.
+                          </p>
+                        </div>
+                        <label
+                          className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer flex items-center gap-2 transition-all ${
+                            extracting
+                              ? 'bg-indigo-300 text-white cursor-wait'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                          }`}
+                        >
+                          {extracting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Extracting…
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" />
+                              Choose PDF
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept={PUMP_EXTRACTION_CONFIG.acceptedTypes}
+                            onChange={handlePumpExtract}
+                            disabled={extracting}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      {extractError && (
+                        <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                          {extractError}
+                        </div>
+                      )}
+
+                      {extractInfo && (
+                        <div className="mt-3 bg-white border border-indigo-200 rounded-lg p-3 text-xs">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-slate-600">
+                              <span className="font-semibold text-slate-800">{extractInfo.source_filename}</span>
+                              {' · '}{extractInfo.page_count} page(s)
+                              {' · engine: '}<span className="font-mono">{extractInfo.engine}</span>
+                              {' · '}<span className="font-semibold text-indigo-700">{Object.keys(extractInfo.fields).length}</span> field(s) found
+                            </span>
+                            <button
+                              onClick={() => setExtractInfo(null)}
+                              className="text-slate-400 hover:text-slate-600"
+                              type="button"
+                            >
+                              clear
+                            </button>
+                          </div>
+                          {Object.keys(extractInfo.fields).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {Object.entries(extractInfo.fields)
+                                .slice(0, PUMP_EXTRACTION_CONFIG.resultListPreview)
+                                .map(([k, v]) => {
+                                  const prov = extractInfo.provenance[k] || 'text';
+                                  const badge = PUMP_EXTRACTION_CONFIG.provenanceBadge[prov]
+                                              || PUMP_EXTRACTION_CONFIG.provenanceBadge.text;
+                                  return (
+                                    <span
+                                      key={k}
+                                      className={`px-2 py-0.5 rounded-full ${badge.className}`}
+                                      title={`source: ${badge.label}`}
+                                    >
+                                      <span className="font-mono text-[10px] uppercase opacity-70 mr-1">{k}</span>
+                                      <span className="font-semibold">{String(v)}</span>
+                                    </span>
+                                  );
+                                })}
+                              {Object.keys(extractInfo.fields).length > PUMP_EXTRACTION_CONFIG.resultListPreview && (
+                                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                  +{Object.keys(extractInfo.fields).length - PUMP_EXTRACTION_CONFIG.resultListPreview} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {extractInfo.warnings.length > 0 && (
+                            <details className="mt-2 text-[11px] text-amber-700">
+                              <summary className="cursor-pointer">
+                                {extractInfo.warnings.length} warning(s)
+                              </summary>
+                              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                                {extractInfo.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Section 1: Project Information */}
               <details className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-4" open>
                 <summary className="cursor-pointer font-semibold text-blue-900 text-lg flex items-center gap-2">

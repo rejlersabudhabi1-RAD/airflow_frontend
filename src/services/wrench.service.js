@@ -56,6 +56,79 @@ const wrenchService = {
    * Returns { total, documents: [{DOC_NO, DOC_DESCRIPTION, ORDER_NO, ...}] }
    */
   searchDocuments: (filters = {}) => apiService.post(`${BASE}/sync/search-documents/`, filters),
+
+  /**
+   * Fetch unique discipline codes and document numbers from a sample search.
+   * Used to populate dropdowns in the Document Search UI.
+   * Returns { disciplines: string[], doc_numbers: string[] }
+   */
+  getDocumentChoices: () => apiService.get(`${BASE}/sync/document-choices/`),
+
+  /**
+   * List transmittals from Wrench via the REST WebAPI.
+   * @param {number} page
+   * @param {number} pageSize
+   */
+  listTransmittals: (page = 1, pageSize = 100) =>
+    apiService.get(`${BASE}/sync/list-transmittals/`, { params: { page, page_size: pageSize } }),
+
+  /**
+   * Fetch documents linked to a transmittal via its ORDER_NO (and optionally TRANS_ID).
+   * Backend tries transmittal-specific REST paths first, then GenericDocumentList, then DocumentSearch.
+   * No SVC URL required for the first two strategies.
+   * @param {string} orderNo   – the ORDER_NO field from the transmittal row
+   * @param {string} [transId] – the TRANS_ID field (sent as fallback identifier)
+   * @param {number} page
+   * @param {number} pageSize
+   */
+  getTransmittalDocuments: (orderNo, transId = '', page = 1, pageSize = 200) =>
+    apiService.get(`${BASE}/sync/trans-documents/`, {
+      params: {
+        order_no:  orderNo,
+        ...(transId ? { trans_id: transId } : {}),
+        page,
+        page_size: pageSize,
+      },
+    }),
+
+  // ── S3 Export ─────────────────────────────────────────────────────────────
+  /** List S3 export jobs (last 50) */
+  getS3Jobs: () => apiService.get(`${BASE}/s3-sync/`),
+
+  /** Get a single S3 job */
+  getS3Job: (id) => apiService.get(`${BASE}/s3-sync/${id}/`),
+
+  /**
+   * Start a Wrench → S3 export job.
+   * @param {object} payload – { mode: 'batch'|'realtime', entity_type: 'transmittals'|'documents'|'all', s3_prefix?: string }
+   */
+  startS3Sync: (payload) => apiService.post(`${BASE}/s3-sync/start/`, payload),
+
+  /** Stop a running real-time S3 export job */
+  stopS3Job: (id) => apiService.post(`${BASE}/s3-sync/${id}/stop/`),
+
+  // ── Token Injection ───────────────────────────────────────────────────────
+  /**
+   * Save a pre-shared Wrench session token directly — bypasses username/password login.
+   * Once saved, the backend uses this token for all Wrench API calls; the rolling-token
+   * refresh from each Wrench response keeps it current automatically.
+   * @param {string} token – raw Wrench session token string
+   */
+  injectToken: (token) => apiService.post(`${BASE}/config/inject-token/`, { token }),
+
+  // ── Document Download ─────────────────────────────────────────────────────
+  /**
+   * Download a Wrench document file (proxied through the backend for auth).
+   * Backend tries multiple Wrench download endpoints and streams the binary back.
+   * @param {string} idocId  – IDOC_ID of the document (required)
+   * @param {string} [docNo] – DOC_NO used as fallback filename hint (optional)
+   * Returns a blob response for direct save-as in the browser.
+   */
+  downloadDocument: (idocId, docNo) =>
+    apiService.get(`${BASE}/sync/document-download/`, {
+      params: { idoc_id: idocId, ...(docNo ? { doc_no: docNo } : {}) },
+      responseType: 'blob',
+    }),
 }
 
 export default wrenchService

@@ -66,7 +66,7 @@ export const FEATURES_CATALOG = {
         shortName: PID_NAMING_CONFIG.shortName,
         description: PID_NAMING_CONFIG.fullDescription,
         longDescription: PID_NAMING_CONFIG.detailedDescription,
-        path: '/pid/upload',
+        path: '/engineering/process/pid-verification', // SOFT-CODED: redirected from /pid/upload
         moduleCode: 'pid_analysis',
         status: FEATURE_STATUS.ACTIVE,
         badges: [FEATURE_BADGES.AI_POWERED, FEATURE_BADGES.POPULAR],
@@ -113,16 +113,16 @@ export const FEATURES_CATALOG = {
       },
       {
         id: 'eng-piping-pms',
-        name: 'Piping Material Specification',
-        shortName: 'PMS',
-        description: 'Comprehensive piping material specification management',
+        name: 'Valve MTO',
+        shortName: 'Valve MTO',
+        description: 'Valve Material Take-Off — quantities, specs and project rollup',
         path: '/engineering/piping/pms',
         moduleCode: 'piping_pms',
         status: FEATURE_STATUS.NEW,
         badges: [FEATURE_BADGES.NEW],
         capabilities: [
-          'Material specification database',
-          'Piping class management',
+          'Valve register and take-off',
+          'Per-line valve quantification',
           'Compliance tracking',
           'Cost estimation'
         ],
@@ -285,7 +285,7 @@ export const FEATURES_CATALOG = {
         id: 'common-pid-checker-removed',
         name: '(Moved) P&ID Checker',
         status: FEATURE_STATUS.MOVED_TO_PROCESS_ENGINEERING,
-        redirectPath: '/pid/upload',
+        redirectPath: '/engineering/process/pid-verification', // SOFT-CODED: redirected from /pid/upload
         note: 'Feature moved to Process Engineering -> P&ID for better organization'
       },
       {

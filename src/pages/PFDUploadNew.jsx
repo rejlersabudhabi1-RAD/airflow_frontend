@@ -23,7 +23,13 @@ const PFDUploadNew = () => {
     project_code: '',
     drawing_title: '',
     client: 'SARB Oil & Gas Division',
-    contractor: 'Rejlers Engineering AB'
+    contractor: 'Rejlers Engineering AB',
+    // Engineering context — feed the AI precision enhancer for better P&ID accuracy
+    fluid_service: '',
+    operating_pressure: '',
+    operating_temperature: '',
+    applicable_standards: 'ISA 5.1, ADNOC DEP, API 520, API 521',
+    design_basis: '',
   });
   
   // UI states
@@ -103,6 +109,12 @@ const PFDUploadNew = () => {
       uploadData.append('drawing_title', formData.drawing_title);
       uploadData.append('client', formData.client);
       uploadData.append('contractor', formData.contractor);
+      // Engineering context for AI precision enhancement
+      uploadData.append('fluid_service', formData.fluid_service);
+      uploadData.append('operating_pressure', formData.operating_pressure);
+      uploadData.append('operating_temperature', formData.operating_temperature);
+      uploadData.append('applicable_standards', formData.applicable_standards);
+      uploadData.append('design_basis', formData.design_basis);
 
       setProgress(30);
 
@@ -422,6 +434,87 @@ const PFDUploadNew = () => {
                           value={formData.contractor}
                           onChange={(e) => setFormData({ ...formData, contractor: e.target.value })}
                           className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      {/* Engineering Context — improves AI P&ID accuracy */}
+                      <div className="md:col-span-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-4">
+                          Engineering Context — enhances AI instrument loop &amp; safety device accuracy
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Fluid Service
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.fluid_service}
+                          onChange={(e) => setFormData({ ...formData, fluid_service: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                          placeholder="e.g. Hydrocarbon Gas / Crude Oil / Water"
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Operating Pressure (barg)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.operating_pressure}
+                          onChange={(e) => setFormData({ ...formData, operating_pressure: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                          placeholder="e.g. 10.5"
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Operating Temperature (°C)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.operating_temperature}
+                          onChange={(e) => setFormData({ ...formData, operating_temperature: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                          placeholder="e.g. 60"
+                          disabled={uploading}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Applicable Standards
+                        </label>
+                        <select
+                          value={formData.applicable_standards}
+                          onChange={(e) => setFormData({ ...formData, applicable_standards: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900"
+                          disabled={uploading}
+                        >
+                          <option value="ISA 5.1, ADNOC DEP, API 520, API 521">ISA 5.1 + ADNOC DEP + API 520/521 (default)</option>
+                          <option value="ISA 5.1, API 520, API 521, ASME">ISA 5.1 + API 520/521 + ASME</option>
+                          <option value="ISA 5.1, Shell DEP, API 520">ISA 5.1 + Shell DEP + API 520</option>
+                          <option value="ISA 5.1, Aramco SAES, API 520">ISA 5.1 + Aramco SAES + API 520</option>
+                          <option value="EN ISO 10628, ISA 5.1, PED">EN ISO 10628 + ISA 5.1 + PED (European)</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Design Basis / Additional Notes
+                        </label>
+                        <textarea
+                          value={formData.design_basis}
+                          onChange={(e) => setFormData({ ...formData, design_basis: e.target.value })}
+                          rows={3}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 resize-none"
+                          placeholder="e.g. Three-phase separation, fiscal metering required, ESD system per SIL 2, sour service H2S > 300 ppm"
                           disabled={uploading}
                         />
                       </div>

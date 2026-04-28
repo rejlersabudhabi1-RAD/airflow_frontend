@@ -1246,7 +1246,6 @@ const SmartDatasheetPage = () => {
       pump_minimum_flow: '',
       fluid_density_mcf: '',
       pump_discharge_pressure_min_flow: '',
-      destination_pressure: '',
       el_destination_pump_cl: '',
       mcf_line_friction_losses: '',
       flow_meter_losses: '',
