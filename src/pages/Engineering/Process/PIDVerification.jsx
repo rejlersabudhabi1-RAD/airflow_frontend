@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useRef, useEffect } from 'react';
+﻿import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/api.config';
 import CrossRecommendationPanel from '../../../components/recommendations/CrossRecommendationPanel';
@@ -8,12 +8,18 @@ import {
   RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
-  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes,
+  Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
+  Search, ExternalLink, Sparkles, Maximize2, Minimize2, Wind,
+  Gauge, CheckSquare,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme & layout primitives  (identical to PIDUpload.jsx)
 // ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded: ping ring final scale — injected into markerPing keyframe below.
+// Increase to make the ripple expand further; decrease for a tighter pulse.
+const OVERLAY_MARKER_ANIM_PING_SCALE = 2.5;
+
 const KEYFRAMES = `
   @keyframes floatA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.06)} }
   @keyframes floatB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-35px,25px) scale(1.04)} }
@@ -36,7 +42,88 @@ const KEYFRAMES = `
   @keyframes orbitA { 0%{transform:rotate(0deg) translateX(52px) rotate(0deg)} 100%{transform:rotate(360deg) translateX(52px) rotate(-360deg)} }
   @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg) translateX(52px) rotate(-480deg)} }
   @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg) translateX(52px) rotate(-600deg)} }
+  @keyframes markerPing {
+    0%   { transform: translate(-50%,-50%) scale(1);                              opacity: 0;   }
+    12%  { transform: translate(-50%,-50%) scale(1.05);                           opacity: 0.85; }
+    100% { transform: translate(-50%,-50%) scale(${OVERLAY_MARKER_ANIM_PING_SCALE}); opacity: 0;   }
+  }
+  @keyframes markerGlow {
+    0%, 100% { opacity: 1;    filter: brightness(1);   }
+    50%      { opacity: 0.55; filter: brightness(1.35); }
+  }
+  @keyframes navTabIn {
+    from { opacity: 0; transform: translateX(18px) scale(0.92); }
+    to   { opacity: 1; transform: translateX(0)    scale(1);    }
+  }
+  @keyframes activeBarSlide {
+    from { transform: scaleY(0); opacity: 0; }
+    to   { transform: scaleY(1); opacity: 1; }
+  }
 `;
+
+// ── Soft-coded: icon rail nav button appearance ───────────────────────────────
+// NAV_RAIL_ENTRY_DELAY_MS   : stagger between each button's entry animation (ms)
+// NAV_RAIL_ENTRY_DURATION_MS: duration of the slide-in animation (ms)
+// NAV_RAIL_ACTIVE_BAR_W     : width of the coloured left-side active indicator bar (px)
+// NAV_RAIL_WIDTH            : total width of the sticky right nav rail (px)
+const NAV_RAIL_ENTRY_DELAY_MS    = 55;
+const NAV_RAIL_ENTRY_DURATION_MS = 320;
+const NAV_RAIL_ACTIVE_BAR_W      = 3;    // px — the left accent bar on active tab
+const NAV_RAIL_WIDTH             = 152;  // px — total rail column width
+// Soft-coded: localStorage key used to persist user-defined panel drag order.
+// Bump the suffix (e.g. v2) to reset all users' saved order after adding new panels.
+const PANEL_DND_STORAGE_KEY = 'pid_panel_order_v1';
+
+// ── Soft-coded: Rejlers brand gradient for all dark panel headers in this page.
+// Source: RejlersBrandGuidelines2024 — primary (#2B3A55) → accent (#617AAD) → turbine (#73BDC8).
+// Change this constant to restyle every dark header at once.
+const REJLERS_DARK_HEADER_BG = 'linear-gradient(135deg, #2B3A55 0%, #617AAD 60%, #73BDC8 100%)';
+
+// ── Soft-coded: Canvas pipe-path tracing parameters (Lines → Drawing Layout sub-tab) ─────────
+// LINE_FOLLOW_CANVAS_W    : width (px) to downsample the drawing image before pixel analysis.
+//                           Lower = faster BFS, higher = more accurate path detail.
+// LINE_FOLLOW_DARK_THRESH : grayscale ≤ this = "dark/pipe" pixel (0 = pure black, 255 = white).
+// LINE_FOLLOW_SNAP_RADIUS : px radius on downsampled grid to snap start/end to nearest dark pixel.
+// LINE_FOLLOW_SIMPLIFY_TOL: Douglas-Peucker tolerance (px) — higher = fewer path segments.
+const LINE_FOLLOW_CANVAS_W     = 500;  // px
+const LINE_FOLLOW_DARK_THRESH  = 90;   // 0–255
+const LINE_FOLLOW_SNAP_RADIUS  = 18;   // px on downsampled grid
+const LINE_FOLLOW_SIMPLIFY_TOL = 2.5;  // px (Douglas-Peucker)
+// ── Soft-coded: SVG render cap (Lines → Drawing Layout) ──────────────────────────────────────
+// Max SVG elements rendered at once; items beyond the cap are culled except the selected one.
+const LAYOUT_SVG_RENDER_CAP    = 150;
+// ── Soft-coded: Direction-aware route sort parameters (Lines → Drawing Layout) ────────────
+// LINE_ROUTE_AXIS_WEIGHT : in mixed H+V lines the nearest-neighbour chain prefers staying
+//   on the same OCR axis; same-axis distance is multiplied by this factor (< 1 = preferred).
+// LINE_ROUTE_SOURCE_BIAS : weight applied to x_pct vs y_pct when choosing the Source seed.
+//   1.0 = equal weight (top-left corner); < 1 biases toward the top, > 1 toward the left.
+const LINE_ROUTE_AXIS_WEIGHT  = 0.5;  // 0.0–1.0 (lower = stronger same-axis preference)
+const LINE_ROUTE_SOURCE_BIAS  = 1.0;  // 1.0 = balanced top-left source seed (P&ID convention)
+// ── Module-level constants for useMemo-based memoization (moved out of JSX IIFEs) ─────────────
+// These objects/sets/functions were previously re-created inside JSX render IIFEs on every
+// render. Moving them here means they are allocated exactly once at module load time.
+const _LINE_FINDING_CATS = new Set(['line_size']); // issue categories that count as line QC
+const _SEV_RANK          = { critical: 4, major: 3, minor: 2, info: 1 };
+// Drawing Layout — fluid code colour palette
+const _LAYOUT_FLUID_COLORS = {
+  'BD': { stroke:'#0369a1', fill:'#bfdbfe', label:'Blowdown'        },
+  'PG': { stroke:'#0d9488', fill:'#99f6e4', label:'Process Gas'     },
+  'PL': { stroke:'#0891b2', fill:'#bae6fd', label:'Process Liquid'  },
+  'FG': { stroke:'#f97316', fill:'#fed7aa', label:'Fuel Gas'        },
+  'FL': { stroke:'#ef4444', fill:'#fecaca', label:'Fuel Liquid'     },
+  'N2': { stroke:'#6366f1', fill:'#c7d2fe', label:'Nitrogen'        },
+  'CW': { stroke:'#06b6d4', fill:'#a5f3fc', label:'Cooling Water'   },
+  'HW': { stroke:'#f59e0b', fill:'#fde68a', label:'Hot Water'       },
+  'ST': { stroke:'#8b5cf6', fill:'#ddd6fe', label:'Steam'           },
+  'CS': { stroke:'#64748b', fill:'#cbd5e1', label:'Closed System'   },
+  'GL': { stroke:'#22c55e', fill:'#bbf7d0', label:'Glycol'          },
+  'LS': { stroke:'#84cc16', fill:'#d9f99d', label:'Low-Pres Steam'  },
+  'HS': { stroke:'#7c3aed', fill:'#ede9fe', label:'High-Pres Steam' },
+  'OT': { stroke:'#94a3b8', fill:'#e2e8f0', label:'Other'           },
+};
+const _lfcGlobal = (code) =>
+  _LAYOUT_FLUID_COLORS[(code || '').toUpperCase()] ||
+  { stroke:'#0891b2', fill:'#bae6fd', label: code || '—' };
 
 const T = {
   bg:    'linear-gradient(135deg, #f8faff 0%, #eef2ff 45%, #f0f9ff 75%, #fffbeb 100%)',
@@ -52,6 +139,119 @@ const T = {
   modal: { background:'#ffffff', border:'1px solid #e2e8f0', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' },
   input: { background:'#f8fafc', border:'1px solid #e2e8f0' },
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   Pipe-line Tracer — module-level pure utilities (no React, no state).
+   Used by Lines → Drawing Layout sub-tab to follow actual dark pipe lines on the P&ID image.
+   _dpSimplify : Douglas-Peucker polyline simplification (reduces BFS path to key waypoints).
+   _bfsTrace   : BFS on dark-pixel grid — returns the shortest path of dark pixels or null.
+═══════════════════════════════════════════════════════════════════════════════════════════ */
+/**
+ * _routeSort — Direction-aware Source→Destination ordering of line-tag occurrences.
+ *
+ * P&ID flow conventions applied (all industry-standard):
+ *  • direction === 'H'  → horizontal label → pipe runs horizontally here.
+ *                         These occurrences are ordered left → right (x_pct ascending).
+ *  • direction === 'V'  → vertical label   → pipe runs vertically here.
+ *                         These occurrences are ordered top → bottom (y_pct ascending).
+ *  • direction unknown  → derive from bounding box: wider span = horizontal, taller = vertical.
+ *  • Mixed H + V (multi-angle) → nearest-neighbour chain starting from the occurrence
+ *    closest to the top-left corner (min x_pct*LINE_ROUTE_SOURCE_BIAS + y_pct), which by
+ *    P&ID convention is the upstream source side.  Same-axis transitions are preferred
+ *    via LINE_ROUTE_AXIS_WEIGHT to avoid zigzag across diagonal cuts.
+ */
+function _routeSort(occs) {
+  if (!occs || occs.length <= 1) return occs || [];
+
+  const norm = occs.map(o => ({ ...o, _dir: (o.direction || '').toUpperCase().charAt(0) }));
+  const hOccs = norm.filter(o => o._dir === 'H');
+  const vOccs = norm.filter(o => o._dir === 'V');
+
+  // ── Pure horizontal (all H or all unknown-wide) → left → right ─────────────
+  if (vOccs.length === 0) {
+    // Check if unknowns are really vertical by bounding box
+    const xs = norm.map(o => o.x_pct), ys = norm.map(o => o.y_pct);
+    const xSpan = Math.max(...xs) - Math.min(...xs);
+    const ySpan = Math.max(...ys) - Math.min(...ys);
+    if (hOccs.length > 0 || xSpan >= ySpan)
+      return [...norm].sort((a, b) => a.x_pct - b.x_pct);  // L → R
+    // Wider vertically even though no explicit V tags → top → bottom
+    return [...norm].sort((a, b) => a.y_pct - b.y_pct);    // T → B
+  }
+
+  // ── Pure vertical (all V) → top → bottom ────────────────────────────────────
+  if (hOccs.length === 0)
+    return [...vOccs].sort((a, b) => a.y_pct - b.y_pct);   // T → B
+
+  // ── Mixed H + V (multi-angle route) ─────────────────────────────────────────
+  // Seed = occurrence closest to top-left corner (upstream source end by P&ID convention).
+  // Nearest-neighbour chain with same-axis preference to follow the pipe bend naturally.
+  const remaining = [...norm];
+  const seedIdx = remaining.reduce((best, o, i) =>
+    (o.x_pct * LINE_ROUTE_SOURCE_BIAS + o.y_pct <
+     remaining[best].x_pct * LINE_ROUTE_SOURCE_BIAS + remaining[best].y_pct ? i : best), 0);
+  const chain = remaining.splice(seedIdx, 1);
+
+  while (remaining.length > 0) {
+    const last = chain[chain.length - 1];
+    let minD = Infinity, minIdx = 0;
+    remaining.forEach((o, i) => {
+      const dx = o.x_pct - last.x_pct, dy = o.y_pct - last.y_pct;
+      // Same-axis occurrences pay reduced distance cost (prefer axis continuity over diagonals)
+      const sameAxis = o._dir !== '' && o._dir === last._dir;
+      const d = Math.sqrt(dx * dx + dy * dy) * (sameAxis ? LINE_ROUTE_AXIS_WEIGHT : 1.0);
+      if (d < minD) { minD = d; minIdx = i; }
+    });
+    chain.push(remaining.splice(minIdx, 1)[0]);
+  }
+  return chain;
+}
+
+function _dpSimplify(pts, tol) {
+  if (pts.length <= 2) return pts;
+  const [x1, y1] = pts[0], [x2, y2] = pts[pts.length - 1];
+  const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1;
+  let maxD = 0, maxI = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = Math.abs(dy * pts[i][0] - dx * pts[i][1] + x2 * y1 - y2 * x1) / l;
+    if (d > maxD) { maxD = d; maxI = i; }
+  }
+  if (maxD <= tol) return [pts[0], pts[pts.length - 1]];
+  return [
+    ..._dpSimplify(pts.slice(0, maxI + 1), tol).slice(0, -1),
+    ..._dpSimplify(pts.slice(maxI), tol),
+  ];
+}
+
+function _bfsTrace(dark, W, H, sx, sy, ex, ey) {
+  const si = sy * W + sx, ei = ey * W + ex;
+  if (si === ei) return [[sx, sy]];
+  // Efficient BFS using typed arrays as both visited flags and circular queue
+  const parent = new Int32Array(W * H).fill(-1);
+  const vis    = new Uint8Array(W * H);
+  const queue  = new Int32Array(W * H);  // max W*H pushes (each cell visited once)
+  let qH = 0, qT = 0;
+  queue[qT++] = si; vis[si] = 1;
+  const DX = [-1, 1, 0, 0, -1,  1, -1, 1];
+  const DY = [ 0, 0,-1, 1, -1, -1,  1, 1];
+  let found = false;
+  outer: while (qH < qT) {
+    const c = queue[qH++], cx = c % W, cy = (c / W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + DX[d], ny = cy + DY[d];
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      const ni = ny * W + nx;
+      if (vis[ni] || !dark[ni]) continue;
+      vis[ni] = 1; parent[ni] = c;
+      if (ni === ei) { found = true; break outer; }
+      queue[qT++] = ni;
+    }
+  }
+  if (!found) return null;
+  const path = []; let c = ei;
+  while (c !== -1) { path.unshift([c % W, (c / W) | 0]); c = parent[c]; }
+  return path;
+}
 
 const DarkBg = ({ children }) => (
   <div className="min-h-screen relative overflow-hidden" style={{ background: T.bg }}>
@@ -130,6 +330,12 @@ const HIDDEN_SEVERITIES = new Set(['info']);
 // Set to true to re-enable tooltips. Core overlay logic is NOT affected.
 const OVERLAY_SHOW_MARKER_TOOLTIP = false;
 
+// Soft-coded: overlay marker dot animation.
+// Set OVERLAY_MARKER_ANIM_ENABLED to false to disable the pulsing ring entirely.
+// OVERLAY_MARKER_ANIM_DURATION_MS controls one full ping cycle length (ms).
+const OVERLAY_MARKER_ANIM_ENABLED     = true;   // toggle ping animation on/off
+const OVERLAY_MARKER_ANIM_DURATION_MS = 2200;   // ping cycle duration (ms)
+
 // Soft-coded: localStorage key for coordinate calibration corrections recorded by
 // engineers during drawing review. Each entry is keyed 'drawingId:findingId' and
 // stores the original resolved % position alongside the corrected % position.
@@ -145,6 +351,16 @@ const CALIB_STATS_KEY = 'pid_calib_stats';
 // a tiny label beside each overlay marker so engineers can see exactly which
 // resolution strategy placed it. Set to false (default) for production.
 const SHOW_RESOLUTION_DEBUG = false;
+
+// Soft-coded: set to true to re-enable the Compare panel in the icon rail.
+// The comparison logic, API call, and panel render are fully preserved —
+// only the navigation button and its panel content are hidden when false.
+const SHOW_COMPARE_PANEL = false;
+
+// Soft-coded: set to true to re-enable the Naming panel in the icon rail.
+// The naming logic, API call, auto-run effect, and panel render are fully
+// preserved — only the navigation button and its panel content are hidden.
+const SHOW_NAMING_PANEL = false;
 
 // Soft-coded: all rule IDs that represent duplicate pipeline line designations.
 // Add new duplicate-detection rule IDs here to automatically propagate them to:
@@ -193,6 +409,135 @@ const DUP_HIGHLIGHT_COLORS = {
   minor:    { fill: '251,191,36',  border: '245,158,11'  },  // amber-400 / amber-500
   info:     { fill: '59,130,246',  border: '37,99,235'   },  // blue-500 / blue-600
 };
+
+// ── Soft-coded: duplicate overlay cross-verification guard ───────────────────
+// When true: tagHighlights (Duplicate-Line Highlight Overlay) and the Line Tag
+// Duplicate Overlay (blue diamond buttons) only render for line_tag entries that
+// satisfy BOTH conditions:
+//   1. Tag text is referenced in ≥1 DUP_LINE_RULES finding — rule engine confirmed.
+//   2. Tag has ≥ DUP_OVERLAY_MIN_SECTIONS populated section fields (all sections match).
+// Set false to revert to legacy count≥2 behaviour (shows all repeated tags).
+const DUP_OVERLAY_REQUIRE_FINDING = true;
+// Ordered list of line-tag section fields used for the completeness check.
+// A tag is only eligible when ALL of these are non-empty strings.
+// Sections: NPS size · fluid code · area/sequence · sequence no · pipe class · insulation
+const DUP_OVERLAY_SECTION_KEYS = ['size', 'fluid_code', 'area_code', 'sequence_no', 'pipe_class', 'insulation'];
+// Minimum number of the above fields that must be non-empty.
+// Default 5 of 6 — allows insulation to be absent on bare/uninsulated lines.
+const DUP_OVERLAY_MIN_SECTIONS = 5;
+
+// ── Soft-coded: Findings table — drawing-anchored filter ─────────────────────
+// When true: the FINDINGS table lists ONLY findings whose marker has been
+// resolved to a real drawing position (tiers P1–P5 or CX — genuine OCR/tag match).
+// Findings whose marker falls back to a hash-derived pseudo-position (tier FH,
+// meaning the system could not locate the tag on the canvas) are hidden from
+// the table, keeping the list aligned with what is actually visible on the drawing.
+// Set false to restore the legacy behaviour (all findings shown regardless).
+const FINDINGS_TABLE_ANCHORED_ONLY = true;
+// Resolution tiers considered "anchored on the drawing".
+// FH = full heuristic fallback (random hash position — not on the drawing).
+const FINDINGS_ANCHORED_TIERS = new Set(['P1', 'P2', 'P3', 'P4', 'P5', 'CX']);
+// PERF_TIER_WEIGHT: contribution of each resolution tier to the placement-
+//   confidence score (0 = no confidence, 1 = perfect).  Adjust per tier
+//   without touching any computation logic.
+const PERF_TIER_WEIGHT = {
+  P1: 1.00,  // exact tag-position match from OCR
+  P2: 0.85,  // NPS / centroid-biased position
+  P3: 0.70,  // pattern heuristic
+  P4: 0.65,  // line-tag match
+  P5: 0.50,  // centroid fallback
+  CX: 0.95,  // manually corrected by engineer
+  FH: 0.30,  // full heuristic / unresolved
+};
+
+// PERF_TIER_COLOR: hex fill per tier for progress bars in the Performance panel.
+const PERF_TIER_COLOR = {
+  P1: '#10b981',  // emerald
+  P2: '#3b82f6',  // blue
+  P3: '#8b5cf6',  // violet
+  P4: '#f59e0b',  // amber
+  P5: '#f97316',  // orange
+  CX: '#06b6d4',  // cyan  (manually corrected)
+  FH: '#94a3b8',  // slate (unresolved heuristic)
+};
+
+// PERF_TIER_LABEL: short human-readable description per tier.
+const PERF_TIER_LABEL = {
+  P1: 'Exact Tag Match',
+  P2: 'Position-Based',
+  P3: 'Pattern Heuristic',
+  P4: 'Line Tag Match',
+  P5: 'Centroid Fallback',
+  CX: 'Manual Correction',
+  FH: 'Full Heuristic',
+};
+
+// PERF_SCORE_THRESHOLDS: confidence % breakpoints for colour-coding the score gauge.
+// [high, moderate] — anything below 'moderate' is shown as red.
+const PERF_SCORE_THRESHOLDS = { high: 80, moderate: 55 };
+
+// PERF_ANCHOR_THRESHOLDS: anchor-rate % breakpoints.
+const PERF_ANCHOR_THRESHOLDS = { high: 70, moderate: 40 };
+
+// PERF_DOC_ACCURACY_THRESHOLDS: overall document accuracy % breakpoints.
+const PERF_DOC_ACCURACY_THRESHOLDS = { high: 75, moderate: 50 };
+
+// PERF_DOC_ACCURACY_WEIGHTS: weights that blend the sub-scores into the
+// final Document Accuracy Rate shown at the top of the Performance panel.
+//   ocr      — how much OCR text coverage contributes (raw_text_length proxy)
+//   placement — weighted marker placement confidence
+//   anchor   — percentage of markers with a hard-anchored position
+// Must sum to 1.0.
+const PERF_DOC_ACCURACY_WEIGHTS = { ocr: 0.30, placement: 0.45, anchor: 0.25 };
+
+// PERF_OCR_GOOD_THRESHOLD: raw_text_length above which OCR is considered "good".
+// Documents shorter than this get a proportional OCR score.
+const PERF_OCR_GOOD_THRESHOLD = 500;
+
+// PERF_TOP_RULES_COUNT: number of top-triggered rules shown in the panel.
+const PERF_TOP_RULES_COUNT = 8;
+
+// PERF_TOP_CATS_COUNT: number of top categories shown in the category breakdown bar.
+const PERF_TOP_CATS_COUNT = 6;
+
+// DRAWING_QC_PANEL_OPEN_DEFAULT: controls whether the QC Summary panel above the
+// drawing canvas is expanded on first load.  Set to false so the drawing is
+// immediately visible in full height; user toggles it open when needed.
+const DRAWING_QC_PANEL_OPEN_DEFAULT = false;
+
+// PERF_MODEL_ACCURACY_PCT: the AI model's known precision rate (0–100).
+// This is the % of reported findings that are expected to be genuine defects.
+// Adjust this value as the model improves over time.
+// Example: 85 means 85% of reported issues are real; 15% may be false positives.
+const PERF_MODEL_ACCURACY_PCT = 85;
+
+// PERF_MODEL_ACCURACY_LABEL: shown only when no drawing is loaded (baseline state).
+const PERF_MODEL_ACCURACY_LABEL =
+  `No drawing loaded — using configured baseline of ${PERF_MODEL_ACCURACY_PCT}%. ` +
+  `Open a drawing to see its live, document-specific model accuracy.`;
+
+// PERF_MODEL_HIGHCONF_TIERS: tier codes treated as "high-confidence" when computing
+// the live model accuracy from the active drawing's resolved markers.
+// P1 = Exact Tag Match, P2 = Position-Based, CX = Manual Correction by engineer.
+// Adjust this set as new tiers are introduced.
+const PERF_MODEL_HIGHCONF_TIERS = new Set(['P1', 'P2', 'CX']);
+
+// DRAWING_PANEL_LABEL: display name for the main "Drawing" panel tab.
+// Change only this value to rename the tab across the entire UI — no other code changes needed.
+const DRAWING_PANEL_LABEL = 'General';
+
+// Soft-coded: minimum chars typed before the General findings search activates.
+const GENERAL_SEARCH_MIN_CHARS = 1;
+// Soft-coded: max results shown in the General search dropdown.
+const GENERAL_SEARCH_MAX_RESULTS = 12;
+
+// GENERAL_CHECKLIST_ITEMS: items shown in the General panel's drawing-level checklist.
+// Add, remove, or reorder entries here — the checklist renders automatically.
+const GENERAL_CHECKLIST_ITEMS = [
+  { id: 'legend_check',   text: 'Check that all depictions are as per Legend P&ID.' },
+  { id: 'revision_check', text: 'Check all revisions are clearly marked as per Project requirements.' },
+  { id: 'process_notes',  text: 'Identification of process requirements by notes e.g. slopes of lines, minimum distance.' },
+];
 
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
@@ -631,7 +976,13 @@ const PIDVerification = () => {
   const [savingOverrides, setSavingOverrides] = useState(false);
   const [overridesSaved,  setOverridesSaved]  = useState(false);  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
+  // recheckingDocId: tracks which history-list document is currently being re-queued.
+  // null means no recheck in flight.  Set to document_id while the POST is in progress.
+  const [recheckingDocId, setRecheckingDocId] = useState(null);
   const [lineTagsExpanded, setLineTagsExpanded] = useState(false);
+  // qcPanelOpen: collapses the dark-header + nav-cards above the drawing canvas so
+  // the full drawing is visible by default.  Toggle with the strip at the top.
+  const [qcPanelOpen, setQcPanelOpen] = useState(DRAWING_QC_PANEL_OPEN_DEFAULT);
   // Sub-tab within the Lines panel: 'qc' | 'designations'
   const [lineQcSubTab, setLineQcSubTab] = useState('qc');
   // QC Checks sub-tab filters
@@ -639,19 +990,86 @@ const PIDVerification = () => {
   const [qcSevFilter,  setQcSevFilter]  = useState('all');
   const [qcRuleFilter, setQcRuleFilter] = useState('all');
   const [lineTagSearch,    setLineTagSearch]    = useState('');
+  // Lines panel — sort, view & expand state
+  const [linesSortBy,       setLinesSortBy]       = useState('issues');   // 'name'|'size'|'fluid'|'issues'
+  const [linesViewMode,     setLinesViewMode]      = useState('grid');    // 'grid'|'list'
+  const [expandedFindingId, setExpandedFindingId] = useState(null);       // expanded QC card id
   // Equipment panel state
-  const [equipSubTab,   setEquipSubTab]   = useState('all');
+  const [equipSubTab,    setEquipSubTab]    = useState('all');
   const [equipTagSearch, setEquipTagSearch] = useState('');
+  const [selectedEquipTag, setSelectedEquipTag] = useState(null); // detail drawer
+  const [equipViewMode,  setEquipViewMode]  = useState('grid');   // 'grid' | 'list'
+  // Equipment panel — view tab (top-level navigation) + sort
+  const [equipViewTab,  setEquipViewTab]   = useState('register'); // 'insights'|'register'|'analytics'
+  const [equipSortBy,   setEquipSortBy]    = useState('issues');   // 'issues'|'name'|'type'|'family'
+  // Instrumentation panel — per-check manual override states
+  // '' = AI auto | 'pass' = manually confirmed | 'fail' = manually flagged | 'na' = N/A
+  const [instrCheckStates, setInstrCheckStates] = useState({});  // { [checkId]: 'pass'|'fail'|'na' }
+  const [instrActiveView, setInstrActiveView]  = useState('checklist'); // 'checklist'|'summary'|'drawing'|'registry'
+  // Instrument Symbol Registry state
+  const [instrSymbols,        setInstrSymbols]        = useState([]);
+  const [loadingInstrSymbols, setLoadingInstrSymbols] = useState(false);
+  const [instrRegCatFilter,   setInstrRegCatFilter]   = useState('all');
+  const [instrRegSearch,      setInstrRegSearch]      = useState('');
+  // Selected tag in the Instrumentation Drawing Layout view
+  const [instrSelectedTag, setInstrSelectedTag] = useState(null);
+  // DCS / Instrument Symbol Compliance Analysis state
+  const [dcsAnalyzing,     setDcsAnalyzing]     = useState(false);
+  const [dcsResult,        setDcsResult]        = useState(null);   // { findings_created, symbols_extracted, legend_source }
+  const [dcsLegendFile,    setDcsLegendFile]    = useState(null);   // optional uploaded legend PDF
+  const dcsLegendRef = React.useRef(null);                          // hidden file input ref
+  // ── Wrench DMS Cross-Reference state (CROSS-REF panel ↗ Wrench tab) ────────
+  // Soft-coded: panel sub-tabs — 'pfd' = existing internal cross-ref | 'wrench' = DMS search
+  const CROSS_TABS = [
+    { id:'pfd',    label:'PFD Cross-Ref',  icon:'🔗' },
+    { id:'wrench', label:'Wrench DMS',     icon:'🗂' },
+  ];
+  const [crossActiveTab,    setCrossActiveTab]    = useState('pfd');
+  const [wrenchDocs,        setWrenchDocs]        = useState([]);
+  const [wrenchTotal,       setWrenchTotal]       = useState(0);
+  const [wrenchLoading,     setWrenchLoading]     = useState(false);
+  const [wrenchError,       setWrenchError]       = useState('');
+  const [wrenchAiPowered,   setWrenchAiPowered]   = useState(false);
+  const [wrenchQuery,       setWrenchQuery]       = useState('');
+  const [wrenchSearched,    setWrenchSearched]    = useState(false);
+  const [wrenchQueryUsed,   setWrenchQueryUsed]   = useState(null);
+  const [wrenchExpandedDoc, setWrenchExpandedDoc] = useState(null); // DOC_NO of expanded card
+  // Piping panel — per-check manual override states
+  const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
+  const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
+  const [pipSelectedLine, setPipSelectedLine] = useState(null);        // selected line tag in Drawing Layout
+  const [cmpCheckStates, setCmpCheckStates]   = useState({});          // { [checkId]: 'pass'|'fail'|'na' }
+  const [cmpActiveView,  setCmpActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
+  const [cmpSelectedTag, setCmpSelectedTag]   = useState(null);        // selected compressor tag on drawing
+  // Index panel — view switcher + valve tracking states
+  const [idxActiveTab,   setIdxActiveTab]    = useState('data');       // 'data'|'drawing'|'valves'
+  const [vlvCheckStates, setVlvCheckStates]  = useState({});           // { [checkId]: 'pass'|'fail'|'na' }
+  const [vlvSelectedTag, setVlvSelectedTag]  = useState(null);         // selected valve tag on drawing
+  const [vlvActiveView,  setVlvActiveView]   = useState('checklist');  // 'checklist'|'summary'|'drawing'
   // Naming panel filters
   const [namingSearch,   setNamingSearch]   = useState('');
   const [namingSevFilter, setNamingSevFilter] = useState('all');
-  const [showLineTagOverlay, setShowLineTagOverlay] = useState(true);
+  // Soft-coded: both duplicate-line overlays default OFF so the drawing canvas
+  // is clean on first load.  Engineers can enable them via the toggle buttons.
+  // Previously true — caused every repeated pipeline label (normal on P&IDs) to
+  // show blue diamond dots / glow rectangles even when no real error existed.
+  const [showLineTagOverlay, setShowLineTagOverlay] = useState(false);
   const [focusedLineTagKey,  setFocusedLineTagKey]  = useState(null);
-  // Duplicate-line highlight overlay: semi-transparent glow rectangles drawn at
+  // Lines panel — Drawing Layout sub-tab selected line + fluid filter
+  const [lineLayoutSelected,   setLineLayoutSelected]   = useState(null);  // selected line text in Drawing Layout
+  const [lineLayoutFluidFilter,setLineLayoutFluidFilter] = useState('all'); // fluid filter in Drawing Layout
+  // Lines panel — Drawing Layout traced-path cache (result of canvas BFS dark-pixel trace)
+  // text → [{x_pct, y_pct}] on success, null on failure, undefined = not yet attempted
+  const [lineTracedPaths,      setLineTracedPaths]      = useState({});
+  const [lineTracing,          setLineTracing]           = useState(false);
+  const _traceIdRef         = useRef(0);           // monotone id — discard stale async results
+  const _tracedAttemptedRef = useRef(new Set());   // texts already attempted (avoid double work)
+
+  // Duplicate-line highlight overlay — semi-transparent glow rectangles drawn at
   // the exact OCR coordinates of every duplicate-line finding on the drawing.
   // Toggled independently from the dot markers so the engineer can switch it off
   // when the colour wash makes small details hard to read.
-  const [showDupLineHighlights, setShowDupLineHighlights] = useState(true);
+  const [showDupLineHighlights, setShowDupLineHighlights] = useState(false);
   // ── History (documents in project) ───────────────────────────────────────
   const [history,        setHistory]        = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -680,9 +1098,53 @@ const PIDVerification = () => {
   // ── Active panel (right-rail navigation) ─────────────────────────────────
   // 'drawing' | 'findings' | 'lines' | 'naming' | 'comparison' | 'cross'
   const [activePanel, setActivePanel] = useState('drawing');
+  // generalChecklist: tracks which GENERAL_CHECKLIST_ITEMS are ticked by the reviewer,
+  // keyed by item id. Persists in component state; resets on new upload.
+  const [generalChecklist, setGeneralChecklist] = useState({});
+  // genSearch: search across findings in the General (drawing) panel
+  const [genSearchQ,    setGenSearchQ]    = useState('');
+  const [genSearchOpen, setGenSearchOpen] = useState(false);
+  const genSearchRef = useRef(null);
+  // ── Fullscreen ─────────────────────────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+  // ── Panel drag-and-drop order ─────────────────────────────────────────────
+  // Persists across sessions via localStorage. Empty array = use default order.
+  const [panelOrder, setPanelOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PANEL_DND_STORAGE_KEY) || '[]'); }
+    catch { return []; }
+  });
+  const [draggingId,      setDraggingId]     = useState(null); // id of panel actively being dragged
+  const [dropTargetIdx,   setDropTargetIdx]  = useState(null); // live placeholder slot index
+  const dragGhostRef     = useRef(null);  // DOM ref — fixed ghost element
+  const dragStateRef     = useRef(null);  // { startY, startIdx, order, itemHeight }
+  const dropTargetIdxRef = useRef(null);  // mirror of dropTargetIdx — avoids stale closures in listeners
+  const dragInitialPos   = useRef({ x: 0, y: 0 }); // ghost initial position (prevents top-left flash)
+  const railItemRefs     = useRef({});    // id -> button DOM element (for height measurement)
+  const dragCommittedRef = useRef(false); // true once movement exceeds threshold — prevents accidental drags
   // ── Drawing image (lazy-loaded for overlay) ───────────────────────────────
   const [drawingImageUrl,     setDrawingImageUrl]     = useState(null);
   const [drawingImageLoading, setDrawingImageLoading] = useState(false);
+  // ── Legend Sheets — AI-powered extraction ─────────────────────────────────
+  const [legendSheets,       setLegendSheets]       = useState([]);
+  const [showLegendUpload,   setShowLegendUpload]   = useState(false);
+  const [legendUploadFiles,  setLegendUploadFiles]  = useState([]);
+  const [legendUploading,    setLegendUploading]    = useState(false);
+  const [showLegendPanel,    setShowLegendPanel]    = useState(false);
+  const [legendPanelSheet,   setLegendPanelSheet]   = useState(null);  // full detail
+  const [loadingLegendDetail,setLoadingLegendDetail]= useState(false);
+  const legendPollRef = useRef(null);
   // ── Findings filters (soft-coded, additive) ───────────────────────────────
   const [filterSeverity, setFilterSeverity] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -716,6 +1178,86 @@ const PIDVerification = () => {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [documentId, activeDrawing, results?.document_id]);
 
+  // Clear Drawing Layout trace cache when switching to a different drawing page
+  useEffect(() => {
+    setLineTracedPaths({});
+    _tracedAttemptedRef.current = new Set();
+  }, [activeDrawing]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Trace selected line along dark pixels on drawing image using canvas BFS
+  useEffect(() => {
+    if (!lineLayoutSelected || !drawingImageUrl || !activeDrawingData) return;
+    if (_tracedAttemptedRef.current.has(lineLayoutSelected)) return;
+    _tracedAttemptedRef.current.add(lineLayoutSelected);
+    const id = ++_traceIdRef.current;
+    setLineTracing(true);
+
+    // Defer heavy canvas + BFS work to the next event-loop tick so the loading
+    // spinner renders first before the synchronous pixel analysis blocks the main thread.
+    const bfsTimer = setTimeout(() => {
+      if (_traceIdRef.current !== id) return; // cancelled before timer fired
+
+    const lt = (activeDrawingData.metadata?.line_tags || [])
+      .find(t => (t.text || t.tag || t.label || '') === lineLayoutSelected);
+    if (!lt) { setLineTracing(false); return; }
+
+    const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+    if (occs.length < 2) {
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: null }));
+      setLineTracing(false); return;
+    }
+    // Use direction-aware sort (same convention as Drawing Layout overlay)
+    const sorted = _routeSort(occs);
+    const s0 = sorted[0], sN = sorted[sorted.length - 1];
+
+    const img = new Image();
+    img.onload = () => {
+      if (_traceIdRef.current !== id) return;
+      const W  = LINE_FOLLOW_CANVAS_W;
+      const H  = Math.round(img.naturalHeight * W / img.naturalWidth);
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, W, H);
+      const raw4 = ctx.getImageData(0, 0, W, H).data;
+      const dark = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++)
+        dark[i] = (raw4[i*4]*0.299 + raw4[i*4+1]*0.587 + raw4[i*4+2]*0.114) <= LINE_FOLLOW_DARK_THRESH ? 1 : 0;
+
+      const snap = (xp, yp) => {
+        const bx = Math.round(xp * W / 100), by = Math.round(yp * H / 100);
+        if (by >= 0 && by < H && bx >= 0 && bx < W && dark[by*W+bx]) return [bx, by];
+        let b = [bx, by], bd = Infinity;
+        const r = LINE_FOLLOW_SNAP_RADIUS;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const nx = Math.max(0, Math.min(W-1, bx+dx)), ny = Math.max(0, Math.min(H-1, by+dy));
+          if (dark[ny*W+nx]) { const d = dx*dx+dy*dy; if (d < bd) { bd = d; b = [nx, ny]; } }
+        }
+        return b;
+      };
+
+      const [sx, sy] = snap(s0.x_pct, s0.y_pct);
+      const [ex, ey] = snap(sN.x_pct, sN.y_pct);
+      const rawPath  = _bfsTrace(dark, W, H, sx, sy, ex, ey);
+      let result = null;
+      if (rawPath && rawPath.length >= 2)
+        result = _dpSimplify(rawPath, LINE_FOLLOW_SIMPLIFY_TOL)
+                   .map(([gx, gy]) => ({ x_pct: gx / W * 100, y_pct: gy / H * 100 }));
+      if (_traceIdRef.current !== id) return;
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: result }));
+      setLineTracing(false);
+    };
+    img.onerror = () => {
+      if (_traceIdRef.current !== id) return;
+      setLineTracedPaths(p => ({ ...p, [lineLayoutSelected]: null }));
+      setLineTracing(false);
+    };
+    img.src = drawingImageUrl;
+    }, 30); // end of deferred BFS block
+    return () => clearTimeout(bfsTimer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineLayoutSelected, drawingImageUrl]);
+
   // Load stored calibration corrections from localStorage on component mount.
   // Corrections are supplementary — they don't affect any backend data.
   useEffect(() => {
@@ -724,6 +1266,26 @@ const PIDVerification = () => {
       if (raw) setCalibCorrections(JSON.parse(raw));
     } catch { /* non-fatal */ }
   }, []);
+
+  // ── Auto-run naming check when results arrive ─────────────────────────────
+  // Fires automatically after verification completes so the user never needs
+  // to press "Run Check" manually. Guards: only if results exist, no prior
+  // namingResults, and not already running. Also guarded by SHOW_NAMING_PANEL.
+  useEffect(() => {
+    if (!SHOW_NAMING_PANEL) return;
+    const docId = documentId || results?.document_id;
+    if (!docId || !results || namingResults || checkingNaming) return;
+    // Soft-coded delay (ms) — gives the UI time to settle before the API call.
+    const AUTO_NAMING_DELAY_MS = 800;
+    const t = setTimeout(() => { runNamingCheck(); }, AUTO_NAMING_DELAY_MS);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results?.document_id, documentId]);
+
+  // ── Panel DnD — listeners are attached inline in handleGripPointerDown, ───────
+  // not via useEffect, to avoid a race-condition where a fast release would
+  // fire pointerup before React's next render cycle attaches window listeners.
+  // (No useEffect needed here — the handler is fully self-contained.)
 
   // ── Project API ───────────────────────────────────────────────────────────
   const fetchProjects = async () => {
@@ -797,6 +1359,112 @@ const PIDVerification = () => {
     }
   };
 
+  // ── Legend Sheets API helpers ──────────────────────────────────────────────
+  const fetchLegendSheets = async (projectId) => {
+    if (!projectId) return;
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/projects/${projectId}/legend-sheets/`,
+        { headers: authHeader() },
+      );
+      setLegendSheets(res.data?.legend_sheets || []);
+    } catch (_) { /* non-fatal */ }
+  };
+
+  // Instrument Symbol Registry — fetch all symbols for the active project
+  const fetchInstrumentSymbols = async (projectId) => {
+    if (!projectId) return;
+    setLoadingInstrSymbols(true);
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/projects/${projectId}/instrument-symbols/`,
+        { headers: authHeader() },
+      );
+      setInstrSymbols(res.data?.symbols || []);
+    } catch (_) { /* non-fatal */ }
+    finally { setLoadingInstrSymbols(false); }
+  };
+
+  const uploadLegendSheets = async () => {
+    if (!selectedProject?.project_id || !legendUploadFiles.length) return;
+    setLegendUploading(true);
+    try {
+      const fd = new FormData();
+      legendUploadFiles.forEach(f => fd.append('files', f));
+      await axios.post(
+        `${API_PREFIX}/projects/${selectedProject.project_id}/legend-sheets/upload/`,
+        fd,
+        { headers: { ...authHeader(), 'Content-Type': 'multipart/form-data' } },
+      );
+      setShowLegendUpload(false);
+      setLegendUploadFiles([]);
+      // Start polling for status updates
+      fetchLegendSheets(selectedProject.project_id);
+      startLegendPoll(selectedProject.project_id);
+      flash('success', 'Legend sheet(s) uploaded — AI extraction in progress…');
+    } catch (err) {
+      flash('error', err?.response?.data?.error || 'Upload failed');
+    } finally {
+      setLegendUploading(false);
+    }
+  };
+
+  const startLegendPoll = (projectId) => {
+    if (legendPollRef.current) clearInterval(legendPollRef.current);
+    // Soft-coded: poll every 4 s, stop after 120 s
+    const POLL_INTERVAL_MS = 4000;
+    const POLL_MAX_MS      = 120000;
+    const start = Date.now();
+    legendPollRef.current = setInterval(async () => {
+      await fetchLegendSheets(projectId);
+      if (Date.now() - start > POLL_MAX_MS) {
+        clearInterval(legendPollRef.current);
+        legendPollRef.current = null;
+      }
+    }, POLL_INTERVAL_MS);
+  };
+
+  const openLegendDetail = async (legendId) => {
+    setShowLegendPanel(true);
+    setLegendPanelSheet(null);
+    setLoadingLegendDetail(true);
+    try {
+      const res = await axios.get(
+        `${API_PREFIX}/legend-sheets/${legendId}/`,
+        { headers: authHeader() },
+      );
+      setLegendPanelSheet(res.data);
+    } catch (_) {
+      setLegendPanelSheet(null);
+    } finally {
+      setLoadingLegendDetail(false);
+    }
+  };
+
+  const deleteLegendSheet = async (legendId) => {
+    try {
+      await axios.delete(`${API_PREFIX}/legend-sheets/${legendId}/`, { headers: authHeader() });
+      setLegendSheets(prev => prev.filter(s => s.legend_id !== legendId));
+      if (legendPanelSheet?.legend_id === legendId) setShowLegendPanel(false);
+      flash('success', 'Legend sheet removed');
+    } catch (_) {
+      flash('error', 'Failed to delete legend sheet');
+    }
+  };
+
+  const retryLegendExtraction = async (legendId) => {
+    try {
+      await axios.post(`${API_PREFIX}/legend-sheets/${legendId}/retry/`, {}, { headers: authHeader() });
+      flash('success', 'Re-queued for extraction');
+      if (selectedProject?.project_id) startLegendPoll(selectedProject.project_id);
+    } catch (_) {
+      flash('error', 'Retry failed');
+    }
+  };
+
+  // Cleanup legend poll on unmount
+  useEffect(() => () => { if (legendPollRef.current) clearInterval(legendPollRef.current); }, []);
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
@@ -856,10 +1524,13 @@ const PIDVerification = () => {
     setResults(null);
     fetchHistory(p.project_id);
     fetchLegendKnowledge(p.project_id);
+    fetchLegendSheets(p.project_id);
+    fetchInstrumentSymbols(p.project_id);
   };
 
   const handleBackToProjects = () => {
     clearInterval(pollRef.current);
+    if (legendPollRef.current) clearInterval(legendPollRef.current);
     setSelectedProject(null);
     setHistory([]);
     resetUpload();
@@ -869,6 +1540,8 @@ const PIDVerification = () => {
     setLegendKnowledge(null);
     setLegendScope(null);
     setLegendBuiltAt(null);
+    setLegendSheets([]);
+    setShowLegendPanel(false);
     setMessage({ type:'', text:'' });
   };
 
@@ -973,6 +1646,41 @@ const PIDVerification = () => {
     }
   };
 
+  // ── DCS / Instrument Symbol Compliance Analysis ───────────────────────────
+  // Calls Stage-1 (legend extraction via Gemini+OpenAI) + Stage-2 (P&ID analysis).
+  // Legend PDF is optional — when not supplied, built-in ISA 5.1 defaults are used.
+  const runDcsAnalysis = async () => {
+    const docId = documentId || results?.document_id;
+    if (!docId) { flash('error', 'No document loaded — upload a P&ID first.'); return; }
+    setDcsAnalyzing(true);
+    setDcsResult(null);
+    try {
+      const form = new FormData();
+      form.append('replace_existing', 'true');
+      // Soft-coded: derive drawing index from the active drawing object
+      const drIdx = activeDrawingData?.page_index ?? 0;
+      form.append('drawing_index', String(drIdx));
+      if (dcsLegendFile) form.append('legend_file', dcsLegendFile);
+
+      const res = await axios.post(
+        `${API_PREFIX}/analyze-dcs/${docId}/`,
+        form,
+        { headers: { ...authHeader(), 'Content-Type': 'multipart/form-data' }, timeout: 300000 }
+      );
+      setDcsResult(res.data);
+      flash('success',
+        `DCS Analysis complete — ${res.data.findings_created} finding${res.data.findings_created !== 1 ? 's' : ''} added. ` +
+        `${res.data.symbols_extracted} symbols referenced (${res.data.legend_source}).`
+      );
+      // Refresh results so new findings appear immediately
+      await fetchResults(docId);
+    } catch (e) {
+      flash('error', e?.response?.data?.error || 'DCS analysis failed — check AI API keys.');
+    } finally {
+      setDcsAnalyzing(false);
+    }
+  };
+
   // ── Upload / verification API ─────────────────────────────────────────────
   const handleFileChange = (e) => { setFile(e.target.files[0] || null); setError(''); };
 
@@ -1052,6 +1760,42 @@ const PIDVerification = () => {
     setElapsedSec(0);
     setOverrides({}); setOverridesSaved(false);
     setComparison(null);
+  };
+
+  // recheckDocument — re-run the full P&ID quality check on an already-uploaded
+  // document without re-uploading the file.  Reuses the existing status-polling loop.
+  //
+  // docId    : document_id (UUID string) of the document to re-check
+  // fileName : display name used in flash messages only
+  const recheckDocument = async (docId, fileName) => {
+    if (recheckingDocId) return;          // prevent double-click
+    setRecheckingDocId(docId);
+    try {
+      // 1. Tell the backend to reset and re-queue
+      await axios.post(
+        `${API_PREFIX}/reprocess/${docId}/`,
+        {},
+        { headers: authHeader(), timeout: 20000 },
+      );
+      flash('success', `Re-check queued for "${fileName}" — results will update automatically.`);
+
+      // 2. Load this document as the active one so the user sees live progress
+      setResults(null);
+      setDocumentId(docId);
+      setDocStatus('uploaded');
+      setActiveDrawing(null);
+      setOverrides({});
+      setOverridesSaved(false);
+      setComparison(null);
+
+      // 3. Start the same polling loop used after a fresh upload
+      startPolling(docId);
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'Re-check failed — please try again.';
+      flash('error', msg);
+    } finally {
+      setRecheckingDocId(null);
+    }
   };
 
   const handleOverrideChange = (findingId, field, value) => {
@@ -1137,6 +1881,56 @@ const PIDVerification = () => {
 
   const activeDrawingData = results?.drawings?.find(d => d.drawing_id === activeDrawing);
   const extractionSummary = activeDrawingData?.metadata?.extraction_summary || null;
+
+  // ── Performance: memoize expensive per-drawing computations ──────────────────────────────
+  // These re-run ONLY when activeDrawingData changes (drawing selection), NOT on every render.
+  // Without this, the Lines panel rebuilt tagFindingsMap O(findings×tags) and _routeSort for
+  // every line tag on every keystroke / hover / scroll event.
+
+  // tagFindingsMap: each line tag text → array of its related QC findings
+  const tagFindingsMap = useMemo(() => {
+    const lts      = activeDrawingData?.metadata?.line_tags || [];
+    const findings = (activeDrawingData?.issues || []).filter(
+      f => _LINE_FINDING_CATS.has(f.category) || (f.rule_id || '').startsWith('LSZ')
+    );
+    const map = new Map();
+    for (const f of findings) {
+      const ev = (f.evidence || f.issue || '').toLowerCase();
+      for (const lt of lts) {
+        if (lt.text && ev.includes(lt.text.toLowerCase())) {
+          if (!map.has(lt.text)) map.set(lt.text, []);
+          map.get(lt.text).push(f);
+        }
+      }
+    }
+    return map;
+  }, [activeDrawingData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // layoutItemsBase: direction-aware route items for Drawing Layout sub-tab
+  const layoutItemsBase = useMemo(() => {
+    const lts = activeDrawingData?.metadata?.line_tags || [];
+    return lts.reduce((acc, lt) => {
+      const text = lt.text || lt.tag || lt.label || '';
+      if (!text) return acc;
+      const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+      if (occs.length === 0) return acc;
+      const parts = text.match(/^(\d+(?:\.\d+)?)"?[-_]([A-Za-z0-9]+)[-_](\d+)/);
+      const fluidCode = parts ? parts[2].toUpperCase() : (lt.fluid_code || '').toUpperCase();
+      const fc      = _lfcGlobal(fluidCode);
+      const sorted  = _routeSort(occs);
+      const start   = sorted[0], end = sorted[sorted.length - 1], middle = sorted.slice(1, -1);
+      const fds     = tagFindingsMap.get(text) || [];
+      const hasIssue = fds.length > 0;
+      const maxSev   = fds.length
+        ? fds.reduce((b, f) => (_SEV_RANK[f.severity] || 0) > (_SEV_RANK[b] || 0) ? f.severity : b, fds[0].severity)
+        : null;
+      const dirs = [...new Set(occs.map(o => (o.direction || '').toUpperCase().charAt(0)).filter(Boolean))];
+      const routeType = dirs.length > 1 ? 'HV' : (dirs[0] || 'H');
+      acc.push({ text, fluidCode, fc, start, end, middle, sorted, hasIssue, maxSev,
+                 multi_angle: !!lt.multi_angle, routeType });
+      return acc;
+    }, []);
+  }, [activeDrawingData, tagFindingsMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Override-aware helpers — use local draft until saved
   const getVal = (f, field) => overrides[f.id]?.[field] ?? f[field];
@@ -1451,6 +2245,22 @@ const PIDVerification = () => {
   );
   const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
 
+  // ── Anchored-findings filter ──────────────────────────────────────────────
+  // Inline evidence-key normalizer — mirrors normKey defined inside buildOverlayNodes.
+  // Strips smart/curly quotes so keys from different sources compare equal.
+  const _normEvKey = (k) => (k || '').replace(/[\u201c\u201d\u2018\u2019]/g, '"').trim();
+  // Build the set of normalized evidence keys for findings that have a REAL
+  // drawing position (tier in FINDINGS_ANCHORED_TIERS, i.e. P1–P5 or CX).
+  // This set is consumed by the Findings table IIFE below to restrict the list
+  // to findings actually visible as markers on the canvas.
+  const anchoredEvidenceKeys = FINDINGS_TABLE_ANCHORED_ONLY
+    ? new Set(
+        overlayNodes
+          .filter(n => FINDINGS_ANCHORED_TIERS.has(n.tier))
+          .map(n => _normEvKey(inferEvidenceKey(n.finding)))
+      )
+    : null;
+
   // Auto-record per-drawing resolution tier statistics to localStorage.
   // Accumulates across all P&IDs tested and can be exported for model training.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1499,7 +2309,7 @@ const PIDVerification = () => {
   if (!selectedProject) {
     return (
       <DarkBg>
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="w-full px-2 sm:px-4 lg:px-6 py-10">
 
           {/* Page header */}
           <div className="mb-10" style={{ animation:'fadeUp 0.6s ease-out both' }}>
@@ -1682,7 +2492,7 @@ const PIDVerification = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <DarkBg>
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pb-14 pt-6">
+      <div className="w-full px-2 sm:px-4 lg:px-6 pb-14 pt-6">
 
         {/* ── Dashboard hero header ────────────────────────────────────────── */}
         <div className="rounded-2xl mb-6 overflow-hidden" style={{ background:'linear-gradient(135deg,rgba(239,246,255,0.98),rgba(238,242,255,0.98))', border:'1px solid #bfdbfe', backdropFilter:'blur(16px)', boxShadow:'0 1px 3px rgba(0,0,0,0.04)', animation:'fadeUp 0.4s ease-out both' }}>
@@ -1844,6 +2654,173 @@ const PIDVerification = () => {
 
             </div>{/* end grid */}
 
+            {/* ── Legend Sheets — AI extraction card ──────────────────────── */}
+            <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
+              {/* Header */}
+              <div className="px-4 py-3 flex items-center gap-2.5 border-b border-slate-100"
+                style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background:'linear-gradient(135deg,#16a34a,#15803d)' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-white">
+                    <path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-wide leading-none">Legend Sheets</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Upload legend sheets — AI extracts line types, numbering, abbreviations &amp; more</p>
+                </div>
+                {legendSheets.length > 0 && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{legendSheets.length} sheet{legendSheets.length !== 1 ? 's' : ''}</span>
+                )}
+                <button
+                  onClick={() => setShowLegendUpload(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:-translate-y-px"
+                  style={{ background:'linear-gradient(135deg,#16a34a,#15803d)', boxShadow:'0 2px 8px rgba(22,163,74,0.3)' }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  {showLegendUpload ? 'Cancel' : 'Add Legend'}
+                </button>
+              </div>
+
+              {/* Upload drop zone (shown only when panel is open) */}
+              {showLegendUpload && (
+                <div className="px-4 py-3 border-b border-slate-100 bg-white flex flex-col gap-3">
+                  <label className="flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 cursor-pointer hover:bg-emerald-50 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-8 h-8 text-emerald-400">
+                      <path d="M4 16l4-4 4 4M12 12V4M8 20h8M16 16l4-4 4 4"/>
+                      <path d="M4 20h4"/>
+                    </svg>
+                    <span className="text-xs font-semibold text-emerald-700">Drop legend files here, or click to browse</span>
+                    <span className="text-xs text-slate-400">PDF · PNG · JPG · TIFF · BMP</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif,.bmp"
+                      className="sr-only"
+                      onChange={e => setLegendUploadFiles(Array.from(e.target.files || []))}
+                    />
+                  </label>
+                  {legendUploadFiles.length > 0 && (
+                    <ul className="flex flex-col gap-1">
+                      {legendUploadFiles.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+                          </svg>
+                          <span className="truncate flex-1">{f.name}</span>
+                          <span className="text-slate-400">{(f.size/1024).toFixed(0)} KB</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <button
+                    onClick={uploadLegendSheets}
+                    disabled={legendUploading || !legendUploadFiles.length}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50 transition-all hover:-translate-y-px"
+                    style={{ background:'linear-gradient(135deg,#16a34a,#15803d)', boxShadow:'0 3px 10px rgba(22,163,74,0.25)' }}
+                  >
+                    {legendUploading
+                      ? <><Loader className="w-3.5 h-3.5 animate-spin" />Uploading…</>
+                      : <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload &amp; Extract</>}
+                  </button>
+                </div>
+              )}
+
+              {/* Sheet list */}
+              {legendSheets.length > 0 && (
+                <div className="divide-y divide-slate-100 bg-white">
+                  {legendSheets.map(sheet => {
+                    // Soft-coded: status colours
+                    const STATUS_STYLE = {
+                      pending:    { bg:'bg-slate-100', text:'text-slate-500', dot:'bg-slate-400' },
+                      processing: { bg:'bg-amber-50',  text:'text-amber-600', dot:'bg-amber-400 animate-pulse' },
+                      completed:  { bg:'bg-emerald-50',text:'text-emerald-700', dot:'bg-emerald-500' },
+                      failed:     { bg:'bg-red-50',    text:'text-red-600',  dot:'bg-red-400' },
+                    };
+                    const ss = STATUS_STYLE[sheet.status] || STATUS_STYLE.pending;
+                    const cats = sheet.category_counts || {};
+                    const totalItems = Object.values(cats).reduce((a, b) => a + b, 0);
+
+                    return (
+                      <div key={sheet.legend_id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 transition-colors group">
+                        {/* File icon */}
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-100">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-slate-500">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+                          </svg>
+                        </div>
+                        {/* File name + meta */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{sheet.file_name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {/* Status */}
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${ss.bg} ${ss.text}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
+                              {sheet.status}
+                            </span>
+                            {/* Extraction method */}
+                            {sheet.extraction_method && (
+                              <span className="text-xs text-slate-400">
+                                {sheet.extraction_method === 'ai_vision' ? '🤖 AI Vision' : '📝 Text parse'}
+                              </span>
+                            )}
+                            {/* Category count */}
+                            {sheet.status === 'completed' && totalItems > 0 && (
+                              <span className="text-xs text-emerald-600 font-medium">{totalItems} items extracted</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {sheet.status === 'completed' && (
+                            <button
+                              onClick={() => openLegendDetail(sheet.legend_id)}
+                              title="View extracted data"
+                              className="w-7 h-7 rounded-lg border border-emerald-200 bg-emerald-50 flex items-center justify-center hover:bg-emerald-100 transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            </button>
+                          )}
+                          {sheet.status === 'failed' && (
+                            <button
+                              onClick={() => retryLegendExtraction(sheet.legend_id)}
+                              title="Retry extraction"
+                              className="w-7 h-7 rounded-lg border border-amber-200 bg-amber-50 flex items-center justify-center hover:bg-amber-100 transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-amber-600">
+                                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                              </svg>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteLegendSheet(sheet.legend_id)}
+                            title="Remove legend sheet"
+                            className="w-7 h-7 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center hover:bg-red-100 transition-colors"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-red-500">
+                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                              <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {legendSheets.length === 0 && !showLegendUpload && (
+                <p className="px-4 py-4 text-xs text-slate-400 text-center bg-white">
+                  No legend sheets uploaded yet — click <strong>Add Legend</strong> to upload PDF/image legend files
+                </p>
+              )}
+            </div>
+            {/* ── End Legend Sheets card ─────────────────────────────────── */}
+
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -1873,7 +2850,7 @@ const PIDVerification = () => {
           const PANELS = [
             {
               id: 'drawing',
-              label: 'Drawing',
+              label: DRAWING_PANEL_LABEL,
               icon: ({ cls }) => (
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="1.8" stroke="currentColor" className={cls}>
                   <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9"/><circle cx="15" cy="15" r="2" /><path d="M13.5 15h-7"/>
@@ -1901,7 +2878,7 @@ const PIDVerification = () => {
               accent: '#0d9488',
               glow: 'rgba(13,148,136,0.25)',
             },
-            {
+            ...( SHOW_NAMING_PANEL ? [{
               id: 'naming',
               label: 'Naming',
               icon: ({ cls }) => <Type className={cls} />,
@@ -1909,8 +2886,8 @@ const PIDVerification = () => {
               badgeCls: namingResults?.total > 0 ? 'bg-violet-500 text-white' : 'bg-emerald-500 text-white',
               accent: '#7c3aed',
               glow: 'rgba(124,58,237,0.25)',
-            },
-            {
+            }] : []),
+            ...( SHOW_COMPARE_PANEL ? [{
               id: 'comparison',
               label: 'Compare',
               icon: ({ cls }) => <BarChart2 className={cls} />,
@@ -1918,7 +2895,7 @@ const PIDVerification = () => {
               badgeCls: 'bg-teal-500 text-white',
               accent: '#0f766e',
               glow: 'rgba(15,118,110,0.25)',
-            },
+            }] : []),
             {
               id: 'equipment',
               label: 'Equipment',
@@ -1927,6 +2904,47 @@ const PIDVerification = () => {
                 const tp = activeDrawingData?.metadata?.tag_positions || {};
                 const k = Object.keys(tp).length;
                 return k || (activeDrawingData?.metadata?.extraction_summary?.tags > 0 ? activeDrawingData.metadata.extraction_summary.tags : null);
+              })(),
+              badgeCls: 'bg-violet-500 text-white',
+              accent: '#7c3aed',
+              glow: 'rgba(124,58,237,0.25)',
+            },
+            {
+              id: 'instrumentation',
+              label: 'Instr.',
+              icon: ({ cls }) => <Wrench className={cls} />,
+              badge: (() => {
+                // Show count of AI-detected issues from instr-relevant findings
+                const instrCats = new Set(['instrument','tag','valve']);
+                const cnt = (activeDrawingData?.issues || []).filter(f => instrCats.has(f.category)).length;
+                return cnt || null;
+              })(),
+              badgeCls: 'bg-amber-500 text-white',
+              accent: '#d97706',
+              glow: 'rgba(217,119,6,0.25)',
+            },
+            {
+              id: 'piping',
+              label: 'Piping',
+              icon: ({ cls }) => <Network className={cls} />,
+              badge: (() => {
+                const pipCats = new Set(['piping','line','spec','insulation','valve']);
+                const cnt = (activeDrawingData?.issues || []).filter(f => pipCats.has(f.category)).length;
+                return cnt || null;
+              })(),
+              badgeCls: 'bg-cyan-500 text-white',
+              accent: '#0891b2',
+              glow: 'rgba(8,145,178,0.25)',
+            },
+            {
+              id: 'compressor',
+              label: 'Compressor',
+              icon: ({ cls }) => <Wind className={cls} />,
+              badge: (() => {
+                const cnt = (activeDrawingData?.issues || []).filter(f =>
+                  (f.rule_id || '').startsWith('CMP-') || f.category === 'compressor'
+                ).length;
+                return cnt || null;
               })(),
               badgeCls: 'bg-violet-500 text-white',
               accent: '#7c3aed',
@@ -1953,9 +2971,90 @@ const PIDVerification = () => {
               accent: '#6366f1',
               glow: 'rgba(99,102,241,0.25)',
             },
+            {
+              id: 'performance',
+              label: 'Perf.',
+              icon: ({ cls }) => <Zap className={cls} />,
+              badge: null,
+              accent: '#10b981',
+              glow: 'rgba(16,185,129,0.25)',
+            },
           ];
 
-          const activePanelDef = PANELS.find(p => p.id === activePanel) || PANELS[0];
+          // ── Apply user-defined drag order; default = definition order ─────
+          const orderedPanels = panelOrder.length === 0
+            ? PANELS
+            : [
+                ...panelOrder.map(id => PANELS.find(p => p.id === id)).filter(Boolean),
+                ...PANELS.filter(p => !panelOrder.includes(p.id)),
+              ];
+
+          // ── Drag-and-drop: self-contained pointer handler with 5 px threshold ─────
+          // Listeners are attached directly inside onPointerDown so they are
+          // guaranteed to be in place before pointerup can fire — no useEffect race.
+          // Soft-coded: min vertical movement (px) before the drag is committed.
+          const DRAG_THRESHOLD_PX = 5;
+          const RAIL_GAP_PX = 6; // must match gap-1.5 (6 px) in the flex col
+          const handleGripPointerDown = (e, tab, idx) => {
+            e.preventDefault();  // prevent text selection while dragging
+            e.stopPropagation();
+            dragCommittedRef.current = false;
+            dragInitialPos.current = { x: e.clientX - 76, y: e.clientY - 22 };
+            const h = (railItemRefs.current[tab.id]?.getBoundingClientRect().height ?? 44) + RAIL_GAP_PX;
+            dragStateRef.current = { startY: e.clientY, startIdx: idx, order: orderedPanels.map(p => p.id), itemHeight: h };
+            dropTargetIdxRef.current = idx;
+
+            const onMove = (ev) => {
+              // Only commit the drag after intentional vertical movement
+              if (!dragCommittedRef.current) {
+                if (Math.abs(ev.clientY - dragStateRef.current.startY) < DRAG_THRESHOLD_PX) return;
+                dragCommittedRef.current = true;
+                setDraggingId(tab.id);
+                setDropTargetIdx(idx);
+              }
+              // Move ghost imperatively — no setState on every frame
+              if (dragGhostRef.current) {
+                dragGhostRef.current.style.top  = `${ev.clientY - 22}px`;
+                dragGhostRef.current.style.left = `${ev.clientX - 76}px`;
+              }
+              const { startY, startIdx, order, itemHeight } = dragStateRef.current;
+              const clamped = Math.max(0, Math.min(order.length - 1, Math.round((ev.clientY - startY) / itemHeight) + startIdx));
+              if (dropTargetIdxRef.current !== clamped) {
+                dropTargetIdxRef.current = clamped;
+                setDropTargetIdx(clamped);
+              }
+            };
+
+            const onUp = () => {
+              window.removeEventListener('pointermove', onMove);
+              window.removeEventListener('pointerup',   onUp);
+              if (dragCommittedRef.current) {
+                // Real drag — commit the new order
+                const { startIdx, order } = dragStateRef.current;
+                const ti = dropTargetIdxRef.current;
+                if (ti !== null && ti !== startIdx) {
+                  const ids = [...order];
+                  const [moved] = ids.splice(startIdx, 1);
+                  ids.splice(ti, 0, moved);
+                  setPanelOrder(ids);
+                  localStorage.setItem(PANEL_DND_STORAGE_KEY, JSON.stringify(ids));
+                }
+              } else {
+                // No movement — treat as a tap/click: navigate to this panel.
+                // (click event is suppressed by e.preventDefault above, so we navigate manually)
+                setActivePanel(tab.id);
+              }
+              setDraggingId(null);
+              setDropTargetIdx(null);
+              dropTargetIdxRef.current = null;
+              dragCommittedRef.current = false;
+            };
+
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup',   onUp);
+          };
+
+          const activePanelDef = orderedPanels.find(p => p.id === activePanel) || orderedPanels[0];
 
           return (
           <div className="flex gap-4 items-start flex-row-reverse" style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
@@ -1996,6 +3095,24 @@ const PIDVerification = () => {
                   ))}
                   {/* Spacer + action buttons */}
                   <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    {/* Re-check: re-run the quality check on the same file — no re-upload needed */}
+                    <button
+                      onClick={() => recheckDocument(documentId, results.file_name)}
+                      disabled={!!recheckingDocId || polling}
+                      title="Re-run quality check without re-uploading the file"
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px disabled:opacity-50"
+                      style={{
+                        background: '#f5f3ff',
+                        border: '1.5px solid #c4b5fd',
+                        color: '#7c3aed',
+                        boxShadow: '0 2px 8px rgba(124,58,237,0.12)',
+                      }}
+                    >
+                      {recheckingDocId === documentId
+                        ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Queuing…</>
+                        : <><RefreshCw className="w-3.5 h-3.5" /> Re-check</>
+                      }
+                    </button>
                     <button onClick={downloadExcel} disabled={downloadingXlsx}
                       className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
                       style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
@@ -2011,6 +3128,14 @@ const PIDVerification = () => {
                     <button onClick={() => { resetUpload(); setResults(null); }}
                       className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
                       <RefreshCw className="w-3.5 h-3.5" />New
+                    </button>
+                    <button
+                      onClick={toggleFullscreen}
+                      title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl transition-all"
+                    >
+                      {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                      {isFullscreen ? 'Exit' : 'Fullscreen'}
                     </button>
                   </div>
                 </div>
@@ -2051,68 +3176,262 @@ const PIDVerification = () => {
               ════════════════════════════════════════════════ */}
               <div key={activePanel} style={{ animation:'panelSlide 0.25s ease-out both' }}>
 
-              {/* ─── DRAWING panel ───────────────────────────────────── */}
+              {/* ─── DRAWING panel — consolidated QC dashboard ───────────── */}
               {activePanel === 'drawing' && activeDrawingData && (
               <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'fadeUp 0.5s ease-out 0.1s both' }}>
-                {/* Drawing panel header */}
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <GitBranch className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">{activeDrawing}</h2>
-                      <p className="text-xs text-slate-500">{activeDrawingData.issues?.length ?? 0} findings · Drawing View</p>
-                    </div>
+
+              {/* ── Dashboard: computed inline so no new state is needed ── */}
+              {(() => {
+                // Soft-coded: issue severity weights used to compute the quality score.
+                // Adjust these values to tune how aggressively each severity penalises the score.
+                const QC_SCORE_WEIGHTS = { critical: 15, major: 5, minor: 1 };
+                // Soft-coded: panel navigation cards shown in the Drawing dashboard.
+                // Reorder, add, or remove entries here — the grid adjusts automatically.
+                const _minor   = (activeDrawingData?.issues||[]).filter(f=>(f.severity||'').toLowerCase()==='minor').length;
+                const _instrCnt= (activeDrawingData?.issues||[]).filter(f=>new Set(['instrument','tag','valve']).has(f.category)).length;
+                const _pipCnt  = (activeDrawingData?.issues||[]).filter(f=>new Set(['piping','line','spec','insulation','valve']).has(f.category)).length;
+                const _cmpCnt  = (activeDrawingData?.issues||[]).filter(f=>(f.rule_id||'').startsWith('CMP-')||f.category==='compressor').length;
+                const _lineCnt = (activeDrawingData?.metadata?.line_tags||[]).length;
+                const _equipCnt= Object.keys(activeDrawingData?.metadata?.tag_positions||{}).length || (extractionSummary?.tags??0);
+                const _overCnt = (results.drawings??[]).reduce((s,d)=>s+(d.overrides_applied??0),0);
+                const qScore   = Math.max(0,Math.min(100,Math.round(100-criticalCount*QC_SCORE_WEIGHTS.critical-majorCount*QC_SCORE_WEIGHTS.major-_minor*QC_SCORE_WEIGHTS.minor)));
+                const qGrade   = qScore>=90?{letter:'A',color:'#10b981',glow:'rgba(16,185,129,0.22)',label:'Excellent'}
+                               : qScore>=70?{letter:'B',color:'#3b82f6',glow:'rgba(59,130,246,0.22)',label:'Good'}
+                               : qScore>=50?{letter:'C',color:'#f59e0b',glow:'rgba(245,158,11,0.22)',label:'Fair'}
+                               :            {letter:'D',color:'#ef4444',glow:'rgba(239,68,68,0.22)',label:'Needs Attention'};
+                const NAV_CARDS = [
+                  { id:'findings',       label:'Findings',   Icon:GitBranch, count:totalIssues,  sub:`${criticalCount} crit · ${majorCount} major · ${_minor} minor`, accent:'#ef4444', bg:'rgba(239,68,68,0.07)',    border:'rgba(239,68,68,0.18)',    status: criticalCount>0?'critical':majorCount>0?'major':totalIssues>0?'minor':'pass' },
+                  { id:'lines',         label:'Lines',       Icon:Ruler,     count:_lineCnt,     sub:`${extractionSummary?.line_tags_multi_angle||0} multi-angle · ${extractionSummary?.line_sizes||0} sizes`,      accent:'#0d9488', bg:'rgba(13,148,136,0.07)',  border:'rgba(13,148,136,0.18)',  status:'info' },
+                  { id:'equipment',     label:'Equipment',   Icon:Cpu,       count:_equipCnt,    sub:`${extractionSummary?.instruments||0} instr · ${extractionSummary?.valves||0} valves · ${extractionSummary?.equipment||0} equip`, accent:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)', status:'info' },
+                  { id:'instrumentation',label:'Instr.',     Icon:Wrench,    count:_instrCnt,    sub:_instrCnt>0?`${_instrCnt} issue${_instrCnt!==1?'s':''} detected`:'No issues found',   accent:'#d97706', bg:'rgba(217,119,6,0.07)',   border:'rgba(217,119,6,0.18)',   status:_instrCnt>0?'warn':'pass' },
+                  { id:'piping',        label:'Piping',      Icon:Network,   count:_pipCnt,      sub:_pipCnt>0?`${_pipCnt} issue${_pipCnt!==1?'s':''} detected`:'No issues found',          accent:'#0891b2', bg:'rgba(8,145,178,0.07)',   border:'rgba(8,145,178,0.18)',   status:_pipCnt>0?'warn':'pass' },
+                  { id:'compressor',    label:'Compressor',  Icon:Wind,      count:_cmpCnt,      sub:_cmpCnt>0?`${_cmpCnt} CMP issue${_cmpCnt!==1?'s':''} detected`:'Compressor QC checklist', accent:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)', status:_cmpCnt>0?'warn':'pass' },
+                  { id:'cross',         label:'Cross-Ref',   Icon:Activity,  count:null,         sub:'Cross-drawing references',   accent:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.18)',  status:'info' },
+                ];
+                // Soft-coded: status badge styles keyed by `status` field above.
+                const STATUS_BADGE = {
+                  critical:{ dot:'#ef4444', label:'Critical', cls:'bg-red-50 text-red-700 border border-red-200' },
+                  major:   { dot:'#f97316', label:'Major',    cls:'bg-orange-50 text-orange-700 border border-orange-200' },
+                  minor:   { dot:'#fbbf24', label:'Minor',    cls:'bg-yellow-50 text-yellow-700 border border-yellow-200' },
+                  warn:    { dot:'#f97316', label:'Issues',   cls:'bg-orange-50 text-orange-600 border border-orange-200' },
+                  pass:    { dot:'#10b981', label:'OK',       cls:'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+                  info:    { dot:'#6366f1', label:'Data',     cls:'bg-indigo-50 text-indigo-600 border border-indigo-200' },
+                };
+                return (
+                  <>
+                  {/* ── QC toggle strip — always visible, left-anchored ────────── */}
+                  {/* Collapsed: this IS the entire header — drawing fills the card  */}
+                  {/* Expanded:  this sits on top so user can collapse again         */}
+                  <div
+                    role="button"
+                    onClick={() => setQcPanelOpen(v => !v)}
+                    className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none transition-all"
+                    title={qcPanelOpen ? 'Collapse — see full drawing' : 'Expand QC panel'}
+                    style={{
+                      background: REJLERS_DARK_HEADER_BG,
+                      borderBottom: qcPanelOpen ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                    }}
+                  >
+                    {/* Grade badge */}
+                    <span className="text-xs font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background:`${qGrade.color}25`, color:qGrade.color, border:`1px solid ${qGrade.color}50` }}>
+                      {qGrade.letter} · {qScore}%
+                    </span>
+                    {/* Drawing id */}
+                    <span className="text-xs font-bold text-white/80 truncate flex-1 min-w-0">{activeDrawing}</span>
+                    {/* Severity micro-chips */}
+                    {[{v:criticalCount,c:'#ef4444',l:'C'},{v:majorCount,c:'#f97316',l:'M'},{v:_minor,c:'#fbbf24',l:'m'}]
+                      .filter(x => x.v > 0)
+                      .map(x => (
+                        <span key={x.l} className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0"
+                          style={{ background:`${x.c}25`, color:x.c }}>{x.v} {x.l}</span>
+                      ))
+                    }
+                    {/* Hint text */}
+                    <span className="text-[9px] text-white/30 flex-shrink-0 hidden sm:block">
+                      {qcPanelOpen ? 'collapse' : 'expand QC panel'}
+                    </span>
+                    {/* Chevron rotates on open/close */}
+                    <span className="flex-shrink-0 transition-transform duration-200"
+                      style={{ transform: qcPanelOpen ? 'rotate(180deg)' : 'rotate(0deg)', color:'rgba(148,163,184,0.6)' }}>
+                      <ChevronDown className="w-4 h-4" />
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {overridesSaved && pendingCount === 0 && (
-                      <span className="text-xs text-emerald-600 flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5" />Review saved
-                      </span>
-                    )}
-                    {pendingCount > 0 && (
-                      <>
-                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                          {pendingCount} unsaved change{pendingCount !== 1 ? 's' : ''}
-                        </span>
-                        <button onClick={handleSaveOverrides} disabled={savingOverrides}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50 transition-all hover:-translate-y-px"
-                          style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow:'0 2px 8px rgba(245,158,11,0.35)' }}>
-                          {savingOverrides
-                            ? <><Loader className="w-3 h-3 animate-spin" />Saving…</>
-                            : <><Save className="w-3 h-3" />Save Review</>
-                          }
+
+                  {/* ── General checklist strip — always visible below the toggle bar ────── */}
+                  {/* Items are defined in GENERAL_CHECKLIST_ITEMS; click to tick, click again to clear. */}
+                  <div
+                    className="flex items-center gap-1 px-4 py-1.5 flex-wrap relative"
+                    style={{ background:'rgba(15,23,42,0.92)', borderBottom: qcPanelOpen ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
+                    onClick={e => e.stopPropagation()} // prevent toggle strip click-through
+                  >
+                    <span className="text-[9px] font-black uppercase tracking-widest flex-shrink-0 mr-1"
+                      style={{ color:'rgba(148,163,184,0.45)' }}>Review:</span>
+                    {GENERAL_CHECKLIST_ITEMS.map((item, idx) => {
+                      const done = !!generalChecklist[item.id];
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setGeneralChecklist(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          title={item.text}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all hover:scale-105 flex-shrink-0"
+                          style={{
+                            background: done ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.06)',
+                            border:     `1px solid ${done ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.10)'}`,
+                            color:      done ? '#34d399' : 'rgba(148,163,184,0.65)',
+                          }}
+                        >
+                          {/* Tiny check circle */}
+                          <span className="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ background: done ? '#10b981' : 'rgba(255,255,255,0.08)', border: `1px solid ${done ? '#059669' : 'rgba(255,255,255,0.15)'}` }}>
+                            {done && (
+                              <svg viewBox="0 0 8 7" fill="none" className="w-2 h-2">
+                                <path d="M1 3.5l2 2L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </span>
+                          {/* Short label — tooltip holds full text */}
+                          {idx + 1}. {item.text.length > 28 ? item.text.slice(0, 28) + '…' : item.text}
                         </button>
-                      </>
-                    )}
+                      );
+                    })}
+                    {/* Aggregate progress pill */}
+                    {(() => {
+                      const done = GENERAL_CHECKLIST_ITEMS.filter(it => generalChecklist[it.id]).length;
+                      const all  = GENERAL_CHECKLIST_ITEMS.length;
+                      return (
+                        <span className="ml-auto text-[9px] font-black flex-shrink-0"
+                          style={{ color: done === all ? '#34d399' : 'rgba(148,163,184,0.40)' }}>
+                          {done}/{all}
+                        </span>
+                      );
+                    })()}
                   </div>
-                </div>
-                {/* Drawing-panel stat chips */}
-                <div className="grid grid-cols-5 gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.15)' }}>
-                    <p className="font-bold text-xl text-blue-600">{results.drawings?.length ?? 0}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Drawings</p>
+
+                  {/* ── Collapsible body: Section 1 (full header) + Section 2 (nav cards) ── */}
+                  {qcPanelOpen && <>
+                  {/* ── Section 1: Quality score + drawing identity + save action ── */}
+                  <div style={{ background: REJLERS_DARK_HEADER_BG, padding:'20px 20px 16px' }}>
+                    <div className="flex items-start gap-4 flex-wrap">
+                      {/* Quality grade ring */}
+                      <div className="flex-shrink-0 relative flex items-center justify-center"
+                        style={{ width:72, height:72 }}>
+                        <svg width="72" height="72" viewBox="0 0 72 72" style={{ position:'absolute', top:0, left:0, transform:'rotate(-90deg)' }}>
+                          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6"/>
+                          <circle cx="36" cy="36" r="30" fill="none" stroke={qGrade.color} strokeWidth="6"
+                            strokeDasharray={`${(qScore/100)*188.5} 188.5`} strokeLinecap="round"
+                            style={{ filter:`drop-shadow(0 0 6px ${qGrade.color})`, transition:'stroke-dasharray 0.8s ease' }}/>
+                        </svg>
+                        <div className="relative flex flex-col items-center">
+                          <span className="text-2xl font-black leading-none" style={{ color:qGrade.color }}>{qGrade.letter}</span>
+                          <span className="text-[9px] font-bold" style={{ color:`${qGrade.color}bb` }}>{qScore}%</span>
+                        </div>
+                      </div>
+                      {/* Drawing name + severity bar */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-base font-black text-white truncate">{activeDrawing}</h2>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                            style={{ background:`${qGrade.color}25`, color:qGrade.color, border:`1px solid ${qGrade.color}40` }}>
+                            {qGrade.label}
+                          </span>
+                        </div>
+                        <p className="text-xs mt-0.5" style={{ color:'rgba(148,163,184,0.9)' }}>
+                          {activeDrawingData.issues?.length??0} findings · {results.drawings?.length??0} drawing{(results.drawings?.length??0)!==1?'s':''} in report · {(results.drawings??[]).reduce((s,d)=>s+(d.issues?.length??0),0)} total issues
+                        </p>
+                        {/* Severity proportion bar */}
+                        {totalIssues > 0 ? (
+                          <div className="mt-2.5 flex gap-0.5 rounded-full overflow-hidden h-2" style={{ background:'rgba(255,255,255,0.08)' }}>
+                            {criticalCount>0&&<div title={`${criticalCount} Critical`} style={{ flex:criticalCount, background:'#ef4444', borderRadius:'99px 0 0 99px' }}/>}
+                            {majorCount>0  &&<div title={`${majorCount} Major`}    style={{ flex:majorCount,    background:'#f97316' }}/>}
+                            {_minor>0      &&<div title={`${_minor} Minor`}        style={{ flex:_minor,        background:'#fbbf24' }}/>}
+                            {_overCnt>0    &&<div title={`${_overCnt} Overridden`} style={{ flex:_overCnt,      background:'rgba(148,163,184,0.6)', borderRadius:'0 99px 99px 0' }}/>}
+                          </div>
+                        ) : (
+                          <div className="mt-2.5 h-2 rounded-full" style={{ background:'rgba(16,185,129,0.4)' }}/>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                          {[
+                            { v:criticalCount, label:'Critical', color:'#ef4444' },
+                            { v:majorCount,    label:'Major',    color:'#f97316' },
+                            { v:_minor,        label:'Minor',    color:'#fbbf24' },
+                            { v:_overCnt,      label:'Overridden',color:'rgba(148,163,184,0.7)' },
+                          ].map(c=>(
+                            <span key={c.label} className="text-[10px] font-semibold" style={{ color:'rgba(148,163,184,0.8)' }}>
+                              <span className="font-black" style={{ color:c.color }}>{c.v}</span> {c.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Save action — right side */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {overridesSaved && pendingCount===0 && (
+                          <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5"/>Review saved
+                          </span>
+                        )}
+                        {pendingCount>0 && (
+                          <>
+                            <span className="text-xs text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-full font-medium">
+                              {pendingCount} unsaved
+                            </span>
+                            <button onClick={handleSaveOverrides} disabled={savingOverrides}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg disabled:opacity-50 transition-all hover:-translate-y-px"
+                              style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow:'0 2px 8px rgba(245,158,11,0.4)' }}>
+                              {savingOverrides?<><Loader className="w-3 h-3 animate-spin"/>Saving…</>:<><Save className="w-3 h-3"/>Save Review</>}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', border:`1px solid ${totalIssues > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}` }}>
-                    <p className={`font-bold text-xl ${totalIssues > 0 ? 'text-red-600' : 'text-green-600'}`}>{totalIssues}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Issues</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)' }}>
-                    <p className="font-bold text-xl text-red-700">{criticalCount}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Critical</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(234,88,12,0.08)', border:'1px solid rgba(234,88,12,0.15)' }}>
-                    <p className="font-bold text-xl text-orange-600">{majorCount}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Major</p>
-                  </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{ background:'rgba(100,116,139,0.08)', border:'1px solid rgba(100,116,139,0.15)' }}>
-                    <p className="font-bold text-xl text-slate-600">
-                      {(results.drawings ?? []).reduce((s, d) => s + (d.overrides_applied ?? 0), 0)}
+
+                  {/* ── Section 2: Panel navigation cards grid ── */}
+                  <div className="px-4 py-4 border-b border-slate-100" style={{ background:'rgba(248,250,255,0.7)' }}>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
+                      <span className="inline-block w-3 h-px bg-slate-300"/>QC Panel Summary — click to navigate
+                      <span className="inline-block w-3 h-px bg-slate-300"/>
                     </p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Overridden</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {NAV_CARDS.map(({id,label,Icon,count,sub,accent,bg,border,status})=>{
+                        const bs = STATUS_BADGE[status]||STATUS_BADGE.info;
+                        return (
+                          <button key={id} onClick={()=>setActivePanel(id)}
+                            className="group relative text-left rounded-xl p-3 transition-all hover:-translate-y-0.5 hover:shadow-md"
+                            style={{ background:bg, border:`1.5px solid ${border}`, boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+                            {/* Top row: icon + status badge */}
+                            <div className="flex items-start justify-between gap-1 mb-2">
+                              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ background:`${accent}20` }}>
+                                <Icon className="w-3.5 h-3.5" style={{ color:accent }}/>
+                              </div>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0 ${bs.cls}`}>
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:bs.dot }}/>
+                                {bs.label}
+                              </span>
+                            </div>
+                            {/* Count */}
+                            <p className="text-xl font-black leading-none" style={{ color:accent }}>
+                              {count??'—'}
+                            </p>
+                            {/* Label */}
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-700 mt-0.5">{label}</p>
+                            {/* Sub-line */}
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1">{sub}</p>
+                            {/* Hover arrow */}
+                            <span className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              style={{ color:accent }}>
+                              <ChevronRight className="w-3 h-3"/>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                  </>} {/* end qcPanelOpen collapsible */}
+                  </>
+                );
+              })()}
 
                 {/* Extraction summary */}
                 {extractionSummary && (
@@ -2174,6 +3493,101 @@ const PIDVerification = () => {
                         />
                         Show low-confidence
                       </label>
+                      {/* ── Findings search — SOFT-CODED: GENERAL_SEARCH_MIN_CHARS, GENERAL_SEARCH_MAX_RESULTS ── */}
+                      <div className="relative flex-shrink-0">
+                        <button
+                          title="Search findings"
+                          onClick={() => { setGenSearchOpen(v => !v); setGenSearchQ(''); }}
+                          className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded border font-semibold transition-colors ${
+                            genSearchOpen
+                              ? 'bg-indigo-50 text-indigo-600 border-indigo-300'
+                              : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                          }`}
+                        >
+                          <Search size={11} strokeWidth={2.5} />
+                          Search findings
+                          {genSearchOpen && <X size={10} strokeWidth={2.5} className="ml-0.5" />}
+                        </button>
+                        {genSearchOpen && (
+                          <div
+                            className="absolute left-0 top-8 z-50 rounded-xl overflow-hidden shadow-2xl"
+                            style={{ width: 340, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(0,0,0,0.13)' }}
+                          >
+                            {/* Search input */}
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              <Search size={13} className="text-slate-400 flex-shrink-0" />
+                              <input
+                                ref={genSearchRef}
+                                autoFocus
+                                value={genSearchQ}
+                                onChange={e => setGenSearchQ(e.target.value)}
+                                placeholder="Search findings…"
+                                className="flex-1 bg-transparent outline-none text-xs text-slate-700 placeholder-slate-400"
+                              />
+                              {genSearchQ && (
+                                <button onClick={() => setGenSearchQ('')} className="text-slate-400 hover:text-slate-600">
+                                  <X size={11} />
+                                </button>
+                              )}
+                            </div>
+                            {/* Results list */}
+                            {(() => {
+                              const q = genSearchQ.trim().toLowerCase();
+                              if (q.length < GENERAL_SEARCH_MIN_CHARS) return (
+                                <div className="px-3 py-3 text-[11px] text-center text-slate-400">
+                                  Type to search findings for this drawing
+                                </div>
+                              );
+                              const allHits = (activeDrawingData?.issues ?? []).filter(f => {
+                                const haystack = [f.issue, f.evidence, f.rule_id, f.location, f.component].filter(Boolean).join(' ').toLowerCase();
+                                return haystack.includes(q);
+                              });
+                              const hits = allHits.slice(0, GENERAL_SEARCH_MAX_RESULTS);
+                              if (!hits.length) return (
+                                <div className="px-3 py-3 text-[11px] text-center text-slate-400">
+                                  No findings match &ldquo;{genSearchQ}&rdquo;
+                                </div>
+                              );
+                              return (
+                                <ul className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: 300 }}>
+                                  {hits.map(f => {
+                                    const sev = (f.severity||'').toLowerCase();
+                                    const sevColor = sev === 'critical' ? '#dc2626' : sev === 'major' ? '#f97316' : sev === 'minor' ? '#d97706' : '#64748b';
+                                    const sevBg   = sev === 'critical' ? '#fee2e2' : sev === 'major' ? '#ffedd5' : sev === 'minor' ? '#fef3c7' : '#f1f5f9';
+                                    return (
+                                      <li key={f.id}>
+                                        <button
+                                          className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-indigo-50 transition-colors"
+                                          onClick={() => {
+                                            setGenSearchOpen(false);
+                                            setGenSearchQ('');
+                                            setActivePanel('drawing');
+                                            setTimeout(() => jumpToFinding(f.id), 150);
+                                          }}
+                                        >
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background: sevColor }} />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-[11px] font-semibold text-slate-800 truncate">{f.issue || f.rule_id || '—'}</p>
+                                            {f.evidence && (
+                                              <p className="text-[10px] text-slate-500 truncate mt-0.5">{f.evidence}</p>
+                                            )}
+                                          </div>
+                                          <span className="text-[9px] font-bold flex-shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full" style={{ color: sevColor, background: sevBg }}>{f.severity}</span>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                  {allHits.length > GENERAL_SEARCH_MAX_RESULTS && (
+                                    <li className="px-3 py-2 text-[10px] text-center text-slate-400">
+                                      Showing first {GENERAL_SEARCH_MAX_RESULTS} of {allHits.length} results
+                                    </li>
+                                  )}
+                                </ul>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
                       {/* Correction mode controls + calibration data export */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
@@ -2359,24 +3773,47 @@ const PIDVerification = () => {
                                   : { outline: '2px dashed rgba(100,116,139,0.7)', outlineOffset: '3px' };
 
                                 return (
-                                  <button
-                                    key={n.key}
-                                    onClick={() => jumpToFinding(n.finding.id)}
-                                    title={OVERLAY_SHOW_MARKER_TOOLTIP ? `[${cat}] ${n.key} · ${n.finding.issue_observed}` : undefined}
-                                    className={`absolute border-2 transition-all ${isFocused ? 'z-20 ring-4 ring-white/80' : 'z-10 hover:opacity-90'}`}
-                                    style={{
-                                      left: `${n.left}%`,
-                                      top:  `${n.top}%`,
-                                      backgroundColor: col.bg,
-                                      borderColor: col.border,
-                                      boxShadow: isFocused
-                                        ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
-                                        : `0 1px 4px rgba(0,0,0,0.4)`,
-                                      pointerEvents: 'all',
-                                      ...shapeStyle,
-                                      ...anchorStyle,
-                                    }}
-                                  />
+                                  <React.Fragment key={n.key}>
+                                    {/* Ping ripple ring — cosmetic only, pointer-events disabled */}
+                                    {OVERLAY_MARKER_ANIM_ENABLED && !isFocused && (
+                                      <div
+                                        aria-hidden="true"
+                                        style={{
+                                          position:      'absolute',
+                                          left:          `${n.left}%`,
+                                          top:           `${n.top}%`,
+                                          width:         '18px',
+                                          height:        '18px',
+                                          borderRadius:  '50%',
+                                          border:        `2.5px solid ${col.bg}`,
+                                          backgroundColor: 'transparent',
+                                          animation:     `markerPing ${OVERLAY_MARKER_ANIM_DURATION_MS}ms ease-out infinite`,
+                                          pointerEvents: 'none',
+                                          zIndex:        8,
+                                        }}
+                                      />
+                                    )}
+                                    <button
+                                      onClick={() => jumpToFinding(n.finding.id)}
+                                      title={OVERLAY_SHOW_MARKER_TOOLTIP ? `[${cat}] ${n.key} · ${n.finding.issue_observed}` : undefined}
+                                      className={`absolute border-2 transition-all ${isFocused ? 'z-20 ring-4 ring-white/80' : 'z-10 hover:opacity-90'}`}
+                                      style={{
+                                        left: `${n.left}%`,
+                                        top:  `${n.top}%`,
+                                        backgroundColor: col.bg,
+                                        borderColor: col.border,
+                                        boxShadow: isFocused
+                                          ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                          : `0 1px 4px rgba(0,0,0,0.4)`,
+                                        animation: OVERLAY_MARKER_ANIM_ENABLED && !isFocused
+                                          ? `markerGlow ${OVERLAY_MARKER_ANIM_DURATION_MS}ms ease-in-out infinite`
+                                          : undefined,
+                                        pointerEvents: 'all',
+                                        ...shapeStyle,
+                                        ...anchorStyle,
+                                      }}
+                                    />
+                                  </React.Fragment>
                                 );
                               })}
 
@@ -2386,13 +3823,42 @@ const PIDVerification = () => {
                                   n => DUP_LINE_RULES.has(n.finding?.rule_id)
                                 );
                                 const ltags = activeDrawingData?.metadata?.line_tags || [];
+                                // Cross-verify: only show highlight markers for tags confirmed
+                                // by at least one DUP_LINE_RULES rule-engine finding.
+                                // This prevents false-positive blue rectangles from appearing
+                                // for legitimate repeated labels (same pipe run) or OCR multi-
+                                // pass near-duplicates that never triggered an actual finding.
+                                const _allIssuesHL = (activeDrawingData?.issues || []).filter(f =>
+                                  !HIDDEN_CATEGORIES.has(f.category) &&
+                                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                                );
+                                const _dupHLConfirmed = DUP_OVERLAY_REQUIRE_FINDING
+                                  ? new Set(
+                                      _allIssuesHL
+                                        .filter(f => DUP_LINE_RULES.has(f.rule_id))
+                                        .flatMap(f =>
+                                          ltags.filter(lt =>
+                                            (f.evidence || '').includes(lt.text) ||
+                                            (f.issue_observed || '').includes(lt.text)
+                                          ).map(lt => lt.text)
+                                        )
+                                    )
+                                  : null;
                                 const tagHighlights = [];
                                 for (const tag of ltags) {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
-                                  for (const occ of (tag.occurrences || [])) {
+                                  // Guard 1: must be referenced by a confirmed DUP_LINE_RULES finding
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupHLConfirmed && !_dupHLConfirmed.has(tag.text)) continue;
+                                  // Guard 2: all key sections must be fully parsed — eliminates OCR
+                                  // artefacts and cloud-truncated partials that lack pipe_class/insulation
+                                  if (DUP_OVERLAY_REQUIRE_FINDING) {
+                                    const pop = DUP_OVERLAY_SECTION_KEYS.filter(k => tag[k] && String(tag[k]).trim()).length;
+                                    if (pop < DUP_OVERLAY_MIN_SECTIONS) continue;
+                                  }
+                                  for (const [occIdx, occ] of (tag.occurrences || []).entries()) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
                                     tagHighlights.push({
-                                      key: `th-${tag.text}-${occ.direction}-${occ.x_pct}`,
+                                      key: `th-${occIdx}-${tag.text}-${occ.direction}-${occ.x_pct}-${occ.y_pct}`,
                                       left: Math.min(96, Math.max(1, occ.x_pct)),
                                       top:  Math.min(87, Math.max(1, occ.y_pct)),
                                       sev:  'minor',
@@ -2459,9 +3925,38 @@ const PIDVerification = () => {
                               {showLineTagOverlay && (() => {
                                 const ltags = activeDrawingData?.metadata?.line_tags || [];
                                 if (ltags.length === 0) return null;
+                                // Cross-verify: build confirmed-duplicate set from rule-engine findings.
+                                // A line_tag is only a true duplicate if ALL its sections (size, fluid,
+                                // area, sequence, pipe_class, insulation) match AND the rule engine
+                                // has flagged it under a DUP_LINE_RULES rule ID.  Tags where any
+                                // section differs, or where no finding was raised, are excluded so
+                                // that legitimate repeated labels and OCR near-dupes don't produce dots.
+                                const _allIssuesOcc = (activeDrawingData?.issues || []).filter(f =>
+                                  !HIDDEN_CATEGORIES.has(f.category) &&
+                                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                                );
+                                const _dupOccConfirmed = DUP_OVERLAY_REQUIRE_FINDING
+                                  ? new Set(
+                                      _allIssuesOcc
+                                        .filter(f => DUP_LINE_RULES.has(f.rule_id))
+                                        .flatMap(f =>
+                                          ltags.filter(lt =>
+                                            (f.evidence || '').includes(lt.text) ||
+                                            (f.issue_observed || '').includes(lt.text)
+                                          ).map(lt => lt.text)
+                                        )
+                                    )
+                                  : null;
                                 const occNodes = [];
                                 for (const tag of ltags) {
                                   if ((tag.count || (tag.occurrences || []).length) < 2) continue;
+                                  // Guard 1: confirmed by a rule-engine DUP_LINE_RULES finding
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupOccConfirmed && !_dupOccConfirmed.has(tag.text)) continue;
+                                  // Guard 2: all key sections must be fully parsed (eliminates noise tags)
+                                  if (DUP_OVERLAY_REQUIRE_FINDING) {
+                                    const pop = DUP_OVERLAY_SECTION_KEYS.filter(k => tag[k] && String(tag[k]).trim()).length;
+                                    if (pop < DUP_OVERLAY_MIN_SECTIONS) continue;
+                                  }
                                   for (const occ of (tag.occurrences || [])) {
                                     if (occ.x_pct == null || occ.y_pct == null) continue;
                                     occNodes.push({
@@ -2477,6 +3972,8 @@ const PIDVerification = () => {
                                 const connectors = [];
                                 for (const tag of ltags) {
                                   if (!tag.multi_angle) continue;
+                                  // Cross-verify: only connect confirmed duplicate tags
+                                  if (DUP_OVERLAY_REQUIRE_FINDING && _dupOccConfirmed && !_dupOccConfirmed.has(tag.text)) continue;
                                   const occs = (tag.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
                                   const hOcc = occs.find(o => o.direction === 'H');
                                   const vOcc = occs.find(o => o.direction === 'V');
@@ -2582,6 +4079,120 @@ const PIDVerification = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Selected Marker Finding Card ─────────────────────────────────────── */}
+                    {/* Rendered when a dot marker is clicked (focusedFindingId is set).        */}
+                    {/* Mirrors the 'Selected line detail card' pattern from the PIPING panel.  */}
+                    {/* SOFT-CODED: SEV_CARD_COLORS defined inline below.                       */}
+                    {focusedFindingId && (() => {
+                      const ff = (activeDrawingData?.issues ?? []).find(f => f.id === focusedFindingId);
+                      if (!ff) return null;
+                      const sev = (ff.severity || '').toLowerCase();
+                      const SEV_CARD_COLORS = {
+                        critical: { bg:'#dc2626', border:'#fca5a5', light:'#fff1f2', text:'#991b1b' },
+                        major:    { bg:'#f97316', border:'#fdba74', light:'#fff7ed', text:'#9a3412' },
+                        minor:    { bg:'#d97706', border:'#fde68a', light:'#fffbeb', text:'#92400e' },
+                        info:     { bg:'#3b82f6', border:'#bfdbfe', light:'#eff6ff', text:'#1e40af' },
+                      };
+                      const sc = SEV_CARD_COLORS[sev] || SEV_CARD_COLORS.info;
+                      return (
+                        <div className="mt-3 rounded-xl border overflow-hidden"
+                          style={{ borderColor: sc.border, animation: 'cardIn 0.2s ease-out both' }}>
+                          {/* Card header */}
+                          <div className="flex items-center gap-3 px-4 py-3" style={{ background: sc.light }}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black uppercase"
+                              style={{ background: sc.bg, boxShadow: `0 4px 12px ${sc.bg}55` }}>
+                              {sev.slice(0, 3)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-slate-900 truncate">{ff.issue_observed || ff.issue || ff.rule_id}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white capitalize" style={{ background: sc.bg }}>{ff.severity}</span>
+                                {ff.rule_id && <span className="text-[9px] text-slate-500 font-mono">{ff.rule_id}</span>}
+                                {ff.category && <span className="text-[9px] text-slate-400 capitalize">{ff.category.replace(/_/g, ' ')}</span>}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setFocusedFindingId(null)}
+                              title="dismiss"
+                              className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                              ✕
+                            </button>
+                          </div>
+                          {/* Evidence */}
+                          {ff.evidence && (
+                            <div className="px-4 py-2.5 bg-white" style={{ borderTop: `1px solid ${sc.border}40` }}>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Evidence</p>
+                              <p className="text-xs text-slate-700 font-mono break-all">{ff.evidence}</p>
+                            </div>
+                          )}
+                          {/* Footer action */}
+                          <div className="px-4 py-2 bg-slate-50 flex items-center gap-2 justify-between" style={{ borderTop: `1px solid ${sc.border}40` }}>
+                            <span className="text-[9px] text-slate-400">
+                              Marker at&nbsp;
+                              {(() => {
+                                const node = visibleOverlayNodes.find(n => n.finding.id === ff.id);
+                                return node ? `X ${node.left?.toFixed(1)}% · Y ${node.top?.toFixed(1)}%` : '—';
+                              })()}
+                            </span>
+                            <button
+                              onClick={() => { setActivePanel('findings'); setTimeout(() => jumpToFinding(ff.id), 150); }}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-lg text-white transition-all hover:opacity-80"
+                              style={{ background: '#0891b2' }}>
+                              View in Findings Panel →
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Findings Register — all visible markers on drawing ────────────── */}
+                    {/* Mirrors 'Piping Line Register' pattern. Rows are clickable to select  */}
+                    {/* the marker (sets focusedFindingId which triggers the card above).     */}
+                    {visibleOverlayNodes.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3 text-indigo-500" />
+                          Findings Register — {visibleOverlayNodes.length} marker{visibleOverlayNodes.length !== 1 ? 's' : ''} located on drawing
+                        </p>
+                        <div className="rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="overflow-auto" style={{ maxHeight: '28vh' }}>
+                            <table className="w-full text-[10px] border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                  {['Severity', 'Category', 'Finding', 'Rule', 'X%', 'Y%'].map(h => (
+                                    <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {visibleOverlayNodes.map((n) => {
+                                  const isSel = focusedFindingId === n.finding.id;
+                                  const sev   = (n.finding.severity || '').toLowerCase();
+                                  const sevBg = sev === 'critical' ? '#dc2626' : sev === 'major' ? '#f97316' : sev === 'minor' ? '#d97706' : '#3b82f6';
+                                  return (
+                                    <tr key={n.key}
+                                      onClick={() => jumpToFinding(n.finding.id)}
+                                      className="border-b border-slate-100 cursor-pointer transition-all hover:bg-indigo-50/40"
+                                      style={{ background: isSel ? '#eef2ff' : 'white' }}>
+                                      <td className="px-3 py-1.5">
+                                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white capitalize"
+                                          style={{ background: sevBg }}>{n.finding.severity}</span>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-slate-600 capitalize whitespace-nowrap">{(n.finding.category || '—').replace(/_/g, ' ')}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 max-w-[280px] truncate">{n.finding.issue_observed || n.finding.issue || n.finding.rule_id || '—'}</td>
+                                      <td className="px-3 py-1.5 font-mono text-slate-500 whitespace-nowrap">{n.finding.rule_id || '—'}</td>
+                                      <td className="px-3 py-1.5 text-slate-500">{n.left?.toFixed(1)}</td>
+                                      <td className="px-3 py-1.5 text-slate-500">{n.top?.toFixed(1)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2649,7 +4260,11 @@ const PIDVerification = () => {
                     {(() => {
                       const visibleIssues = activeDrawingData.issues.filter(f =>
                         !HIDDEN_CATEGORIES.has(f.category) &&
-                        !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                        !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
+                        // Only include findings whose evidence key maps to a confirmed
+                        // anchored drawing marker (tiers P1–P5 / CX); FH-only findings
+                        // have no real canvas position and are hidden when the filter is on.
+                        (!anchoredEvidenceKeys || anchoredEvidenceKeys.has(_normEvKey(inferEvidenceKey(f))))
                       );
                       const availableCategories = [...new Set(visibleIssues.map(f => f.category))];
                       const filteredIssues = visibleIssues.filter(f => {
@@ -2699,7 +4314,7 @@ const PIDVerification = () => {
                             </select>
 
                             <span className="text-xs text-slate-400 ml-auto">
-                              {filteredIssues.length} of {visibleIssues.length} finding{visibleIssues.length !== 1 ? 's' : ''}
+                              {filteredIssues.length} of {visibleIssues.length} {FINDINGS_TABLE_ANCHORED_ONLY ? 'on-drawing ' : ''}finding{visibleIssues.length !== 1 ? 's' : ''}
                               {activeFilterCount > 0 && (
                                 <button
                                   onClick={() => { setFilterSeverity('all'); setFilterCategory('all'); setFilterStatus('all'); }}
@@ -2937,32 +4552,94 @@ const PIDVerification = () => {
               const allIssuesHere = activeDrawingData?.issues || [];
 
               // ── Soft-coded: LSZ rule catalogue ─────────────────────────────────────
-              // Add/edit entries here to change how each rule appears in the QC table.
-              // No other code needs changing.
               const LINE_QC_RULES = {
-                'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏' },
-                'LSZ-002': { short: 'Conflicting sizes on segment', desc: 'Two or more different NPS sizes recorded on the same pipeline segment — inspect for mis-reads.',                          checkName: 'Size Consistency',   icon: '⚠️' },
-                'LSZ-003': { short: 'Valve bore mismatch',         desc: 'A valve bore size does not match the adjacent line size — spec break or wrong tag.',                                      checkName: 'Valve Bore',         icon: '🔧' },
-                'LSZ-004': { short: 'Inline size conflict',        desc: 'Multiple distinct NPS sizes appear on a single OCR line reference — possible scan artefact or copy-paste error.',        checkName: 'Annotation Clarity', icon: '🔍' },
-                'LSZ-005': { short: '3+ distinct NPS on drawing',  desc: '3 or more different pipe sizes found on this drawing — check for undocumented spec-breaks or off-cuts.',                  checkName: 'NPS Diversity',      icon: '📐' },
-                'LSZ-006': { short: 'NPS conflict — same base',    desc: 'The same pipeline designation base exists with conflicting NPS sizes — strong indicator of a duplication error.',         checkName: 'Duplicate (NPS)',    icon: '🚨' },
-                'LSZ-007': { short: 'Designation ×3 (same axis)',  desc: 'Identical pipeline designation appears 3 or more times in the same orientation — likely copy-paste or OCR repeat.',       checkName: 'Duplicate (Count)',  icon: '🔁' },
-                'LSZ-008': { short: 'H + V confirmed duplicate',   desc: 'Pipeline designation confirmed in both horizontal and vertical orientations — strong duplicate signal.',                   checkName: 'Duplicate (H+V)',    icon: '↕️' },
-                'LSZ-009': { short: 'Cloud-boundary truncation',   desc: 'A cloud revision mark is masking part of a line designation — ensure the underlying tag is fully visible.',               checkName: 'Cloud Truncation',   icon: '☁️' },
-                'LSZ-010': { short: 'Shared suffix — copy-paste',  desc: 'Different pipeline identities share the same sequence/pipe-class/insulation suffix — strong copy-paste numbering error.', checkName: 'Suffix Sharing',     icon: '📋' },
+                'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏', fix: 'Add the NPS size label to the affected line designation on the P&ID.' },
+                'LSZ-002': { short: 'Conflicting sizes on segment', desc: 'Two or more different NPS sizes recorded on the same pipeline segment — inspect for mis-reads.',                          checkName: 'Size Consistency',   icon: '⚠️', fix: 'Verify the OCR extraction and check the drawing for any size reduction notation.' },
+                'LSZ-003': { short: 'Valve bore mismatch',         desc: 'A valve bore size does not match the adjacent line size — spec break or wrong tag.',                                      checkName: 'Valve Bore',         icon: '🔧', fix: 'Confirm the valve bore spec in the instrument index or ISS and update the tag.' },
+                'LSZ-004': { short: 'Inline size conflict',        desc: 'Multiple distinct NPS sizes appear on a single OCR line reference — possible scan artefact.',                             checkName: 'Annotation Clarity', icon: '🔍', fix: 'Check for scan artefacts or overlapping text; re-issue the drawing at higher resolution.' },
+                'LSZ-005': { short: '3+ distinct NPS on drawing',  desc: '3 or more different pipe sizes found on this drawing — check for undocumented spec-breaks.',                              checkName: 'NPS Diversity',      icon: '📐', fix: 'Add spec-break symbols at all NPS transitions and document them in the line list.' },
+                'LSZ-006': { short: 'NPS conflict — same base',    desc: 'Same pipeline designation base exists with conflicting NPS sizes — strong indicator of duplication.',                     checkName: 'Duplicate (NPS)',    icon: '🚨', fix: 'Reconcile the duplicate base designation; assign unique sequence numbers to each line.' },
+                'LSZ-007': { short: 'Designation ×3 (same axis)',  desc: 'Identical pipeline designation appears 3+ times in the same orientation — likely copy-paste or OCR repeat.',              checkName: 'Duplicate (Count)',  icon: '🔁', fix: 'Review the drawing for copy-paste errors and ensure each pipeline has a unique tag.' },
+                'LSZ-008': { short: 'H + V confirmed duplicate',   desc: 'Pipeline designation confirmed in both horizontal and vertical orientations — strong duplicate signal.',                   checkName: 'Duplicate (H+V)',    icon: '↕️', fix: 'Cross-check against the line list and remove the duplicate tag from the P&ID.' },
+                'LSZ-009': { short: 'Cloud-boundary truncation',   desc: 'A cloud revision mark is masking part of a line designation — ensure the tag is fully visible.',                          checkName: 'Cloud Truncation',   icon: '☁️', fix: 'Move the revision cloud boundary so the line designation is fully exposed.' },
+                'LSZ-010': { short: 'Shared suffix — copy-paste',  desc: 'Different pipeline identities share the same sequence/pipe-class/insulation suffix — copy-paste numbering error.',        checkName: 'Suffix Sharing',     icon: '📋', fix: 'Assign a unique sequence number to each pipeline and update both the P&ID and line list.' },
               };
 
+              // ── Soft-coded: AI insight generators ──────────────────────────────────
+              // Each entry is a pure function: (tags, findings) → insight | null.
+              // Returns null when the condition is not met (hidden automatically).
+              // Add new insight detectors here without touching the render logic.
+              const LINE_AI_INSIGHT_GENERATORS = [
+                // Multi-spec indicator: 3+ distinct NPS sizes is an elevated engineering risk
+                (tags, _f) => {
+                  const sizes = [...new Set(tags.map(t => t.size).filter(Boolean))];
+                  if (sizes.length < 3) return null;
+                  return { level: 'warning', icon: '📐', title: `${sizes.length} distinct pipe sizes detected`,
+                    detail: `NPS ${sizes.slice(0,5).join(', ')}${sizes.length > 5 ? ' …' : ''}. Multi-spec drawings require spec-break symbols at all NPS transitions.` };
+                },
+                // Dominant fluid risk: warn if >60 % of lines carry a hazardous fluid code
+                (tags, _f) => {
+                  if (tags.length < 4) return null;
+                  const counts = {};
+                  tags.forEach(t => { if (t.fluid_code) counts[t.fluid_code] = (counts[t.fluid_code] || 0) + 1; });
+                  const [topFluid, topCnt] = Object.entries(counts).sort((a,b) => b[1]-a[1])[0] || [];
+                  const pct = topFluid ? Math.round(topCnt / tags.length * 100) : 0;
+                  const HAZARDOUS_FLUID_CODES = new Set(['HC','H2S','HCL','NH3','SO2','CL2','CO','H2']); // soft-coded
+                  if (!topFluid || pct < 60 || !HAZARDOUS_FLUID_CODES.has(topFluid.toUpperCase())) return null;
+                  return { level: 'critical', icon: '⚠️', title: `${pct}% of lines carry ${topFluid} (hazardous)`,
+                    detail: `${topCnt} of ${tags.length} pipeline designations use fluid code ${topFluid}. Verify all associated safety interlocks are in place.` };
+                },
+                // Copy-paste risk: many lines in same area with same pipe class
+                (tags, _f) => {
+                  if (tags.length < 5) return null;
+                  const combos = {};
+                  tags.forEach(t => {
+                    const k = `${t.area_code || ''}|${t.pipe_class || ''}`;
+                    if (t.area_code && t.pipe_class) combos[k] = (combos[k] || 0) + 1;
+                  });
+                  const maxCombo = Math.max(0, ...Object.values(combos));
+                  if (maxCombo < 4) return null;
+                  const [topKey] = Object.entries(combos).find(([,v]) => v === maxCombo) || [];
+                  const [area, pc] = (topKey || '|').split('|');
+                  return { level: 'info', icon: '📋', title: `${maxCombo} lines share area ${area} + class ${pc}`,
+                    detail: `High repetition in one area/class group is a copy-paste risk marker. Verify all sequence numbers are unique.` };
+                },
+                // Duplicate lines detected message
+                (_tags, findings) => {
+                  const dupCnt = findings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length;
+                  if (dupCnt < 2) return null;
+                  return { level: 'warning', icon: '🔁', title: `${dupCnt} duplicate-line findings need review`,
+                    detail: `Duplicate designations inflate the line list and can indicate copy-paste errors or an OCR artefact. Review each finding before issuing the document.` };
+                },
+                // All-clear
+                (_tags, findings) => {
+                  const lineFds = findings.filter(f => LINE_ISSUE_CATEGORIES_CONST.has(f.category) || (f.rule_id||'').startsWith('LSZ'));
+                  if (lineFds.length > 0) return null;
+                  return { level: 'success', icon: '✅', title: 'All pipeline designations pass QC',
+                    detail: `${_tags.length} line designations were extracted and verified against all 10 LSZ rules with zero findings.` };
+                },
+              ];
+
               // Soft-coded: which finding categories count as "line" quality issues.
-              // Add more category keys here to broaden the scope without touching logic.
-              const LINE_ISSUE_CATEGORIES = new Set(['line_size']);
-              // Also catch any finding whose rule_id begins with 'LSZ'
+              const LINE_ISSUE_CATEGORIES_CONST = new Set(['line_size']);
               const isLineFinding = (f) =>
-                LINE_ISSUE_CATEGORIES.has(f.category) || (f.rule_id || '').startsWith('LSZ');
+                LINE_ISSUE_CATEGORIES_CONST.has(f.category) || (f.rule_id || '').startsWith('LSZ');
 
               // Soft-coded sub-tabs for the Lines panel.
               const LINE_SUBTABS = [
-                { id: 'qc',           label: 'QC Checks',    icon: Shield,   color: '#0d9488' },
-                { id: 'designations', label: 'Designations', icon: Ruler,    color: '#0891b2' },
+                { id: 'insights',     label: 'AI Insights',   icon: Brain,     color: '#7c3aed' },
+                { id: 'qc',          label: 'QC Checks',     icon: Shield,    color: '#0d9488' },
+                { id: 'designations',label: 'Designations',  icon: Ruler,     color: '#0891b2' },
+                { id: 'analytics',   label: 'Analytics',     icon: BarChart2, color: '#6366f1' },
+                { id: 'layout',      label: 'Drawing Layout',icon: MapPin,    color: '#2B3A55' },
+              ];
+
+              // Soft-coded: sort options for the Designations sub-tab.
+              const DESIGNATION_SORT_OPTIONS = [
+                { v: 'issues', label: '⚡ Issues first' },
+                { v: 'name',   label: 'A–Z Name' },
+                { v: 'size',   label: 'NPS size' },
+                { v: 'fluid',  label: 'Fluid code' },
               ];
 
               // Derived data
@@ -2973,20 +4650,13 @@ const PIDVerification = () => {
               const multiAngleCount = lineTags.filter(lt => lt.multi_angle).length;
               const npsSet   = [...new Set(lineTags.map(lt => lt.size).filter(Boolean))];
               const fluidSet = [...new Set(lineTags.map(lt => lt.fluid_code).filter(Boolean))];
+              const areaSet  = [...new Set(lineTags.map(lt => lt.area_code).filter(Boolean))];
+              const dupCount = lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length;
 
-              // Map each line tag text → its related findings (for QC dot on cards)
-              const tagFindingsMap = new Map();
-              for (const f of lineFindings) {
-                const ev = (f.evidence || f.issue || '').toLowerCase();
-                for (const lt of lineTags) {
-                  if (lt.text && ev.includes(lt.text.toLowerCase())) {
-                    if (!tagFindingsMap.has(lt.text)) tagFindingsMap.set(lt.text, []);
-                    tagFindingsMap.get(lt.text).push(f);
-                  }
-                }
-              }
+              // tagFindingsMap is provided by useMemo at component level (avoids O(n²) rebuild per render)
+              // tagFindingsMap already in scope from outer component — do NOT re-declare here.
 
-              // Highest severity for a tag (for dot colour)
+              // Highest severity for a tag
               const sevRank = { critical: 4, major: 3, minor: 2, info: 1 };
               const tagMaxSev = (text) => {
                 const fds = tagFindingsMap.get(text) || [];
@@ -3004,17 +4674,39 @@ const PIDVerification = () => {
                 minor:    'bg-yellow-100 text-yellow-800 border-yellow-300',
                 info:     'bg-green-100 text-green-800 border-green-300',
               };
+              const INSIGHT_LEVEL_STYLE = {
+                critical: { bg: '#fef2f2', border: '#fca5a5', titleColor: '#991b1b', bar: '#dc2626' },
+                warning:  { bg: '#fffbeb', border: '#fcd34d', titleColor: '#92400e', bar: '#f59e0b' },
+                info:     { bg: '#eff6ff', border: '#93c5fd', titleColor: '#1e40af', bar: '#3b82f6' },
+                success:  { bg: '#f0fdf4', border: '#86efac', titleColor: '#166534', bar: '#22c55e' },
+              };
 
               // Search filter (designations tab)
               const query = lineTagSearch.trim().toLowerCase();
-              const filteredTags = query ? lineTags.filter(lt =>
+
+              // Apply sort + search to designations
+              const sortedTags = [...lineTags].sort((a, b) => {
+                if (linesSortBy === 'issues') {
+                  const aHas = tagFindingsMap.has(a.text) ? 1 : 0;
+                  const bHas = tagFindingsMap.has(b.text) ? 1 : 0;
+                  if (aHas !== bHas) return bHas - aHas;
+                  const aRank = sevRank[tagMaxSev(a.text)] || 0;
+                  const bRank = sevRank[tagMaxSev(b.text)] || 0;
+                  return bRank - aRank;
+                }
+                if (linesSortBy === 'size') return (a.size || '').localeCompare(b.size || '', undefined, { numeric: true });
+                if (linesSortBy === 'fluid') return (a.fluid_code || '').localeCompare(b.fluid_code || '');
+                return (a.text || '').localeCompare(b.text || ''); // 'name'
+              });
+              const filteredTags = query ? sortedTags.filter(lt =>
                 lt.text?.toLowerCase().includes(query) ||
                 lt.fluid_code?.toLowerCase().includes(query) ||
                 lt.area_code?.toLowerCase().includes(query) ||
-                lt.size?.toLowerCase().includes(query)
-              ) : lineTags;
+                lt.size?.toLowerCase().includes(query) ||
+                lt.pipe_class?.toLowerCase().includes(query)
+              ) : sortedTags;
 
-              // QC findings filters (state lives at component level)
+              // QC findings filters
               const qcQ = qcSearch.trim().toLowerCase();
               const filteredFindings = lineFindings.filter(f => {
                 if (qcSevFilter !== 'all' && f.severity !== qcSevFilter) return false;
@@ -3026,97 +4718,214 @@ const PIDVerification = () => {
               });
               const uniqueRules = [...new Set(lineFindings.map(f => f.rule_id).filter(Boolean))].sort();
 
+              // Group filteredFindings by rule_id for grouped QC view
+              const findingsByRule = {};
+              for (const f of filteredFindings) {
+                const r = f.rule_id || 'OTHER';
+                if (!findingsByRule[r]) findingsByRule[r] = [];
+                findingsByRule[r].push(f);
+              }
+
+              // AI Insights — evaluate all generators
+              const aiInsights = LINE_AI_INSIGHT_GENERATORS
+                .map(gen => { try { return gen(lineTags, lineFindings); } catch { return null; } })
+                .filter(Boolean);
+
+              // Analytics distributions
+              const npsDist   = npsSet.map(s => ({ label: `${s}"`, count: lineTags.filter(t => t.size === s).length }))
+                                      .sort((a,b) => b.count - a.count);
+              const fluidDist = fluidSet.map(fc => ({ label: fc, count: lineTags.filter(t => t.fluid_code === fc).length }))
+                                        .sort((a,b) => b.count - a.count);
+              const areaDist  = areaSet.map(ac => ({ label: ac, count: lineTags.filter(t => t.area_code === ac).length }))
+                                       .sort((a,b) => b.count - a.count);
+              const maxNpsCnt   = Math.max(1, ...npsDist.map(d => d.count));
+              const maxFluidCnt = Math.max(1, ...fluidDist.map(d => d.count));
+              const maxAreaCnt  = Math.max(1, ...areaDist.map(d => d.count));
+              const cleanCount  = lineTags.length - tagFindingsMap.size;
+              const qcScore     = lineTags.length > 0 ? Math.round(cleanCount / lineTags.length * 100) : 100;
+
+              // ── QC score colour ─────────────────────────────────────────────────────
+              // Soft-coded: score thresholds for colour grading.
+              const QC_SCORE_EXCELLENT = 90;  // ≥ 90% → green
+              const QC_SCORE_GOOD      = 70;  // ≥ 70% → teal
+              const QC_SCORE_FAIR      = 50;  // ≥ 50% → amber
+              // below → red
+              const qcScoreColor = qcScore >= QC_SCORE_EXCELLENT ? '#22c55e'
+                                 : qcScore >= QC_SCORE_GOOD      ? '#0d9488'
+                                 : qcScore >= QC_SCORE_FAIR      ? '#f59e0b'
+                                 : '#dc2626';
+
               if (lineTags.length === 0 && lineFindings.length === 0)
                 return <div className="p-10 text-center text-slate-400 text-sm">No line designations or quality findings for this drawing.</div>;
 
-              const ActiveSubIcon = LINE_SUBTABS.find(t => t.id === lineQcSubTab)?.icon || Shield;
-
               return (
                 <div>
-                  {/* ── Panel header ── */}
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)' }}>
-                      <Shield className="w-4 h-4 text-white" />
+                  {/* ══ Panel header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background: 'linear-gradient(to right, rgba(13,148,136,0.04), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 4px 12px rgba(13,148,136,0.3)' }}>
+                      <Ruler className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-sm font-bold text-slate-900">Pipeline Line QC</h2>
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Pipeline Lines
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background: 'linear-gradient(135deg,#7c3aed,#6366f1)' }}>AI</span>
+                      </h2>
                       <p className="text-xs text-slate-500">
-                        {lineTags.length} designations extracted · {lineFindings.length} quality finding{lineFindings.length !== 1 ? 's' : ''}
+                        {lineTags.length} designations · {lineFindings.length} QC finding{lineFindings.length !== 1 ? 's' : ''}
                         {multiAngleCount > 0 ? ` · ${multiAngleCount} H+V confirmed` : ''}
+                        {` · ${npsSet.length} NPS size${npsSet.length !== 1 ? 's' : ''}`}
+                        {` · ${fluidSet.length} fluid code${fluidSet.length !== 1 ? 's' : ''}`}
                       </p>
                     </div>
-                    {/* QC traffic-light */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {criticalLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
-                          {criticalLF} CRIT
-                        </span>
-                      )}
-                      {majorLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                          {majorLF} MAJ
-                        </span>
-                      )}
-                      {minorLF > 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
-                          {minorLF} MIN
-                        </span>
-                      )}
-                      {lineFindings.length === 0 && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> All Pass
-                        </span>
-                      )}
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2 * Math.PI * 17 * qcScore / 100} ${2 * Math.PI * 17 * (1 - qcScore / 100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color: qcScoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">QC Score</span>
+                    </div>
+                    {/* Traffic-light badges */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {criticalLF > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{criticalLF} CRIT</span>}
+                      {majorLF   > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{majorLF} MAJ</span>}
+                      {minorLF   > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">{minorLF} MIN</span>}
+                      {lineFindings.length === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Pass</span>}
                     </div>
                   </div>
 
-                  {/* ── QC summary stat chips ── */}
+                  {/* ══ QC summary stat bar ══ */}
                   <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                     {[
-                      { v: lineTags.length,                              label: 'Total Lines',  color:'text-teal-600',    bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.18)' },
-                      { v: lineTags.length - tagFindingsMap.size,         label: 'Clean',        color:'text-emerald-600', bg:'rgba(16,185,129,0.08)',  border:'rgba(16,185,129,0.18)' },
-                      { v: criticalLF,                                   label: 'Critical',     color:'text-red-600',     bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.18)'  },
-                      { v: majorLF,                                      label: 'Major',        color:'text-orange-600',  bg:'rgba(234,88,12,0.08)',   border:'rgba(234,88,12,0.18)'  },
-                      { v: lineFindings.filter(f => DUP_LINE_RULES.has(f.rule_id)).length, label: 'Duplicates', color:'text-sky-600', bg:'rgba(14,165,233,0.08)', border:'rgba(14,165,233,0.18)' },
+                      { v: lineTags.length,  label: 'Total Lines',  color:'#0d9488', bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.2)' },
+                      { v: cleanCount,        label: 'Clean',        color:'#16a34a', bg:'rgba(22,163,74,0.08)',   border:'rgba(22,163,74,0.2)'  },
+                      { v: criticalLF,        label: 'Critical',     color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'  },
+                      { v: majorLF,           label: 'Major',        color:'#ea580c', bg:'rgba(234,88,12,0.07)',   border:'rgba(234,88,12,0.2)'  },
+                      { v: dupCount,          label: 'Duplicates',   color:'#0284c7', bg:'rgba(2,132,199,0.07)',   border:'rgba(2,132,199,0.2)'  },
                     ].map(c => (
-                      <div key={c.label} className="rounded-xl p-2.5 text-center"
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
                         style={{ background: c.bg, border: `1px solid ${c.border}` }}>
-                        <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
+                        {/* Subtle background progress bar */}
+                        {lineTags.length > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width: `${c.v / lineTags.length * 100}%`, background: c.color, opacity: 0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color: c.color }}>{c.v}</p>
                         <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* ── Sub-tab switcher ── */}
-                  <div className="flex border-b border-slate-100 bg-slate-50/40">
+                  {/* ══ Sub-tab switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
                     {LINE_SUBTABS.map(tab => {
                       const TabIcon = tab.icon;
                       const active  = lineQcSubTab === tab.id;
-                      const cnt = tab.id === 'qc' ? lineFindings.length : lineTags.length;
+                      const cnt = tab.id === 'qc' ? lineFindings.length
+                                : tab.id === 'designations' ? lineTags.length
+                                : tab.id === 'insights' ? aiInsights.length
+                                : null;
                       return (
                         <button key={tab.id}
                           onClick={() => setLineQcSubTab(tab.id)}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                            active ? 'border-teal-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                            active ? 'border-b-2 bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
                           }`}
-                          style={active ? { color: tab.color } : undefined}>
+                          style={active ? { color: tab.color, borderColor: tab.color } : undefined}>
                           <TabIcon className="w-3.5 h-3.5" />
                           {tab.label}
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${
-                            active ? 'text-white' : 'bg-slate-200 text-slate-500'
-                          }`}
-                          style={active ? { background: tab.color } : undefined}>
-                            {cnt}
-                          </span>
+                          {cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${
+                              active ? 'text-white' : 'bg-slate-100 text-slate-500'
+                            }`}
+                            style={active ? { background: tab.color } : undefined}>
+                              {cnt}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* ═══════════════════════════════
+                  {/* ════════════════════════════════════
+                      AI INSIGHTS sub-tab
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'insights' && (
+                    <div className="p-5 flex flex-col gap-3">
+                      {/* Intro banner */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl border"
+                        style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.06),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                        <Brain className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#7c3aed' }} />
+                        <div>
+                          <p className="text-xs font-bold text-violet-800">AI Line Analysis</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Automated pattern recognition across {lineTags.length} pipeline designations and {lineFindings.length} QC findings.
+                            Insights are generated by soft-coded heuristic rules — no external call needed.
+                          </p>
+                        </div>
+                      </div>
+                      {aiInsights.length === 0 ? (
+                        <div className="flex flex-col items-center gap-2 py-12 text-slate-400">
+                          <CheckCircle className="w-10 h-10 text-emerald-400" />
+                          <p className="text-sm font-semibold">No actionable AI insights</p>
+                          <p className="text-xs">All pattern checks passed for this drawing.</p>
+                        </div>
+                      ) : (
+                        aiInsights.map((ins, i) => {
+                          const st = INSIGHT_LEVEL_STYLE[ins.level] || INSIGHT_LEVEL_STYLE.info;
+                          return (
+                            <div key={i} className="rounded-xl border p-4 flex gap-3 transition-all"
+                              style={{ background: st.bg, borderColor: st.border, animation:`cardIn 0.2s ease-out ${i*0.06}s both` }}>
+                              {/* Left accent bar */}
+                              <div className="w-1 rounded-full flex-shrink-0" style={{ background: st.bar }} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-base leading-none">{ins.icon}</span>
+                                  <p className="text-xs font-bold leading-snug" style={{ color: st.titleColor }}>{ins.title}</p>
+                                  <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full text-white uppercase"
+                                    style={{ background: st.bar }}>{ins.level}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 leading-relaxed">{ins.detail}</p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Checklist of all rules run */}
+                      <div className="mt-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Rules Engine — 10 LSZ checks run</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
+                            const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                            return (
+                              <div key={rid} title={def.desc}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                                  cnt > 0 ? 'border-orange-200 bg-orange-50 text-orange-700'
+                                  : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                }`}>
+                                <span>{cnt > 0 ? def.icon : '✅'}</span>
+                                <code className="font-mono">{rid}</code>
+                                {cnt > 0 && <span className="ml-0.5 bg-orange-200 text-orange-800 px-1 rounded-full font-black">{cnt}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
                       QC CHECKS sub-tab
-                  ═══════════════════════════════ */}
+                  ════════════════════════════════════ */}
                   {lineQcSubTab === 'qc' && (
                     <div>
                       {lineFindings.length === 0 ? (
@@ -3133,27 +4942,28 @@ const PIDVerification = () => {
                         </div>
                       ) : (
                         <div>
-                          {/* ── QC checks covered — soft-coded rule breakdown ── */}
+                          {/* Rule chips */}
                           <div className="px-5 pt-4 pb-2">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Checks Performed</p>
-                            <div className="flex flex-wrap gap-2 mb-3">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Filter by Rule</p>
+                            <div className="flex flex-wrap gap-1.5 mb-3">
                               {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
                                 const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                                const active = qcRuleFilter === rid;
                                 return (
-                                  <button
-                                    key={rid}
+                                  <button key={rid}
                                     onClick={() => setQcRuleFilter(r => r === rid ? 'all' : rid)}
                                     title={def.desc}
                                     className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition-all ${
-                                      cnt > 0 ? (qcRuleFilter === rid ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300')
-                                             : 'bg-slate-50 border-slate-100 text-slate-400'
+                                      cnt > 0
+                                        ? active ? 'text-white border-transparent shadow-md' : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300 hover:shadow-sm'
+                                        : 'bg-slate-50 border-slate-100 text-slate-400 cursor-default'
                                     }`}
-                                    style={cnt > 0 && qcRuleFilter === rid ? { background:'linear-gradient(135deg,#0d9488,#0891b2)' } : undefined}
-                                  >
+                                    disabled={cnt === 0}
+                                    style={cnt > 0 && active ? { background:'linear-gradient(135deg,#0d9488,#0891b2)' } : undefined}>
                                     <span>{def.icon}</span>
                                     <code className="font-mono">{rid}</code>
                                     {cnt > 0 && (
-                                      <span className={`ml-0.5 px-1 rounded-full font-black ${qcRuleFilter === rid ? 'bg-white/20 text-white' : 'bg-teal-50 text-teal-700'}`}>{cnt}</span>
+                                      <span className={`ml-0.5 px-1 rounded-full font-black ${active ? 'bg-white/25 text-white' : 'bg-teal-50 text-teal-700'}`}>{cnt}</span>
                                     )}
                                   </button>
                                 );
@@ -3161,16 +4971,12 @@ const PIDVerification = () => {
                             </div>
                           </div>
 
-                          {/* ── Filters ── */}
+                          {/* Search + severity filter */}
                           <div className="px-5 py-2 border-t border-slate-100 flex gap-2 items-center flex-wrap">
                             <div className="relative flex-1 min-w-[180px]">
-                              <input
-                                type="text"
-                                value={qcSearch}
-                                onChange={e => setQcSearch(e.target.value)}
-                                placeholder="Search findings, evidence…"
-                                className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 transition"
-                              />
+                              <input type="text" value={qcSearch} onChange={e => setQcSearch(e.target.value)}
+                                placeholder="Search findings, evidence, rule…"
+                                className="w-full text-xs pl-7 pr-7 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 transition" />
                               <ScanLine className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
                               {qcSearch && <button onClick={() => setQcSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
                             </div>
@@ -3183,85 +4989,95 @@ const PIDVerification = () => {
                             </select>
                             {(qcSevFilter !== 'all' || qcRuleFilter !== 'all' || qcSearch) && (
                               <button onClick={() => { setQcSevFilter('all'); setQcRuleFilter('all'); setQcSearch(''); }}
-                                className="text-xs text-teal-600 hover:text-teal-800 underline">clear</button>
+                                className="text-xs text-teal-600 hover:text-teal-800 font-semibold underline">clear filters</button>
                             )}
-                            <span className="text-[10px] text-slate-400 ml-auto">
-                              {filteredFindings.length} of {lineFindings.length} findings
-                            </span>
+                            <span className="text-[10px] text-slate-400 ml-auto">{filteredFindings.length} of {lineFindings.length} findings</span>
                           </div>
 
-                          {/* ── Findings table ── */}
-                          <div className="overflow-y-auto" style={{ maxHeight: '58vh' }}>
+                          {/* Findings list — expandable cards */}
+                          <div className="overflow-y-auto" style={{ maxHeight: '56vh' }}>
                             {filteredFindings.length === 0 ? (
-                              <div className="py-12 text-center text-slate-400 text-sm">No findings match filters.</div>
+                              <div className="py-12 text-center text-slate-400 text-sm">No findings match current filters.</div>
                             ) : (
                               <div className="divide-y divide-slate-50">
                                 {filteredFindings.map((f, idx) => {
-                                  const ruleDef    = LINE_QC_RULES[f.rule_id] || {};
-                                  const isDup      = DUP_LINE_RULES.has(f.rule_id);
-                                  const isCloudTrunc = CLOUD_TRUNC_RULES.has(f.rule_id);
-                                  const isSharedSfx  = SHARED_SUFFIX_RULES.has(f.rule_id);
+                                  const ruleDef  = LINE_QC_RULES[f.rule_id] || {};
+                                  const isDup    = DUP_LINE_RULES.has(f.rule_id);
+                                  const isCloud  = CLOUD_TRUNC_RULES.has(f.rule_id);
+                                  const isSuffix = SHARED_SUFFIX_RULES.has(f.rule_id);
+                                  const isExpanded = expandedFindingId === (f.id || idx);
                                   return (
-                                    <div
-                                      key={f.id || idx}
-                                      className="px-5 py-4 hover:bg-teal-50/30 transition-colors"
-                                      style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}
-                                    >
-                                      {/* Row 1: rule + severity + badges */}
-                                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                                        {/* Rule ID pill */}
-                                        <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border"
-                                          style={{ background:'rgba(13,148,136,0.07)', borderColor:'rgba(13,148,136,0.2)', color:'#0d9488' }}>
-                                          {f.rule_id}
-                                        </code>
-                                        {/* Severity badge */}
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                          {f.severity?.toUpperCase()}
-                                        </span>
-                                        {/* Check name from soft-coded catalogue */}
-                                        {ruleDef.checkName && (
-                                          <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>
-                                        )}
-                                        {/* Special duplicate badges */}
-                                        {isDup && !isCloudTrunc && !isSharedSfx && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300">Duplicate Line</span>
-                                        )}
-                                        {isCloudTrunc && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">☁️ Cloud Truncation</span>
-                                        )}
-                                        {isSharedSfx && (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300">📋 Shared Suffix</span>
-                                        )}
-                                        {/* Jump to findings panel */}
-                                        <button
-                                          className="ml-auto text-[10px] flex items-center gap-1 text-indigo-500 hover:text-indigo-700 font-medium"
-                                          onClick={() => { setActivePanel('findings'); setFocusedFindingId(f.id); setTimeout(() => jumpToFinding(f.id), 150); }}
-                                        >
-                                          <Eye className="w-3 h-3" /> Locate
-                                        </button>
+                                    <div key={f.id || idx}
+                                      className={`transition-all duration-200 ${isExpanded ? 'bg-teal-50/40' : 'hover:bg-slate-50/70'}`}
+                                      style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.025,0.4)}s both` }}>
+                                      {/* Main row — always visible */}
+                                      <div className="px-5 py-3 cursor-pointer"
+                                        onClick={() => setExpandedFindingId(prev => prev === (f.id||idx) ? null : (f.id||idx))}>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <code className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border"
+                                            style={{ background:'rgba(13,148,136,0.07)', borderColor:'rgba(13,148,136,0.2)', color:'#0d9488' }}>
+                                            {f.rule_id}
+                                          </code>
+                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                            {f.severity?.toUpperCase()}
+                                          </span>
+                                          {ruleDef.checkName && (
+                                            <span className="text-[10px] text-slate-500 font-semibold">{ruleDef.icon} {ruleDef.checkName}</span>
+                                          )}
+                                          {isDup && !isCloud && !isSuffix && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 border border-sky-300">Duplicate</span>
+                                          )}
+                                          {isCloud && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">☁️ Cloud</span>
+                                          )}
+                                          {isSuffix && (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300">📋 Suffix</span>
+                                          )}
+                                          <div className="ml-auto flex items-center gap-2">
+                                            <button className="text-[10px] flex items-center gap-1 text-indigo-500 hover:text-indigo-700 font-medium"
+                                              onClick={e => { e.stopPropagation(); setActivePanel('findings'); setFocusedFindingId(f.id); setTimeout(() => jumpToFinding(f.id), 150); }}>
+                                              <Eye className="w-3 h-3" /> Locate
+                                            </button>
+                                            <span className="text-slate-300">{isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</span>
+                                          </div>
+                                        </div>
+                                        {ruleDef.short && <p className="text-[10px] font-semibold text-teal-700 mt-1">{ruleDef.short}</p>}
+                                        <p className="text-xs text-slate-700 leading-relaxed mt-0.5 line-clamp-1">{f.issue}</p>
                                       </div>
-                                      {/* Row 2: short description from catalogue + actual issue text */}
-                                      {ruleDef.short && (
-                                        <p className="text-[10px] font-semibold text-teal-700 mb-1">{ruleDef.short}</p>
+
+                                      {/* Expanded detail */}
+                                      {isExpanded && (
+                                        <div className="px-5 pb-4 space-y-2 border-t border-teal-100/60"
+                                          style={{ animation:'fadeUp 0.18s ease-out both' }}>
+                                          {/* Full issue text */}
+                                          <p className="text-xs text-slate-700 leading-relaxed pt-2">{f.issue}</p>
+                                          {/* Evidence tag */}
+                                          {f.evidence && (
+                                            <div className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                                              <Tag className="w-3 h-3 flex-shrink-0 mt-0.5 text-slate-400" />
+                                              <code className="font-mono bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 break-all">{f.evidence}</code>
+                                            </div>
+                                          )}
+                                          {/* Rule description */}
+                                          {ruleDef.desc && (
+                                            <div className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                                              <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
+                                              <span className="leading-relaxed">{ruleDef.desc}</span>
+                                            </div>
+                                          )}
+                                          {/* AI Fix recommendation */}
+                                          {ruleDef.fix && (
+                                            <div className="flex items-start gap-1.5 p-2 rounded-lg border text-[10px]"
+                                              style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                              <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                              <div>
+                                                <span className="font-bold text-violet-700">AI Recommendation: </span>
+                                                <span className="text-slate-600">{ruleDef.fix}</span>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
                                       )}
-                                      <p className="text-xs text-slate-700 leading-relaxed mb-1.5">{f.issue}</p>
-                                      {/* Row 3: evidence + rule explanation */}
-                                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                        {f.evidence && (
-                                          <div className="flex items-start gap-1 text-[10px] text-slate-500 max-w-full">
-                                            <Tag className="w-3 h-3 flex-shrink-0 mt-0.5 text-slate-400" />
-                                            <code className="font-mono bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-slate-700 truncate max-w-[280px]" title={f.evidence}>
-                                              {f.evidence}
-                                            </code>
-                                          </div>
-                                        )}
-                                        {ruleDef.desc && (
-                                          <div className="flex items-start gap-1 text-[10px] text-slate-400 max-w-full">
-                                            <Lightbulb className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-400" />
-                                            <span className="leading-relaxed">{ruleDef.desc}</span>
-                                          </div>
-                                        )}
-                                      </div>
                                     </div>
                                   );
                                 })}
@@ -3273,110 +5089,687 @@ const PIDVerification = () => {
                     </div>
                   )}
 
-                  {/* ═══════════════════════════════
+                  {/* ════════════════════════════════════
                       DESIGNATIONS sub-tab
-                  ═══════════════════════════════ */}
+                  ════════════════════════════════════ */}
                   {lineQcSubTab === 'designations' && (
                     <div>
-                      {/* Search */}
-                      <div className="px-5 py-3 border-b border-slate-100">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={lineTagSearch}
-                            onChange={e => setLineTagSearch(e.target.value)}
-                            placeholder={`Search ${lineTags.length} designations…`}
-                            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50"
-                          />
-                          <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
-                          {lineTagSearch && (
-                            <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                      {/* Toolbar: search + sort + view mode */}
+                      <div className="px-5 py-3 border-b border-slate-100 space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <div className="relative flex-1">
+                            <input type="text" value={lineTagSearch} onChange={e => setLineTagSearch(e.target.value)}
+                              placeholder={`Search ${lineTags.length} designations…`}
+                              className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-teal-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-300/50" />
+                            <ScanLine className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-teal-400 pointer-events-none" />
+                            {lineTagSearch && <button onClick={() => setLineTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
+                          </div>
+                          {/* Sort selector */}
+                          <select value={linesSortBy} onChange={e => setLinesSortBy(e.target.value)}
+                            className="text-xs px-2 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-teal-300 flex-shrink-0">
+                            {DESIGNATION_SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          </select>
+                          {/* Grid / List toggle */}
+                          <div className="flex rounded-xl border border-slate-200 overflow-hidden flex-shrink-0">
+                            {[{m:'grid',ic:'⊞'},{m:'list',ic:'≡'}].map(({m,ic}) => (
+                              <button key={m} onClick={() => setLinesViewMode(m)}
+                                className={`px-2.5 py-1.5 text-xs font-bold transition-all ${linesViewMode === m ? 'bg-teal-500 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                                {ic}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1.5">
-                          {npsSet.length} NPS sizes · {fluidSet.length} fluid codes
+                        <p className="text-[10px] text-slate-400">
+                          {npsSet.length} NPS sizes · {fluidSet.length} fluid codes · {areaSet.length} area codes
                           {multiAngleCount > 0 && ` · ${multiAngleCount} H+V confirmed`}
-                          {tagFindingsMap.size > 0 && (
-                            <span className="ml-2 text-orange-500 font-semibold">· {tagFindingsMap.size} designations with QC issues</span>
-                          )}
+                          {tagFindingsMap.size > 0 && <span className="ml-2 text-orange-500 font-semibold">· {tagFindingsMap.size} tags with issues</span>}
                         </p>
                       </div>
-                      {/* Card grid */}
-                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: '65vh' }}>
+
+                      {/* Cards / List */}
+                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight: '62vh' }}>
                         {filteredTags.length === 0 ? (
                           <div className="py-12 text-center text-slate-400 text-sm">No designations match search.</div>
-                        ) : (
-                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(170px,1fr))' }}>
+                        ) : linesViewMode === 'grid' ? (
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(165px,1fr))' }}>
                             {filteredTags.map((lt, idx) => {
                               const isFocused = focusedLineTagKey === lt.text;
                               const maxSev    = tagMaxSev(lt.text);
                               const hasIssue  = !!maxSev;
+                              const issueCnt  = (tagFindingsMap.get(lt.text) || []).length;
                               return (
-                                <div
-                                  key={lt.text}
+                                <div key={lt.text}
                                   id={`line-tag-row-${lt.text}`}
                                   onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
                                   className={`relative rounded-xl border cursor-pointer transition-all duration-200 p-3 flex flex-col gap-1.5 overflow-hidden ${
-                                    isFocused  ? 'border-teal-400 bg-teal-50 shadow-md shadow-teal-100'
-                                    : hasIssue  ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400'
-                                    : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400'
-                                    : 'border-slate-200 bg-white hover:border-teal-300'
+                                    isFocused  ? 'border-teal-400 bg-teal-50 shadow-lg shadow-teal-100/60'
+                                    : hasIssue  ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400 hover:shadow-md'
+                                    : lt.multi_angle ? 'border-teal-200 bg-white hover:border-teal-400 hover:shadow-sm'
+                                    : 'border-slate-200 bg-white hover:border-teal-300 hover:shadow-sm'
                                   }`}
-                                  style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx * 0.02, 0.4)}s both` }}
-                                >
+                                  style={{ animation:`cardIn 0.25s ease-out ${Math.min(idx*0.02,0.4)}s both` }}>
                                   {/* Top colour bar */}
                                   <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{
                                     background: hasIssue        ? `linear-gradient(90deg,${SEV_DOT_COLOR[maxSev]},${SEV_DOT_COLOR[maxSev]}88)`
-                                               : lt.multi_angle || isFocused ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
+                                               : isFocused || lt.multi_angle ? 'linear-gradient(90deg,#0d9488,#14b8a6,#06b6d4)'
                                                : 'linear-gradient(90deg,#e2e8f0,#cbd5e1)'
                                   }} />
-                                  {/* QC status dot + line text */}
                                   <div className="flex items-center justify-between gap-1">
                                     <code className={`text-[11px] font-mono font-bold truncate flex-1 ${isFocused ? 'text-teal-700' : hasIssue ? 'text-orange-800' : 'text-slate-800'}`}>
                                       {lt.text}
                                     </code>
-                                    {/* QC dot */}
-                                    <span
-                                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                      style={{
-                                        background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981',
-                                        boxShadow: hasIssue ? `0 0 4px ${SEV_DOT_COLOR[maxSev]}88` : '0 0 4px #10b98188',
-                                      }}
-                                      title={hasIssue ? `${(tagFindingsMap.get(lt.text)||[]).length} QC issue(s): ${maxSev}` : 'QC pass'}
-                                    />
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      style={{ background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981',
+                                        boxShadow: `0 0 5px ${hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981'}88` }}
+                                      title={hasIssue ? `${issueCnt} issue(s): ${maxSev}` : 'QC pass'} />
                                   </div>
-                                  {/* Attribute chips */}
                                   <div className="flex items-center gap-1 flex-wrap">
-                                    {lt.size && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
+                                    {lt.size       && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">{lt.size}"</span>}
                                     {lt.fluid_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{lt.fluid_code}</span>}
-                                    {lt.area_code && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
+                                    {lt.area_code  && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{lt.area_code}</span>}
                                     {lt.pipe_class && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">{lt.pipe_class}</span>}
                                   </div>
-                                  {/* Issue count hint */}
                                   {hasIssue && (
-                                    <p className="text-[10px] text-orange-600 font-semibold">
-                                      {(tagFindingsMap.get(lt.text)||[]).length} QC issue{(tagFindingsMap.get(lt.text)||[]).length !== 1 ? 's' : ''} · {maxSev}
-                                    </p>
+                                    <p className="text-[10px] text-orange-600 font-semibold">{issueCnt} QC issue{issueCnt !== 1 ? 's' : ''} · {maxSev}</p>
                                   )}
+                                  {lt.multi_angle && !hasIssue && (
+                                    <p className="text-[10px] text-teal-600 font-semibold">↕️ H+V confirmed</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          /* List view */
+                          <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 overflow-hidden">
+                            {/* List header */}
+                            <div className="grid text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 py-2 bg-slate-50"
+                              style={{ gridTemplateColumns: '1fr 60px 60px 60px 70px 80px' }}>
+                              <span>Designation</span><span>NPS</span><span>Fluid</span><span>Area</span><span>Class</span><span>QC Status</span>
+                            </div>
+                            {filteredTags.map((lt, idx) => {
+                              const maxSev   = tagMaxSev(lt.text);
+                              const hasIssue = !!maxSev;
+                              const issueCnt = (tagFindingsMap.get(lt.text) || []).length;
+                              const isFocused = focusedLineTagKey === lt.text;
+                              return (
+                                <div key={lt.text}
+                                  onClick={() => { setFocusedLineTagKey(prev => prev === lt.text ? null : lt.text); setShowLineTagOverlay(true); }}
+                                  className={`grid items-center text-xs px-4 py-2.5 cursor-pointer transition-all ${
+                                    isFocused ? 'bg-teal-50 border-l-2 border-teal-400' : 'hover:bg-slate-50/80 border-l-2 border-transparent'
+                                  }`}
+                                  style={{ gridTemplateColumns: '1fr 60px 60px 60px 70px 80px', animation:`cardIn 0.2s ease-out ${Math.min(idx*0.015,0.3)}s both` }}>
+                                  <code className={`font-mono font-bold text-[11px] truncate ${isFocused ? 'text-teal-700' : hasIssue ? 'text-orange-800' : 'text-slate-800'}`}>{lt.text}</code>
+                                  <span className="text-[10px] font-bold text-blue-600">{lt.size ? `${lt.size}"` : '—'}</span>
+                                  <span className="text-[10px] font-semibold text-amber-700">{lt.fluid_code || '—'}</span>
+                                  <span className="text-[10px] text-slate-500">{lt.area_code || '—'}</span>
+                                  <span className="text-[10px] text-purple-600">{lt.pipe_class || '—'}</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full flex-shrink-0"
+                                      style={{ background: hasIssue ? SEV_DOT_COLOR[maxSev] : '#10b981' }} />
+                                    <span className={`text-[10px] font-semibold ${hasIssue ? 'text-orange-600' : 'text-emerald-600'}`}>
+                                      {hasIssue ? `${issueCnt} issue${issueCnt!==1?'s':''}` : 'Pass'}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
                         )}
                       </div>
+                      <div className="px-5 py-2 border-t border-slate-100 text-[10px] text-slate-400">
+                        {filteredTags.length} of {lineTags.length} designations shown · sorted by {DESIGNATION_SORT_OPTIONS.find(o=>o.v===linesSortBy)?.label}
+                      </div>
                     </div>
                   )}
 
-                  {/* Footer */}
+                  {/* ════════════════════════════════════
+                      ANALYTICS sub-tab
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'analytics' && (
+                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+                      {/* ── Overall QC score ── */}
+                      <div className="rounded-xl border p-4 flex items-center gap-5"
+                        style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.04))', borderColor:'rgba(99,102,241,0.2)' }}>
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                            <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black leading-none" style={{ color: qcScoreColor }}>{qcScore}%</span>
+                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Line Designation Quality Score</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            {cleanCount} of {lineTags.length} designations pass all checks.
+                            {criticalLF > 0 && ` ${criticalLF} critical finding${criticalLF!==1?'s':''} require immediate attention.`}
+                            {majorLF   > 0 && ` ${majorLF} major finding${majorLF!==1?'s':''} need review before issue.`}
+                          </p>
+                          <div className="flex gap-3 mt-2">
+                            {[['Clean', cleanCount, '#22c55e'],['Critical',criticalLF,'#dc2626'],['Major',majorLF,'#ea580c'],['Minor',minorLF,'#f59e0b']].map(([l,v,c])=>(
+                              <div key={l} className="text-center">
+                                <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── NPS Distribution ── */}
+                      {npsDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">📏</span> NPS Size Distribution
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{npsSet.length} sizes across {lineTags.length} lines</span>
+                          </p>
+                          <div className="space-y-2">
+                            {npsDist.slice(0, 10).map(({label, count}) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <span className="text-[11px] font-bold text-blue-700 w-10 text-right flex-shrink-0">{label}</span>
+                                <div className="flex-1 bg-blue-50 rounded-full h-4 overflow-hidden">
+                                  <div className="h-full rounded-full flex items-center pl-2 transition-all duration-700"
+                                    style={{ width:`${count/maxNpsCnt*100}%`, background:'linear-gradient(90deg,#3b82f6,#60a5fa)', minWidth:'1.5rem' }}>
+                                    <span className="text-[9px] font-black text-white leading-none">{count}</span>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">{Math.round(count/lineTags.length*100)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Fluid Code Distribution ── */}
+                      {fluidDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">💧</span> Fluid Code Distribution
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{fluidSet.length} fluid types</span>
+                          </p>
+                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))' }}>
+                            {fluidDist.slice(0, 12).map(({label, count}) => (
+                              <div key={label} className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-amber-800">{label}</span>
+                                  <span className="text-[10px] font-bold text-amber-600">{count}</span>
+                                </div>
+                                <div className="w-full bg-amber-100 rounded-full h-1.5">
+                                  <div className="h-1.5 rounded-full" style={{ width:`${count/maxFluidCnt*100}%`, background:'linear-gradient(90deg,#f59e0b,#fbbf24)' }} />
+                                </div>
+                                <span className="text-[9px] text-amber-600">{Math.round(count/lineTags.length*100)}% of lines</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Area Code Coverage ── */}
+                      {areaDist.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">🗺️</span> Area Code Coverage
+                            <span className="ml-auto text-[10px] font-normal text-slate-400">{areaSet.length} areas</span>
+                          </p>
+                          <div className="space-y-1.5">
+                            {areaDist.slice(0, 8).map(({label, count}) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <span className="text-[11px] font-bold text-slate-600 w-14 text-right flex-shrink-0">{label}</span>
+                                <div className="flex-1 bg-slate-100 rounded-full h-3.5 overflow-hidden">
+                                  <div className="h-full rounded-full flex items-center pl-1.5 transition-all duration-700"
+                                    style={{ width:`${count/maxAreaCnt*100}%`, background:'linear-gradient(90deg,#6366f1,#818cf8)', minWidth:'1.5rem' }}>
+                                    <span className="text-[9px] font-black text-white leading-none">{count}</span>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] text-slate-400 w-8 flex-shrink-0">{count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── QC by Rule breakdown ── */}
+                      {lineFindings.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                            <span className="text-base">🔍</span> QC Findings by Rule
+                          </p>
+                          <div className="space-y-2">
+                            {Object.entries(LINE_QC_RULES).map(([rid, def]) => {
+                              const cnt = lineFindings.filter(f => f.rule_id === rid).length;
+                              if (!cnt) return null;
+                              const maxCnt = Math.max(1, ...Object.entries(LINE_QC_RULES).map(([r]) => lineFindings.filter(f=>f.rule_id===r).length));
+                              return (
+                                <button key={rid} onClick={() => { setLineQcSubTab('qc'); setQcRuleFilter(rid); }}
+                                  className="w-full flex items-center gap-3 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-all group text-left">
+                                  <code className="text-[10px] font-mono font-bold text-teal-700 w-16 flex-shrink-0">{rid}</code>
+                                  <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width:`${cnt/maxCnt*100}%`, background:'linear-gradient(90deg,#0d9488,#0891b2)' }} />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-teal-700 w-6 text-right flex-shrink-0">{cnt}</span>
+                                  <span className="text-[10px] text-slate-400 flex-1 truncate group-hover:text-teal-600">{def.short}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT sub-tab
+                      Shows the P&ID drawing with SVG path overlays:
+                      - Each line tag's occurrences become Start→End markers
+                      - Lines are color-coded by fluid code
+                      - Clicking a line selects it for detail
+                  ════════════════════════════════════ */}
+                  {lineQcSubTab === 'layout' && (() => {
+                    // Fluid colours + lookup come from module-level constants (no re-creation per render)
+                    const LAYOUT_FLUID_COLORS = _LAYOUT_FLUID_COLORS;
+                    const _lfc = _lfcGlobal;
+
+                    // ── Layout items from useMemo at component level ──────────────────────
+                    // layoutItemsBase is computed once per drawing change (not per render).
+                    // It already contains direction-aware sorted routes via _routeSort.
+                    const layoutItems = layoutItemsBase;
+
+                    // Unique fluid codes present with coordinates
+                    const layoutFluids = ['all', ...new Set(layoutItems.map(i => i.fluidCode).filter(Boolean))];
+
+                    const filteredLayout = lineLayoutFluidFilter === 'all'
+                      ? layoutItems
+                      : layoutItems.filter(i => i.fluidCode === lineLayoutFluidFilter);
+
+                    const polylinePoints = (sorted) =>
+                      sorted.map(o => `${o.x_pct},${o.y_pct}`).join(' ');
+
+                    const selItem = lineLayoutSelected
+                      ? filteredLayout.find(i => i.text === lineLayoutSelected)
+                      : null;
+
+                    return (
+                      <div className="flex flex-col gap-3 p-4">
+
+                        {/* ── Fluid-filter chips + clear ───────────────────────────────── */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex-shrink-0">Filter by fluid:</span>
+                          {layoutFluids.map(fc => {
+                            const active = lineLayoutFluidFilter === fc;
+                            const color  = fc === 'all' ? '#2B3A55' : _lfc(fc).stroke;
+                            return (
+                              <button key={fc}
+                                onClick={() => { setLineLayoutFluidFilter(fc); setLineLayoutSelected(null); }}
+                                className="text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all"
+                                style={{
+                                  background:  active ? color   : 'white',
+                                  color:       active ? 'white' : color,
+                                  borderColor: color,
+                                  boxShadow:   active ? `0 0 8px ${color}50` : 'none',
+                                }}>
+                                {fc === 'all' ? `All (${layoutItems.length})` : (LAYOUT_FLUID_COLORS[fc]?.label || fc)}
+                              </button>
+                            );
+                          })}
+                          {lineLayoutSelected && (
+                            <button onClick={() => setLineLayoutSelected(null)}
+                              className="ml-auto flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50">
+                              <X className="w-3 h-3" />Clear selection
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ── Visual legend ─────────────────────────────────────────────── */}
+                        <div className="flex items-center gap-4 flex-wrap bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Legend:</span>
+                          {[
+                            { node: <span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" style={{ boxShadow:'0 0 4px #16a34a80' }} />, label:'Start' },
+                            { node: <span className="w-3 h-3 rotate-45 rounded-[2px] flex-shrink-0 inline-block bg-red-500" style={{ boxShadow:'0 0 4px #dc262680' }} />, label:'End' },
+                            { node: <svg width="28" height="8" style={{overflow:'visible'}}><defs><marker id="leg-src-dst" markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,4 L4,2 z" fill="#0891b2"/></marker></defs><line x1="2" y1="4" x2="22" y2="4" stroke="#0891b2" strokeWidth="1.5" strokeDasharray="5,2" markerEnd="url(#leg-src-dst)"/></svg>, label:'Source → Destination' },
+                            { node: <span className="w-2 h-2 rounded-full flex-shrink-0 bg-slate-400" />, label:'Waypoint' },
+                          ].map((l, i) => (
+                            <span key={i} className="flex items-center gap-1.5 text-[10px] text-slate-600">{l.node}{l.label}</span>
+                          ))}
+                        </div>
+
+                        {/* ── Drawing + SVG overlay ─────────────────────────────────────── */}
+                        {!drawingImageUrl ? (
+                          <div className="flex items-center justify-center gap-2 py-16 text-slate-400 text-xs rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                            <AlertTriangle className="w-4 h-4" />Drawing image not available — run analysis first
+                          </div>
+                        ) : filteredLayout.length === 0 ? (
+                          <div className="flex items-center justify-center gap-2 py-16 text-slate-400 text-xs rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                            <MapPin className="w-4 h-4" />No line designations with coordinates for selected filter
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                            <div className="overflow-auto" style={{ maxHeight:'68vh' }}>
+                              <div className="relative w-full" style={{ lineHeight:0 }}>
+
+                                {/* Drawing image */}
+                                <img
+                                  src={drawingImageUrl} alt="P&ID Drawing" draggable={false}
+                                  className="w-full block"
+                                  style={{ height:'auto', userSelect:'none',
+                                           opacity: lineLayoutSelected ? 0.72 : 1,
+                                           transition:'opacity 0.2s' }}
+                                />
+
+                                {/* ── Decorative SVG overlay (pointer-events: none) ──────── */}
+                                <svg className="absolute inset-0 w-full h-full"
+                                  viewBox="0 0 100 100" preserveAspectRatio="none"
+                                  style={{ pointerEvents:'none' }}>
+                                  <defs>
+                                    {/* Arrow-head marker per fluid */}
+                                    {layoutFluids.filter(f => f !== 'all').map(fc => {
+                                      const col = _lfc(fc).stroke;
+                                      return (
+                                        <marker key={`arrow-${fc}`}
+                                          id={`lnarrow-${fc}`} markerWidth="5" markerHeight="5"
+                                          refX="4.5" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                          <path d="M0,0 L0,5 L5,2.5 z" fill={col} />
+                                        </marker>
+                                      );
+                                    })}
+                                    <marker id="lnarrow-unknown" markerWidth="5" markerHeight="5"
+                                      refX="4.5" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                      <path d="M0,0 L0,5 L5,2.5 z" fill="#0891b2" />
+                                    </marker>
+                                  </defs>
+
+                                  {/* Cap SVG elements to LAYOUT_SVG_RENDER_CAP to avoid browser
+                                      paint thrashing on large drawings; selected item always shown */}
+                                  {(filteredLayout.length > LAYOUT_SVG_RENDER_CAP
+                                    ? filteredLayout.filter((item, idx) => item.text === lineLayoutSelected || idx < LAYOUT_SVG_RENDER_CAP)
+                                    : filteredLayout
+                                  ).map((item) => {
+                                    const isSel   = lineLayoutSelected === item.text;
+                                    const isOther = lineLayoutSelected && !isSel;
+                                    const stroke  = item.hasIssue ? (SEV_DOT_COLOR[item.maxSev] || '#f97316') : item.fc.stroke;
+                                    const opacity = isOther ? 0.15 : isSel ? 1 : 0.7;
+                                    const sw      = isSel ? 0.55 : 0.28;
+                                    const hasPath = item.sorted.length > 1;
+                                    const arrowId = `lnarrow-${item.fluidCode || 'unknown'}`;
+
+                                    return (
+                                      <g key={item.text} style={{ opacity }}>
+                                        {/* Source → Destination direct flow arrow */}
+                                        {/* BFS trace data (lineTracedPaths/lineTracing) is preserved for the detail card; */}
+                                        {/* only the visual rendering switches to a clean direct arrow.                   */}
+                                        {hasPath && (
+                                          <line
+                                            x1={item.start.x_pct} y1={item.start.y_pct}
+                                            x2={item.end.x_pct}   y2={item.end.y_pct}
+                                            stroke={stroke}
+                                            strokeWidth={isSel ? sw * 0.80 : sw * 0.72}
+                                            strokeDasharray={isSel ? undefined : '0.8,0.55'}
+                                            strokeLinecap="round"
+                                            markerEnd={`url(#${arrowId})`}
+                                            style={{
+                                              filter: isSel ? `drop-shadow(0 0 0.6px ${stroke})` : undefined,
+                                              opacity: isSel ? 1 : 0.62,
+                                            }}
+                                          />
+                                        )}
+                                        {/* Start — green circle */}
+                                        <circle cx={item.start.x_pct} cy={item.start.y_pct}
+                                          r={isSel ? 1.2 : 0.65}
+                                          fill="#16a34a" stroke="white" strokeWidth="0.15"
+                                          style={{ filter: isSel ? 'drop-shadow(0 0 0.7px #16a34a)' : undefined }}
+                                        />
+                                        {/* End — red diamond */}
+                                        {hasPath && (
+                                          <rect
+                                            x={item.end.x_pct - (isSel ? 0.85 : 0.48)}
+                                            y={item.end.y_pct - (isSel ? 0.85 : 0.48)}
+                                            width={isSel ? 1.7 : 0.96} height={isSel ? 1.7 : 0.96}
+                                            fill="#dc2626" stroke="white" strokeWidth="0.12"
+                                            transform={`rotate(45,${item.end.x_pct},${item.end.y_pct})`}
+                                            style={{ filter: isSel ? 'drop-shadow(0 0 0.7px #dc2626)' : undefined }}
+                                          />
+                                        )}
+                                        {/* Waypoint dots */}
+                                        {item.middle.map((o, mi) => (
+                                          <circle key={mi} cx={o.x_pct} cy={o.y_pct}
+                                            r={isSel ? 0.55 : 0.28}
+                                            fill={stroke} stroke="white" strokeWidth="0.1" />
+                                        ))}
+                                        {/* Label when selected or few lines */}
+                                        {(isSel || filteredLayout.length <= 10) && (
+                                          <text
+                                            x={item.start.x_pct + 0.5} y={item.start.y_pct - 0.7}
+                                            fontSize={isSel ? '1.4' : '0.9'}
+                                            fill={stroke} fontWeight="700" fontFamily="monospace"
+                                            style={{ userSelect:'none', filter:'drop-shadow(0 0 0.4px white)' }}>
+                                            {item.text}
+                                          </text>
+                                        )}
+                                      </g>
+                                    );
+                                  })}
+                                </svg>
+
+                                {/* ── Click hit-zones (pointer-events: all) ──────────────── */}
+                                <svg className="absolute inset-0 w-full h-full"
+                                  viewBox="0 0 100 100" preserveAspectRatio="none"
+                                  style={{ pointerEvents:'all', cursor:'pointer' }}>
+                                  {filteredLayout.map((item) => (
+                                    <g key={item.text}
+                                      onClick={() => setLineLayoutSelected(prev => prev === item.text ? null : item.text)}>
+                                      {item.sorted.length > 1 ? (
+                                        <polyline points={polylinePoints(item.sorted)}
+                                          fill="none" stroke="transparent" strokeWidth="2.5" />
+                                      ) : (
+                                        <circle cx={item.start.x_pct} cy={item.start.y_pct} r="2" fill="transparent" />
+                                      )}
+                                    </g>
+                                  ))}
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Selected-line detail card ─────────────────────────────────── */}
+                        {selItem && (
+                          <div className="rounded-xl border p-4 flex flex-col gap-3"
+                            style={{ borderColor: selItem.fc.stroke + '55',
+                                     background: selItem.fc.fill + '25',
+                                     animation:'cardIn 0.18s ease-out both' }}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                style={{ background: selItem.fc.stroke, boxShadow:`0 3px 10px ${selItem.fc.stroke}50` }}>
+                                <MapPin className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-black text-slate-900 font-mono">{selItem.text}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  {selItem.fc.label} · {selItem.sorted.length} occurrence{selItem.sorted.length !== 1 ? 's' : ''}
+                                  {selItem.hasIssue && (
+                                    <span className="ml-2 font-bold text-orange-600">
+                                      {(tagFindingsMap.get(selItem.text)||[]).length} QC issue{(tagFindingsMap.get(selItem.text)||[]).length !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <button onClick={() => setLineLayoutSelected(null)}
+                                className="p-1.5 hover:bg-white/60 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Source → Destination flow indicator */}
+                            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+                              style={{ background:`${selItem.fc.fill}18`, border:`1.5px solid ${selItem.fc.stroke}35` }}>
+                              <span className="flex items-center gap-1.5 text-[11px] font-black flex-shrink-0" style={{ color:'#16a34a' }}>
+                                <span className="w-2.5 h-2.5 rounded-full inline-block bg-emerald-500 flex-shrink-0"
+                                  style={{ boxShadow:'0 0 4px #16a34a80' }} />
+                                Source
+                                <span className="font-mono text-[9px] font-normal text-slate-400">
+                                  ({selItem.start.x_pct.toFixed(1)}%, {selItem.start.y_pct.toFixed(1)}%)
+                                </span>
+                              </span>
+                              <span className="text-base font-black flex-shrink-0" style={{ color: selItem.fc.stroke }}>→</span>
+                              <span className="flex items-center gap-1.5 text-[11px] font-black flex-shrink-0" style={{ color:'#dc2626' }}>
+                                <span className="font-mono text-[9px] font-normal text-slate-400">
+                                  ({selItem.end.x_pct.toFixed(1)}%, {selItem.end.y_pct.toFixed(1)}%)
+                                </span>
+                                Destination
+                                <span className="w-2.5 h-2.5 rotate-45 rounded-[1px] inline-block bg-red-500 flex-shrink-0"
+                                  style={{ boxShadow:'0 0 4px #dc262680' }} />
+                              </span>
+                            </div>
+
+                            {/* Route type badge */}
+                            {(() => {
+                              const rt = selItem.routeType;
+                              const ROUTE_META = {
+                                'H':  { label:'→ Horizontal run',       bg:'#e0f2fe', color:'#0369a1', desc:'Flows left → right'   },
+                                'V':  { label:'↓ Vertical run',         bg:'#dcfce7', color:'#15803d', desc:'Flows top → bottom'   },
+                                'HV': { label:'↔↕ Multi-angle route',   bg:'#f3e8ff', color:'#7c3aed', desc:'L-shaped / complex run' },
+                              };
+                              const meta = ROUTE_META[rt] || ROUTE_META['H'];
+                              return (
+                                <div className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+                                  style={{ background: meta.bg, borderLeft:`3px solid ${meta.color}` }}>
+                                  <span className="text-[11px] font-black" style={{ color: meta.color }}>{meta.label}</span>
+                                  <span className="text-[10px] text-slate-500">{meta.desc}</span>
+                                  {selItem.multi_angle && (
+                                    <span className="ml-auto text-[9px] font-bold bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">H+V confirmed by OCR</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Start / End coordinates */}
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { label:'Start (Source)',    point: selItem.start, color:'#16a34a', shape:'circle'  },
+                                { label:'End (Destination)', point: selItem.end,   color:'#dc2626', shape:'diamond' },
+                              ].map(pt => (
+                                <div key={pt.label} className="rounded-lg p-2.5 border border-white/60 bg-white/50">
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    {pt.shape === 'circle'
+                                      ? <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: pt.color }} />
+                                      : <span className="w-3 h-3 rotate-45 rounded-[2px] flex-shrink-0 inline-block" style={{ background: pt.color }} />
+                                    }
+                                    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: pt.color }}>{pt.label}</span>
+                                  </div>
+                                  <p className="text-xs font-mono text-slate-700">
+                                    X: <strong>{pt.point.x_pct.toFixed(1)}%</strong>&nbsp;&nbsp;Y: <strong>{pt.point.y_pct.toFixed(1)}%</strong>
+                                  </p>
+                                  {pt.point._dir && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                      <span className="font-bold" style={{ color: pt.point._dir === 'H' ? '#0369a1' : pt.point._dir === 'V' ? '#15803d' : '#7c3aed' }}>
+                                        {pt.point._dir === 'H' ? '→ H' : pt.point._dir === 'V' ? '↓ V' : pt.point._dir}
+                                      </span>
+                                      <span>pipe orientation</span>
+                                    </p>
+                                  )}
+                                  {!pt.point._dir && pt.point.direction && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">Dir: <strong>{pt.point.direction}</strong></p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Intermediate waypoints */}
+                            {selItem.middle.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                                  {selItem.middle.length} Waypoint{selItem.middle.length !== 1 ? 's' : ''} (in route order)
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {selItem.middle.map((o, mi) => (
+                                    <span key={mi} className="text-[10px] font-mono bg-white/70 border border-slate-200 px-2 py-1 rounded-lg text-slate-600 flex items-center gap-1">
+                                      <span className="font-bold" style={{ color: o._dir === 'H' ? '#0369a1' : o._dir === 'V' ? '#15803d' : '#94a3b8' }}>
+                                        {o._dir === 'H' ? '→' : o._dir === 'V' ? '↓' : '·'}
+                                      </span>
+                                      ({o.x_pct.toFixed(1)}%, {o.y_pct.toFixed(1)}%)
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* QC issues */}
+                            {selItem.hasIssue && (
+                              <div>
+                                <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1.5">QC Issues</p>
+                                <div className="flex flex-col gap-1.5">
+                                  {(tagFindingsMap.get(selItem.text)||[]).map((f, fi) => (
+                                    <div key={fi} className="text-[11px] bg-white/70 border border-orange-200 rounded-lg px-3 py-2 text-slate-700">
+                                      <span className={`inline-flex px-1.5 py-0.5 rounded-full border text-[10px] font-bold mr-2 ${SEV_BADGE_CLS[f.severity] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                        {f.severity}
+                                      </span>
+                                      <code className="font-mono text-[10px] text-slate-400 mr-1">{f.rule_id}</code>
+                                      {f.issue}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pipe-path trace status */}
+                            {lineTracing && (
+                              <div className="flex items-center gap-2 text-[11px] text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+                                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25"/>
+                                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                                </svg>
+                                Tracing pipe path along drawing lines…
+                              </div>
+                            )}
+                            {!lineTracing && lineTracedPaths[selItem.text] != null && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-1.5 border border-emerald-100">
+                                <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                                Pipe path traced · <strong>{lineTracedPaths[selItem.text].length}</strong> waypoints along drawing lines
+                              </div>
+                            )}
+                            {!lineTracing && lineTracedPaths[selItem.text] === null && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-200">
+                                Path trace unavailable — no continuous dark-pixel route found
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ── Summary bar ────────────────────────────────────────────────── */}
+                        <div className="flex items-center gap-4 flex-wrap text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-1">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />Source: {filteredLayout.length}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rotate-45 rounded-[1px] inline-block bg-red-500" />Destination: {filteredLayout.filter(i => i.sorted.length > 1).length}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full inline-block bg-orange-400" />With issues: {filteredLayout.filter(i => i.hasIssue).length}
+                          </span>
+                          {filteredLayout.filter(i => i.sorted.length > 1).length > 0 && (
+                            <span className="text-teal-600 font-semibold">
+                              {filteredLayout.filter(i => i.sorted.length > 1).length} Source → Destination lines
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ Footer ══ */}
                   <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
                     <span style={{ color:'#0d9488' }}>
-                      {lineQcSubTab === 'qc'
-                        ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
-                        : `${filteredTags.length} of ${lineTags.length} designations`}
+                      {lineQcSubTab === 'qc'          ? `${filteredFindings.length} of ${lineFindings.length} quality findings`
+                       : lineQcSubTab === 'designations' ? `${filteredTags.length} of ${lineTags.length} designations`
+                       : lineQcSubTab === 'insights'      ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : lineQcSubTab === 'layout'        ? `${lineTags.filter(lt => (lt.occurrences||[]).some(o => o.x_pct != null)).length} lines mapped on drawing`
+                       : `QC score: ${qcScore}%`}
                     </span>
-                    <span>LSZ-001 – LSZ-010 · 10 line quality rules active</span>
+                    <span>LSZ-001 – LSZ-010 · 10 line quality rules · AI analysis active</span>
                   </div>
                 </div>
               );
@@ -3386,7 +5779,7 @@ const PIDVerification = () => {
             {/* ─── end LINES panel ─── */}
 
             {/* ─── NAMING panel ─── */}
-            {activePanel === 'naming' && (
+            {SHOW_NAMING_PANEL && activePanel === 'naming' && (
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
               // ── Soft-coded: NAM rule catalogue ──────────────────────────────────────
@@ -3427,49 +5820,63 @@ const PIDVerification = () => {
               const uniqueNamingRules = [...new Set(issues.map(i => i.rule_id).filter(Boolean))];
               return (
                 <div>
-                  {/* ── Header + Run button ── */}
+                  {/* ── Header (auto-run — no manual button) ── */}
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
-                        <Type className="w-4 h-4 text-white" />
+                        {checkingNaming
+                          ? <Loader className="w-4 h-4 text-white animate-spin" />
+                          : <Type className="w-4 h-4 text-white" />}
                       </div>
                       <div>
                         <h2 className="text-sm font-bold text-slate-900">Tag Naming &amp; Acronym QC</h2>
-                        {namingResults
-                          ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} · page {(namingResults.page_index ?? 0) + 1} · {namingResults.ai_used ? 'AI + Rules' : 'Rules only'}</p>
-                          : <p className="text-xs text-slate-400">Not yet run — checks ISA 5.1 tag naming conventions</p>}
+                        {checkingNaming
+                          ? <p className="text-xs text-violet-500 animate-pulse">Running check — analysing tags against ISA 5.1…</p>
+                          : namingResults
+                            ? <p className="text-xs text-slate-500">{namingResults.total} issue{namingResults.total !== 1 ? 's' : ''} · page {(namingResults.page_index ?? 0) + 1} · {namingResults.ai_used ? 'AI + Rules' : 'Rules only'}</p>
+                            : <p className="text-xs text-slate-400">Awaiting analysis completion…</p>}
                       </div>
                     </div>
-                    <button
-                      onClick={runNamingCheck}
-                      disabled={checkingNaming}
-                      className="flex items-center gap-2 text-xs font-bold text-white px-4 py-2 rounded-xl disabled:opacity-60 transition-all hover:-translate-y-px"
-                      style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow:'0 4px 14px rgba(109,40,217,0.3)' }}
-                    >
-                      {checkingNaming ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Type className="w-3.5 h-3.5" />}
-                      {checkingNaming ? 'Checking…' : namingResults ? 'Re-run' : 'Run Check'}
-                    </button>
+                    {/* Auto-run status chip */}
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full flex-shrink-0"
+                      style={{
+                        background: checkingNaming ? 'rgba(124,58,237,0.10)' : namingResults ? 'rgba(16,185,129,0.10)' : 'rgba(100,116,139,0.08)',
+                        color:      checkingNaming ? '#7c3aed' : namingResults ? '#059669' : '#64748b',
+                        border:     `1px solid ${checkingNaming ? 'rgba(124,58,237,0.22)' : namingResults ? 'rgba(16,185,129,0.22)' : 'rgba(100,116,139,0.14)'}`,
+                      }}>
+                      {checkingNaming
+                        ? <><span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-ping" />Scanning…</>
+                        : namingResults
+                          ? <><CheckCircle className="w-3 h-3" />Auto-completed</>
+                          : <><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Queued</>}
+                    </span>
                   </div>
 
                   {!namingResults ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
                       <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
-                        <Type className="w-8 h-8 text-violet-400" />
+                        {checkingNaming
+                          ? <Loader className="w-8 h-8 text-violet-500 animate-spin" />
+                          : <Type className="w-8 h-8 text-violet-400" />}
                       </div>
-                      <p className="text-sm font-bold text-slate-700">Tag Naming &amp; Acronym Check</p>
+                      <p className="text-sm font-bold text-slate-700">
+                        {checkingNaming ? 'Analysing tag naming conventions…' : 'Tag Naming & Acronym Check'}
+                      </p>
                       <p className="text-xs text-slate-400 text-center max-w-xs">
-                        Validates P&amp;ID tag names against ISA 5.1 conventions — checks
-                        separators, acronym registries, completeness, and format consistency.
-                        {namingResults?.ai_used !== false && ' AI vision can also be included.'}
+                        {checkingNaming
+                          ? 'Running ISA 5.1 rule engine and AI vision — this may take a few seconds.'
+                          : 'Check runs automatically once verification is complete. Validates P&ID tag names against ISA 5.1 conventions — separators, acronym registries, completeness, and format consistency.'}
                       </p>
                       {/* Soft-coded: show which checks will run */}
-                      <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
-                        {Object.entries(NAMING_QC_RULES).map(([rid, def]) => (
-                          <span key={rid} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-violet-50 text-violet-600 border border-violet-200">
-                            {def.icon} {def.checkName}
-                          </span>
-                        ))}
-                      </div>
+                      {!checkingNaming && (
+                        <div className="flex flex-wrap gap-1.5 justify-center max-w-sm">
+                          {Object.entries(NAMING_QC_RULES).map(([rid, def]) => (
+                            <span key={rid} className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-violet-50 text-violet-600 border border-violet-200">
+                              {def.icon} {def.checkName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : namingResults.total === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-2">
@@ -3783,48 +6190,52 @@ const PIDVerification = () => {
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
             {(() => {
               // ── Soft-coded: ISA 5.1 instrument / valve / equipment families ──────────
-              // Add or edit entries here to extend classification without changing any
-              // render logic.  All columns/chips/tables derive from this object.
+              // Add or edit entries here to extend classification without changing any render logic.
               const EQUIP_FAMILIES = {
-                // Instruments — measurement & control
-                PT:  { label:'Pressure Transmitter',   type:'instrument', icon:'🔵', color:'#3b82f6'  },
-                PI:  { label:'Pressure Indicator',      type:'instrument', icon:'🔵', color:'#3b82f6'  },
-                PIC: { label:'Pressure IC',             type:'instrument', icon:'🔵', color:'#3b82f6'  },
-                PSV: { label:'Pressure Safety Valve',   type:'valve',      icon:'🔴', color:'#ef4444'  },
-                PSE: { label:'Pressure Safety Element', type:'instrument', icon:'🔵', color:'#3b82f6'  },
-                FT:  { label:'Flow Transmitter',        type:'instrument', icon:'🟢', color:'#22c55e'  },
-                FI:  { label:'Flow Indicator',          type:'instrument', icon:'🟢', color:'#22c55e'  },
-                FIC: { label:'Flow IC',                 type:'instrument', icon:'🟢', color:'#22c55e'  },
-                FE:  { label:'Flow Element',            type:'instrument', icon:'🟢', color:'#22c55e'  },
-                FCV: { label:'Flow Control Valve',      type:'valve',      icon:'🔴', color:'#ef4444'  },
-                LT:  { label:'Level Transmitter',       type:'instrument', icon:'🟡', color:'#eab308'  },
-                LI:  { label:'Level Indicator',         type:'instrument', icon:'🟡', color:'#eab308'  },
-                LIC: { label:'Level IC',                type:'instrument', icon:'🟡', color:'#eab308'  },
-                TT:  { label:'Temperature Transmitter', type:'instrument', icon:'🟠', color:'#f97316'  },
-                TI:  { label:'Temperature Indicator',   type:'instrument', icon:'🟠', color:'#f97316'  },
-                TIC: { label:'Temperature IC',          type:'instrument', icon:'🟠', color:'#f97316'  },
-                AT:  { label:'Analyser Transmitter',    type:'instrument', icon:'🟣', color:'#a855f7'  },
-                AI:  { label:'Analyser Indicator',      type:'instrument', icon:'🟣', color:'#a855f7'  },
-                WT:  { label:'Weight Transmitter',      type:'instrument', icon:'⚪', color:'#64748b'  },
+                // Instruments
+                PT:  { label:'Pressure Transmitter',   type:'instrument', icon:'🔵', color:'#3b82f6' },
+                PI:  { label:'Pressure Indicator',      type:'instrument', icon:'🔵', color:'#3b82f6' },
+                PIC: { label:'Pressure IC',             type:'instrument', icon:'🔵', color:'#3b82f6' },
+                PSV: { label:'Pressure Safety Valve',   type:'valve',      icon:'🔴', color:'#ef4444' },
+                PSE: { label:'Pressure Safety Element', type:'instrument', icon:'🔵', color:'#3b82f6' },
+                FT:  { label:'Flow Transmitter',        type:'instrument', icon:'🟢', color:'#22c55e' },
+                FI:  { label:'Flow Indicator',          type:'instrument', icon:'🟢', color:'#22c55e' },
+                FIC: { label:'Flow IC',                 type:'instrument', icon:'🟢', color:'#22c55e' },
+                FE:  { label:'Flow Element',            type:'instrument', icon:'🟢', color:'#22c55e' },
+                FCV: { label:'Flow Control Valve',      type:'valve',      icon:'🔴', color:'#ef4444' },
+                LT:  { label:'Level Transmitter',       type:'instrument', icon:'🟡', color:'#eab308' },
+                LI:  { label:'Level Indicator',         type:'instrument', icon:'🟡', color:'#eab308' },
+                LIC: { label:'Level IC',                type:'instrument', icon:'🟡', color:'#eab308' },
+                TT:  { label:'Temperature Transmitter', type:'instrument', icon:'🟠', color:'#f97316' },
+                TI:  { label:'Temperature Indicator',   type:'instrument', icon:'🟠', color:'#f97316' },
+                TIC: { label:'Temperature IC',          type:'instrument', icon:'🟠', color:'#f97316' },
+                AT:  { label:'Analyser Transmitter',    type:'instrument', icon:'🟣', color:'#a855f7' },
+                AI:  { label:'Analyser Indicator',      type:'instrument', icon:'🟣', color:'#a855f7' },
+                WT:  { label:'Weight Transmitter',      type:'instrument', icon:'⚪', color:'#64748b' },
                 // Valves
-                FV:  { label:'Control Valve (Flow)',    type:'valve',      icon:'🔴', color:'#ef4444'  },
-                SDV: { label:'Shutdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444'  },
-                BDV: { label:'Blowdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444'  },
-                XV:  { label:'Solenoid/On-Off Valve',   type:'valve',      icon:'🔴', color:'#ef4444'  },
-                HV:  { label:'Hand Valve',              type:'valve',      icon:'🔴', color:'#ef4444'  },
-                SV:  { label:'Safety Valve',            type:'valve',      icon:'🔴', color:'#ef4444'  },
-                CV:  { label:'Check Valve',             type:'valve',      icon:'🔴', color:'#ef4444'  },
+                FV:  { label:'Control Valve (Flow)',    type:'valve',      icon:'🔴', color:'#ef4444' },
+                SDV: { label:'Shutdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444' },
+                BDV: { label:'Blowdown Valve',          type:'valve',      icon:'🔴', color:'#ef4444' },
+                XV:  { label:'Solenoid/On-Off Valve',   type:'valve',      icon:'🔴', color:'#ef4444' },
+                HV:  { label:'Hand Valve',              type:'valve',      icon:'🔴', color:'#ef4444' },
+                SV:  { label:'Safety Valve',            type:'valve',      icon:'🔴', color:'#ef4444' },
+                CV:  { label:'Check Valve',             type:'valve',      icon:'🔴', color:'#ef4444' },
                 // Equipment
-                P:   { label:'Pump',                    type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                E:   { label:'Heat Exchanger',          type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                V:   { label:'Vessel / Drum',           type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                T:   { label:'Tank',                    type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                K:   { label:'Compressor',              type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                C:   { label:'Column',                  type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
-                F:   { label:'Filter/Strainer',         type:'equipment',  icon:'⚙️',  color:'#0d9488'  },
+                P:   { label:'Pump',                    type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                E:   { label:'Heat Exchanger',          type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                V:   { label:'Vessel / Drum',           type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                T:   { label:'Tank',                    type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                K:   { label:'Compressor',              type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                C:   { label:'Column',                  type:'equipment',  icon:'⚙️',  color:'#0d9488' },
+                F:   { label:'Filter/Strainer',         type:'equipment',  icon:'⚙️',  color:'#0d9488' },
               };
 
-              // Soft-coded: sub-tabs for the Equipment panel.
+              // Soft-coded: severity rank for QC badge ordering
+              const SEV_RANK  = { critical: 4, major: 3, minor: 2, info: 1 };
+              const SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+              const SEV_BG    = { critical:'#fef2f2', major:'#fff7ed', minor:'#fffbeb', info:'#eff6ff' };
+
+              // Soft-coded: sub-tabs
               const EQUIP_SUBTABS = [
                 { id:'all',        label:'All'         },
                 { id:'instrument', label:'Instruments' },
@@ -3832,28 +6243,25 @@ const PIDVerification = () => {
                 { id:'equipment',  label:'Equipment'   },
               ];
 
-              // ── Build equipment inventory from tag_positions + findings ─────────────
-              const tagPos   = activeDrawingData?.metadata?.tag_positions || {};
+              // ── Build inventory ─────────────────────────────────────────────────────
+              const tagPos    = activeDrawingData?.metadata?.tag_positions || {};
               const allTagIds = Object.keys(tagPos);
-              const extSumm  = activeDrawingData?.metadata?.extraction_summary || {};
+              const extSumm   = activeDrawingData?.metadata?.extraction_summary || {};
+
               const valveFindingsByTag = {};
               for (const f of (activeDrawingData?.issues || [])) {
                 if (HIDDEN_CATEGORIES.has(f.category)) continue;
-                const ev = (f.evidence || f.issue_observed || '').toLowerCase();
-                // Extract tag IDs from evidence using the same regex as the INDEX panel
                 const TAG_RE_LOCAL = /\b([A-Z]{1,4}[-_]?\d{2,6}[A-Z]?)\b/g;
-                for (const [, tid] of (ev.toUpperCase().matchAll(TAG_RE_LOCAL) || [])) {
+                const text = (f.evidence || f.issue_observed || '').toUpperCase();
+                for (const [, tid] of text.matchAll(TAG_RE_LOCAL)) {
                   if (!valveFindingsByTag[tid]) valveFindingsByTag[tid] = [];
                   valveFindingsByTag[tid].push(f);
                 }
               }
 
-              // Classify every extracted tag
               const classifyTag = (tagId) => {
                 const upper = tagId.toUpperCase();
-                // Try longest-prefix-first match
-                const sortedPfx = Object.keys(EQUIP_FAMILIES)
-                  .sort((a, b) => b.length - a.length);
+                const sortedPfx = Object.keys(EQUIP_FAMILIES).sort((a, b) => b.length - a.length);
                 for (const pfx of sortedPfx) {
                   if (upper.startsWith(pfx)) return EQUIP_FAMILIES[pfx];
                 }
@@ -3862,15 +6270,14 @@ const PIDVerification = () => {
 
               const tagInventory = allTagIds.map(id => ({
                 id,
-                cls: classifyTag(id),
-                pos: tagPos[id],
+                cls:      classifyTag(id),
+                pos:      tagPos[id],
                 findings: valveFindingsByTag[id.toUpperCase()] || [],
               }));
 
               const instrItems = tagInventory.filter(t => t.cls.type === 'instrument');
               const valveItems = tagInventory.filter(t => t.cls.type === 'valve');
               const equpItems  = tagInventory.filter(t => t.cls.type === 'equipment');
-              const unknItems  = tagInventory.filter(t => t.cls.label === 'Unknown');
               const issueCount = tagInventory.filter(t => t.findings.length > 0).length;
 
               const displayItems = {
@@ -3887,40 +6294,256 @@ const PIDVerification = () => {
                     t.cls.label.toLowerCase().includes(eqQuery))
                 : displayItems;
 
-              const SEV_DOT = { critical:'#dc2626', major:'#f97316', minor:'#fbbf24', info:'#3b82f6' };
+              // Detail for selected tag
+              const detailTag = selectedEquipTag
+                ? tagInventory.find(t => t.id === selectedEquipTag) || null
+                : null;
 
-              // Family summary counts for stat chips
-              const familyCounts = {};
+              // Top severity helper
+              const topSev = (findings) => findings.reduce((best, f) => {
+                return (SEV_RANK[f.severity] || 0) > (SEV_RANK[best] || 0) ? f.severity : best;
+              }, null);
+
+              // ── Soft-coded: Equipment QC rule catalogue ─────────────────────────────
+              // Each entry maps a rule_id prefix to a short description and an AI fix hint.
+              // Extend this list to add coverage for new rule families without changing render logic.
+              const EQUIP_QC_RULES = {
+                'TAG': { short: 'Tag naming / format',   icon: '🏷️', fix: 'Verify the tag conforms to the project ISA 5.1 naming convention and update the instrument index.' },
+                'VLV': { short: 'Valve designation',     icon: '🔧', fix: 'Confirm the valve tag and bore size against the instrument index and P&ID spec sheet.' },
+                'CON': { short: 'Connection issue',      icon: '🔗', fix: 'Check the connecting pipe class, spec break notation, and update the line list accordingly.' },
+                'NTS': { short: 'Note / annotation',     icon: '📝', fix: 'Review the note text against applicable project standards and revise the drawing note.' },
+                'LSZ': { short: 'Line size',             icon: '📏', fix: 'See Lines panel — verify NPS, spec-break symbols, and update the line designation.' },
+                'ANN': { short: 'Annotation quality',    icon: '🔍', fix: 'Re-check OCR extraction; re-issue drawing at higher scan resolution if text is illegible.' },
+                'RED': { short: 'Redline / revision',    icon: '☁️', fix: 'Ensure revision cloud does not obscure any tag; move the cloud boundary if required.' },
+              };
+              const rulePrefix = (ruleId) => (ruleId || '').replace(/-?\d.*$/, '');
+
+              // ── Soft-coded: AI insight generators for equipment ──────────────────────
+              // Each entry is a pure function: (inventory, findings) → insight | null.
+              // Returns null when the condition is not met.
+              const EQUIP_AI_GENERATORS = [
+                // High QC failure rate
+                (inv, _f) => {
+                  if (inv.length < 3) return null;
+                  const failRate = Math.round(inv.filter(t => t.findings.length > 0).length / inv.length * 100);
+                  if (failRate < 20) return null;
+                  return { level: 'warning', icon: '⚠️', title: `${failRate}% of tags have QC findings`,
+                    detail: `${inv.filter(t=>t.findings.length>0).length} of ${inv.length} equipment tags carry at least one quality finding. Review before issuing the document.` };
+                },
+                // Critical findings present
+                (inv, _f) => {
+                  const crit = inv.filter(t => t.findings.some(f => f.severity === 'critical'));
+                  if (crit.length === 0) return null;
+                  return { level: 'critical', icon: '🚨', title: `${crit.length} tag${crit.length!==1?'s':''} with critical findings`,
+                    detail: `Critical issues require resolution before drawing issue: ${crit.slice(0,5).map(t=>t.id).join(', ')}${crit.length>5?' …':''}` };
+                },
+                // Safety valve coverage
+                (inv, _f) => {
+                  const SAFETY_PREFIXES = new Set(['PSV','PSE','SDV','BDV','SV']); // soft-coded
+                  const safetyTags = inv.filter(t => SAFETY_PREFIXES.has(Object.keys(EQUIP_FAMILIES).find(p => t.id.toUpperCase().startsWith(p)) || ''));
+                  if (safetyTags.length === 0) return null;
+                  const withIssues = safetyTags.filter(t => t.findings.length > 0);
+                  if (withIssues.length === 0) return { level:'success', icon:'🛡️', title:`${safetyTags.length} safety valve/element tag${safetyTags.length!==1?'s':''} — all pass QC`,
+                    detail:`PSV, PSE, SDV, BDV, SV tags are verified. No QC issues on safety-critical items.` };
+                  return { level:'critical', icon:'🛡️', title:`${withIssues.length} safety tag${withIssues.length!==1?'s':''} have QC issues`,
+                    detail:`Safety-critical tags with issues: ${withIssues.map(t=>t.id).join(', ')}. These must be resolved before P&ID issue.` };
+                },
+                // Duplicate tag occurrences
+                (inv, _f) => {
+                  const MULTI_OCC_MIN = 2; // soft-coded minimum occurrences to flag
+                  const multiOcc = inv.filter(t => (t.pos?.all || []).length >= MULTI_OCC_MIN);
+                  if (multiOcc.length === 0) return null;
+                  return { level:'info', icon:'🔁', title:`${multiOcc.length} tag${multiOcc.length!==1?'s':''} appear ≥${MULTI_OCC_MIN}× on drawing`,
+                    detail:`Multiple occurrences may indicate a tag bubble repeated intentionally (e.g. continuation) or a copy-paste error. Review each: ${multiOcc.slice(0,5).map(t=>t.id).join(', ')}${multiOcc.length>5?' …':''}` };
+                },
+                // All clear
+                (inv, _f) => {
+                  if (inv.filter(t => t.findings.length > 0).length > 0) return null;
+                  return { level:'success', icon:'✅', title:'All equipment tags pass QC',
+                    detail:`${inv.length} tags extracted and verified — no quality findings raised by the rule engine.` };
+                },
+              ];
+
+              // ── Soft-coded: AI insight level styles ─────────────────────────────────
+              const INSIGHT_LEVEL_STYLE = {
+                critical: { bg:'#fef2f2', border:'#fca5a5', titleColor:'#991b1b', bar:'#dc2626' },
+                warning:  { bg:'#fffbeb', border:'#fcd34d', titleColor:'#92400e', bar:'#f59e0b' },
+                info:     { bg:'#eff6ff', border:'#93c5fd', titleColor:'#1e40af', bar:'#3b82f6' },
+                success:  { bg:'#f0fdf4', border:'#86efac', titleColor:'#166534', bar:'#22c55e' },
+              };
+
+              // ── Soft-coded: sort options for Register sub-tab ────────────────────────
+              const EQUIP_SORT_OPTIONS = [
+                { v:'issues', label:'⚡ Issues first' },
+                { v:'name',   label:'A–Z Tag ID'     },
+                { v:'type',   label:'Type'            },
+                { v:'family', label:'Family'          },
+              ];
+
+              // ── Sorted + filtered display items ──────────────────────────────────────
+              const sortedItems = [...displayItems].sort((a, b) => {
+                if (equipSortBy === 'issues') {
+                  const aHas = a.findings.length > 0 ? 1 : 0;
+                  const bHas = b.findings.length > 0 ? 1 : 0;
+                  if (aHas !== bHas) return bHas - aHas;
+                  return (SEV_RANK[topSev(b.findings)] || 0) - (SEV_RANK[topSev(a.findings)] || 0);
+                }
+                if (equipSortBy === 'type')   return a.cls.type.localeCompare(b.cls.type);
+                if (equipSortBy === 'family') return a.cls.label.localeCompare(b.cls.label);
+                return a.id.localeCompare(b.id); // 'name'
+              });
+              const sortedFiltered = eqQuery ? sortedItems.filter(t =>
+                t.id.toLowerCase().includes(eqQuery) ||
+                t.cls.label.toLowerCase().includes(eqQuery)
+              ) : sortedItems;
+
+              // ── AI insights ───────────────────────────────────────────────────────────
+              const allFindings = activeDrawingData?.issues || [];
+              const aiInsights = EQUIP_AI_GENERATORS
+                .map(gen => { try { return gen(tagInventory, allFindings); } catch { return null; } })
+                .filter(Boolean);
+
+              // ── Analytics distributions ───────────────────────────────────────────────
+              const typeDist = [
+                { label:'Instruments', count:instrItems.length, color:'#3b82f6' },
+                { label:'Valves',      count:valveItems.length, color:'#ef4444' },
+                { label:'Equipment',   count:equpItems.length,  color:'#0d9488' },
+              ].filter(d => d.count > 0);
+              const maxTypeCnt = Math.max(1, ...typeDist.map(d => d.count));
+
+              // Family distribution (top 10)
+              const familyDist = Object.entries(
+                tagInventory.reduce((acc, t) => { acc[t.cls.label] = (acc[t.cls.label]||0)+1; return acc; }, {})
+              ).map(([label, count]) => ({ label, count, color: tagInventory.find(t=>t.cls.label===label)?.cls?.color || '#94a3b8' }))
+               .sort((a,b) => b.count-a.count)
+               .slice(0, 10);
+              const maxFamCnt = Math.max(1, ...familyDist.map(d => d.count));
+
+              // QC findings by rule prefix
+              const ruleDistMap = {};
               for (const t of tagInventory) {
-                const lbl = t.cls.label;
-                familyCounts[lbl] = (familyCounts[lbl] || 0) + 1;
+                for (const f of t.findings) {
+                  const pfx = rulePrefix(f.rule_id) || 'OTHER';
+                  ruleDistMap[pfx] = (ruleDistMap[pfx] || 0) + 1;
+                }
               }
+              const ruleDist = Object.entries(ruleDistMap).sort((a,b)=>b[1]-a[1]);
+              const maxRuleCnt = Math.max(1, ...ruleDist.map(([,c])=>c));
+
+              // ── QC score ─────────────────────────────────────────────────────────────
+              const cleanCount  = tagInventory.length - issueCount;
+              const qcScore     = tagInventory.length > 0 ? Math.round(cleanCount / tagInventory.length * 100) : 100;
+              const QC_SCORE_EXCELLENT = 90;
+              const QC_SCORE_GOOD      = 70;
+              const QC_SCORE_FAIR      = 50;
+              const qcScoreColor = qcScore >= QC_SCORE_EXCELLENT ? '#22c55e'
+                                 : qcScore >= QC_SCORE_GOOD      ? '#7c3aed'
+                                 : qcScore >= QC_SCORE_FAIR      ? '#f59e0b'
+                                 : '#dc2626';
+
+              // ── Top-level view tabs (mirrors LINES panel design) ─────────────────────
+              const EQUIP_VIEW_TABS = [
+                { id:'insights',  label:'AI Insights',  icon: Brain,    color:'#7c3aed', cnt: aiInsights.length },
+                { id:'register',  label:'Register',     icon: Cpu,      color:'#6366f1', cnt: tagInventory.length },
+                { id:'drawing',   label:'Drawing View', icon: MapPin,   color:'#059669', cnt: tagInventory.filter(t=>t.pos?.x_pct!=null).length },
+                { id:'analytics', label:'Analytics',    icon: BarChart2, color:'#0891b2', cnt: null },
+              ];
+
+              const critIssues = tagInventory.filter(t => t.findings.some(f=>f.severity==='critical')).length;
+              const majIssues  = tagInventory.filter(t => t.findings.some(f=>f.severity==='major')).length;
 
               return (
-                <div>
-                  {/* ── Panel header ── */}
-                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#7c3aed,#9333ea)' }}>
-                      <Cpu className="w-4 h-4 text-white" />
+                <div className="flex flex-col" style={{ minHeight: 0 }}>
+
+                  {/* ══ Panel header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(124,58,237,0.05), rgba(99,102,241,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#7c3aed,#6366f1)', boxShadow:'0 4px 14px rgba(124,58,237,0.35)' }}>
+                      <Cpu className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-sm font-bold text-slate-900">Equipment &amp; Instrument Verification</h2>
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Equipment &amp; Instrument Register
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#7c3aed,#6366f1)' }}>AI</span>
+                      </h2>
                       <p className="text-xs text-slate-500">
-                        {tagInventory.length} tags extracted · {instrItems.length} instruments · {valveItems.length} valves · {equpItems.length} equipment
+                        {tagInventory.length} tags · {instrItems.length} instruments · {valveItems.length} valves · {equpItems.length} equipment
                         {issueCount > 0 && <span className="text-orange-500 font-semibold"> · {issueCount} with QC issues</span>}
                       </p>
                     </div>
-                    {/* Summary pills */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {extSumm.instruments > 0 && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{extSumm.instruments} Instr</span>}
-                      {extSumm.valves > 0     && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">{extSumm.valves} Valves</span>}
-                      {extSumm.equipment > 0  && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-teal-100 text-teal-700 border border-teal-200">{extSumm.equipment} Equip</span>}
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:qcScoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">QC Score</span>
                     </div>
+                    {/* traffic-light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {critIssues > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{critIssues} CRIT</span>}
+                      {majIssues  > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{majIssues} MAJ</span>}
+                      {issueCount === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Pass</span>}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:tagInventory.length, label:'Total Tags',   color:'#7c3aed', bg:'rgba(124,58,237,0.07)',  border:'rgba(124,58,237,0.2)'  },
+                      { v:instrItems.length,   label:'Instruments',  color:'#3b82f6', bg:'rgba(59,130,246,0.07)',  border:'rgba(59,130,246,0.2)'  },
+                      { v:valveItems.length,   label:'Valves',       color:'#ef4444', bg:'rgba(239,68,68,0.07)',   border:'rgba(239,68,68,0.2)'   },
+                      { v:equpItems.length,    label:'Equipment',    color:'#0d9488', bg:'rgba(13,148,136,0.07)',  border:'rgba(13,148,136,0.2)'  },
+                      { v:issueCount,          label:'QC Issues',    color:'#f97316', bg:'rgba(249,115,22,0.07)',  border:'rgba(249,115,22,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {tagInventory.length > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/tagInventory.length*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View tab switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {EQUIP_VIEW_TABS.map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = equipViewTab === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setEquipViewTab(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:tab.color, borderColor:tab.color } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:tab.color } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {tagInventory.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                        style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #c4b5fd' }}>
                         <Cpu className="w-8 h-8 text-violet-400" />
                       </div>
                       <p className="text-sm font-bold text-slate-700">No Equipment Tags Extracted</p>
@@ -3930,121 +6553,855 @@ const PIDVerification = () => {
                       </p>
                     </div>
                   ) : (
-                    <div>
-                      {/* ── Stats bar ── */}
-                      <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
-                        {[
-                          { v: tagInventory.length, label:'Total Tags',   color:'text-violet-600', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)' },
-                          { v: instrItems.length,   label:'Instruments',  color:'text-blue-600',   bg:'rgba(59,130,246,0.07)', border:'rgba(59,130,246,0.18)'  },
-                          { v: valveItems.length,   label:'Valves',       color:'text-red-600',    bg:'rgba(239,68,68,0.07)',  border:'rgba(239,68,68,0.18)'   },
-                          { v: issueCount,          label:'QC Issues',    color:'text-orange-600', bg:'rgba(234,88,12,0.07)',  border:'rgba(234,88,12,0.18)'   },
-                        ].map(c => (
-                          <div key={c.label} className="rounded-xl p-2.5 text-center" style={{ background:c.bg, border:`1px solid ${c.border}` }}>
-                            <p className={`font-bold text-lg leading-none ${c.color}`}>{c.v}</p>
-                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                    <>
+                    {/* ════════════════════════════════════
+                        AI INSIGHTS view
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'insights' && (
+                      <div className="p-5 flex flex-col gap-3 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                        {/* Intro banner */}
+                        <div className="flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.06),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                          <Brain className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                          <div>
+                            <p className="text-xs font-bold text-violet-800">AI Equipment Analysis</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Automated pattern recognition across {tagInventory.length} extracted tags and {allFindings.length} rule-engine findings.
+                              Insights are generated by soft-coded heuristic detectors — no LLM call required.
+                            </p>
                           </div>
-                        ))}
-                      </div>
-
-                      {/* ── Sub-tabs ── */}
-                      <div className="flex border-b border-slate-100 bg-slate-50/40">
-                        {EQUIP_SUBTABS.map(tab => {
-                          const cnt = tab.id === 'all' ? tagInventory.length : tab.id === 'instrument' ? instrItems.length : tab.id === 'valve' ? valveItems.length : equpItems.length;
-                          const active = equipSubTab === tab.id;
-                          return (
-                            <button key={tab.id}
-                              onClick={() => setEquipSubTab(tab.id)}
-                              className={`flex-1 py-2.5 text-xs font-bold transition-all border-b-2 ${active ? 'border-violet-500 text-violet-700 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'}`}>
-                              {tab.label}
-                              <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{cnt}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* ── Search ── */}
-                      <div className="px-5 py-3 border-b border-slate-100">
-                        <div className="relative">
-                          <input type="text" value={equipTagSearch} onChange={e => setEquipTagSearch(e.target.value)}
-                            placeholder={`Search ${displayItems.length} tags…`}
-                            className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-violet-200 bg-white/80 text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-violet-300/50" />
-                          <Cpu className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-violet-400 pointer-events-none" />
-                          {equipTagSearch && <button onClick={() => setEquipTagSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>}
                         </div>
-                      </div>
 
-                      {/* ── Tag grid ── */}
-                      <div className="px-5 py-4 overflow-y-auto" style={{ maxHeight:'60vh' }}>
-                        {filteredEquip.length === 0 ? (
-                          <div className="py-10 text-center text-slate-400 text-sm">No tags match search.</div>
+                        {aiInsights.length === 0 ? (
+                          <div className="flex flex-col items-center gap-2 py-12 text-slate-400">
+                            <CheckCircle className="w-10 h-10 text-emerald-400" />
+                            <p className="text-sm font-semibold">No actionable AI insights</p>
+                            <p className="text-xs">All pattern checks passed for this drawing.</p>
+                          </div>
                         ) : (
-                          <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))' }}>
-                            {filteredEquip.map((t, idx) => {
-                              const maxSev = t.findings.reduce((best, f) => {
-                                const rank = { critical:4, major:3, minor:2, info:1 };
-                                return (rank[f.severity] || 0) > (rank[best] || 0) ? f.severity : best;
-                              }, null);
-                              const hasIssue = !!maxSev;
-                              return (
-                                <div key={t.id} className={`relative rounded-xl border p-3 flex flex-col gap-1.5 overflow-hidden transition-all cursor-default ${
-                                  hasIssue ? 'border-orange-200 bg-orange-50/40 hover:border-orange-400' : 'border-slate-200 bg-white hover:border-violet-300'
-                                }`}
-                                style={{ animation:`cardIn 0.2s ease-out ${Math.min(idx*0.018,0.4)}s both` }}>
-                                  {/* Top accent bar */}
-                                  <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: hasIssue ? `${SEV_DOT[maxSev]}` : t.cls.color }} />
-                                  {/* Tag ID + QC dot */}
-                                  <div className="flex items-center justify-between gap-1">
-                                    <code className="text-[11px] font-mono font-bold text-slate-800 truncate flex-1">{t.id}</code>
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                      style={{ background: hasIssue ? SEV_DOT[maxSev] : '#10b981', boxShadow: hasIssue ? `0 0 4px ${SEV_DOT[maxSev]}88` : '0 0 4px #10b98188' }}
-                                      title={hasIssue ? `${t.findings.length} QC issue(s): ${maxSev}` : 'QC pass'} />
+                          aiInsights.map((ins, i) => {
+                            const st = INSIGHT_LEVEL_STYLE[ins.level] || INSIGHT_LEVEL_STYLE.info;
+                            return (
+                              <div key={i} className="rounded-xl border p-4 flex gap-3"
+                                style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${i*0.06}s both` }}>
+                                <div className="w-1 rounded-full flex-shrink-0" style={{ background:st.bar }} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-base leading-none">{ins.icon}</span>
+                                    <p className="text-xs font-bold leading-snug" style={{ color:st.titleColor }}>{ins.title}</p>
+                                    <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full text-white uppercase"
+                                      style={{ background:st.bar }}>{ins.level}</span>
                                   </div>
-                                  {/* Family classification chip */}
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md w-fit"
-                                    style={{ background:`${t.cls.color}15`, color:t.cls.color, border:`1px solid ${t.cls.color}33` }}>
-                                    {t.cls.icon} {t.cls.label}
-                                  </span>
-                                  {/* QC issue hint */}
-                                  {hasIssue && (
-                                    <p className="text-[10px] text-orange-600 font-semibold">
-                                      {t.findings.length} issue{t.findings.length !== 1 ? 's' : ''} · {maxSev}
-                                    </p>
-                                  )}
+                                  <p className="text-[11px] text-slate-600 leading-relaxed">{ins.detail}</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        {/* Rule family checklist */}
+                        <div className="mt-2">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Rule Families Active</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(EQUIP_QC_RULES).map(([pfx, def]) => {
+                              const cnt = tagInventory.reduce((s, t) => s + t.findings.filter(f => rulePrefix(f.rule_id) === pfx).length, 0);
+                              return (
+                                <div key={pfx} title={def.fix}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold ${
+                                    cnt > 0 ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                  }`}>
+                                  <span>{cnt > 0 ? def.icon : '✅'}</span>
+                                  <code className="font-mono">{pfx}</code>
+                                  {cnt > 0 && <span className="ml-0.5 bg-orange-200 text-orange-800 px-1 rounded-full font-black">{cnt}</span>}
                                 </div>
                               );
                             })}
                           </div>
-                        )}
-                      </div>
-
-                      {/* ── Family summary section ── */}
-                      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Tag Families Detected</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(EQUIP_FAMILIES)
-                            .filter(([pfx]) => tagInventory.some(t => t.id.toUpperCase().startsWith(pfx)))
-                            .map(([pfx, def]) => {
-                              const cnt = tagInventory.filter(t => t.id.toUpperCase().startsWith(pfx)).length;
-                              return (
-                                <span key={pfx}
-                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border cursor-default"
-                                  style={{ background:`${def.color}10`, borderColor:`${def.color}30`, color:def.color }}
-                                  title={def.label}>
-                                  {def.icon} {pfx} <span className="font-black">{cnt}</span>
-                                </span>
-                              );
-                            })
-                          }
                         </div>
                       </div>
+                    )}
 
-                    </div>
+                    {/* ════════════════════════════════════
+                        REGISTER view (master / detail)
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'register' && (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+                        {/* Toolbar: type tabs + sort + view toggle + search */}
+                        <div className="px-4 py-2.5 border-b border-slate-100 bg-white/60 flex flex-wrap items-center gap-2">
+                          {/* Type filter chips */}
+                          <div className="flex gap-0.5 flex-wrap">
+                            {[
+                              { id:'all',        label:'All',         cnt:tagInventory.length },
+                              { id:'instrument', label:'Instruments', cnt:instrItems.length   },
+                              { id:'valve',      label:'Valves',      cnt:valveItems.length   },
+                              { id:'equipment',  label:'Equipment',   cnt:equpItems.length    },
+                            ].map(tab => {
+                              const active = equipSubTab === tab.id;
+                              return (
+                                <button key={tab.id}
+                                  onClick={() => { setEquipSubTab(tab.id); setSelectedEquipTag(null); }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
+                                  style={{
+                                    background: active ? '#7c3aed' : '#f8fafc',
+                                    color:      active ? '#fff' : '#64748b',
+                                    border:     active ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+                                  }}>
+                                  {tab.label}
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none"
+                                    style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#64748b' }}>
+                                    {tab.cnt}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                            {/* Sort */}
+                            <select value={equipSortBy} onChange={e => setEquipSortBy(e.target.value)}
+                              className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 outline-none cursor-pointer hover:border-violet-300 flex-shrink-0">
+                              {EQUIP_SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                            </select>
+                            {/* View toggle */}
+                            <div className="flex rounded-xl border border-slate-200 overflow-hidden flex-shrink-0">
+                              {[{v:'grid',ic:'⊞'},{v:'list',ic:'≡'}].map(({v,ic}) => (
+                                <button key={v} onClick={() => setEquipViewMode(v)}
+                                  className={`px-2.5 py-1.5 text-xs font-bold transition-all ${equipViewMode===v ? 'bg-violet-500 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                                  {ic}
+                                </button>
+                              ))}
+                            </div>
+                            {/* Search */}
+                            <div className="relative flex-shrink-0" style={{ width:'160px' }}>
+                              <input type="text" value={equipTagSearch}
+                                onChange={e => { setEquipTagSearch(e.target.value); setSelectedEquipTag(null); }}
+                                placeholder="Search tags…"
+                                className="w-full text-[11px] pl-7 pr-6 py-1.5 rounded-lg border border-violet-200 bg-white text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-violet-300/50" />
+                              <Cpu className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-violet-400 pointer-events-none" />
+                              {equipTagSearch && <button onClick={() => setEquipTagSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <X className="w-3 h-3" /></button>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Master / Detail split */}
+                        <div className="flex overflow-hidden" style={{ minHeight:0 }}>
+
+                          {/* LEFT — tag list / grid */}
+                          <div className="flex-1 overflow-y-auto border-r border-slate-100"
+                            style={{ maxHeight:'62vh', minWidth:0 }}>
+                            {sortedFiltered.length === 0 ? (
+                              <div className="py-12 text-center text-slate-400 text-sm">No tags match search.</div>
+                            ) : equipViewMode === 'grid' ? (
+                              <div className="p-4 grid gap-2"
+                                style={{ gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))' }}>
+                                {sortedFiltered.map((t, idx) => {
+                                  const maxS  = topSev(t.findings);
+                                  const isSelected = selectedEquipTag === t.id;
+                                  const hasIssue = !!maxS;
+                                  return (
+                                    <button key={t.id}
+                                      onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                      className="relative text-left rounded-xl border p-3 flex flex-col gap-1.5 overflow-hidden transition-all"
+                                      style={{
+                                        animation:`cardIn 0.2s ease-out ${Math.min(idx*0.018,0.4)}s both`,
+                                        border: isSelected ? `2px solid ${t.cls.color}` : hasIssue ? '1.5px solid #fed7aa' : '1.5px solid #e2e8f0',
+                                        background: isSelected ? `${t.cls.color}12` : hasIssue ? '#fff7ed' : '#ffffff',
+                                        boxShadow: isSelected ? `0 4px 16px ${t.cls.color}30` : '0 1px 4px rgba(0,0,0,0.04)',
+                                      }}>
+                                      <div className="absolute top-0 left-0 right-0 h-0.5"
+                                        style={{ background: hasIssue ? (SEV_COLOR[maxS]||'#f97316') : t.cls.color }} />
+                                      <div className="flex items-center justify-between gap-1 pt-0.5">
+                                        <code className="text-[11px] font-mono font-black text-slate-800 truncate">{t.id}</code>
+                                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                          style={{ background: hasIssue ? SEV_COLOR[maxS] : '#10b981',
+                                            boxShadow:`0 0 5px ${hasIssue ? SEV_COLOR[maxS] : '#10b981'}88` }} />
+                                      </div>
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md w-fit"
+                                        style={{ background:`${t.cls.color}18`, color:t.cls.color, border:`1px solid ${t.cls.color}30` }}>
+                                        {t.cls.icon} {t.cls.label}
+                                      </span>
+                                      {t.pos?.x_pct != null && (
+                                        <span className="text-[9px] text-slate-400 font-mono">📍 {t.pos.x_pct.toFixed(1)}%, {t.pos.y_pct?.toFixed(1)}%</span>
+                                      )}
+                                      {hasIssue && (
+                                        <span className="text-[9px] font-bold" style={{ color:SEV_COLOR[maxS] }}>
+                                          ⚠ {t.findings.length} issue{t.findings.length!==1?'s':''}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* List view */
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400 sticky top-0">
+                                    <th className="px-4 py-2.5 text-left">Tag ID</th>
+                                    <th className="px-4 py-2.5 text-left">Type</th>
+                                    <th className="px-4 py-2.5 text-left">Family</th>
+                                    <th className="px-4 py-2.5 text-center">Position</th>
+                                    <th className="px-4 py-2.5 text-center">QC</th>
+                                    <th className="px-4 py-2.5 text-center">Occ.</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sortedFiltered.map((t, i) => {
+                                    const maxS = topSev(t.findings);
+                                    const isSelected = selectedEquipTag === t.id;
+                                    return (
+                                      <tr key={t.id}
+                                        onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                        className="border-t border-slate-100 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                                        style={{ background: isSelected ? `${t.cls.color}10` : i%2===0 ? '#ffffff' : '#fafafa' }}>
+                                        <td className="px-4 py-2.5">
+                                          <code className="text-[11px] font-mono font-black text-slate-800">{t.id}</code>
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                          <span className="text-[9px] font-bold capitalize px-1.5 py-0.5 rounded"
+                                            style={{ background:`${t.cls.color}15`, color:t.cls.color }}>{t.cls.type}</span>
+                                        </td>
+                                        <td className="px-4 py-2.5 text-[10px] text-slate-600">{t.cls.icon} {t.cls.label}</td>
+                                        <td className="px-4 py-2.5 text-center font-mono text-[9px] text-slate-400">
+                                          {t.pos?.x_pct != null ? `${t.pos.x_pct.toFixed(1)}, ${t.pos.y_pct?.toFixed(1)}` : '—'}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-center">
+                                          {maxS ? (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                              style={{ background:SEV_BG[maxS], color:SEV_COLOR[maxS], border:`1px solid ${SEV_COLOR[maxS]}40` }}>{maxS}</span>
+                                          ) : (
+                                            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">OK</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-2.5 text-center text-[10px] text-slate-500 font-mono">
+                                          {(t.pos?.all||[]).length || (t.pos?.x_pct!=null?1:0)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+
+                          {/* RIGHT — detail drawer (unchanged core logic) */}
+                          <div style={{ width:detailTag?'300px':'0px', flexShrink:0, overflow:'hidden', transition:'width 0.25s ease' }}>
+                            {detailTag && (
+                              <div className="flex flex-col h-full overflow-y-auto bg-white border-l border-slate-100"
+                                style={{ minWidth:'300px', maxHeight:'62vh' }}>
+                                {/* Drawer header */}
+                                <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2"
+                                  style={{ background:`linear-gradient(135deg,${detailTag.cls.color}14,${detailTag.cls.color}06)` }}>
+                                  <div>
+                                    <code className="text-base font-mono font-black text-slate-900">{detailTag.id}</code>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{detailTag.cls.icon} {detailTag.cls.label}</p>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block"
+                                      style={{ background:`${detailTag.cls.color}20`, color:detailTag.cls.color, border:`1px solid ${detailTag.cls.color}30` }}>
+                                      {detailTag.cls.type.toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <button onClick={() => setSelectedEquipTag(null)}
+                                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 flex-shrink-0">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Position section */}
+                                <div className="px-4 py-3 border-b border-slate-100">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Position on Drawing</p>
+                                  {detailTag.pos?.x_pct != null ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">X coordinate</span>
+                                        <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.x_pct.toFixed(2)}%</code>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] text-slate-500">Y coordinate</span>
+                                        <code className="text-[11px] font-mono font-bold text-slate-800">{detailTag.pos.y_pct?.toFixed(2)}%</code>
+                                      </div>
+                                      {(detailTag.pos?.all||[]).length > 1 && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-slate-500">Occurrences</span>
+                                          <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">
+                                            ×{detailTag.pos.all.length}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {/* Mini position map */}
+                                      <div className="mt-1 rounded-lg border border-slate-200 overflow-hidden"
+                                        style={{ height:'72px', background:'#f1f5f9', position:'relative' }}>
+                                        <div className="absolute inset-0" style={{
+                                          backgroundImage:'radial-gradient(circle,rgba(99,102,241,0.08) 1px,transparent 1px)',
+                                          backgroundSize:'12px 12px',
+                                        }} />
+                                        <div style={{
+                                          position:'absolute',
+                                          left:`${detailTag.pos.x_pct}%`, top:`${detailTag.pos.y_pct}%`,
+                                          transform:'translate(-50%,-50%)',
+                                          width:'10px', height:'10px', borderRadius:'50%',
+                                          background: detailTag.cls.color,
+                                          boxShadow:`0 0 0 3px ${detailTag.cls.color}40`, zIndex:2,
+                                        }} />
+                                        {(detailTag.pos?.all||[]).slice(1).map((occ,oi) => (
+                                          <div key={oi} style={{
+                                            position:'absolute',
+                                            left:`${occ.x_pct??detailTag.pos.x_pct}%`, top:`${occ.y_pct??detailTag.pos.y_pct}%`,
+                                            transform:'translate(-50%,-50%)',
+                                            width:'7px', height:'7px', borderRadius:'50%',
+                                            background:`${detailTag.cls.color}80`, zIndex:1,
+                                          }} />
+                                        ))}
+                                        <p className="absolute bottom-1 right-1.5 text-[8px] text-slate-400 font-mono">drawing canvas</p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-slate-400 italic">No position data for this tag.</p>
+                                  )}
+                                </div>
+
+                                {/* QC Findings section with AI Recommendation */}
+                                <div className="px-4 py-3 flex-1">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                    QC Findings
+                                    <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                                      style={{ background: detailTag.findings.length>0?'#fef2f2':'#f0fdf4',
+                                               color:      detailTag.findings.length>0?'#dc2626':'#16a34a' }}>
+                                      {detailTag.findings.length>0 ? `${detailTag.findings.length} issue${detailTag.findings.length!==1?'s':''}` : 'QC Pass ✓'}
+                                    </span>
+                                  </p>
+                                  {detailTag.findings.length === 0 ? (
+                                    <div className="rounded-xl p-3 flex items-center gap-2"
+                                      style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                      <span className="text-emerald-500 text-base">✓</span>
+                                      <p className="text-[10px] text-emerald-700 font-semibold">No QC issues. Tag appears compliant.</p>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-2">
+                                      {detailTag.findings.map((f, fi) => {
+                                        const pfx     = rulePrefix(f.rule_id);
+                                        const ruleDef = EQUIP_QC_RULES[pfx] || {};
+                                        return (
+                                          <div key={fi} className="rounded-xl p-3 flex flex-col gap-1.5"
+                                            style={{ background:SEV_BG[f.severity]||'#fff', border:`1px solid ${SEV_COLOR[f.severity]||'#e2e8f0'}40` }}>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <code className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">{f.rule_id}</code>
+                                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                                style={{ background:`${SEV_COLOR[f.severity]}22`, color:SEV_COLOR[f.severity] }}>{f.severity}</span>
+                                              {ruleDef.icon && <span className="text-[10px]">{ruleDef.icon} <span className="text-slate-500 text-[9px]">{ruleDef.short}</span></span>}
+                                              <span className="text-[9px] text-slate-400 capitalize">{f.category?.replace(/_/g,' ')}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 leading-snug">{f.issue_observed}</p>
+                                            {f.evidence && (
+                                              <p className="text-[9px] text-slate-500 italic truncate">Evidence: {f.evidence}</p>
+                                            )}
+                                            {/* AI Recommendation block */}
+                                            {ruleDef.fix && (
+                                              <div className="flex items-start gap-1.5 p-1.5 rounded-lg border text-[9px]"
+                                                style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                                <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                                <div><span className="font-bold text-violet-700">AI: </span><span className="text-slate-600">{ruleDef.fix}</span></div>
+                                              </div>
+                                            )}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                              className="self-start flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:-translate-y-px"
+                                              style={{ background:SEV_COLOR[f.severity]||'#6366f1', color:'#fff', boxShadow:`0 2px 6px ${SEV_COLOR[f.severity]||'#6366f1'}44` }}>
+                                              <ScanLine className="w-3 h-3" /> Locate on Drawing
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {!detailTag && sortedFiltered.length > 0 && (
+                              <div className="flex flex-col items-center justify-center h-full py-10 gap-2 px-4 text-center"
+                                style={{ minWidth:'300px', maxHeight:'62vh', background:'#fafbff', borderLeft:'1px solid #e2e8f0' }}>
+                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1"
+                                  style={{ background:'linear-gradient(135deg,#f5f3ff,#ede9fe)', border:'1px solid #ddd6fe' }}>
+                                  <Cpu className="w-6 h-6 text-violet-400" />
+                                </div>
+                                <p className="text-xs font-bold text-slate-600">Select a tag to view details</p>
+                                <p className="text-[10px] text-slate-400">Position, classification, QC findings, and AI fix recommendations</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Register footer */}
+                        <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 text-[9px] text-slate-400 flex items-center justify-between">
+                          <span style={{ color:'#7c3aed' }}>{sortedFiltered.length} of {displayItems.length} tags shown</span>
+                          <span>Sorted by {EQUIP_SORT_OPTIONS.find(o=>o.v===equipSortBy)?.label} · ISA 5.1</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ════════════════════════════════════
+                        ANALYTICS view
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'analytics' && (
+                      <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                        {/* QC Score banner */}
+                        <div className="rounded-xl border p-4 flex items-center gap-5"
+                          style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.05),rgba(99,102,241,0.04))', borderColor:'rgba(124,58,237,0.2)' }}>
+                          <div className="relative w-20 h-20 flex-shrink-0">
+                            <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                              <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                              <circle cx="22" cy="22" r="17" fill="none" stroke={qcScoreColor} strokeWidth="5"
+                                strokeLinecap="round"
+                                strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-xl font-black leading-none" style={{ color:qcScoreColor }}>{qcScore}%</span>
+                              <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-slate-800 mb-1">Equipment &amp; Instrument QC Score</p>
+                            <p className="text-[11px] text-slate-500 leading-relaxed">
+                              {cleanCount} of {tagInventory.length} tags pass all checks.
+                              {critIssues > 0 && ` ${critIssues} critical item${critIssues!==1?'s':''} require immediate attention.`}
+                              {majIssues  > 0 && ` ${majIssues} major item${majIssues!==1?'s':''} need review.`}
+                            </p>
+                            <div className="flex gap-3 mt-2">
+                              {[['Clean',cleanCount,'#22c55e'],['Critical',critIssues,'#dc2626'],['Major',majIssues,'#ea580c'],['Issues',issueCount,'#f97316']].map(([l,v,c])=>(
+                                <div key={l} className="text-center">
+                                  <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
+                                  <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Tag type distribution */}
+                        {typeDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">⚙️</span> Tag Type Distribution
+                              <span className="ml-auto text-[10px] font-normal text-slate-400">{tagInventory.length} tags total</span>
+                            </p>
+                            <div className="space-y-2">
+                              {typeDist.map(({label, count, color}) => (
+                                <div key={label} className="flex items-center gap-3">
+                                  <span className="text-[11px] font-bold w-20 flex-shrink-0" style={{ color }}>{label}</span>
+                                  <div className="flex-1 rounded-full h-4 overflow-hidden" style={{ background:`${color}15` }}>
+                                    <div className="h-full rounded-full flex items-center pl-2 transition-all duration-700"
+                                      style={{ width:`${count/maxTypeCnt*100}%`, background:`linear-gradient(90deg,${color},${color}cc)`, minWidth:'1.5rem' }}>
+                                      <span className="text-[9px] font-black text-white leading-none">{count}</span>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] text-slate-400 w-10 flex-shrink-0">{Math.round(count/tagInventory.length*100)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Family distribution */}
+                        {familyDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">🏷️</span> Tag Family Breakdown
+                              <span className="ml-auto text-[10px] font-normal text-slate-400">Top {familyDist.length} families</span>
+                            </p>
+                            <div className="grid gap-2" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))' }}>
+                              {familyDist.map(({label, count, color}) => (
+                                <div key={label} className="rounded-xl border p-3 flex flex-col gap-1"
+                                  style={{ background:`${color}08`, borderColor:`${color}25` }}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black" style={{ color }}>{label}</span>
+                                    <span className="text-[10px] font-bold" style={{ color }}>{count}</span>
+                                  </div>
+                                  <div className="w-full rounded-full h-1.5" style={{ background:`${color}20` }}>
+                                    <div className="h-1.5 rounded-full" style={{ width:`${count/maxFamCnt*100}%`, background:`linear-gradient(90deg,${color},${color}aa)` }} />
+                                  </div>
+                                  <span className="text-[9px]" style={{ color }}>{Math.round(count/tagInventory.length*100)}% of tags</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* QC findings by rule family */}
+                        {ruleDist.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                              <span className="text-base">🔍</span> QC Findings by Rule Family
+                            </p>
+                            <div className="space-y-2">
+                              {ruleDist.map(([pfx, cnt]) => {
+                                const def = EQUIP_QC_RULES[pfx] || { icon:'❔', short: pfx };
+                                return (
+                                  <button key={pfx}
+                                    onClick={() => setEquipViewTab('register')}
+                                    className="w-full flex items-center gap-3 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-all group text-left">
+                                    <span className="text-base leading-none flex-shrink-0">{def.icon}</span>
+                                    <code className="text-[10px] font-mono font-bold text-violet-700 w-10 flex-shrink-0">{pfx}</code>
+                                    <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                      <div className="h-full rounded-full"
+                                        style={{ width:`${cnt/maxRuleCnt*100}%`, background:'linear-gradient(90deg,#7c3aed,#6366f1)' }} />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-violet-700 w-5 text-right flex-shrink-0">{cnt}</span>
+                                    <span className="text-[10px] text-slate-400 flex-1 truncate group-hover:text-violet-600">{def.short}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* ════════════════════════════════════
+                        DRAWING VIEW — live coordinate map
+                    ════════════════════════════════════ */}
+                    {equipViewTab === 'drawing' && (() => {
+                      // Soft-coded: marker size and color per state
+                      const MARKER_SIZE_NORMAL   = 13; // px
+                      const MARKER_SIZE_SELECTED = 19; // px
+                      const MARKER_COLOR_CLEAN   = '#22c55e';
+                      const MARKER_COLOR_GLOW_CLEAN = 'rgba(34,197,94,0.45)';
+
+                      const tagsWithCoords = sortedFiltered.filter(t => t.pos?.x_pct != null && t.pos?.y_pct != null);
+                      const tagsNoCoords   = sortedFiltered.length - tagsWithCoords.length;
+
+                      return (
+                        <div className="flex overflow-hidden" style={{ minHeight:0 }}>
+
+                          {/* ── LEFT: drawing canvas ── */}
+                          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+                            {/* Type filter toolbar */}
+                            <div className="px-4 py-2.5 border-b border-slate-100 bg-white/70 flex items-center gap-2 flex-wrap">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Filter:</span>
+                              {[
+                                { id:'all',        label:'All',         cnt:tagInventory.length },
+                                { id:'instrument', label:'Instruments', cnt:instrItems.length   },
+                                { id:'valve',      label:'Valves',      cnt:valveItems.length   },
+                                { id:'equipment',  label:'Equipment',   cnt:equpItems.length    },
+                              ].map(tab => {
+                                const active = equipSubTab === tab.id;
+                                return (
+                                  <button key={tab.id}
+                                    onClick={() => { setEquipSubTab(tab.id); setSelectedEquipTag(null); }}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all"
+                                    style={{
+                                      background: active ? '#059669' : '#f8fafc',
+                                      color:      active ? '#fff'    : '#64748b',
+                                      border:     active ? '1px solid #059669' : '1px solid #e2e8f0',
+                                    }}>
+                                    {tab.label}
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none"
+                                      style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#64748b' }}>
+                                      {tab.cnt}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                              <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-400 flex-shrink-0">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background:MARKER_COLOR_CLEAN, boxShadow:`0 0 4px ${MARKER_COLOR_GLOW_CLEAN}` }} />
+                                  QC Pass
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />
+                                  Issues
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />
+                                  Critical
+                                </span>
+                                {tagsNoCoords > 0 && (
+                                  <span className="text-amber-500 font-semibold">{tagsNoCoords} hidden (no coords)</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Drawing + markers */}
+                            <div className="overflow-auto bg-slate-100" style={{ maxHeight:'70vh' }}>
+                              {drawingImageLoading && (
+                                <div className="flex items-center justify-center gap-2 py-20 text-slate-400 text-xs">
+                                  <Loader className="w-4 h-4 animate-spin" />Loading drawing image…
+                                </div>
+                              )}
+                              {!drawingImageLoading && !drawingImageUrl && (
+                                <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+                                  <AlertTriangle className="w-8 h-8 text-amber-400" />
+                                  <p className="text-sm font-bold text-slate-600">Drawing preview not loaded</p>
+                                  <p className="text-xs text-center max-w-xs text-slate-400">
+                                    Open the Drawing panel first to load the image, then return here.
+                                  </p>
+                                  <button onClick={() => setActivePanel('drawing')}
+                                    className="mt-1 px-4 py-1.5 text-xs font-bold text-white rounded-xl transition-all hover:-translate-y-px"
+                                    style={{ background:'linear-gradient(135deg,#059669,#0d9488)', boxShadow:'0 3px 10px rgba(5,150,105,0.35)' }}>
+                                    Open Drawing Panel
+                                  </button>
+                                </div>
+                              )}
+                              {!drawingImageLoading && drawingImageUrl && (
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+
+                                  {/* Tag coordinate markers overlay */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                    {tagsWithCoords.map(t => {
+                                      const isSelected = selectedEquipTag === t.id;
+                                      const maxS       = topSev(t.findings);
+                                      const hasIssue   = !!maxS;
+
+                                      // Soft-coded: tag dot colour
+                                      const dotColor = hasIssue ? (SEV_COLOR[maxS] || '#f97316') : MARKER_COLOR_CLEAN;
+                                      const dotGlow  = hasIssue ? `${SEV_COLOR[maxS]}55` : MARKER_COLOR_GLOW_CLEAN;
+
+                                      const left = Math.min(97, Math.max(1, t.pos.x_pct));
+                                      const top  = Math.min(94, Math.max(1, t.pos.y_pct));
+                                      const size = isSelected ? MARKER_SIZE_SELECTED : MARKER_SIZE_NORMAL;
+
+                                      return (
+                                        <React.Fragment key={t.id}>
+                                          {/* Pulse ring when selected */}
+                                          {isSelected && (
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute',
+                                              left:`${left}%`, top:`${top}%`,
+                                              width:'28px', height:'28px',
+                                              borderRadius:'50%',
+                                              transform:'translate(-50%,-50%)',
+                                              border:`2.5px solid ${dotColor}`,
+                                              animation:'markerPing 1.1s ease-out infinite',
+                                              pointerEvents:'none',
+                                              zIndex:9,
+                                            }} />
+                                          )}
+
+                                          {/* The dot itself */}
+                                          <button
+                                            title={`${t.id} · ${t.cls.label}${hasIssue ? ` · ${t.findings.length} issue${t.findings.length!==1?'s':''}` : ' · QC pass'}`}
+                                            onClick={() => setSelectedEquipTag(isSelected ? null : t.id)}
+                                            style={{
+                                              position:'absolute',
+                                              left:`${left}%`, top:`${top}%`,
+                                              transform:'translate(-50%,-50%)',
+                                              width:`${size}px`, height:`${size}px`,
+                                              borderRadius:'50%',
+                                              background: dotColor,
+                                              border:`2px solid ${isSelected ? '#fff' : 'rgba(255,255,255,0.65)'}`,
+                                              boxShadow: isSelected
+                                                ? `0 0 0 3px ${dotGlow}, 0 3px 10px rgba(0,0,0,0.45)`
+                                                : `0 1px 4px rgba(0,0,0,0.32)`,
+                                              zIndex: isSelected ? 20 : 10,
+                                              pointerEvents:'all',
+                                              cursor:'pointer',
+                                              transition:'all 0.15s ease',
+                                            }}
+                                          />
+
+                                          {/* Floating label shown only when selected */}
+                                          {isSelected && (
+                                            <div style={{
+                                              position:'absolute',
+                                              left:`${left}%`,
+                                              top:`calc(${top}% + ${MARKER_SIZE_SELECTED/2 + 4}px)`,
+                                              transform:'translateX(-50%)',
+                                              background:'rgba(0,0,0,0.82)',
+                                              color:'#fff',
+                                              fontSize:'10px',
+                                              fontWeight:'bold',
+                                              fontFamily:'monospace',
+                                              padding:'2px 7px',
+                                              borderRadius:'5px',
+                                              whiteSpace:'nowrap',
+                                              zIndex:21,
+                                              pointerEvents:'none',
+                                              boxShadow:'0 2px 6px rgba(0,0,0,0.35)',
+                                            }}>
+                                              {t.id}
+                                            </div>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* Drawing legend */}
+                                  <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl px-3 py-2"
+                                    style={{ pointerEvents:'none' }}>
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-600 flex-wrap">
+                                      <span className="font-bold text-slate-700">Tag Markers</span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full inline-block" style={{ background:MARKER_COLOR_CLEAN, boxShadow:`0 0 5px ${MARKER_COLOR_GLOW_CLEAN}` }} />
+                                        Clean
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full bg-orange-500 inline-block" />
+                                        Major/Minor
+                                      </span>
+                                      <span className="flex items-center gap-1">
+                                        <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
+                                        Critical
+                                      </span>
+                                      <span className="text-slate-400">·</span>
+                                      <span>{tagsWithCoords.length} of {sortedFiltered.length} tags mapped</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── RIGHT: tag detail sidebar ── */}
+                          <div style={{ width:detailTag ? '290px' : '0px', flexShrink:0, overflow:'hidden', transition:'width 0.25s ease' }}>
+                            {detailTag && (
+                              <div className="flex flex-col h-full overflow-y-auto bg-white border-l border-slate-100"
+                                style={{ minWidth:'290px', maxHeight:'70vh' }}>
+
+                                {/* Sidebar header */}
+                                <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2"
+                                  style={{ background:`linear-gradient(135deg,${detailTag.cls.color}14,${detailTag.cls.color}06)` }}>
+                                  <div>
+                                    <code className="text-base font-mono font-black text-slate-900">{detailTag.id}</code>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">{detailTag.cls.icon} {detailTag.cls.label}</p>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block"
+                                      style={{ background:`${detailTag.cls.color}20`, color:detailTag.cls.color, border:`1px solid ${detailTag.cls.color}30` }}>
+                                      {detailTag.cls.type.toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <button onClick={() => setSelectedEquipTag(null)}
+                                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 flex-shrink-0">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Coordinates card */}
+                                {detailTag.pos?.x_pct != null && (
+                                  <div className="px-4 py-3 border-b border-slate-100">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Coordinates on Drawing</p>
+                                    <div className="flex gap-2 mb-2">
+                                      <div className="flex-1 rounded-xl p-2.5 text-center"
+                                        style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                        <p className="text-[9px] text-emerald-600 font-bold">X</p>
+                                        <code className="text-sm font-black text-emerald-700">{detailTag.pos.x_pct.toFixed(2)}%</code>
+                                      </div>
+                                      <div className="flex-1 rounded-xl p-2.5 text-center"
+                                        style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                        <p className="text-[9px] text-emerald-600 font-bold">Y</p>
+                                        <code className="text-sm font-black text-emerald-700">{detailTag.pos.y_pct?.toFixed(2)}%</code>
+                                      </div>
+                                    </div>
+                                    {/* Mini dot map */}
+                                    <div className="rounded-lg border border-slate-200 overflow-hidden"
+                                      style={{ height:'64px', background:'#f1f5f9', position:'relative' }}>
+                                      <div className="absolute inset-0" style={{
+                                        backgroundImage:'radial-gradient(circle,rgba(5,150,105,0.1) 1px,transparent 1px)',
+                                        backgroundSize:'10px 10px',
+                                      }} />
+                                      <div style={{
+                                        position:'absolute',
+                                        left:`${detailTag.pos.x_pct}%`, top:`${detailTag.pos.y_pct}%`,
+                                        transform:'translate(-50%,-50%)',
+                                        width:'11px', height:'11px', borderRadius:'50%',
+                                        background:MARKER_COLOR_CLEAN,
+                                        boxShadow:`0 0 0 3px ${MARKER_COLOR_GLOW_CLEAN}`,
+                                        zIndex:2,
+                                      }} />
+                                      <p className="absolute bottom-1 right-1.5 text-[8px] text-slate-400 font-mono">canvas</p>
+                                    </div>
+                                    {(detailTag.pos?.all||[]).length > 1 && (
+                                      <p className="text-[10px] text-violet-600 font-bold mt-1.5">× {detailTag.pos.all.length} occurrences on drawing</p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* QC findings */}
+                                <div className="px-4 py-3 flex-1">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                    QC Findings
+                                    <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                                      style={{ background: detailTag.findings.length>0?'#fef2f2':'#f0fdf4',
+                                               color:      detailTag.findings.length>0?'#dc2626':'#16a34a' }}>
+                                      {detailTag.findings.length>0 ? `${detailTag.findings.length} issue${detailTag.findings.length!==1?'s':''}` : 'QC Pass ✓'}
+                                    </span>
+                                  </p>
+                                  {detailTag.findings.length === 0 ? (
+                                    <div className="rounded-xl p-3 flex items-center gap-2"
+                                      style={{ background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+                                      <span className="text-emerald-500 text-base">✓</span>
+                                      <p className="text-[10px] text-emerald-700 font-semibold">No QC issues. Tag appears compliant.</p>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-2">
+                                      {detailTag.findings.map((f, fi) => {
+                                        const pfx     = rulePrefix(f.rule_id);
+                                        const ruleDef = EQUIP_QC_RULES[pfx] || {};
+                                        return (
+                                          <div key={fi} className="rounded-xl p-3 flex flex-col gap-1.5"
+                                            style={{ background:SEV_BG[f.severity]||'#fff', border:`1px solid ${SEV_COLOR[f.severity]||'#e2e8f0'}40` }}>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <code className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">{f.rule_id}</code>
+                                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                                style={{ background:`${SEV_COLOR[f.severity]}22`, color:SEV_COLOR[f.severity] }}>{f.severity}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 leading-snug">{f.issue_observed}</p>
+                                            {ruleDef.fix && (
+                                              <div className="flex items-start gap-1.5 p-1.5 rounded-lg border text-[9px]"
+                                                style={{ background:'rgba(124,58,237,0.04)', borderColor:'rgba(124,58,237,0.15)' }}>
+                                                <Brain className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color:'#7c3aed' }} />
+                                                <div><span className="font-bold text-violet-700">AI: </span><span className="text-slate-600">{ruleDef.fix}</span></div>
+                                              </div>
+                                            )}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                              className="self-start flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg transition-all hover:-translate-y-px"
+                                              style={{ background:SEV_COLOR[f.severity]||'#6366f1', color:'#fff', boxShadow:`0 2px 6px ${SEV_COLOR[f.severity]||'#6366f1'}44` }}>
+                                              <ScanLine className="w-3 h-3" /> Locate Finding
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {!detailTag && (
+                              <div className="flex flex-col items-center justify-center h-full py-12 gap-2 px-4 text-center"
+                                style={{ minWidth:'290px', maxHeight:'70vh', background:'#fafbff', borderLeft:'1px solid #e2e8f0' }}>
+                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1"
+                                  style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)', border:'1px solid #bbf7d0' }}>
+                                  <MapPin className="w-6 h-6 text-emerald-400" />
+                                </div>
+                                <p className="text-xs font-bold text-slate-600">Click a marker on the drawing</p>
+                                <p className="text-[10px] text-slate-400">Tag details, coordinates, and QC findings will appear here</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    </>
                   )}
-                  {/* Panel footer */}
-                  <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-[10px] text-slate-400">
-                    <span style={{ color:'#7c3aed' }}>{filteredEquip.length} of {displayItems.length} tags shown</span>
-                    <span>{Object.keys(EQUIP_FAMILIES).length} classification rules · ISA 5.1 prefix catalogue</span>
+
+                  {/* ══ Footer ══ */}
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#7c3aed' }}>
+                      {equipViewTab === 'register'  ? `${sortedFiltered.length} of ${displayItems.length} tags shown`
+                       : equipViewTab === 'insights' ? `${aiInsights.length} AI insight${aiInsights.length!==1?'s':''}`
+                       : equipViewTab === 'drawing'  ? `${tagInventory.filter(t=>t.pos?.x_pct!=null).length} tags mapped on drawing`
+                       : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>{Object.keys(EQUIP_FAMILIES).length} families · ISA 5.1 · AI analysis active</span>
                   </div>
+
                 </div>
               );
             })()}
@@ -4052,20 +7409,4141 @@ const PIDVerification = () => {
             )}
             {/* ─── end EQUIPMENT panel ─── */}
 
-            {/* ─── CROSS-REF panel ─── */}
-            {activePanel === 'cross' && (
+            {/* ─── INSTRUMENTATION panel ─── */}
+            {activePanel === 'instrumentation' && (
             <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
-              <CrossRecommendationPanel
-                sourceType="pid"
-                documentId={documentId || results?.document_id}
-                projectId={selectedProject?.project_id || results?.project_id}
-                fileName={results?.file_name}
-              />
+            {(() => {
+              // ══ Soft-coded: ISA 5.1 / IEC 62424 Instrumentation QC Checklist ══════════
+              // Add, remove, or reorder items here without touching any render logic.
+              // Each entry:
+              //   id         — unique string key
+              //   category   — logical grouping (used for section headers + analytics)
+              //   title      — one-line requirement label
+              //   detail     — verbose requirement text shown in expanded card
+              //   standard   — applicable standard reference
+              //   detectKeys — OCR/rule evidence keywords used for AI auto-detection
+              //                presence in issues → 'warn' | absence → 'ok' (soft)
+              //   severity   — 'critical'|'major'|'minor'|'info'
+              const INSTR_CHECKS = [
+                // ── Identification ──────────────────────────────────────────────────────
+                {
+                  id: 'IC-01',
+                  category: 'Identification',
+                  title: 'Instrumentation identification symbols, tag numbers and location designation',
+                  detail: 'All instruments must carry ISA 5.1 identification symbols, correct tag numbers, and a clear location designation (field, DCS, local panel, unit control panel, ESD, etc.).',
+                  standard: 'ISA 5.1 / IEC 62424',
+                  severity: 'critical',
+                  detectKeys: ['tag','symbol','location','dcs','field','panel','esd','identification'],
+                },
+                {
+                  id: 'IC-02',
+                  category: 'Identification',
+                  title: 'PRV/PCV set-point marked near tag number',
+                  detail: 'For all PRVs and PCVs (self-regulating), the set-point value must be annotated directly adjacent to the tag number on the P&ID.',
+                  standard: 'ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['prv','pcv','set point','setpoint','self-regulating','set-point'],
+                },
+                {
+                  id: 'IC-03',
+                  category: 'Identification',
+                  title: 'Upstream / downstream tapping of PRV/PCV correctly depicted',
+                  detail: 'Upstream and downstream tapping points for PRVs/PCVs (self-regulating) shall be shown exactly as required by the project specification.',
+                  standard: 'ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['upstream','downstream','tapping','prv','pcv'],
+                },
+                // ── Sensors & Transmitters ───────────────────────────────────────────────
+                {
+                  id: 'IC-04',
+                  category: 'Sensors & Transmitters',
+                  title: 'Temperature, pressure and flow sensors/transmitters identified; signal direction checked',
+                  detail: 'All temperature sensors & transmitters (TE/TT), pressure sensors & transmitters (PE/PT), and flow meters & transmitters (FE/FT) must be individually identified. Signal flow direction arrows shall be shown and verified.',
+                  standard: 'ISA 5.1 § 4.3',
+                  severity: 'critical',
+                  detectKeys: ['temperature','pressure','flow','transmitter','sensor','te','tt','pe','pt','fe','ft','signal','direction'],
+                },
+                {
+                  id: 'IC-05',
+                  category: 'Sensors & Transmitters',
+                  title: 'Instrument isolation valve location identified',
+                  detail: 'Instrument isolation valve locations must be explicit on the P&ID. Note: if not shown, they must be covered in typical hook-up drawings in the legend P&ID.',
+                  standard: 'ISA 5.1 / Project Spec',
+                  severity: 'major',
+                  detectKeys: ['isolation valve','isv','hook-up','hook up','legend'],
+                },
+                // ── Control Systems ──────────────────────────────────────────────────────
+                {
+                  id: 'IC-06',
+                  category: 'Control Systems',
+                  title: 'DCS alarms shown; pre-alarm / monitoring signals indicated',
+                  detail: 'DCS alarm set-points (high/low/high-high/low-low) shall be shown on the P&ID where process control is required. Pre-alarm and monitoring signals must also be indicated.',
+                  standard: 'IEC 62424 / ISA-18.2',
+                  severity: 'critical',
+                  detectKeys: ['dcs','alarm','hh','ll','hi','lo','prealarm','pre-alarm','monitoring','control'],
+                },
+                {
+                  id: 'IC-07',
+                  category: 'Control Systems',
+                  title: 'Logic functions shown',
+                  detail: 'All logic functions (AND, OR, etc.) relevant to the control loop must be depicted on the P&ID.',
+                  standard: 'ISA 5.1',
+                  severity: 'minor',
+                  detectKeys: ['logic','function','and gate','or gate'],
+                },
+                {
+                  id: 'IC-08',
+                  category: 'Control Systems',
+                  title: 'Auxiliary control functions — resets, overrides, ESD, interlocks',
+                  detail: 'Auxiliary control system functions including resets, overrides, emergency shutdown (ESD), and interlocks must be clearly indicated on the P&ID.',
+                  standard: 'IEC 61511 / ISA-S84',
+                  severity: 'critical',
+                  detectKeys: ['reset','override','esd','interlock','emergency','shutdown','aux'],
+                },
+                // ── Physical / Installation ──────────────────────────────────────────────
+                {
+                  id: 'IC-09',
+                  category: 'Physical / Installation',
+                  title: 'Upstream/downstream straight run length for control valves and flow meters',
+                  detail: 'The required upstream and downstream pipe straight run lengths for control valves and flow measuring devices must be dimensioned on the P&ID.',
+                  standard: 'ISA 75.01 / Vendor Req.',
+                  severity: 'major',
+                  detectKeys: ['straight run','upstream length','downstream length','control valve','flow meter','diameters','pipe length'],
+                },
+                {
+                  id: 'IC-10',
+                  category: 'Physical / Installation',
+                  title: 'Straight run requirements for flow elements indicated',
+                  detail: 'Flow elements (orifice plates, venturis, Coriolis, ultrasonic) shall show the minimum straight-pipe upstream and downstream requirements in pipe diameters or millimetres.',
+                  standard: 'ISO 5167 / Vendor Req.',
+                  severity: 'major',
+                  detectKeys: ['flow element','orifice','venturi','coriolis','ultrasonic','straight run','upstream','downstream'],
+                },
+                // ── Legend & Continuity ──────────────────────────────────────────────────
+                {
+                  id: 'IC-11',
+                  category: 'Legend & Continuity',
+                  title: 'MOVs, ESD valves and special instrument types covered in legend P&ID',
+                  detail: 'All special instrument types including Motor Operated Valves (MOVs), ESD valves, and proprietary items must be defined with standard symbols in the legend P&ID.',
+                  standard: 'ISA 5.1 § 3',
+                  severity: 'major',
+                  detectKeys: ['mov','esd valve','legend','special','motor operated'],
+                },
+                {
+                  id: 'IC-12',
+                  category: 'Legend & Continuity',
+                  title: 'Instrument signal continuity from one P&ID to another verified',
+                  detail: 'Instrument signal lines that continue to another P&ID sheet must be shown with correct continuation flags and matching tag references on both sheets.',
+                  standard: 'ISA 5.1 § 5.5',
+                  severity: 'critical',
+                  detectKeys: ['continuity','continuation','sheet','reference','signal','cross-reference','inter-pid'],
+                },
+                {
+                  id: 'IC-13',
+                  category: 'Legend & Continuity',
+                  title: 'All alarm set-points indicated on P&ID',
+                  detail: 'Every instrument alarm (PAHH, PAH, PAL, PALL, etc.) must have its engineering-unit set-point value annotated on the P&ID.',
+                  standard: 'ISA-18.2 / Project Spec',
+                  severity: 'critical',
+                  detectKeys: ['alarm','set-point','setpoint','pahh','pah','pal','pall','tahh','lahh','fahh'],
+                },
+              ];
+
+              // ── Soft-coded: categories for section grouping ──────────────────────────
+              const INSTR_CATEGORIES = [
+                'Identification',
+                'Sensors & Transmitters',
+                'Control Systems',
+                'Physical / Installation',
+                'Legend & Continuity',
+              ];
+
+              // ── Soft-coded: severity colours (reuse same scheme as EQUIPMENT) ─────────
+              const IS_SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+              const IS_SEV_BG    = { critical:'#fef2f2', major:'#fff7ed', minor:'#fffbeb', info:'#eff6ff' };
+              const IS_STATUS_STYLE = {
+                pass:  { bg:'#f0fdf4', border:'#86efac', dot:'#22c55e', label:'Pass',    icon:'✓' },
+                fail:  { bg:'#fef2f2', border:'#fca5a5', dot:'#dc2626', label:'Fail',    icon:'✗' },
+                warn:  { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review',  icon:'⚠' },
+                ok:    { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK',  icon:'✓' },
+                na:    { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',     icon:'—' },
+                open:  { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending', icon:'?' },
+              };
+
+              // ── AI auto-detection: cross-reference rule-engine findings against detectKeys ──
+              // For each check, scan all current drawing issues for keyword evidence.
+              // Returns 'warn' if matching issues found, 'ok' if no issues and tags exist, 'open' if insufficient data.
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const haystack = `${(f.issue_observed || '')} ${(f.evidence || '')} ${(f.category || '')} ${(f.rule_id || '')}`.toLowerCase();
+                  return keys.some(k => haystack.includes(k));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              // ── Effective status (manual override wins over auto) ─────────────────────
+              const effectiveStatus = (check) => {
+                const manual = instrCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────────
+              const statCounts = INSTR_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c);
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+              }, {});
+              const total     = INSTR_CHECKS.length;
+              const passCnt   = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt   = (statCounts.fail || 0);
+              const warnCnt   = (statCounts.warn || 0);
+              const pendCnt   = (statCounts.open || 0) + (statCounts.na || 0);
+              const qcScore   = total > 0 ? Math.round(passCnt / total * 100) : 0;
+
+              // Soft-coded thresholds
+              const SCORE_EXCELLENT = 90;
+              const SCORE_GOOD      = 70;
+              const SCORE_FAIR      = 50;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e'
+                               : qcScore >= SCORE_GOOD      ? '#d97706'
+                               : qcScore >= SCORE_FAIR      ? '#f59e0b'
+                               : '#dc2626';
+
+              // Soft-coded: flexible badge count for Drawing Layout tab.
+              // Accepts single-letter prefixes (V-3115, E-101) plus standard ISA (FT-101).
+              // Excludes pipeline designations that start with a digit or inch mark.
+              const _INSTR_BADGE_RE = /^[A-Za-z]{1,6}[-_\s.]?\d/;
+              const instrMarkerCount = Object.keys(
+                activeDrawingData?.metadata?.tag_positions || {}
+              ).filter(t => _INSTR_BADGE_RE.test((t || '').trim())).length;
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(217,119,6,0.06), rgba(245,158,11,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#d97706,#f59e0b)', boxShadow:'0 4px 14px rgba(217,119,6,0.35)' }}>
+                      <Wrench className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Instrumentation QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#d97706,#f59e0b)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · ISA 5.1 / IEC 62424 / ISA-18.2
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Traffic light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Clear</span>}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#d97706', bg:'rgba(217,119,6,0.07)',   border:'rgba(217,119,6,0.2)'    },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'    },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.2)'   },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'    },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ══ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {[
+                      { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                      { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:instrMarkerCount || null },
+                      { id:'registry',  label:'Registry',       icon:Database,      cnt:instrSymbols.length || null },
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = instrActiveView === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setInstrActiveView(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:'#d97706', borderColor:'#d97706' } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:'#d97706' } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ════════════════════════════════════
+                      CHECKLIST VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {/* AI confidence banner */}
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-amber-700">No drawing data loaded.</span> Process and analyse a P&ID drawing first; AI auto-detection will then highlight potential gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Grouped checklist sections */}
+                      {INSTR_CATEGORIES.map(cat => {
+                        const checks = INSTR_CHECKS.filter(c => c.category === cat);
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:'linear-gradient(to right,#d9770640,transparent)' }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:'#d97706', background:'rgba(217,119,6,0.1)', border:'1px solid rgba(217,119,6,0.2)' }}>
+                                {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:'linear-gradient(to left,#d9770640,transparent)' }} />
+                            </div>
+
+                            {/* Check cards */}
+                            <div className="flex flex-col gap-2">
+                              {checks.map((check, ci) => {
+                                const status = effectiveStatus(check);
+                                const st     = IS_STATUS_STYLE[status] || IS_STATUS_STYLE.open;
+                                const isManual = !!instrCheckStates[check.id];
+                                // evidence items linked to this check (AI-detected)
+                                const evidence = allIssues.filter(f => {
+                                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                                  return (check.detectKeys||[]).some(k => hay.includes(k));
+                                });
+
+                                return (
+                                  <div key={check.id}
+                                    className="rounded-xl border flex flex-col overflow-hidden"
+                                    style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${ci*0.04}s both` }}>
+                                    {/* Card top row */}
+                                    <div className="flex items-start gap-3 p-3">
+                                      {/* Status dot */}
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] font-black text-white"
+                                        style={{ background:st.dot, boxShadow:`0 0 6px ${st.dot}55` }}>
+                                        {st.icon}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                          <code className="text-[9px] font-mono font-black text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200">{check.id}</code>
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                            style={{ background:`${IS_SEV_COLOR[check.severity]}18`, color:IS_SEV_COLOR[check.severity] }}>
+                                            {check.severity}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">{check.standard}</span>
+                                          {isManual && <span className="text-[9px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">Manual Override</span>}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-800 leading-snug">{check.title}</p>
+                                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.detail}</p>
+
+                                        {/* Evidence findings (AI-detected) */}
+                                        {evidence.length > 0 && (
+                                          <div className="mt-2 flex flex-col gap-1">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">AI Evidence ({evidence.length})</p>
+                                            {evidence.slice(0, 3).map((f, fi) => (
+                                              <div key={fi} className="flex items-start gap-1.5 text-[9px] text-slate-600 bg-white/70 rounded-lg px-2 py-1 border border-slate-100">
+                                                <span className="font-black mt-0.5" style={{ color:IS_SEV_COLOR[f.severity]||'#64748b' }}>⚑</span>
+                                                <span className="truncate">{f.issue_observed}</span>
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                                  className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                                                  style={{ background:'#d97706', color:'#fff' }}>
+                                                  Locate
+                                                </button>
+                                              </div>
+                                            ))}
+                                            {evidence.length > 3 && (
+                                              <p className="text-[9px] text-slate-400 px-1">+{evidence.length - 3} more findings</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Manual override row */}
+                                    <div className="flex items-center gap-1.5 px-3 pb-3">
+                                      <span className="text-[9px] font-bold text-slate-400 mr-1">Override:</span>
+                                      {[
+                                        { v:'pass', label:'✓ Pass', color:'#22c55e' },
+                                        { v:'fail', label:'✗ Fail', color:'#dc2626' },
+                                        { v:'na',   label:'— N/A',  color:'#94a3b8' },
+                                      ].map(opt => {
+                                        const isActive = instrCheckStates[check.id] === opt.v;
+                                        return (
+                                          <button key={opt.v}
+                                            onClick={() => setInstrCheckStates(prev => ({
+                                              ...prev,
+                                              [check.id]: isActive ? undefined : opt.v,
+                                            }))}
+                                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border transition-all"
+                                            style={{
+                                              background: isActive ? opt.color : 'white',
+                                              color:      isActive ? '#fff'    : opt.color,
+                                              borderColor: isActive ? opt.color : `${opt.color}60`,
+                                            }}>
+                                            {opt.label}
+                                          </button>
+                                        );
+                                      })}
+                                      {instrCheckStates[check.id] && (
+                                        <button
+                                          onClick={() => setInstrCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                          className="text-[9px] text-slate-400 hover:text-slate-600 ml-auto">
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="h-6" />
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      SUMMARY VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'summary' && (
+                    <div className="p-5 space-y-6 overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                      {/* Score ring */}
+                      <div className="rounded-xl border p-4 flex items-center gap-5"
+                        style={{ background:'linear-gradient(135deg,rgba(217,119,6,0.05),rgba(245,158,11,0.04))', borderColor:'rgba(217,119,6,0.2)' }}>
+                        <div className="relative w-20 h-20 flex-shrink-0">
+                          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                            <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="5" />
+                            <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black leading-none" style={{ color:scoreColor }}>{qcScore}%</span>
+                            <span className="text-[9px] text-slate-400 font-medium">QC</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-slate-800 mb-1">Instrumentation QC Score</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            {passCnt} of {total} checks passed or auto-cleared.
+                            {failCnt > 0 && ` ${failCnt} check${failCnt!==1?'s':''} marked as failed — resolve before IFR/IFC issue.`}
+                            {warnCnt > 0 && ` ${warnCnt} check${warnCnt!==1?'s':''} require engineer review.`}
+                          </p>
+                          <div className="flex gap-4 mt-2">
+                            {[['Pass/OK',passCnt,'#22c55e'],['Review',warnCnt,'#f59e0b'],['Failed',failCnt,'#dc2626'],['Pending',pendCnt,'#94a3b8']].map(([l,v,c])=>(
+                              <div key={l} className="text-center">
+                                <p className="text-base font-black leading-none" style={{color:c}}>{v}</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Category breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">📋</span> Checks by Category
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {INSTR_CATEGORIES.map(cat => {
+                            const catChecks = INSTR_CHECKS.filter(c => c.category === cat);
+                            const catPass   = catChecks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                            const catFail   = catChecks.filter(c => effectiveStatus(c) === 'fail').length;
+                            const catWarn   = catChecks.filter(c => effectiveStatus(c) === 'warn').length;
+                            const catPct    = Math.round(catPass / catChecks.length * 100);
+                            return (
+                              <div key={cat} className="rounded-xl border p-3"
+                                style={{ background: catFail>0 ? '#fef2f220' : catWarn>0 ? '#fffbeb40' : '#f0fdf430',
+                                         borderColor: catFail>0 ? '#fca5a580' : catWarn>0 ? '#fcd34d80' : '#86efac80' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[11px] font-bold text-slate-700">{cat}</span>
+                                  <div className="flex items-center gap-2">
+                                    {catFail > 0 && <span className="text-[9px] font-black text-red-600">{catFail}✗</span>}
+                                    {catWarn > 0 && <span className="text-[9px] font-black text-amber-600">{catWarn}⚠</span>}
+                                    <span className="text-[9px] font-bold" style={{ color:catFail>0?'#dc2626':catWarn>0?'#f59e0b':'#22c55e' }}>{catPct}%</span>
+                                  </div>
+                                </div>
+                                <div className="w-full rounded-full h-2" style={{ background:'rgba(0,0,0,0.08)' }}>
+                                  <div className="h-2 rounded-full transition-all duration-700"
+                                    style={{ width:`${catPct}%`, background: catFail>0 ? '#dc2626' : catWarn>0 ? '#f59e0b' : '#22c55e' }} />
+                                </div>
+                                <p className="text-[9px] text-slate-400 mt-1">{catPass} of {catChecks.length} checks OK</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Severity breakdown */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
+                          <span className="text-base">🔍</span> Failed / Review by Severity
+                        </p>
+                        {['critical','major','minor','info'].map(sev => {
+                          const sevChecks = INSTR_CHECKS.filter(c => c.severity === sev);
+                          const sevIssues = sevChecks.filter(c => ['fail','warn'].includes(effectiveStatus(c))).length;
+                          if (sevIssues === 0 && sevChecks.length === 0) return null;
+                          return (
+                            <div key={sev} className="flex items-center gap-3 py-1.5 border-b border-slate-100 last:border-0">
+                              <span className="text-[10px] font-black w-14 capitalize" style={{ color:IS_SEV_COLOR[sev] }}>{sev}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width:`${sevIssues/Math.max(1,sevChecks.length)*100}%`, background:`linear-gradient(90deg,${IS_SEV_COLOR[sev]},${IS_SEV_COLOR[sev]}99)` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500 w-16 text-right">{sevIssues} / {sevChecks.length}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Reset all overrides */}
+                      {Object.keys(instrCheckStates).length > 0 && (
+                        <button
+                          onClick={() => setInstrCheckStates({})}
+                          className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
+                          Reset all {Object.keys(instrCheckStates).length} manual override{Object.keys(instrCheckStates).length!==1?'s':''}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT VIEW
+                  ════════════════════════════════════ */}
+                  {instrActiveView === 'drawing' && (() => {
+                    // ── Soft-coded: ISA 5.1 instrument tag type descriptions ────────────────
+                    // Key = ISA prefix (e.g. 'PT'), Value = human-readable type label.
+                    // Add/remove entries without touching render logic below.
+                    const ISA_TAG_TYPES = {
+                      // Temperature
+                      'TE':'Temp. Element',          'TT':'Temp. Transmitter',       'TI':'Temp. Indicator',
+                      'TIC':'Temp. Ind. Controller', 'TC':'Temp. Controller',         'TCV':'Temp. Control Valve',
+                      'TS':'Temp. Switch',           'TSH':'Temp. Switch Hi',         'TSL':'Temp. Switch Lo',
+                      'TSHH':'Temp. Switch HiHi',    'TSLL':'Temp. Switch LoLo',      'TY':'Temp. Relay',
+                      'TAH':'Temp. Alarm Hi',        'TAL':'Temp. Alarm Lo',          'TAHH':'Temp. Alarm HiHi', 'TALL':'Temp. Alarm LoLo',
+                      // Pressure
+                      'PE':'Press. Element',        'PT':'Press. Transmitter',       'PI':'Press. Indicator',
+                      'PIC':'Press. Ind. Controller','PC':'Press. Controller',         'PCV':'Press. Control Valve',
+                      'PS':'Press. Switch',          'PSH':'Press. Switch Hi',         'PSL':'Press. Switch Lo',
+                      'PSHH':'Press. Switch HiHi',   'PSLL':'Press. Switch LoLo',
+                      'PSV':'Press. Safety Valve',   'PRV':'Press. Relief Valve',      'PY':'Press. Relay',
+                      'PAH':'Press. Alarm Hi',       'PAL':'Press. Alarm Lo',          'PAHH':'Press. Alarm HiHi', 'PALL':'Press. Alarm LoLo',
+                      // Flow
+                      'FE':'Flow Element',          'FT':'Flow Transmitter',         'FI':'Flow Indicator',
+                      'FIC':'Flow Ind. Controller', 'FC':'Flow Controller',           'FCV':'Flow Control Valve',
+                      'FS':'Flow Switch',            'FSH':'Flow Switch Hi',           'FSL':'Flow Switch Lo',
+                      'FV':'Flow Control Valve',     'FY':'Flow Relay',
+                      'FAH':'Flow Alarm Hi',         'FAL':'Flow Alarm Lo',
+                      // Level
+                      'LE':'Level Element',         'LT':'Level Transmitter',         'LI':'Level Indicator',
+                      'LIC':'Level Ind. Controller','LC':'Level Controller',           'LCV':'Level Control Valve',
+                      'LG':'Level Gauge',            'LS':'Level Switch',              'LSH':'Level Switch Hi',  'LSL':'Level Switch Lo',
+                      'LSHH':'Level Switch HiHi',   'LSLL':'Level Switch LoLo',        'LY':'Level Relay',
+                      'LAH':'Level Alarm Hi',        'LAL':'Level Alarm Lo',            'LAHH':'Level Alarm HiHi','LALL':'Level Alarm LoLo',
+                      // Analysis
+                      'AE':'Analysis Element',      'AT':'Analysis Transmitter',      'AI':'Analysis Indicator',
+                      'AIC':'Analysis Ind. Controller','AC':'Analysis Controller',    'AY':'Analysis Relay',
+                      // Valves / Actuators
+                      'SV':'Solenoid Valve',        'SDV':'Shutdown Valve',           'XV':'Actuated Valve',
+                      'MOV':'Motor Operated Valve', 'XCV':'Actuated Ctrl Valve',      'HV':'Hand Valve',
+                      'LV':'Level Valve',           'TV':'Temp. Valve',               'PV':'Press. Valve',
+                      'HIC':'Hand Ind. Controller',
+                      // Position / Speed / Misc
+                      'ZT':'Position Transmitter',  'ZI':'Position Indicator',        'ZS':'Position Switch',
+                      'ST':'Speed Transmitter',     'SI':'Speed Indicator',            'SS':'Speed Switch',
+                      'WT':'Weight Transmitter',    'WI':'Weight Indicator',           'WIC':'Weight Ind. Controller',
+                      'JT':'Power Transmitter',     'JI':'Power Indicator',
+                      // ── Soft-coded: P&ID Equipment tags (single / short prefix) ──────────
+                      // These appear in tag_positions when OCR extracts equipment tags.
+                      // Add project-specific prefixes here without changing render logic.
+                      'V':   'Vessel / Drum',        'TK':  'Storage Tank',          'D':   'Drum',
+                      'E':   'Heat Exchanger',       'P':   'Pump',                   'C':   'Compressor',
+                      'K':   'Turbine / Compressor', 'H':   'Fired Heater',           'B':   'Blower / Fan',
+                      'FR':  'Filter',               'SCR': 'Scrubber',               'SEP': 'Separator',
+                      'MX':  'Mixer',                'STR': 'Strainer',               'RX':  'Reactor',
+                      'CO':  'Cooler',               'HE':  'Heater',                 'EX':  'Expander',
+                      'SP':  'Spool Piece',          'AG':  'Agitator',               'CR':  'Crystalliser',
+                      'EJ':  'Ejector',              'FL':  'Flare Stack',            'MR':  'Manifold',
+                    };
+
+                    // ── Soft-coded: ISA prefix detector (derives from ISA_TAG_TYPES above) ─────
+                    // Single source of truth: the same ISA_TAG_TYPES dict drives BOTH label lookup
+                    // AND tag detection — no separate regex to maintain.
+                    // Handles all real-world formats: FT-101, FT101, FT_101, ft-101, FT 101.
+                    // Returns matched prefix (UPPERCASE) or null if not an ISA instrument tag.
+                    const _ISA_SORTED_PFX = Object.keys(ISA_TAG_TYPES)
+                      .sort((a, b) => b.length - a.length); // longest-first: TSHH beats TSH beats TS
+                    const _detectIsaPfx = (rawTag) => {
+                      const t = (rawTag || '').trim().toUpperCase();
+                      for (const pfx of _ISA_SORTED_PFX) {
+                        if (t.startsWith(pfx)) {
+                          const rem = t.slice(pfx.length);
+                          // Accept separator (- _ space .) then digit, or directly a digit
+                          if (/^[-_\s.]?\d/.test(rem)) return pfx;
+                        }
+                      }
+                      return null;
+                    };
+
+                    // ── Soft-coded: P&ID title-block exclusion zones ──────────────────────────
+                    // Tags found ONLY within these regions are drawing references, not P&ID
+                    // diagram positions. Adjust thresholds to match your drawing border template.
+                    // Right-side notes/title column: x > 80%
+                    // Bottom title strip / revision table: y > 88%
+                    // Binding margins (left <4%, top <4%)
+                    const TB_X_RIGHT  = 80;   // % — right-side title block start
+                    const TB_Y_BOTTOM = 88;   // % — bottom title strip start
+                    const TB_X_LEFT   = 4;    // % — left margin end
+                    const TB_Y_TOP    = 4;    // % — top margin end
+                    const _isInTitleBlock = (x, y) =>
+                      x > TB_X_RIGHT || y > TB_Y_BOTTOM || x < TB_X_LEFT || y < TB_Y_TOP;
+
+                    // ── Soft-coded: title-block-aware coordinate resolver ─────────────────────
+                    // Returns [x_pct, y_pct, isRef] where isRef=true means the tag was found
+                    // ONLY in the drawing reference area — not on the actual P&ID diagram.
+                    // Priority order:
+                    //   1. occurrence(s) inside diagram area — pick nearest centroid (50%, 50%)
+                    //   2. primary x_pct/y_pct if inside diagram area
+                    //   3. any position (fallback) — but marks isRef=true so it renders differently
+                    const _resolveCoord = (pos) => {
+                      if (!pos) return [null, null, false];
+                      const primary = (pos.x_pct != null && pos.y_pct != null)
+                        ? { x_pct: pos.x_pct, y_pct: pos.y_pct } : null;
+                      const candidates = [
+                        ...(Array.isArray(pos.all) ? pos.all : []),
+                        ...(primary ? [primary] : []),
+                      ].filter(o => o.x_pct != null && o.y_pct != null);
+                      if (candidates.length === 0) return [null, null, false];
+                      // Step 1: prefer diagram-area occurrences, pick nearest to centroid
+                      const inDiagram = candidates.filter(o => !_isInTitleBlock(o.x_pct, o.y_pct));
+                      if (inDiagram.length > 0) {
+                        let best = inDiagram[0]; let bestD = Infinity;
+                        for (const o of inDiagram) {
+                          const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
+                          if (d < bestD) { bestD = d; best = o; }
+                        }
+                        return [best.x_pct, best.y_pct, false];
+                      }
+                      // Step 2: all occurrences are in title block — flag as reference-only
+                      const fallback = primary || candidates[0];
+                      return [fallback.x_pct, fallback.y_pct, true];
+                    };
+
+                    // ── Soft-coded: severity colour scheme ───────────────────────────────────
+                    const DRAW_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+
+                    // ── Soft-coded: severity priority order ───────────────────────────────────
+                    const SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Build instrument marker list ──────────────────────────────────────────
+                    // Source 1: tag_positions entries classified as ISA instrument tags
+                    const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+
+                    // Source 2: ALL findings (including info severity) — drawing layout
+                    // shows ALL severity levels, styled distinctly.  The global
+                    // HIDDEN_SEVERITIES set only applies to the findings table view.
+                    const instrRelatedIssues = activeDrawingData?.issues || [];
+
+                    // Build findings map with UPPERCASE-dash-normalised keys.
+                    // Regex now also accepts space as a tag-number separator (e.g. "FT 101").
+                    const _tagFindMap = {};
+                    for (const f of instrRelatedIssues) {
+                      const haystack = `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase();
+                      // Soft-coded: {1,6} captures single-letter equipment prefixes (V, E, P, C, K)
+                      const re2 = /\b([A-Z]{1,6})[-_\s]?(\d{2,6}[A-Z]?(?:[-]\d{1,4})?)\b/g;
+                      let m2;
+                      while ((m2 = re2.exec(haystack)) !== null) {
+                        const tid = `${m2[1]}-${m2[2]}`;
+                        if (!_tagFindMap[tid]) _tagFindMap[tid] = [];
+                        _tagFindMap[tid].push(f);
+                      }
+                    }
+
+                    // Build the final marker array using _detectIsaPfx + _resolveCoord
+                    // Three-level lookup mirrors the piping approach:
+                    //  1. normalised key map  2. raw-uppercase map  3. full-text fallback
+                    const instrMarkerList = Object.entries(tagPositions)
+                      .reduce((acc, [rawTag, pos]) => {
+                        const matchedPfx = _detectIsaPfx(rawTag);
+                        if (!matchedPfx) return acc;
+                        const [xp, yp, isRef] = _resolveCoord(pos);
+                        if (xp == null || yp == null) return acc;
+                        const typeLabel = ISA_TAG_TYPES[matchedPfx] || `${matchedPfx} Instrument`;
+                        const tagNorm = rawTag.toUpperCase().replace(/[-_\s.]+/g, '-');
+                        // Mirror piping: regex map → raw-tag map → full-text fallback
+                        const findings = _tagFindMap[tagNorm]
+                          || _tagFindMap[rawTag.toUpperCase()]
+                          || instrRelatedIssues.filter(f =>
+                               `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase().includes(tagNorm)
+                               || `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase().includes(rawTag.toUpperCase())
+                             );
+                        const topSev = findings.reduce((best, f) => {
+                          return (SEV_ORDER[f.severity]||0) > (SEV_ORDER[best]||0) ? f.severity : best;
+                        }, null);
+                        acc.push({ tag: rawTag, prefix: matchedPfx, typeLabel, xp, yp, findings, topSev, isRef });
+                        return acc;
+                      }, [])
+                      .sort((a, b) => a.tag.localeCompare(b.tag));
+
+                    const selectedMarkerData = instrSelectedTag
+                      ? instrMarkerList.find(m => m.tag === instrSelectedTag)
+                      : null;
+
+                    const markerWithFindings = instrMarkerList.filter(m => m.findings.length > 0).length;
+                    const markerCompliant    = instrMarkerList.filter(m => m.findings.length === 0).length;
+
+                    // ── Virtual marker miner ─────────────────────────────────────────────────
+                    // When tag_positions has no ISA tags (e.g. scanned P&ID or different
+                    // tag format), scan all findings text for ISA tag mentions and place
+                    // them at deterministic hash-based positions on the drawing.
+                    // Soft-coded: hash scatter keeps tags within 12%–86% drawing bounds.
+                    const _hashPos = (str) => {
+                      let h = 5381;
+                      for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+                      const ha = Math.abs(h);
+                      return [12 + (ha % 74), 12 + ((ha >>> 8) % 74)];
+                    };
+
+                    if (instrMarkerList.length === 0 && instrRelatedIssues.length > 0) {
+                      const _mined = {};
+                      for (const f of instrRelatedIssues) {
+                        const hay = `${f.evidence||''} ${f.issue_observed||''}`.toUpperCase();
+                        // Mine: standard ISA format AND single-letter equipment prefix
+                        const re3 = /\b([A-Z]{1,6})[-_\s]?(\d{2,6}[A-Z]?(?:[-]\d{1,4})?)\b/g;
+                        let m3;
+                        while ((m3 = re3.exec(hay)) !== null) {
+                          const candidate = `${m3[1]}-${m3[2]}`;
+                          if (!_detectIsaPfx(candidate)) continue;
+                          if (!_mined[candidate]) _mined[candidate] = [];
+                          _mined[candidate].push(f);
+                        }
+                      }
+                      for (const [tag, finds] of Object.entries(_mined)) {
+                        const pfx = _detectIsaPfx(tag);
+                        if (!pfx) continue;
+                        const [xp, yp] = _hashPos(tag);
+                        const topSev = finds.reduce((best, f) =>
+                          (SEV_ORDER[f.severity]||0) > (SEV_ORDER[best]||0) ? f.severity : best, null);
+                        instrMarkerList.push({ tag, prefix:pfx,
+                          typeLabel: ISA_TAG_TYPES[pfx] || `${pfx} Tag`,
+                          xp, yp, findings:finds, topSev, isVirtual:true });
+                      }
+                      instrMarkerList.sort((a, b) => a.tag.localeCompare(b.tag));
+                    }
+
+                    // ── Unmatched findings: ALL findings not attributed to any tag ────────────
+                    // Soft-coded: accepts every category so nothing is hidden.
+                    const _matchedFindingIds = new Set(instrMarkerList.flatMap(m => m.findings.map(f => f.id)));
+                    const unmatchedInstrFindings = instrRelatedIssues.filter(f =>
+                      !_matchedFindingIds.has(f.id)
+                    );
+
+                    // ── ISA 5.1 First-letter → Functional Category ───────────────────────────
+                    // Soft-coded: per ISA-5.1-2009 Table 1 (measured variable first-letter).
+                    // Single source of truth — drives marker bubbles, filter chips, table groups.
+                    const ISA_CAT_MAP = {
+                      A:{ label:'Analysis',      color:'#8b5cf6', light:'rgba(139,92,246,0.10)', ring:'#7c3aed'  },
+                      B:{ label:'Burner/Flame',  color:'#f97316', light:'rgba(249,115,22,0.10)', ring:'#ea580c'  },
+                      E:{ label:'Voltage',       color:'#eab308', light:'rgba(234,179,8,0.10)',  ring:'#ca8a04'  },
+                      F:{ label:'Flow',          color:'#3b82f6', light:'rgba(59,130,246,0.10)', ring:'#1d4ed8'  },
+                      H:{ label:'Hand Operated', color:'#14b8a6', light:'rgba(20,184,166,0.10)', ring:'#0f766e'  },
+                      I:{ label:'Current',       color:'#f59e0b', light:'rgba(245,158,11,0.10)', ring:'#d97706'  },
+                      L:{ label:'Level',         color:'#22c55e', light:'rgba(34,197,94,0.10)',  ring:'#16a34a'  },
+                      P:{ label:'Pressure',      color:'#ef4444', light:'rgba(239,68,68,0.10)',  ring:'#dc2626'  },
+                      Q:{ label:'Quantity',      color:'#a855f7', light:'rgba(168,85,247,0.10)', ring:'#9333ea'  },
+                      S:{ label:'Speed/Freq',    color:'#06b6d4', light:'rgba(6,182,212,0.10)',  ring:'#0891b2'  },
+                      T:{ label:'Temperature',   color:'#f97316', light:'rgba(249,115,22,0.10)', ring:'#ea580c'  },
+                      V:{ label:'Vibration',     color:'#a855f7', light:'rgba(168,85,247,0.10)', ring:'#9333ea'  },
+                      W:{ label:'Weight/Force',  color:'#78716c', light:'rgba(120,113,108,0.10)',ring:'#57534e'  },
+                      Z:{ label:'Position',      color:'#f59e0b', light:'rgba(245,158,11,0.10)', ring:'#d97706'  },
+                    };
+                    const _ISA_CAT_DFLT = { label:'Misc Instrument', color:'#94a3b8', light:'rgba(148,163,184,0.10)', ring:'#64748b' };
+                    const _getIsaCat    = (pfx) => ISA_CAT_MAP[(pfx||'?')[0].toUpperCase()] || _ISA_CAT_DFLT;
+
+                    // ── ISA category distribution ─────────────────────────────────────────────
+                    const _catDistrib = instrMarkerList.reduce((acc, m) => {
+                      const cat = _getIsaCat(m.prefix);
+                      if (!acc[cat.label]) acc[cat.label] = { cat, total:0, withFindings:0, markers:[] };
+                      acc[cat.label].total++;
+                      if (m.findings.length > 0) acc[cat.label].withFindings++;
+                      acc[cat.label].markers.push(m);
+                      return acc;
+                    }, {});
+                    const _catArr = Object.values(_catDistrib).sort((a,b) => b.total - a.total);
+
+                    // ── Coordinate confidence metrics ──────────────────────────────────────────
+                    // Soft-coded thresholds: ≥70% = high, ≥40% = medium, <40% = low.
+                    const _posConf = instrMarkerList.filter(m => !m.isRef && !m.isVirtual).length;
+                    const _posRef  = instrMarkerList.filter(m =>  m.isRef).length;
+                    const _posEst  = instrMarkerList.filter(m =>  m.isVirtual).length;
+                    const _confPct = instrMarkerList.length > 0
+                      ? Math.round((_posConf / instrMarkerList.length) * 100) : 0;
+                    const _confLvl = _confPct >= 70 ? 'high' : _confPct >= 40 ? 'medium' : 'low';
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* ── No drawing data ── */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-amber-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see the instrument layout map with tagged coordinates.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Loading ── */}
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-amber-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {/* ── Drawing available ── */}
+                        {!drawingImageLoading && drawingImageUrl && (
+                          <>
+                            {/* ── DCS / Instrument Symbol Analysis button bar ── */}
+                            <div className="mx-5 mt-3 mb-1 rounded-xl border overflow-hidden"
+                              style={{ borderColor: dcsResult ? 'rgba(139,92,246,0.30)' : 'rgba(139,92,246,0.18)',
+                                       background: 'rgba(139,92,246,0.04)' }}>
+                              <div className="flex items-center gap-2 px-3 py-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                  <span className="text-[10px] font-black text-violet-700 uppercase tracking-wider">DCS Analysis</span>
+                                  {dcsResult && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700">
+                                      {dcsResult.findings_created} finding{dcsResult.findings_created !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] text-slate-400 truncate">
+                                    {dcsLegendFile
+                                      ? `Legend: ${dcsLegendFile.name}`
+                                      : 'Using built-in ISA 5.1 symbols (attach legend PDF for project-specific analysis)'}
+                                  </span>
+                                </div>
+                                {/* Hidden file input for optional legend PDF */}
+                                <input
+                                  ref={dcsLegendRef}
+                                  type="file"
+                                  accept=".pdf"
+                                  className="hidden"
+                                  onChange={e => setDcsLegendFile(e.target.files?.[0] || null)}
+                                />
+                                {/* Attach legend button */}
+                                <button
+                                  onClick={() => dcsLegendRef.current?.click()}
+                                  className="text-[9px] font-bold px-2 py-1 rounded-lg border transition-all flex-shrink-0"
+                                  style={{ borderColor:'rgba(139,92,246,0.3)', color:'#7c3aed',
+                                           background: dcsLegendFile ? 'rgba(139,92,246,0.12)' : 'transparent' }}
+                                  title="Attach instrument legend PDF for project-specific symbol extraction">
+                                  {dcsLegendFile ? '✓ Legend attached' : '+ Attach Legend PDF'}
+                                </button>
+                                {dcsLegendFile && (
+                                  <button
+                                    onClick={() => setDcsLegendFile(null)}
+                                    className="text-[9px] text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                    title="Remove legend file">✕</button>
+                                )}
+                                {/* Run analysis button */}
+                                <button
+                                  onClick={runDcsAnalysis}
+                                  disabled={dcsAnalyzing}
+                                  className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex-shrink-0"
+                                  style={{ background: dcsAnalyzing ? 'rgba(139,92,246,0.15)' : '#7c3aed',
+                                           color: dcsAnalyzing ? '#7c3aed' : 'white',
+                                           border: '1px solid rgba(139,92,246,0.4)',
+                                           opacity: dcsAnalyzing ? 0.7 : 1 }}>
+                                  {dcsAnalyzing
+                                    ? <><span className="w-2.5 h-2.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />Analyzing…</>
+                                    : '⚡ Analyze DCS Compliance'}
+                                </button>
+                              </div>
+                              {/* Result summary strip */}
+                              {dcsResult && (
+                                <div className="px-3 pb-2 text-[9px] text-slate-500 border-t border-violet-100 pt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                  <span className="text-violet-700 font-bold">Last run:</span>
+                                  <span>{dcsResult.findings_created} findings created</span>
+                                  <span>·</span>
+                                  <span>{dcsResult.symbols_extracted} symbols referenced</span>
+                                  <span>·</span>
+                                  <span>Source: <span className="font-semibold">{dcsResult.legend_source === 'uploaded' ? 'Uploaded legend PDF' : 'Built-in ISA 5.1'}</span></span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* ── ISA 5.1 Category Distribution ── */}
+                            {instrMarkerList.length > 0 && (
+                              <div className="mx-5 mt-3 mb-2">
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">ISA 5.1 Variable Breakdown</p>
+                                  <div className="flex-1 h-px bg-slate-100" />
+                                  {/* Coordinate confidence badge */}
+                                  <span
+                                    className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
+                                    style={{
+                                      background: _confLvl==='high'   ? 'rgba(34,197,94,0.10)'  : _confLvl==='medium' ? 'rgba(245,158,11,0.10)' : 'rgba(239,68,68,0.08)',
+                                      color:      _confLvl==='high'   ? '#16a34a'               : _confLvl==='medium' ? '#d97706'              : '#dc2626',
+                                      border:    `1px solid ${_confLvl==='high' ? 'rgba(34,197,94,0.3)' : _confLvl==='medium' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.25)'}`,
+                                    }}
+                                    title={`${_posConf} confirmed diagram positions · ${_posRef} title-block refs · ${_posEst} hash-estimated`}>
+                                    ◎ {_confPct}% coord verified
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {_catArr.map(({ cat, total, withFindings }) => (
+                                    <div key={cat.label}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold flex-shrink-0"
+                                      style={{ background: cat.light, border:`1px solid ${cat.ring}30`, color: cat.color }}>
+                                      <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-black text-white flex-shrink-0"
+                                        style={{ background: cat.color }}>
+                                        {cat.label[0]}
+                                      </span>
+                                      <span className="font-black">{total}</span>
+                                      <span className="font-medium opacity-80">{cat.label}</span>
+                                      {withFindings > 0 && (
+                                        <span className="ml-0.5 text-[7px] px-1.5 py-0.5 rounded-full font-black text-white"
+                                          style={{ background:'#dc2626' }}>{withFindings}!</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── Coordinate confidence warning banner ── */}
+                            {instrMarkerList.length > 0 && _confLvl !== 'high' && (
+                              <div className="mx-5 mb-2 p-2 rounded-lg border flex items-start gap-2"
+                                style={{
+                                  borderColor: _confLvl==='medium' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.25)',
+                                  background:  _confLvl==='medium' ? 'rgba(245,158,11,0.05)' : 'rgba(239,68,68,0.04)',
+                                }}>
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+                                  style={{ color: _confLvl==='medium' ? '#d97706' : '#dc2626' }} />
+                                <p className="text-[9px] leading-relaxed"
+                                  style={{ color: _confLvl==='medium' ? '#92400e' : '#7f1d1d' }}>
+                                  <strong>Position Accuracy {_confLvl === 'medium' ? 'Moderate' : 'Low'}:</strong>
+                                  {' '}{_posConf} confirmed diagram positions
+                                  {_posRef   > 0 ? ` · ${_posRef} title-block refs (dotted border)` : ''}
+                                  {_posEst   > 0 ? ` · ${_posEst} hash-estimated (dashed border)` : ''}.
+                                  {' '}Re-process the drawing for improved coordinate accuracy.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* ── Drawing legend ── */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-2 text-[9px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center text-[5.5px] font-black flex-shrink-0"
+                                  style={{ background:'rgba(59,130,246,0.12)', border:'2px solid #1d4ed8', color:'#3b82f6' }}>FT</span>
+                                ISA bubble (OK)
+                              </span>
+                              {[['critical','#dc2626'],['major','#f97316'],['minor','#d97706']].map(([sev,c]) => (
+                                <span key={sev} className="flex items-center gap-1 capitalize">
+                                  <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                    style={{ background:`${c}15`, border:`2px solid ${c}` }}>
+                                    <span className="text-[5.5px] font-black" style={{ color:c }}>FT</span>
+                                  </span>
+                                  {sev}
+                                </span>
+                              ))}
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                  style={{ background:'rgba(148,163,184,0.12)', border:'2px dotted #94a3b8' }}>
+                                  <span className="text-[5.5px] font-black text-slate-400">??</span>
+                                </span>
+                                Title-block ref
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
+                                  style={{ background:'rgba(59,130,246,0.08)', border:'2px dashed #3b82f6' }}>
+                                  <span className="text-[5.5px] font-black text-blue-400">??</span>
+                                </span>
+                                ~Estimated
+                              </span>
+                              <span className="ml-auto text-amber-600 font-medium">Bubble = ISA variable · Border = finding severity · Click to inspect</span>
+                            </div>
+
+                            {/* Diagnostic empty-state: drawing has tags but none are ISA instruments */}
+                            {instrMarkerList.length === 0 && Object.keys(tagPositions).length > 0 && (
+                              <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                                style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-bold text-amber-700 mb-0.5">
+                                    No ISA 5.1 instrument tags located on this drawing
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                                    {Object.keys(tagPositions).length} tag{Object.keys(tagPositions).length !== 1 ? 's' : ''} found
+                                    in drawing data — none matched a known ISA prefix (FT, PT, LT, TT, AT…).
+                                    Sample keys: <span className="font-mono font-bold text-slate-700">
+                                      {Object.keys(tagPositions).slice(0, 5).join(', ')}
+                                    </span>{Object.keys(tagPositions).length > 5 ? ` …+${Object.keys(tagPositions).length - 5} more` : ''}.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            {instrMarkerList.length === 0 && Object.keys(tagPositions).length === 0 && (
+                              <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                                style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                                No tag coordinate data yet — process and analyse a P&amp;ID drawing first.
+                              </div>
+                            )}
+
+                            {/* ── Filter chip strip: one chip per instrument, sorted by # findings ── */}
+                            {instrMarkerList.length > 0 && (
+                              <div className="px-5 pb-2">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                  Filter — tap a tag to isolate on drawing
+                                </p>
+                                <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                  style={{ scrollbarWidth:'thin', scrollbarColor:'#cbd5e1 transparent' }}>
+                                  <button
+                                    onClick={() => setInstrSelectedTag(null)}
+                                    className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                    style={{
+                                      background: !instrSelectedTag ? '#d97706'             : 'rgba(217,119,6,0.08)',
+                                      color:      !instrSelectedTag ? 'white'               : '#d97706',
+                                      border:    `1px solid ${!instrSelectedTag ? '#d97706' : 'rgba(217,119,6,0.25)'}`,
+                                      boxShadow:  !instrSelectedTag ? '0 0 10px rgba(217,119,6,0.4)' : 'none',
+                                    }}>
+                                    ◈ All
+                                  </button>
+                                  {[...instrMarkerList]
+                                    .sort((a, b) => b.findings.length - a.findings.length || a.tag.localeCompare(b.tag))
+                                    .map(m => {
+                                      const isAct  = instrSelectedTag === m.tag;
+                                      const isaCat = _getIsaCat(m.prefix);
+                                      return (
+                                        <button key={m.tag}
+                                          onClick={() => setInstrSelectedTag(prev => prev === m.tag ? null : m.tag)}
+                                          className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                          style={{
+                                            background: isAct ? isaCat.color       : isaCat.light,
+                                            color:      isAct ? 'white'            : isaCat.color,
+                                            border:    `1px solid ${isAct ? isaCat.color : isaCat.ring + '50'}`,
+                                            boxShadow:  isAct ? `0 0 10px ${isaCat.color}55` : 'none',
+                                          }}>
+                                          <span className="font-mono">{m.tag}</span>
+                                          {m.findings.length > 0 && (
+                                            <span
+                                              className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                              style={{
+                                                background: isAct ? 'rgba(255,255,255,0.3)' : '#dc2626',
+                                                color: 'white',
+                                              }}>
+                                              {m.findings.length}
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Drawing + overlay */}
+                            <div className="px-5 pb-3">
+                              <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                                <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                  <div className="relative w-full" style={{ lineHeight:0 }}>
+                                    <img
+                                      src={drawingImageUrl}
+                                      alt={activeDrawing}
+                                      draggable={false}
+                                      className="w-full block"
+                                      style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                    />
+                                    {/* Overlay */}
+                                    <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                      {/* Dim background when a tag is isolated */}
+                                      {instrSelectedTag && (
+                                        <div className="absolute inset-0"
+                                          style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
+                                                   transition:'opacity 0.25s ease' }} />
+                                      )}
+                                      {/* Render only the selected marker when chip is active */}
+                                      {instrMarkerList.filter(m => !instrSelectedTag || m.tag === instrSelectedTag).map((m) => {
+                                        const isSel   = instrSelectedTag === m.tag;
+                                        const isaCat  = _getIsaCat(m.prefix);
+                                        // ISA P&ID balloon convention:
+                                        //   bubble fill  = ISA measured-variable category colour
+                                        //   border colour = finding severity (or category ring if no findings)
+                                        const sev = m.topSev;
+                                        const sevBorder = m.isRef ? '#94a3b8'
+                                          : sev === 'critical' ? '#dc2626'
+                                          : sev === 'major'    ? '#f97316'
+                                          : sev === 'minor'    ? '#d97706'
+                                          : isaCat.ring;
+                                        const borderStyle = m.isRef ? 'dotted' : m.isVirtual ? 'dashed' : 'solid';
+                                        const glowColor   = m.findings.length > 0 ? `${sevBorder}55` : `${isaCat.color}33`;
+                                        const sz = isSel ? 28 : 20;
+                                        return (
+                                          <React.Fragment key={m.tag}>
+                                            {/* Ping ripple — only for markers with findings */}
+                                            {!isSel && m.findings.length > 0 && (
+                                              <div aria-hidden="true" style={{
+                                                position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz + 8}px`, height:`${sz + 8}px`, borderRadius:'50%',
+                                                border:`1.5px solid ${sevBorder}`, backgroundColor:'transparent',
+                                                animation:'markerPing 2800ms ease-out infinite',
+                                                transform:'translate(-50%,-50%)',
+                                                pointerEvents:'none', zIndex:8,
+                                              }} />
+                                            )}
+                                            {/* ISA Balloon marker — standard P&ID instrument bubble with prefix label */}
+                                            <button
+                                              onClick={() => setInstrSelectedTag(prev => prev === m.tag ? null : m.tag)}
+                                              title={`${m.tag} · ${m.typeLabel}${m.isRef ? ' · ⚠ Title-block ref — actual position unknown' : m.isVirtual ? ' · ~Estimated (hash-based position)' : ''}${m.findings.length > 0 ? ` · ${m.findings.length} finding${m.findings.length!==1?'s':''}` : ' · No findings'}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                borderRadius:'50%',
+                                                background: m.isRef ? 'rgba(148,163,184,0.15)' : isaCat.light,
+                                                border:`2px ${borderStyle} ${sevBorder}`,
+                                                boxShadow: isSel
+                                                  ? `0 0 0 3px ${glowColor}, 0 2px 8px rgba(0,0,0,0.45)`
+                                                  : `0 1px 3px rgba(0,0,0,0.30)`,
+                                                transform:`translate(-50%,-50%) scale(${isSel ? 1.3 : 1})`,
+                                                zIndex: isSel ? 20 : 10,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                display:'flex', alignItems:'center', justifyContent:'center',
+                                                fontSize: isSel ? '7px' : '5.5px',
+                                                fontWeight:900, fontFamily:'monospace',
+                                                color: m.isRef ? '#94a3b8' : isaCat.color,
+                                                letterSpacing:'-0.02em',
+                                                transition:'width 0.15s,height 0.15s,transform 0.15s,box-shadow 0.15s',
+                                                animation: (!isSel && m.findings.length === 0)
+                                                  ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                              }}>
+                                              {m.prefix.slice(0,2)}
+                                            </button>
+                                            {/* Tag label tooltip — visible only when selected */}
+                                            {isSel && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`calc(${m.yp}% + ${sz/2 + 5}px)`,
+                                                transform:'translateX(-50%)',
+                                                background:'rgba(15,23,42,0.90)',
+                                                color:'white', fontSize:'8px', fontWeight:700,
+                                                borderRadius:'4px', padding:'2px 6px',
+                                                whiteSpace:'nowrap', zIndex:25, pointerEvents:'none',
+                                                border:'1px solid rgba(255,255,255,0.15)',
+                                              }}>
+                                                {m.tag}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Selected instrument detail card */}
+                            {selectedMarkerData && (
+                              <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                style={{
+                                  borderColor: selectedMarkerData.topSev
+                                    ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.border || '#0f766e')
+                                    : '#0f766e',
+                                  animation:'cardIn 0.2s ease-out both',
+                                }}>
+                                {/* Detail header */}
+                                <div className="flex items-center gap-3 px-4 py-3"
+                                  style={{ background: selectedMarkerData.topSev
+                                    ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.light || _getIsaCat(selectedMarkerData.prefix).light)
+                                    : _getIsaCat(selectedMarkerData.prefix).light }}>
+                                  {/* ISA balloon icon — category colour, severity border */}
+                                  <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center flex-shrink-0 text-[11px] font-black font-mono"
+                                    style={{
+                                      background:   _getIsaCat(selectedMarkerData.prefix).light,
+                                      borderColor:  selectedMarkerData.topSev
+                                        ? (DRAW_SEV_COLOR[selectedMarkerData.topSev]?.border || _getIsaCat(selectedMarkerData.prefix).ring)
+                                        : _getIsaCat(selectedMarkerData.prefix).ring,
+                                      color:        _getIsaCat(selectedMarkerData.prefix).color,
+                                      boxShadow:   `0 4px 12px ${_getIsaCat(selectedMarkerData.prefix).color}30`,
+                                    }}>
+                                    {selectedMarkerData.prefix.slice(0,2)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-sm font-black text-slate-900">{selectedMarkerData.tag}</p>
+                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                                        style={{
+                                          background: _getIsaCat(selectedMarkerData.prefix).light,
+                                          color:      _getIsaCat(selectedMarkerData.prefix).color,
+                                          border:    `1px solid ${_getIsaCat(selectedMarkerData.prefix).ring}50`,
+                                        }}>
+                                        {_getIsaCat(selectedMarkerData.prefix).label}
+                                      </span>
+                                      {selectedMarkerData.isRef && (
+                                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200">TITLE BLOCK</span>
+                                      )}
+                                      {selectedMarkerData.isVirtual && (
+                                        <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">~ESTIMATED</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">{selectedMarkerData.typeLabel}</p>
+                                    {selectedMarkerData.isRef && (
+                                      <p className="text-[10px] text-amber-600 mt-0.5">
+                                        ⚠ Tag found in drawing reference area only — actual instrument loop position not confirmed from OCR.
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                    <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selectedMarkerData.xp?.toFixed(1)}%</span></span>
+                                    <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selectedMarkerData.yp?.toFixed(1)}%</span></span>
+                                  </div>
+                                  <button
+                                    onClick={() => setInstrSelectedTag(null)}
+                                    className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                                    ✕
+                                  </button>
+                                </div>
+                                {/* Findings list */}
+                                {selectedMarkerData.findings.length > 0 ? (
+                                  <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                      {selectedMarkerData.findings.length} Finding{selectedMarkerData.findings.length!==1?'s':''} Detected
+                                    </p>
+                                    {selectedMarkerData.findings.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = DRAW_SEV_COLOR[sev] || DRAW_SEV_COLOR.info;
+                                      return (
+                                        <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                          style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                            <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                            {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                          </div>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                            style={{ background:'#d97706' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                    No findings — instrument appears compliant with current rule-engine checks.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* ── Instrument Schedule — ISA 5.06 grouped by variable category ── */}
+                            {instrMarkerList.length > 0 ? (
+                              <div className="mx-5 mb-4">
+                                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                  <MapPin className="w-3 h-3 text-amber-500" />
+                                  Instrument Schedule — {instrMarkerList.length} tag{instrMarkerList.length!==1?'s':''} · ISA 5.06 Layout
+                                </p>
+                                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-[10px]">
+                                      <thead>
+                                        <tr style={{ background:'linear-gradient(to right,rgba(217,119,6,0.09),rgba(245,158,11,0.04))' }}>
+                                          {['Tag ID','ISA Type','Variable','X %','Y %','Status','Findings'].map(h => (
+                                            <th key={h} className="px-3 py-2 text-left font-black text-slate-600 whitespace-nowrap border-b border-slate-200">{h}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {/* Iterate category groups (most instruments first) */}
+                                        {_catArr.map(({ cat, markers }) => (
+                                          <React.Fragment key={cat.label}>
+                                            {/* ISA Variable category group header */}
+                                            <tr style={{ background: cat.light }}>
+                                              <td colSpan={7} className="px-3 py-1"
+                                                style={{ borderBottom:`1px solid ${cat.ring}20` }}>
+                                                <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider"
+                                                  style={{ color: cat.color }}>
+                                                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cat.color }} />
+                                                  {cat.label}
+                                                  <span className="font-medium normal-case tracking-normal opacity-70 ml-0.5">
+                                                    ({markers.length} instrument{markers.length!==1?'s':''})
+                                                  </span>
+                                                  {markers.filter(m=>m.findings.length>0).length > 0 && (
+                                                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-white text-[7px] font-black"
+                                                      style={{ background:'#dc2626' }}>
+                                                      {markers.filter(m=>m.findings.length>0).length} with findings
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                            {/* Instrument rows within this category */}
+                                            {markers.map((m) => {
+                                              const sc       = m.topSev ? (DRAW_SEV_COLOR[m.topSev] || DRAW_SEV_COLOR.info) : null;
+                                              const isRowSel = instrSelectedTag === m.tag;
+                                              return (
+                                                <tr key={m.tag}
+                                                  onClick={() => setInstrSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                  className="cursor-pointer border-b border-slate-100 last:border-0 transition-colors hover:bg-amber-50/60"
+                                                  style={isRowSel ? { background:'rgba(217,119,6,0.08)' } : undefined}>
+                                                  <td className="px-3 py-2 font-mono font-black text-slate-800 whitespace-nowrap">
+                                                    <span className="flex items-center gap-1.5">
+                                                      {/* Mini ISA balloon */}
+                                                      <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                                                        style={{
+                                                          background: sc ? sc.light : cat.light,
+                                                          border:`1.5px ${m.isRef ? 'dotted' : m.isVirtual ? 'dashed' : 'solid'} ${sc ? sc.border : cat.ring}`,
+                                                          fontSize:'5px', fontWeight:900, fontFamily:'monospace',
+                                                          color: sc ? sc.text : cat.color,
+                                                        }}>
+                                                        {m.prefix.slice(0,2)}
+                                                      </span>
+                                                      {m.tag}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[120px] truncate" title={m.typeLabel}>{m.typeLabel}</td>
+                                                  <td className="px-3 py-2 whitespace-nowrap">
+                                                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                                                      style={{ background: cat.light, color: cat.color }}>
+                                                      {cat.label}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{m.xp?.toFixed(1)}</td>
+                                                  <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{m.yp?.toFixed(1)}</td>
+                                                  <td className="px-3 py-2 whitespace-nowrap">
+                                                    {m.isRef ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[8px] text-amber-700 bg-amber-50 border border-amber-200">REF</span>
+                                                    ) : m.isVirtual ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[8px] text-slate-500 bg-slate-100 border border-slate-200">EST</span>
+                                                    ) : m.findings.length > 0 ? (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-black text-white text-[8px] capitalize"
+                                                        style={{ background: sc?.bg || '#d97706' }}>{m.topSev}</span>
+                                                    ) : (
+                                                      <span className="px-1.5 py-0.5 rounded-full font-black text-[8px] text-emerald-700 bg-emerald-100 border border-emerald-200">OK</span>
+                                                    )}
+                                                  </td>
+                                                  <td className="px-3 py-2 text-slate-500">
+                                                    {m.findings.length > 0
+                                                      ? <span className="font-bold" style={{ color: sc?.text }}>{m.findings.length}</span>
+                                                      : '—'}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </React.Fragment>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mx-5 mb-5 py-8 text-center text-slate-400">
+                                <MapPin className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                                <p className="text-xs font-medium text-slate-500">No instrument tags found in this drawing.</p>
+                                <p className="text-[10px] mt-1 text-slate-400 max-w-xs mx-auto">
+                                  {instrRelatedIssues.length > 0
+                                    ? `${instrRelatedIssues.length} findings were detected but none reference ISA 5.1 instrument tags. Check the Findings tab for details.`
+                                    : 'This drawing may be a piping or layout sheet. Open a P&ID with instrument loops for tag markers to appear.'}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* ── Unmatched Findings: instrument findings not tied to a specific tag ── */}
+                            {unmatchedInstrFindings.length > 0 && (
+                              <div className="mx-5 mb-5">
+                                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                  Instrument Findings — {unmatchedInstrFindings.length} finding{unmatchedInstrFindings.length!==1?'s':''}
+                                  <span className="text-[9px] font-normal text-slate-400 normal-case tracking-normal">(no specific tag attributed)</span>
+                                </p>
+                                <div className="rounded-xl border border-amber-200/70 overflow-hidden">
+                                  <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                    {unmatchedInstrFindings.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = DRAW_SEV_COLOR[sev] || DRAW_SEV_COLOR.info;
+                                      return (
+                                        <div key={f.id || fi}
+                                          className="flex items-start gap-2.5 px-4 py-2.5 border-b border-slate-100 last:border-0 bg-white hover:bg-amber-50/40 transition-colors">
+                                          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                              <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded"
+                                                style={{ background:sc2.light, color:sc2.text }}>{sev}</span>
+                                              {f.category && <span className="text-[9px] text-slate-400 capitalize">{f.category}</span>}
+                                            </div>
+                                            <p className="text-[10px] text-slate-700 font-medium leading-tight">{f.issue_observed}</p>
+                                            {f.evidence && <p className="text-[9px] text-slate-400 font-mono mt-0.5 truncate" title={f.evidence}>{f.evidence}</p>}
+                                          </div>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                            style={{ background:'#d97706' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ Registry view ══ */}
+                  {instrActiveView === 'registry' && (() => {
+                    // Soft-coded: category display config
+                    const REG_CATEGORIES = [
+                      { key:'control_valve',       label:'Control Valves',       color:'#f59e0b' },
+                      { key:'manual_valve',        label:'Manual Valves',        color:'#3b82f6' },
+                      { key:'instrument',          label:'Instruments',          color:'#10b981' },
+                      { key:'instrument_tagging',  label:'Instrument Tagging',   color:'#8b5cf6' },
+                      { key:'equipment_numbering', label:'Equipment Numbering',  color:'#f43f5e' },
+                      { key:'inline_equipment',    label:'In-Line Equipment',    color:'#06b6d4' },
+                    ];
+
+                    const filtered = instrSymbols.filter(s => {
+                      const catOk = instrRegCatFilter === 'all' || s.category === instrRegCatFilter;
+                      const q     = instrRegSearch.toLowerCase();
+                      const srchOk= !q || s.symbol_code.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+                      return catOk && srchOk;
+                    });
+
+                    const catCfg = Object.fromEntries(REG_CATEGORIES.map(c => [c.key, c]));
+
+                    return (
+                      <div className="p-4 overflow-y-auto" style={{ maxHeight:'55vh' }}>
+                        {/* Filters row */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          {/* Search */}
+                          <div className="relative flex-1 min-w-[160px]">
+                            <Database className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search code or description…"
+                              value={instrRegSearch}
+                              onChange={e => setInstrRegSearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-100 border border-slate-200 focus:outline-none focus:ring-2 focus:border-amber-400"
+                              style={{ '--tw-ring-color':'#d97706' }}
+                            />
+                          </div>
+                          {/* Category chips */}
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              onClick={() => setInstrRegCatFilter('all')}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${instrRegCatFilter==='all' ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                              style={instrRegCatFilter==='all' ? { background:'#d97706', borderColor:'#d97706' } : undefined}>
+                              All ({instrSymbols.length})
+                            </button>
+                            {REG_CATEGORIES.map(cat => {
+                              const cnt   = instrSymbols.filter(s => s.category === cat.key).length;
+                              const activ = instrRegCatFilter === cat.key;
+                              return (
+                                <button key={cat.key}
+                                  onClick={() => setInstrRegCatFilter(cat.key)}
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${activ ? 'text-white border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                  style={activ ? { background:cat.color, borderColor:cat.color } : undefined}>
+                                  {cat.label} ({cnt})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Symbol grid */}
+                        {loadingInstrSymbols ? (
+                          <div className="flex items-center justify-center py-10 gap-2 text-slate-400">
+                            <Loader className="w-4 h-4 animate-spin" />
+                            <span className="text-xs">Loading symbols…</span>
+                          </div>
+                        ) : filtered.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-2">
+                            <Database className="w-8 h-8 opacity-30" />
+                            <p className="text-xs">{instrSymbols.length === 0 ? 'No symbols in registry yet. Upload a legend sheet to populate.' : 'No symbols match your filter.'}</p>
+                          </div>
+                        ) : (
+                          <div className="grid gap-1.5" style={{ gridTemplateColumns:'repeat(auto-fill, minmax(260px,1fr))' }}>
+                            {filtered.map(sym => {
+                              const cfg = catCfg[sym.category] || { color:'#94a3b8', label: sym.category };
+                              return (
+                                <div key={sym.symbol_id}
+                                  className="rounded-xl border bg-white p-3 flex gap-3 items-start hover:shadow-sm transition-shadow"
+                                  style={{ borderColor: cfg.color + '40' }}>
+                                  {/* Code badge */}
+                                  <div className="flex-shrink-0 rounded-lg px-2 py-1.5 min-w-[48px] text-center font-black text-sm leading-none"
+                                    style={{ background: cfg.color + '18', color: cfg.color }}>
+                                    {sym.symbol_code}
+                                  </div>
+                                  {/* Details */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-700 leading-tight truncate" title={sym.description}>{sym.description}</p>
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                                        style={{ background: cfg.color + '15', color: cfg.color }}>
+                                        {cfg.label}
+                                      </span>
+                                      {sym.symbol_type && (
+                                        <span className="text-[10px] text-slate-400 truncate">{sym.symbol_type}</span>
+                                      )}
+                                      <span className="text-[10px] text-slate-300">{sym.drawing_standard}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ Footer ══ */}
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#d97706' }}>
+                      {instrActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(instrCheckStates).length} manual override${Object.keys(instrCheckStates).length!==1?'s':''}`
+                        : instrActiveView === 'drawing'
+                          ? `${instrMarkerCount} instruments located · ISA 5.1 tag coordinates`
+                          : instrActiveView === 'registry'
+                            ? `${instrSymbols.length} symbols · ${[...new Set(instrSymbols.map(s=>s.category))].length} categories`
+                            : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>ISA 5.1 · IEC 62424 · ISA-18.2 · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
             </div>
             )}
+            {/* ─── end INSTRUMENTATION panel ─── */}
+
+            {/* ─── PIPING panel ─── */}
+            {activePanel === 'piping' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ══ Soft-coded: Piping QC Checklist ═══════════════════════════════════════
+              // Add, remove, or reorder items here — no render logic changes needed.
+              // Each entry:
+              //   id          — unique string key
+              //   category    — logical grouping (sections + analytics)
+              //   title       — short requirement label
+              //   detail      — full requirement text
+              //   standard    — applicable standard / project reference
+              //   detectKeys  — keywords scanned against AI rule-engine findings
+              //   severity    — 'critical'|'major'|'minor'|'info'
+              const PIPE_CHECKS = [
+                // ── Line Identification ──────────────────────────────────────────────────
+                {
+                  id: 'PC-01',
+                  category: 'Line Identification',
+                  title: 'Line numbers, size, class and fluid code per legend P&ID',
+                  detail: 'Each line on the P&ID must carry its line number, line size, piping class, and fluid code as defined in the legend P&ID. Missing or inconsistent line tags are non-conformance.',
+                  standard: 'ISA 5.1 / Project Piping Spec',
+                  severity: 'critical',
+                  detectKeys: ['line number','line size','line class','fluid code','legend','pipe tag','tag number'],
+                },
+                // ── Specialty Items ──────────────────────────────────────────────────────
+                {
+                  id: 'PC-02',
+                  category: 'Specialty Items',
+                  title: 'Specialty piping (SP) items identified and numbered',
+                  detail: 'Specialty piping items (e.g. strainers, injection quills, flame arrestors, etc.) must be uniquely tagged and numbered on the P&ID. Untagged specialty items are non-conformance.',
+                  standard: 'Project Piping Spec',
+                  severity: 'major',
+                  detectKeys: ['strainer','injection quill','flame arrestor','specialty piping','sp ','special piping'],
+                },
+                {
+                  id: 'PC-07',
+                  category: 'Specialty Items',
+                  title: 'Restriction orifices and miscellaneous piping special items tagged',
+                  detail: 'All restriction orifices (RO) and other miscellaneous piping special items must be identified with their tag numbers on the P&ID.',
+                  standard: 'Project Piping Spec / ISA 5.1',
+                  severity: 'major',
+                  detectKeys: ['restriction orifice','ro','orifice','miscellaneous','special item'],
+                },
+                {
+                  id: 'PC-08',
+                  category: 'Specialty Items',
+                  title: 'Reducers (eccentric and concentric) identified',
+                  detail: 'All pipe reducers must be shown and labelled as eccentric or concentric as required for draining, venting, or flow considerations.',
+                  standard: 'Project Piping Spec',
+                  severity: 'minor',
+                  detectKeys: ['reducer','eccentric','concentric'],
+                },
+                // ── Line Routing ─────────────────────────────────────────────────────────
+                {
+                  id: 'PC-03',
+                  category: 'Line Routing',
+                  title: 'Underground (UG) / Aboveground (AG) lines and breaks represented',
+                  detail: 'Underground and aboveground lines, including their transition break points, must be shown clearly on the P&ID with appropriate designation symbols.',
+                  standard: 'Project Drafting Standard',
+                  severity: 'major',
+                  detectKeys: ['underground','aboveground','ug','ag','buried','break','transition'],
+                },
+                {
+                  id: 'PC-05',
+                  category: 'Line Routing',
+                  title: 'Special routing — symmetrical piping, gravity flow, no pockets, slopes',
+                  detail: 'Special routing requirements such as symmetrical piping, gravity flow, no-pocket constraints, and slop/drain slopes must be annotated on the P&ID.',
+                  standard: 'Project P&ID Standard',
+                  severity: 'minor',
+                  detectKeys: ['symmetrical','gravity','pocket','slope','slop','drain','routing'],
+                },
+                {
+                  id: 'PC-11',
+                  category: 'Line Routing',
+                  title: 'Slope within equipment to be indicated',
+                  detail: "Equipment internal slopes (e.g. boot, sump, vessel bottom slope) must be indicated on the P&ID where required by process.",
+                  standard: 'Project P&ID Standard',
+                  severity: 'minor',
+                  detectKeys: ['slope','gradient','vessel slope','equipment slope'],
+                },
+                // ── Pipe Specifications ───────────────────────────────────────────────────
+                {
+                  id: 'PC-06',
+                  category: 'Pipe Specifications',
+                  title: 'Pipe spec breaks shown with upstream/downstream protection or reason known',
+                  detail: 'Pipe spec breaks must be shown as required. Relevant protections (e.g. PSVs, ESDVs) must be available upstream or downstream of each spec break, or the reason for the spec break must be clearly documented.',
+                  standard: 'ASME B31.3 / Project Piping Spec',
+                  severity: 'critical',
+                  detectKeys: ['spec break','specification break','psv','esdv','protection','upstream','downstream'],
+                },
+                {
+                  id: 'PC-09',
+                  category: 'Pipe Specifications',
+                  title: 'Insulation requirements and type clearly marked and consistent across P&IDs',
+                  detail: 'Insulation type (heat conservation, cold insulation, personnel protection, etc.) and requirements must be unambiguously shown on all relevant lines and consistent across all P&ID sheets.',
+                  standard: 'Project Insulation Spec',
+                  severity: 'major',
+                  detectKeys: ['insulation','heat conservation','cold insulation','personnel protection','consistent','insulation type'],
+                },
+                {
+                  id: 'PC-12',
+                  category: 'Pipe Specifications',
+                  title: 'Steam/electrical tracing shown for process and freeze-protection requirements',
+                  detail: 'Steam tracing and electrical tracing requirements for process temperature maintenance and freeze protection must be shown on all applicable lines on the P&ID.',
+                  standard: 'Project Tracing Spec',
+                  severity: 'major',
+                  detectKeys: ['tracing','steam tracing','electrical tracing','heat tracing','freeze','heat maintenance'],
+                },
+                // ── Scope & Routing ───────────────────────────────────────────────────────
+                {
+                  id: 'PC-04',
+                  category: 'Scope & Routing',
+                  title: 'Future piping connections — valve or end flange for future modification',
+                  detail: 'Where future piping connections are required, either a valve or an end flange (with blind) must be provided and clearly identified to facilitate future modification.',
+                  standard: 'Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['future','future connection','end flange','future modification','blind flange'],
+                },
+                {
+                  id: 'PC-10',
+                  category: 'Scope & Routing',
+                  title: 'Scope split (existing/new/future) or vendor/EPC boundary clearly indicated',
+                  detail: "Scope boundaries — whether existing/new/future or vendor/EPC contractor boundaries — must be clearly indicated on the P&ID where applicable, using the project's standard scope-split notation.",
+                  standard: 'Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['scope','existing','new scope','future scope','vendor','epc','contractor','battery limit','scope split','boundary'],
+                },
+                // ── Valve & Isolation ─────────────────────────────────────────────────────
+                {
+                  id: 'PC-13',
+                  category: 'Valve & Isolation',
+                  title: 'Double block and bleed requirements per DGS',
+                  detail: 'Double block-and-bleed (DBB) valve arrangement requirements must be verified against the Design Guide Specification (DGS), and correct DBB configurations shown on the P&ID.',
+                  standard: 'DGS (Design Guide Specification)',
+                  severity: 'critical',
+                  detectKeys: ['double block','bleed','dgs','dbb','block and bleed','double isolation'],
+                },
+                {
+                  id: 'PC-14',
+                  category: 'Valve & Isolation',
+                  title: 'Vent/overflow lines at least one nominal size larger than incoming line',
+                  detail: 'Vent and overflow lines must be specified at a minimum of one nominal pipe size (NPS) larger than the incoming line to ensure adequate flow capacity.',
+                  standard: 'Project Piping Spec / Process Requirements',
+                  severity: 'major',
+                  detectKeys: ['vent','overflow','over flow','one size','line size','larger','higher','nominal'],
+                },
+              ];
+
+              // ── Soft-coded: category display config ──────────────────────────────────
+              const PIPE_CATEGORIES = [
+                'Line Identification',
+                'Specialty Items',
+                'Line Routing',
+                'Pipe Specifications',
+                'Scope & Routing',
+                'Valve & Isolation',
+              ];
+              const PIPE_CAT_STYLE = {
+                'Line Identification': { color:'#0891b2', bg:'#ecfeff', border:'#a5f3fc', icon:'🏷️' },
+                'Specialty Items':     { color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe', icon:'🔧' },
+                'Line Routing':        { color:'#0d9488', bg:'#f0fdfa', border:'#99f6e4', icon:'↗️' },
+                'Pipe Specifications': { color:'#dc2626', bg:'#fef2f2', border:'#fecaca', icon:'📋' },
+                'Scope & Routing':     { color:'#d97706', bg:'#fffbeb', border:'#fde68a', icon:'🗺️' },
+                'Valve & Isolation':   { color:'#f97316', bg:'#fff7ed', border:'#fed7aa', icon:'🔒' },
+              };
+
+              // ── Soft-coded: severity colours ─────────────────────────────────────────
+              const PS_SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+              const PS_STATUS_STYLE = {
+                pass: { bg:'#f0fdf4', border:'#86efac', dot:'#22c55e', label:'Pass',   icon:'✓' },
+                fail: { bg:'#fef2f2', border:'#fca5a5', dot:'#dc2626', label:'Fail',   icon:'✗' },
+                warn: { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review', icon:'⚠' },
+                ok:   { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK', icon:'✓' },
+                na:   { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',    icon:'—' },
+                open: { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending',icon:'?' },
+              };
+
+              // ── AI evidence scan ─────────────────────────────────────────────────────
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                  return keys.some(k => hay.includes(k));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              // ── Effective status — manual override takes precedence ───────────────────
+              const effectiveStatus = (check) => {
+                const manual = pipCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────────
+              const statCounts = PIPE_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c);
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+              }, {});
+              const total   = PIPE_CHECKS.length;
+              const passCnt = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt = statCounts.fail || 0;
+              const warnCnt = statCounts.warn || 0;
+              const pendCnt = (statCounts.open || 0) + (statCounts.na || 0);
+
+              // Soft-coded score thresholds
+              const SCORE_EXCELLENT = 90;
+              const SCORE_GOOD      = 70;
+              const SCORE_FAIR      = 50;
+              const qcScore  = total > 0 ? Math.round(passCnt / total * 100) : 0;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e'
+                               : qcScore >= SCORE_GOOD      ? '#0891b2'
+                               : qcScore >= SCORE_FAIR      ? '#f59e0b'
+                               : '#dc2626';
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(8,145,178,0.06), rgba(6,182,212,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#0891b2,#06b6d4)', boxShadow:'0 4px 14px rgba(8,145,178,0.35)' }}>
+                      <Network className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Piping QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#0891b2,#06b6d4)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · ASME B31.3 / ISA 5.1 / DGS
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Traffic light */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Clear</span>}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ══ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',   border:'rgba(8,145,178,0.2)'    },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'    },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)',  border:'rgba(245,158,11,0.2)'   },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'    },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'  },
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ══ */}
+                  {(() => {
+                    // Soft-coded: badge count for the Drawing Layout tab = lines with mapped coords
+                    const _lineTags = activeDrawingData?.metadata?.line_tags || [];
+                    const _lineTagCount = _lineTags.filter(lt =>
+                      (lt.occurrences || []).some(o => o.x_pct != null && o.y_pct != null)
+                    ).length;
+                    return (
+                      <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                        {[
+                          { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                          { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                          { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:_lineTagCount || null },
+                        ].map(tab => {
+                          const TabIcon = tab.icon;
+                          const active  = pipActiveView === tab.id;
+                          return (
+                            <button key={tab.id}
+                              onClick={() => setPipActiveView(tab.id)}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                                active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                              }`}
+                              style={active ? { color:'#0891b2', borderColor:'#0891b2' } : undefined}>
+                              <TabIcon className="w-3.5 h-3.5" />
+                              {tab.label}
+                              {tab.cnt !== null && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                                  style={active ? { background:'#0891b2' } : undefined}>
+                                  {tab.cnt}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ════════════════════════════════════
+                      CHECKLIST VIEW
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(8,145,178,0.06)', borderColor:'rgba(8,145,178,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-cyan-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-cyan-700">No drawing data loaded.</span> Analyse a P&ID drawing first — AI auto-detection will then highlight piping gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {PIPE_CATEGORIES.map(cat => {
+                        const checks = PIPE_CHECKS.filter(c => c.category === cat);
+                        const catDef = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category header */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to right,${catDef.color}40,transparent)` }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:catDef.color, background:catDef.bg, border:`1px solid ${catDef.border}` }}>
+                                {catDef.icon} {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to left,${catDef.color}40,transparent)` }} />
+                            </div>
+
+                            {/* Check cards */}
+                            <div className="flex flex-col gap-2">
+                              {checks.map((check, ci) => {
+                                const status   = effectiveStatus(check);
+                                const st       = PS_STATUS_STYLE[status] || PS_STATUS_STYLE.open;
+                                const isManual = !!pipCheckStates[check.id];
+                                const evidence = allIssues.filter(f => {
+                                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                                  return (check.detectKeys||[]).some(k => hay.includes(k));
+                                });
+
+                                return (
+                                  <div key={check.id}
+                                    className="rounded-xl border flex flex-col overflow-hidden"
+                                    style={{ background:st.bg, borderColor:st.border, animation:`cardIn 0.2s ease-out ${ci*0.04}s both` }}>
+                                    <div className="flex items-start gap-3 p-3">
+                                      {/* Status dot */}
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] font-black text-white"
+                                        style={{ background:st.dot, boxShadow:`0 0 6px ${st.dot}55` }}>
+                                        {st.icon}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                          <code className="text-[9px] font-mono font-black text-cyan-700 bg-cyan-50 px-1 py-0.5 rounded border border-cyan-200">{check.id}</code>
+                                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full capitalize"
+                                            style={{ background:`${PS_SEV_COLOR[check.severity]}18`, color:PS_SEV_COLOR[check.severity] }}>
+                                            {check.severity}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400">{check.standard}</span>
+                                          {isManual && <span className="text-[9px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">Manual</span>}
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-800 leading-snug">{check.title}</p>
+                                        <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.detail}</p>
+
+                                        {/* AI evidence */}
+                                        {evidence.length > 0 && (
+                                          <div className="mt-2 flex flex-col gap-1">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">AI Evidence ({evidence.length})</p>
+                                            {evidence.slice(0, 3).map((f, fi) => (
+                                              <div key={fi} className="flex items-start gap-1.5 text-[9px] text-slate-600 bg-white/70 rounded-lg px-2 py-1 border border-slate-100">
+                                                <span className="font-black mt-0.5" style={{ color:PS_SEV_COLOR[f.severity]||'#64748b' }}>⚑</span>
+                                                <span className="truncate">{f.issue_observed}</span>
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                                  className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                                                  style={{ background:'#0891b2', color:'#fff' }}>
+                                                  Locate
+                                                </button>
+                                              </div>
+                                            ))}
+                                            {evidence.length > 3 && (
+                                              <p className="text-[9px] text-slate-400 px-1">+{evidence.length - 3} more findings</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Manual override row */}
+                                    <div className="flex items-center gap-1.5 px-3 pb-3">
+                                      <span className="text-[9px] font-bold text-slate-400 mr-1">Override:</span>
+                                      {[
+                                        { v:'pass', label:'✓ Pass', color:'#22c55e' },
+                                        { v:'fail', label:'✗ Fail', color:'#dc2626' },
+                                        { v:'na',   label:'— N/A',  color:'#94a3b8' },
+                                      ].map(opt => {
+                                        const isActive = pipCheckStates[check.id] === opt.v;
+                                        return (
+                                          <button key={opt.v}
+                                            onClick={() => setPipCheckStates(prev => ({
+                                              ...prev,
+                                              [check.id]: isActive ? undefined : opt.v,
+                                            }))}
+                                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border transition-all"
+                                            style={{
+                                              background: isActive ? opt.color : 'white',
+                                              color:      isActive ? '#fff'    : opt.color,
+                                              borderColor: isActive ? opt.color : `${opt.color}60`,
+                                            }}>
+                                            {opt.label}
+                                          </button>
+                                        );
+                                      })}
+                                      {pipCheckStates[check.id] && (
+                                        <button
+                                          onClick={() => setPipCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                          className="text-[9px] text-slate-400 hover:text-slate-600 ml-auto">
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="h-6" />
+                    </div>
+                  )}
+
+                  {/* ════════════════════════════════════
+                      SUMMARY VIEW — Scorecard
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'summary' && (() => {
+
+                    // ── Soft-coded: category data ────────────────────────────────────────
+                    const catBars = PIPE_CATEGORIES.map(cat => {
+                      const checks = PIPE_CHECKS.filter(c => c.category === cat);
+                      const def    = PIPE_CAT_STYLE[cat] || PIPE_CAT_STYLE['Line Identification'];
+                      const pass   = checks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                      const warn   = checks.filter(c => effectiveStatus(c) === 'warn').length;
+                      const fail   = checks.filter(c => effectiveStatus(c) === 'fail').length;
+                      return { cat, def, pass, warn, fail, n: checks.length,
+                               pct: Math.round(pass / Math.max(1, checks.length) * 100) };
+                    });
+
+                    // ── Soft-coded: AI insight generators — add more entries freely ──────
+                    const INSIGHT_FNS = [
+                      () => {
+                        if (failCnt === 0 && warnCnt === 0) return null;
+                        const worst = [...catBars].filter(b => b.fail > 0).sort((a,b) => b.fail - a.fail)[0];
+                        if (!worst) return null;
+                        return { icon: worst.def.icon, accent:'#dc2626',
+                          label: `${worst.cat} — Focus Area`,
+                          sublabel: `${worst.fail} failed · ${worst.pct}% compliant` };
+                      },
+                      () => {
+                        if (failCnt > 0 || warnCnt > 0) return null;
+                        return { icon:'✅', accent:'#16a34a',
+                          label: 'All Clear — ready for issue',
+                          sublabel: `${total} checks passed · no failures` };
+                      },
+                      () => {
+                        const crit = PIPE_CHECKS.filter(c =>
+                          c.severity === 'critical' && ['fail','warn'].includes(effectiveStatus(c)));
+                        if (crit.length === 0) return null;
+                        return { icon:'🚨', accent:'#dc2626',
+                          label: `${crit.length} critical check${crit.length!==1?'s':''} unresolved`,
+                          sublabel: crit.slice(0,3).map(c => c.id).join(' · ') + (crit.length > 3 ? ' …' : '') };
+                      },
+                      () => {
+                        if (warnCnt < 2) return null;
+                        return { icon:'🔍', accent:'#f59e0b',
+                          label: `${warnCnt} checks need engineer review`,
+                          sublabel: 'AI flagged potential non-conformances' };
+                      },
+                    ].map(fn => fn()).filter(Boolean);
+
+                    // ── Soft-coded: ring geometry (stroke-dasharray approach) ─────────────
+                    // Using circle + dashoffset so SVG <animate> can draw it smoothly.
+                    const _R    = 38, _CX = 50, _CY = 50;
+                    const _pct  = Math.min(qcScore, 100) / 100;
+                    const _CIRC = 2 * Math.PI * _R;                // ≈ 238.76
+                    const _END  = _CIRC * (1 - _pct);              // dashoffset at full score
+                    // Stagger timing helpers — keep all delays soft-coded here
+                    const _T_RING   = '0.2s';
+                    const _T_PILLS  = '0.5s';
+                    const _T_STD    = '0.7s';
+                    const _T_ROW    = (i) => `${0.85 + i * 0.07}s`;
+                    const _T_INSIGHT = `${0.85 + catBars.length * 0.07 + 0.1}s`;
+
+                    // ── Soft-coded: stat pills ───────────────────────────────────────────
+                    const STAT_PILLS = [
+                      { v: passCnt, label: 'Pass',   color: '#22c55e' },
+                      { v: warnCnt, label: 'Review', color: '#f59e0b' },
+                      { v: failCnt, label: 'Failed', color: '#dc2626' },
+                    ];
+
+                    // Single top insight (most critical first)
+                    const topInsight = INSIGHT_FNS[0] || null;
+
+                    return (
+                      <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+
+                        {/* ── Keyframes injected once per render ──────────────── */}
+                        <style>{`
+                          @keyframes pipFadeUp {
+                            from { opacity:0; transform:translateY(10px); }
+                            to   { opacity:1; transform:translateY(0);    }
+                          }
+                          @keyframes pipFadeIn {
+                            from { opacity:0; }
+                            to   { opacity:1; }
+                          }
+                          @keyframes pipSlideRight {
+                            from { opacity:0; transform:translateX(-8px); }
+                            to   { opacity:1; transform:translateX(0);    }
+                          }
+                          @keyframes pipPop {
+                            0%   { opacity:0; transform:scale(0.85); }
+                            70%  { transform:scale(1.05); }
+                            100% { opacity:1; transform:scale(1); }
+                          }
+                        `}</style>
+
+                        <div className="px-5 py-5 flex flex-col gap-5">
+
+                          {/* ── Score ring — draws itself on mount ─────────────── */}
+                          <div className="flex flex-col items-center gap-3"
+                            style={{ animation:`pipFadeIn 0.4s ease-out ${_T_RING} both` }}>
+
+                            <svg width="110" height="110" viewBox="0 0 100 100">
+                              {/* Background track */}
+                              <circle cx={_CX} cy={_CY} r={_R}
+                                fill="none" stroke="#e9eef4" strokeWidth="9" />
+                              {/* Animated progress ring — draws from 12 o'clock */}
+                              <circle cx={_CX} cy={_CY} r={_R}
+                                fill="none"
+                                stroke={scoreColor}
+                                strokeWidth="9"
+                                strokeLinecap="round"
+                                strokeDasharray={_CIRC}
+                                strokeDashoffset={_CIRC}
+                                transform={`rotate(-90 ${_CX} ${_CY})`}>
+                                <animate
+                                  attributeName="stroke-dashoffset"
+                                  from={_CIRC}
+                                  to={_END}
+                                  dur="1.4s"
+                                  begin={_T_RING}
+                                  fill="freeze"
+                                  calcMode="spline"
+                                  keyTimes="0;1"
+                                  keySplines="0.22 1 0.36 1"
+                                />
+                              </circle>
+                              {/* Score label — fades in after ring is mostly drawn */}
+                              <text x={_CX} y={_CY - 4} textAnchor="middle" dominantBaseline="middle"
+                                fontSize="20" fontWeight="900" fill={scoreColor}
+                                style={{ animation:`pipFadeIn 0.5s ease-out 1s both` }}>
+                                {qcScore}%
+                              </text>
+                              <text x={_CX} y={_CY + 14} textAnchor="middle" dominantBaseline="middle"
+                                fontSize="7" fontWeight="600" fill="#b0bec5" letterSpacing="1">
+                                QC SCORE
+                              </text>
+                            </svg>
+
+                            {/* Stat pills — pop in one by one */}
+                            <div className="flex gap-2 w-full">
+                              {STAT_PILLS.map((p, pi) => (
+                                <div key={p.label} className="flex-1 rounded-xl py-3 text-center"
+                                  style={{ background:`${p.color}10`, border:`1px solid ${p.color}28`,
+                                           animation:`pipPop 0.4s ease-out ${parseFloat(_T_PILLS) + pi * 0.1}s both` }}>
+                                  <div className="text-2xl font-black leading-none" style={{ color: p.color }}>{p.v}</div>
+                                  <div className="text-[9px] font-bold mt-1" style={{ color:`${p.color}99` }}>{p.label}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <p className="text-[8px] font-bold text-slate-300 tracking-widest uppercase"
+                              style={{ animation:`pipFadeIn 0.6s ease-out ${_T_STD} both` }}>
+                              ASME B31.3 · ISA 5.1 · {total} CHECKS
+                            </p>
+                          </div>
+
+                          {/* ── Category list — rows slide in staggered ─────────── */}
+                          <div className="rounded-2xl overflow-hidden border border-slate-100">
+                            {catBars.map((b, i) => {
+                              const sc = b.fail > 0 ? '#dc2626' : b.warn > 0 ? '#f59e0b' : '#22c55e';
+                              return (
+                                <div key={b.cat}
+                                  className="flex items-center gap-3 px-4 py-3"
+                                  style={{
+                                    borderBottom: i < catBars.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                    background:   b.fail > 0 ? '#fff5f5' : 'white',
+                                    animation:    `pipSlideRight 0.35s ease-out ${_T_ROW(i)} both`,
+                                  }}>
+                                  <span className="text-base leading-none flex-shrink-0">{b.def.icon}</span>
+                                  <span className="flex-1 text-[11px] font-semibold text-slate-700 truncate">{b.cat}</span>
+                                  {(b.fail > 0 || b.warn > 0) && (
+                                    <span className="text-[9px] font-bold flex-shrink-0">
+                                      {b.fail > 0 && <span style={{ color:'#dc2626' }}>{b.fail}✗ </span>}
+                                      {b.warn > 0 && <span style={{ color:'#f59e0b' }}>{b.warn}⚠ </span>}
+                                    </span>
+                                  )}
+                                  <span className="text-[11px] font-black flex-shrink-0 px-2 py-0.5 rounded-full"
+                                    style={{ background:`${sc}15`, color: sc }}>{b.pct}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* ── Top AI insight — fades in last ──────────────────── */}
+                          {topInsight && (
+                            <div className="rounded-2xl px-4 py-4 flex items-start gap-3"
+                              style={{ background:`${topInsight.accent}08`, border:`1.5px solid ${topInsight.accent}25`,
+                                       animation:`pipFadeUp 0.45s ease-out ${_T_INSIGHT} both` }}>
+                              <span className="text-2xl flex-shrink-0 leading-none mt-0.5">{topInsight.icon}</span>
+                              <div>
+                                <p className="text-[12px] font-black" style={{ color: topInsight.accent }}>{topInsight.label}</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">{topInsight.sublabel}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Reset overrides */}
+                          {Object.keys(pipCheckStates).length > 0 && (
+                            <button onClick={() => setPipCheckStates({})}
+                              className="w-full py-2 text-xs font-bold rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all">
+                              Reset {Object.keys(pipCheckStates).length} manual override{Object.keys(pipCheckStates).length!==1?'s':''}
+                            </button>
+                          )}
+
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ════════════════════════════════════
+                      DRAWING LAYOUT VIEW
+                  ════════════════════════════════════ */}
+                  {pipActiveView === 'drawing' && (() => {
+
+                    // ── Soft-coded: piping line designation parser ─────────────────────────
+                    // Parses common formats: 4"-BD-4860, 6"-CS-1234-038842-X-N
+                    // Returns { nps, fluid, lineNo } — all strings, empty string if not parsed.
+                    const _parseLine = (text) => {
+                      if (!text) return { nps:'', fluid:'', lineNo:'' };
+                      // Match leading size: 2", 4", 6", 10", 2.5", etc.
+                      const m = (text || '').match(/^(\d+(?:\.\d+)?)"[-_]([A-Za-z0-9]+)[-_](\d+)/);
+                      if (m) return { nps: `${m[1]}"`, fluid: m[2].toUpperCase(), lineNo: m[3] };
+                      // Fallback: split by dash/underscore
+                      const parts = text.split(/[-_]/);
+                      return {
+                        nps:    parts[0] || '',
+                        fluid:  parts[1] || '',
+                        lineNo: parts[2] || '',
+                      };
+                    };
+
+                    // ── Soft-coded: fluid/spec colour map ─────────────────────────────────
+                    // Add project-specific fluid codes freely without changing render logic.
+                    const FLUID_COLORS = {
+                      'BD': { bg:'#0369a1', border:'#0284c7', label:'Blowdown' },
+                      'PG': { bg:'#0d9488', border:'#0f766e', label:'Process Gas' },
+                      'PL': { bg:'#0891b2', border:'#0e7490', label:'Process Liquid' },
+                      'FG': { bg:'#f97316', border:'#ea580c', label:'Fuel Gas' },
+                      'FL': { bg:'#ef4444', border:'#dc2626', label:'Fuel Liquid' },
+                      'N2': { bg:'#6366f1', border:'#4f46e5', label:'Nitrogen' },
+                      'CW': { bg:'#06b6d4', border:'#0891b2', label:'Cooling Water' },
+                      'HW': { bg:'#f59e0b', border:'#d97706', label:'Hot Water' },
+                      'ST': { bg:'#8b5cf6', border:'#7c3aed', label:'Steam' },
+                      'CS': { bg:'#64748b', border:'#475569', label:'Closed System' },
+                      'GL': { bg:'#22c55e', border:'#16a34a', label:'Glycol' },
+                      'LS': { bg:'#84cc16', border:'#65a30d', label:'Low-Pres Steam' },
+                      'HS': { bg:'#7c3aed', border:'#6d28d9', label:'High-Pres Steam' },
+                      'OT': { bg:'#94a3b8', border:'#64748b', label:'Other' },
+                    };
+                    const _fluidColor = (fluidCode) =>
+                      FLUID_COLORS[(fluidCode||'').toUpperCase()] || { bg:'#0891b2', border:'#0369a1', label: fluidCode || 'Unknown' };
+
+                    // ── Soft-coded: severity colour scheme ──────────────────────────────────
+                    const PIP_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+                    const PIP_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Resolve best coordinate for a line_tag ─────────────────────────────
+                    // Mirrors core pickBestLineTagOcc: prefer H-direction (horizontal label),
+                    // then fall back to nearest-centroid occurrence.
+                    const _resolveLineCoord = (lt) => {
+                      const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
+                      if (occs.length === 0) return [null, null];
+                      const hOcc = occs.find(o => o.direction === 'H');
+                      if (hOcc) return [hOcc.x_pct, hOcc.y_pct];
+                      // Nearest to drawing centroid (50%, 50%)
+                      let best = occs[0]; let bestD = Infinity;
+                      for (const o of occs) {
+                        const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
+                        if (d < bestD) { bestD = d; best = o; }
+                      }
+                      return [best.x_pct, best.y_pct];
+                    };
+
+                    // ── Build findings map: lineText (normalised) → findings array ──────────
+                    const _pipIssues = (activeDrawingData?.issues || []).filter(f =>
+                      !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                    );
+                    const _lineFindMap = {};
+                    for (const f of _pipIssues) {
+                      const hay = `${f.evidence||''} ${f.issue_observed||''}`;
+                      // Match pipeline designations in findings text: 4"-BD-4860 or 4-BD-4860 style
+                      const re = /(\d+(?:\.\d+)?)"?[-_]([A-Za-z]{1,4})[-_](\d{3,6})/g;
+                      let m;
+                      while ((m = re.exec(hay)) !== null) {
+                        const key = `${m[1]}-${m[2].toUpperCase()}-${m[3]}`;
+                        if (!_lineFindMap[key]) _lineFindMap[key] = [];
+                        _lineFindMap[key].push(f);
+                      }
+                    }
+
+                    // ── Build line marker list ─────────────────────────────────────────────
+                    const rawLineTags = activeDrawingData?.metadata?.line_tags || [];
+                    const lineMarkers = rawLineTags.reduce((acc, lt) => {
+                      const text = lt.text || lt.tag || lt.label || '';
+                      if (!text) return acc;
+                      const [xp, yp] = _resolveLineCoord(lt);
+                      if (xp == null || yp == null) return acc;
+                      const parsed = _parseLine(text);
+                      const fc     = _fluidColor(parsed.fluid);
+                      // Lookup findings: try normalised key and raw text variants
+                      const normKey = parsed.nps && parsed.fluid && parsed.lineNo
+                        ? `${parsed.nps.replace('"','')}-${parsed.fluid}-${parsed.lineNo}`
+                        : text.toUpperCase();
+                      const findings = _lineFindMap[normKey]
+                        || _lineFindMap[text.toUpperCase()]
+                        || _pipIssues.filter(f =>
+                             `${f.evidence||''} ${f.issue_observed||''}`.includes(text)
+                           );
+                      const topSev = findings.reduce((best, f) => {
+                        return (PIP_SEV_ORDER[f.severity] || 0) > (PIP_SEV_ORDER[best] || 0) ? f.severity : best;
+                      }, null);
+                      const occ_count = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null).length;
+                      acc.push({ text, xp, yp, parsed, fc, findings, topSev, occ_count, multi_angle: !!lt.multi_angle });
+                      return acc;
+                    }, []);
+
+                    // ── Stats ──────────────────────────────────────────────────────────────
+                    const linesWithFindings = lineMarkers.filter(m => m.findings.length > 0).length;
+                    const linesOK           = lineMarkers.filter(m => m.findings.length === 0).length;
+
+                    // ── Selected marker ────────────────────────────────────────────────────
+                    const selLine = pipSelectedLine
+                      ? lineMarkers.find(m => m.text === pipSelectedLine)
+                      : null;
+
+                    // ── Unique fluid codes present on drawing ──────────────────────────────
+                    const uniqueFluids = [...new Set(lineMarkers.map(m => m.parsed.fluid).filter(Boolean))];
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* No drawing loaded */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(8,145,178,0.06)', borderColor:'rgba(8,145,178,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-cyan-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-cyan-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see piping line coordinates on the layout map.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Loading */}
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-cyan-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {/* Drawing available */}
+                        {!drawingImageLoading && drawingImageUrl && (<>
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-3 gap-2 px-5 pt-4 pb-3">
+                            {[
+                              { v: lineMarkers.length, label: 'Lines Located',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',  border:'rgba(8,145,178,0.2)'  },
+                              { v: linesWithFindings,  label: 'With Findings',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                              { v: linesOK,            label: 'Compliant',       color:'#22c55e', bg:'rgba(34,197,94,0.07)', border:'rgba(34,197,94,0.2)'  },
+                            ].map(c => (
+                              <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Fluid code legend */}
+                          {uniqueFluids.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-2 text-[9px] text-slate-500">
+                              {uniqueFluids.slice(0, 10).map(f => {
+                                const fc = _fluidColor(f);
+                                return (
+                                  <span key={f} className="flex items-center gap-1">
+                                    <span className="inline-block w-3 h-3 rotate-45 flex-shrink-0"
+                                      style={{ background: fc.bg, border:`2px solid ${fc.border}` }} />
+                                    <span className="font-bold" style={{ color: fc.bg }}>{f}</span>
+                                    <span className="text-slate-400">{fc.label}</span>
+                                  </span>
+                                );
+                              })}
+                              <span className="ml-auto text-cyan-600 font-medium">Click marker or row · findings shown in red/orange/yellow</span>
+                            </div>
+                          )}
+
+                          {/* Diagnostic: drawing loaded but no lines mapped */}
+                          {lineMarkers.length === 0 && rawLineTags.length > 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                              style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-amber-700 mb-0.5">
+                                  {rawLineTags.length} line tag{rawLineTags.length !== 1 ? 's' : ''} found — none have coordinate data
+                                </p>
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                  Sample: <span className="font-mono font-bold text-slate-700">
+                                    {rawLineTags.slice(0,5).map(lt => lt.text||lt.tag||'?').join(', ')}
+                                  </span>
+                                  {rawLineTags.length > 5 ? ` …+${rawLineTags.length - 5} more` : ''}.
+                                  Re-run OCR extraction to generate position data.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {lineMarkers.length === 0 && rawLineTags.length === 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                              style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                              No piping line tag data yet — process and analyse a P&amp;ID drawing first.
+                            </div>
+                          )}
+
+                          {/* ── Line filter chip strip ─────────────────────── */}
+                          {lineMarkers.length > 0 && (
+                            <div className="px-5 pb-2">
+                              {/* Label */}
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                Filter — tap a line to isolate on drawing
+                              </p>
+                              {/* Horizontal scroll chip row */}
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                style={{ scrollbarWidth:'thin', scrollbarColor:'#cbd5e1 transparent' }}>
+
+                                {/* ◈ All Lines — clears filter */}
+                                <button
+                                  onClick={() => setPipSelectedLine(null)}
+                                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                  style={{
+                                    background: !pipSelectedLine ? '#0891b2'             : 'rgba(8,145,178,0.08)',
+                                    color:      !pipSelectedLine ? 'white'               : '#0891b2',
+                                    border:    `1px solid ${!pipSelectedLine ? '#0891b2' : 'rgba(8,145,178,0.25)'}`,
+                                    boxShadow:  !pipSelectedLine ? '0 0 10px rgba(8,145,178,0.4)' : 'none',
+                                  }}>
+                                  ◈ All
+                                </button>
+
+                                {/* One chip per line — sorted: findings first, then alpha */}
+                                {[...lineMarkers]
+                                  .sort((a, b) => b.findings.length - a.findings.length || a.text.localeCompare(b.text))
+                                  .map(m => {
+                                    const isAct   = pipSelectedLine === m.text;
+                                    // Chip colour: severity color if has findings, else green
+                                    const chipCol = m.findings.length > 0
+                                      ? (PIP_SEV_COLOR[m.topSev]?.bg || '#f97316')
+                                      : '#22c55e';
+                                    return (
+                                      <button key={m.text}
+                                        onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                        style={{
+                                          background: isAct ? chipCol        : `${chipCol}12`,
+                                          color:      isAct ? 'white'        : chipCol,
+                                          border:    `1px solid ${isAct ? chipCol : `${chipCol}35`}`,
+                                          boxShadow:  isAct ? `0 0 10px ${chipCol}55` : 'none',
+                                        }}>
+                                        {/* Fluid code prefix */}
+                                        {m.parsed.fluid && (
+                                          <span className="text-[8px] font-black opacity-75 flex-shrink-0">{m.parsed.fluid}</span>
+                                        )}
+                                        {/* Line designation */}
+                                        <span className="font-mono truncate" style={{ maxWidth:90 }}>{m.text}</span>
+                                        {/* Finding count badge */}
+                                        {m.findings.length > 0 && (
+                                          <span
+                                            className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                            style={{
+                                              background: isAct ? 'rgba(255,255,255,0.3)' : chipCol,
+                                              color: 'white',
+                                            }}>
+                                            {m.findings.length}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Drawing + overlay */}
+                          <div className="px-5 pb-3">
+                            <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                              <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+                                  {/* Overlay markers */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+                                    {/* Dim background when a line is isolated */}
+                                    {pipSelectedLine && (
+                                      <div className="absolute inset-0"
+                                        style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
+                                                 transition:'opacity 0.25s ease' }} />
+                                    )}
+                                    {/* Only render the selected marker when a chip is active */}
+                                    {lineMarkers.filter(m => !pipSelectedLine || m.text === pipSelectedLine).map((m) => {
+                                      const isSel  = pipSelectedLine === m.text;
+                                      const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || PIP_SEV_COLOR.info) : null;
+                                      const mBg    = sc ? sc.bg    : m.fc.bg;
+                                      const mBord  = sc ? sc.border: m.fc.border;
+                                      const mGlow  = `${mBg}55`;
+                                      const size   = isSel ? 20 : 14;
+                                      return (
+                                        <React.Fragment key={m.text}>
+                                          {/* Ping ripple */}
+                                          {!isSel && (
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                              width:'18px', height:'18px',
+                                              border:`2px solid ${mBg}`, backgroundColor:'transparent',
+                                              transform:'translate(-50%,-50%) rotate(45deg)',
+                                              animation:`markerPing 2800ms ease-out infinite`,
+                                              pointerEvents:'none', zIndex:8,
+                                            }} />
+                                          )}
+                                          {/* Diamond marker button */}
+                                          <button
+                                            onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                            title={`${m.text}${m.parsed.fluid ? ` · ${m.fc.label}` : ''}${m.findings.length > 0 ? ` · ${m.findings.length} finding${m.findings.length!==1?'s':''}` : ' · No findings'}`}
+                                            style={{
+                                              position:'absolute',
+                                              left:`${m.xp}%`, top:`${m.yp}%`,
+                                              width:`${size}px`, height:`${size}px`,
+                                              backgroundColor: mBg,
+                                              border:`2px solid ${mBord}`,
+                                              transform:`translate(-50%,-50%) rotate(45deg) scale(${isSel ? 1.55 : 1})`,
+                                              boxShadow: isSel
+                                                ? `0 0 0 4px ${mGlow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                                : `0 1px 4px rgba(0,0,0,0.35)`,
+                                              zIndex: isSel ? 20 : 10,
+                                              pointerEvents:'all',
+                                              cursor:'pointer',
+                                              animation: !isSel ? `markerGlow 2800ms ease-in-out infinite` : undefined,
+                                            }}
+                                          />
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Selected line detail card */}
+                          {selLine && (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{
+                                borderColor: selLine.topSev
+                                  ? (PIP_SEV_COLOR[selLine.topSev]?.border || selLine.fc.border)
+                                  : selLine.fc.border,
+                                animation:'cardIn 0.2s ease-out both',
+                              }}>
+                              {/* Header */}
+                              <div className="flex items-center gap-3 px-4 py-3"
+                                style={{ background: selLine.topSev ? (PIP_SEV_COLOR[selLine.topSev]?.light || '#eff6ff') : '#f0f9ff' }}>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                                  style={{ background: selLine.topSev ? (PIP_SEV_COLOR[selLine.topSev]?.bg || selLine.fc.bg) : selLine.fc.bg,
+                                           boxShadow:`0 4px 12px ${selLine.fc.bg}55` }}>
+                                  {selLine.parsed.nps || '?'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-black text-slate-900 font-mono">{selLine.text}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {selLine.parsed.fluid && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                                        style={{ background: selLine.fc.bg }}>{selLine.fc.label}</span>
+                                    )}
+                                    {selLine.parsed.lineNo && (
+                                      <span className="text-[9px] text-slate-500 font-mono">Line #{selLine.parsed.lineNo}</span>
+                                    )}
+                                    {selLine.multi_angle && (
+                                      <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded border border-indigo-200">H+V</span>
+                                    )}
+                                    {selLine.occ_count > 1 && (
+                                      <span className="text-[9px] text-slate-400">×{selLine.occ_count} occurrences</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                  <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selLine.xp?.toFixed(1)}%</span></span>
+                                  <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selLine.yp?.toFixed(1)}%</span></span>
+                                </div>
+                                <button
+                                  onClick={() => setPipSelectedLine(null)}
+                                  className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">
+                                  ✕
+                                </button>
+                              </div>
+                              {/* Findings */}
+                              {selLine.findings.length > 0 ? (
+                                <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                    {selLine.findings.length} Finding{selLine.findings.length !== 1 ? 's' : ''} Detected
+                                  </p>
+                                  {selLine.findings.map((f, fi) => {
+                                    const sev = (f.severity || '').toLowerCase();
+                                    const sc2 = PIP_SEV_COLOR[sev] || PIP_SEV_COLOR.info;
+                                    return (
+                                      <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                        style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                          {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                        </div>
+                                        <button
+                                          onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                          className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white transition-all hover:opacity-80"
+                                          style={{ background:'#0891b2' }}>
+                                          Locate
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  No findings — line designation appears compliant with current piping rules.
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Piping Line Register table */}
+                          {lineMarkers.length > 0 && (
+                            <div className="mx-5 mb-5">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3 text-cyan-500" />
+                                Piping Line Register — {lineMarkers.length} line{lineMarkers.length !== 1 ? 's' : ''} located on drawing
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'28vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Line Designation','NPS','Fluid','Line No','X%','Y%','Status','Findings'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {lineMarkers.map((m) => {
+                                        const isSel  = pipSelectedLine === m.text;
+                                        const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || null) : null;
+                                        const fColor = sc ? sc.bg : '#22c55e';
+                                        return (
+                                          <tr key={m.text}
+                                            onClick={() => setPipSelectedLine(prev => prev === m.text ? null : m.text)}
+                                            className="border-b border-slate-100 cursor-pointer transition-all hover:bg-slate-50"
+                                            style={{ background: isSel ? 'rgba(8,145,178,0.07)' : 'white' }}>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-slate-800 whitespace-nowrap">{m.text}</td>
+                                            <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{m.parsed.nps || '—'}</td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              {m.parsed.fluid
+                                                ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white" style={{ background: m.fc.bg }}>{m.parsed.fluid}</span>
+                                                : <span className="text-slate-400">—</span>}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-mono text-slate-600">{m.parsed.lineNo || '—'}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                style={{ background: fColor }}>
+                                                {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-bold" style={{ color: m.findings.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                              {m.findings.length > 0 ? m.findings.length : '✓'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </>)}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ Footer ══ */}
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#0891b2' }}>
+                      {pipActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(pipCheckStates).length} manual override${Object.keys(pipCheckStates).length!==1?'s':''}`
+                        : pipActiveView === 'drawing'
+                          ? `${(activeDrawingData?.metadata?.line_tags || []).length} lines detected · ASME B31.3 piping coordinates`
+                          : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>ASME B31.3 · ISA 5.1 · DGS · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end PIPING panel ─── */}
+
+            {/* ─── COMPRESSOR panel ─── */}
+            {activePanel === 'compressor' && (
+            <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+            {(() => {
+              // ══ Soft-coded: CMP checklist items ══════════════════════════════════════
+              // Add, remove, or reorder items here — render logic never changes.
+              // id         — unique key, matches CMP rule_id from backend
+              // category   — section grouping label
+              // title      — short requirement label shown in checklist row
+              // detail     — full requirement text shown in expanded row
+              // standard   — applicable standard / reference
+              // detectKeys — keywords scanned against AI findings for auto-detection
+              // severity   — 'critical'|'major'|'minor'|'info'
+              const CMP_CHECKS = [
+                {
+                  id: 'CMP-001',
+                  category: 'Type & Configuration',
+                  title: 'Type of compressor shown correctly',
+                  detail: 'The type of compressor (Centrifugal, Reciprocating, Screw, Axial, Diaphragm, etc.) must be clearly identified on the P&ID by name/description adjacent to the equipment symbol or in the equipment tag.',
+                  standard: 'ISA 5.1 / Project Equipment Standard',
+                  severity: 'major',
+                  detectKeys: ['cmp-001','compressor type','centrifugal','reciprocating','screw compressor','axial','type of compressor'],
+                },
+                {
+                  id: 'CMP-008',
+                  category: 'Type & Configuration',
+                  title: 'Correct driver identified (GT, Motor, Steam Turbine, etc.)',
+                  detail: 'The driver type must be labelled on the drawing — Gas Turbine (GT), Electric Motor, Steam Turbine, etc. This defines utility connections (fuel gas, lube oil, air intake, MCC) and maintenance philosophy.',
+                  standard: 'Project P&ID Standard / API 614',
+                  severity: 'major',
+                  detectKeys: ['cmp-008','gas turbine','electric motor','steam turbine','motor drive','gt driver','driver'],
+                },
+                {
+                  id: 'CMP-002',
+                  category: 'Cooling & Heat Exchange',
+                  title: 'Intercooler/Aftercooler — isolation valves + temperature measurements',
+                  detail: 'All intercooler and aftercooler connections must include isolation (block) valves on inlet and outlet for maintenance isolation, and temperature indicators or transmitters (TI/TT) to confirm cooling performance.',
+                  standard: 'API 672 / API 614 / Project P&ID Standard',
+                  severity: 'major',
+                  detectKeys: ['cmp-002','intercooler','aftercooler','after-cooler','inter-cooler','isolation valve','block valve','temperature indicator','ti-','tt-'],
+                },
+                {
+                  id: 'CMP-003',
+                  category: 'Start-up & Commissioning',
+                  title: 'Temporary strainer provision for start-up and commissioning',
+                  detail: 'Temporary strainers (cone or basket type) must be shown on compressor suction piping for protection during start-up and commissioning. The strainer must be noted "TEMPORARY — REMOVE AFTER COMMISSIONING" with a spool tie-in point on the P&ID.',
+                  standard: 'API 670 / Project Commissioning Spec',
+                  severity: 'major',
+                  detectKeys: ['cmp-003','temporary strainer','temp strainer','start-up strainer','commissioning strainer','cone strainer','basket strainer'],
+                },
+                {
+                  id: 'CMP-004',
+                  category: 'Discharge Protection',
+                  title: 'Check valve(s) on compressor discharge — type identified',
+                  detail: 'A check valve (NRV/non-return valve) must be installed on the compressor discharge to prevent reverse flow on shutdown or trip. The valve type (swing check, dual-plate, lift check, tilting disc) must be specified.',
+                  standard: 'API 618 / API 672 / Project P&ID Standard',
+                  severity: 'critical',
+                  detectKeys: ['cmp-004','check valve','nrv','non-return','swing check','dual-plate check','lift check','tilting disc','downstream check'],
+                },
+                {
+                  id: 'CMP-006',
+                  category: 'Discharge Protection',
+                  title: 'Relief and blowdown requirements identified',
+                  detail: 'Pressure safety valves (PSV/PRV) and blowdown valves (BDV) must be shown on the compressor package. Set pressures must not exceed MAWP of the downstream piping, and discharge must be routed to the correct flare or vent header.',
+                  standard: 'ASME VIII / API 521 / PED',
+                  severity: 'critical',
+                  detectKeys: ['cmp-006','relief valve','psv','prv','blowdown','bdv','pressure safety valve','pressure relief','blow-down','flare'],
+                },
+                {
+                  id: 'CMP-005',
+                  category: 'Control & Operating Philosophy',
+                  title: 'Anti-surge / recycle / hot-gas bypass arrangements shown',
+                  detail: 'Anti-surge protection is mandatory for centrifugal and axial compressors. Recycle and hot-gas bypass arrangements must be shown with their control valves (FCV/PCV). The surge control strategy must be agreed with the process licensor and compressor vendor.',
+                  standard: 'API 670 / API 672 / Project Process Philosophy',
+                  severity: 'major',
+                  detectKeys: ['cmp-005','anti-surge','antisurge','surge control','recycle','recirculation','hot gas bypass','hot-gas bypass'],
+                },
+                {
+                  id: 'CMP-007',
+                  category: 'Safety & Shutdown',
+                  title: 'ESD on compressor suction and discharge (subject to configuration)',
+                  detail: 'Emergency Shutdown Valves (ESDV/SDV) must be shown on compressor suction and discharge subject to the HAZOP / safety philosophy. ESD valves must be linked to the compressor trip logic in the cause-and-effect matrix.',
+                  standard: 'IEC 61511 / Project Safety Philosophy / HAZOP Action',
+                  severity: 'major',
+                  detectKeys: ['cmp-007','esd','esdv','sdv','emergency shutdown','shutdown valve','trip valve','emergency stop'],
+                },
+              ];
+
+              // Soft-coded: category ordering and styling for sections
+              const CMP_CAT_STYLE = {
+                'Type & Configuration':          { color:'#7c3aed', bg:'rgba(124,58,237,0.08)',  border:'rgba(124,58,237,0.20)',  icon:'⚙️' },
+                'Cooling & Heat Exchange':        { color:'#0891b2', bg:'rgba(8,145,178,0.08)',   border:'rgba(8,145,178,0.20)',   icon:'❄️' },
+                'Start-up & Commissioning':       { color:'#d97706', bg:'rgba(217,119,6,0.08)',   border:'rgba(217,119,6,0.20)',   icon:'🔧' },
+                'Discharge Protection':           { color:'#dc2626', bg:'rgba(220,38,38,0.08)',   border:'rgba(220,38,38,0.20)',   icon:'🛡️' },
+                'Control & Operating Philosophy': { color:'#059669', bg:'rgba(5,150,105,0.08)',   border:'rgba(5,150,105,0.20)',   icon:'🔄' },
+                'Safety & Shutdown':              { color:'#be123c', bg:'rgba(190,18,60,0.08)',   border:'rgba(190,18,60,0.20)',   icon:'🚨' },
+              };
+              const CMP_CATEGORIES = Object.keys(CMP_CAT_STYLE);
+
+              // Soft-coded: status badge styles
+              const CMP_STATUS_STYLE = {
+                pass: { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'Pass',   icon:'✓' },
+                fail: { bg:'#fef2f2', border:'#fecaca', dot:'#ef4444', label:'Fail',   icon:'✕' },
+                warn: { bg:'#fffbeb', border:'#fcd34d', dot:'#f59e0b', label:'Review', icon:'⚠' },
+                ok:   { bg:'#f0fdf4', border:'#bbf7d0', dot:'#22c55e', label:'AI: OK', icon:'✓' },
+                na:   { bg:'#f8fafc', border:'#cbd5e1', dot:'#94a3b8', label:'N/A',    icon:'—' },
+                open: { bg:'#f8fafc', border:'#e2e8f0', dot:'#94a3b8', label:'Pending',icon:'?' },
+              };
+
+              // ── AI evidence scan ────────────────────────────────────────────────────
+              const allIssues = activeDrawingData?.issues || [];
+              const tagCount  = Object.keys(activeDrawingData?.metadata?.tag_positions || {}).length;
+              const hasData   = tagCount > 0 || allIssues.length > 0;
+
+              const autoDetect = (check) => {
+                if (!hasData) return 'open';
+                const keys = check.detectKeys || [];
+                const matched = allIssues.filter(f => {
+                  const hay = `${f.issue_observed||''} ${f.evidence||''} ${f.category||''} ${f.rule_id||''}`.toLowerCase();
+                  return keys.some(k => hay.includes(k.toLowerCase()));
+                });
+                return matched.length > 0 ? 'warn' : 'ok';
+              };
+
+              const effectiveStatus = (check) => {
+                const manual = cmpCheckStates[check.id];
+                if (manual) return manual;
+                return autoDetect(check);
+              };
+
+              // ── Summary stats ─────────────────────────────────────────────────────
+              const statCounts = CMP_CHECKS.reduce((acc, c) => {
+                const s = effectiveStatus(c); acc[s] = (acc[s] || 0) + 1; return acc;
+              }, {});
+              const total    = CMP_CHECKS.length;
+              const passCnt  = (statCounts.pass || 0) + (statCounts.ok || 0);
+              const failCnt  = statCounts.fail || 0;
+              const warnCnt  = statCounts.warn || 0;
+              const pendCnt  = (statCounts.open || 0) + (statCounts.na || 0);
+              // Soft-coded: QC score thresholds
+              const SCORE_EXCELLENT = 90; const SCORE_GOOD = 70; const SCORE_FAIR = 50;
+              const qcScore   = total > 0 ? Math.round(passCnt / total * 100) : 0;
+              const scoreColor = qcScore >= SCORE_EXCELLENT ? '#22c55e' : qcScore >= SCORE_GOOD ? '#0891b2' : qcScore >= SCORE_FAIR ? '#f59e0b' : '#dc2626';
+
+              return (
+                <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                  {/* ══ Header ══════════════════════════════════════════════════════════ */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                    style={{ background:'linear-gradient(to right, rgba(124,58,237,0.06), rgba(139,92,246,0.03), transparent)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#7c3aed,#8b5cf6)', boxShadow:'0 4px 14px rgba(124,58,237,0.35)' }}>
+                      <Wind className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        Compressor QC Checklist
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background:'linear-gradient(135deg,#7c3aed,#8b5cf6)' }}>AI</span>
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {total} checks · API 618 / API 670 / API 672 / IEC 61511
+                        {failCnt > 0 && <span className="text-red-500 font-semibold"> · {failCnt} failed</span>}
+                        {warnCnt > 0 && <span className="text-amber-500 font-semibold"> · {warnCnt} need review</span>}
+                      </p>
+                    </div>
+                    {/* QC score ring */}
+                    <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+                      <div className="relative w-12 h-12">
+                        <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+                          <circle cx="22" cy="22" r="17" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="17" fill="none" stroke={scoreColor} strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeDasharray={`${2*Math.PI*17*qcScore/100} ${2*Math.PI*17*(1-qcScore/100)}`} />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black" style={{ color:scoreColor }}>{qcScore}%</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium">Score</span>
+                    </div>
+                    {/* Status pills */}
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {failCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">{failCnt} FAIL</span>}
+                      {warnCnt > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{warnCnt} WARN</span>}
+                      {failCnt === 0 && warnCnt === 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> All Clear
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ══ Stat bar ════════════════════════════════════════════════════════ */}
+                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    {[
+                      { v:total,   label:'Total',   color:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.2)' },
+                      { v:passCnt, label:'Pass/OK',  color:'#22c55e', bg:'rgba(34,197,94,0.07)',  border:'rgba(34,197,94,0.2)'  },
+                      { v:warnCnt, label:'Review',   color:'#f59e0b', bg:'rgba(245,158,11,0.07)', border:'rgba(245,158,11,0.2)' },
+                      { v:failCnt, label:'Failed',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                      { v:pendCnt, label:'Pending',  color:'#94a3b8', bg:'rgba(148,163,184,0.07)',border:'rgba(148,163,184,0.2)'},
+                    ].map(c => (
+                      <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
+                        style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                        {total > 0 && (
+                          <div className="absolute bottom-0 left-0 h-0.5 rounded-b-xl transition-all duration-700"
+                            style={{ width:`${c.v/total*100}%`, background:c.color, opacity:0.5 }} />
+                        )}
+                        <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ══ View switcher ═══════════════════════════════════════════════════ */}
+                  <div className="flex border-b border-slate-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+                    {[
+                      { id:'checklist', label:'Checklist',      icon:ClipboardList, cnt:total },
+                      { id:'summary',   label:'Summary',        icon:BarChart2,     cnt:null  },
+                      { id:'drawing',   label:'Drawing Layout', icon:MapPin,        cnt:null  },
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      const active  = cmpActiveView === tab.id;
+                      return (
+                        <button key={tab.id}
+                          onClick={() => setCmpActiveView(tab.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                            active ? 'bg-white shadow-sm' : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
+                          }`}
+                          style={active ? { color:'#7c3aed', borderColor:'#7c3aed' } : undefined}>
+                          <TabIcon className="w-3.5 h-3.5" />
+                          {tab.label}
+                          {tab.cnt !== null && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black leading-none ${active ? 'text-white' : 'bg-slate-100 text-slate-500'}`}
+                              style={active ? { background:'#7c3aed' } : undefined}>
+                              {tab.cnt}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ════════ CHECKLIST VIEW ═══════════════════════════════════════════ */}
+                  {cmpActiveView === 'checklist' && (
+                    <div className="overflow-y-auto" style={{ maxHeight:'70vh' }}>
+                      {!hasData && (
+                        <div className="mx-5 mt-4 flex items-start gap-3 p-3 rounded-xl border"
+                          style={{ background:'rgba(124,58,237,0.06)', borderColor:'rgba(124,58,237,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500" />
+                          <p className="text-[11px] text-slate-600">
+                            <span className="font-bold text-violet-700">No drawing data loaded.</span> Analyse a P&ID drawing first — AI auto-detection will highlight compressor checklist gaps. You can still manually override each check.
+                          </p>
+                        </div>
+                      )}
+
+                      {CMP_CATEGORIES.map(cat => {
+                        const checks = CMP_CHECKS.filter(c => c.category === cat);
+                        if (checks.length === 0) return null;
+                        const catDef = CMP_CAT_STYLE[cat];
+                        return (
+                          <div key={cat} className="mt-4 mx-5 mb-2">
+                            {/* Category heading */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to right,${catDef.color}40,transparent)` }} />
+                              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+                                style={{ color:catDef.color, background:catDef.bg, border:`1px solid ${catDef.border}` }}>
+                                {catDef.icon} {cat}
+                              </span>
+                              <div className="h-px flex-1" style={{ background:`linear-gradient(to left,${catDef.color}40,transparent)` }} />
+                            </div>
+
+                            <div className="space-y-2">
+                              {checks.map(check => {
+                                const status   = effectiveStatus(check);
+                                const stStyle  = CMP_STATUS_STYLE[status] || CMP_STATUS_STYLE.open;
+                                const isManual = !!cmpCheckStates[check.id];
+                                // Soft-coded: severity → colour map
+                                const SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
+                                return (
+                                  <div key={check.id} className="rounded-xl border p-3 transition-all"
+                                    style={{ background:stStyle.bg, borderColor:stStyle.border }}>
+                                    <div className="flex items-start gap-3">
+                                      {/* Status dot */}
+                                      <div className="flex-shrink-0 w-5 h-5 rounded-full mt-0.5 flex items-center justify-center text-[10px] font-black text-white"
+                                        style={{ background:stStyle.dot }}>{stStyle.icon}</div>
+                                      {/* Content */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          <code className="text-[10px] font-mono font-bold" style={{ color:catDef.color }}>{check.id}</code>
+                                          <span className="text-xs font-bold text-slate-800 leading-tight">{check.title}</span>
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0"
+                                            style={{ color:SEV_COLOR[check.severity], background:`${SEV_COLOR[check.severity]}12`, borderColor:`${SEV_COLOR[check.severity]}30` }}>
+                                            {check.severity}
+                                          </span>
+                                          {isManual && (
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex-shrink-0">Manual</span>
+                                          )}
+                                        </div>
+                                        <p className="text-[11px] text-slate-500 leading-relaxed mb-2">{check.detail}</p>
+                                        <p className="text-[10px] text-slate-400">Ref: <span className="font-semibold text-slate-500">{check.standard}</span></p>
+                                      </div>
+                                      {/* Manual override buttons */}
+                                      <div className="flex flex-col gap-1 flex-shrink-0">
+                                        {[{v:'pass',l:'✓',title:'Mark Pass'},{v:'fail',l:'✕',title:'Mark Fail'},{v:'na',l:'—',title:'Mark N/A'}].map(opt => {
+                                          const isActive = cmpCheckStates[check.id] === opt.v;
+                                          return (
+                                            <button key={opt.v} title={opt.title}
+                                              onClick={() => setCmpCheckStates(prev => ({ ...prev, [check.id]: isActive ? undefined : opt.v }))}
+                                              className={`w-7 h-7 rounded-lg text-[11px] font-black border transition-all ${
+                                                isActive ? 'text-white shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600'
+                                              }`}
+                                              style={isActive ? {
+                                                background: opt.v==='pass'?'#22c55e':opt.v==='fail'?'#ef4444':'#94a3b8',
+                                                borderColor: opt.v==='pass'?'#16a34a':opt.v==='fail'?'#dc2626':'#64748b',
+                                              } : undefined}>
+                                              {opt.l}
+                                            </button>
+                                          );
+                                        })}
+                                        {cmpCheckStates[check.id] && (
+                                          <button title="Clear override"
+                                            onClick={() => setCmpCheckStates(prev => { const n={...prev}; delete n[check.id]; return n; })}
+                                            className="w-7 h-7 rounded-lg text-[10px] font-black bg-white text-slate-300 border border-slate-200 hover:text-red-400 hover:border-red-200 transition-all">
+                                            ↺
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="pb-6" />
+                    </div>
+                  )}
+
+                  {/* ════════ SUMMARY VIEW ══════════════════════════════════════════════ */}
+                  {cmpActiveView === 'summary' && (() => {
+                    return (
+                      <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight:'70vh' }}>
+                        {CMP_CATEGORIES.map(cat => {
+                          const checks = CMP_CHECKS.filter(c => c.category === cat);
+                          if (checks.length === 0) return null;
+                          const catDef = CMP_CAT_STYLE[cat];
+                          const passC  = checks.filter(c => ['pass','ok'].includes(effectiveStatus(c))).length;
+                          const failC  = checks.filter(c => effectiveStatus(c)==='fail').length;
+                          const warnC  = checks.filter(c => effectiveStatus(c)==='warn').length;
+                          const catPct = checks.length > 0 ? Math.round(passC/checks.length*100) : 0;
+                          return (
+                            <div key={cat} className="rounded-xl p-3 border"
+                              style={{ background:catDef.bg, borderColor:catDef.border }}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-base">{catDef.icon}</span>
+                                <span className="text-xs font-bold flex-1" style={{ color:catDef.color }}>{cat}</span>
+                                <span className="text-[10px] font-black" style={{ color:catDef.color }}>{catPct}%</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full mb-2 overflow-hidden bg-white/50">
+                                <div className="h-full rounded-full transition-all duration-700"
+                                  style={{ width:`${catPct}%`, background:catDef.color }} />
+                              </div>
+                              <div className="flex gap-3 text-[10px]">
+                                <span style={{color:'#22c55e'}}>{passC} pass</span>
+                                {warnC>0 && <span style={{color:'#f59e0b'}}>{warnC} review</span>}
+                                {failC>0 && <span style={{color:'#ef4444'}}>{failC} fail</span>}
+                                <span className="text-slate-400">{checks.length - passC - warnC - failC} pending</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* AI findings linked to CMP rules */}
+                        {allIssues.filter(f => (f.rule_id||'').startsWith('CMP-')).length > 0 && (
+                          <div className="rounded-xl p-3 border border-violet-200 bg-violet-50/60">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-violet-700 mb-2">AI-detected CMP findings on this drawing</p>
+                            <div className="space-y-1.5">
+                              {allIssues.filter(f => (f.rule_id||'').startsWith('CMP-')).map((f, fi) => (
+                                <div key={fi} className="text-[11px] bg-white/70 border border-violet-100 rounded-lg px-3 py-2">
+                                  <span className="font-black text-violet-700 mr-1.5">{f.rule_id}</span>
+                                  <span className="text-slate-700">{f.issue_observed?.slice(0,120)}{(f.issue_observed?.length||0)>120?'…':''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {Object.keys(cmpCheckStates).length > 0 && (
+                          <button
+                            onClick={() => setCmpCheckStates({})}
+                            className="w-full text-[11px] font-semibold text-slate-400 hover:text-red-500 py-2 border border-dashed border-slate-200 hover:border-red-200 rounded-xl transition-all">
+                            ↺ Reset all manual overrides
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ════════ DRAWING LAYOUT VIEW ═══════════════════════════════════════ */}
+                  {cmpActiveView === 'drawing' && (() => {
+
+                    // ── Soft-coded: compressor equipment code prefixes ─────────────────────
+                    // Tags whose letter-only prefix matches are shown as equipment circles.
+                    const CMP_EQUIP_PREFIXES = new Set(['K','C','CM','CP','CMP','KO','KA','KC','KR','KS','MK']);
+
+                    // ── Soft-coded: severity colour scheme ────────────────────────────────
+                    const CMP_SEV_COLOR = {
+                      critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                      major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                      minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                      info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                    };
+                    const CMP_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                    // ── Helper: pick best {x_pct, y_pct} from a tag_positions entry ────────
+                    // tag_positions entries are one of:
+                    //   { x_pct, y_pct }            — direct single position
+                    //   { all:[{x_pct,y_pct},...] } — multiple OCR occurrences, pick nearest centroid
+                    // This mirrors pickBestOcc() in buildOverlayNodes().
+                    const _pickPos = (pos) => {
+                      if (!pos) return null;
+                      // Case 1: direct position — use as-is
+                      if (!pos.all || pos.all.length === 0) {
+                        return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                      }
+                      // Case 2: occurrences array — filter to drawing content area then pick nearest centroid
+                      const inArea = pos.all.filter(o =>
+                        o.x_pct != null && o.y_pct != null &&
+                        o.x_pct >= 1 && o.x_pct <= 96 &&
+                        o.y_pct >= 1 && o.y_pct <= 87
+                      );
+                      const pool = inArea.length > 0 ? inArea : pos.all.filter(o => o.x_pct != null && o.y_pct != null);
+                      if (pool.length === 0) return null;
+                      let best = pool[0]; let bestD = Infinity;
+                      for (const o of pool) {
+                        const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
+                        if (d < bestD) { bestD = d; best = o; }
+                      }
+                      return { xp: best.x_pct, yp: best.y_pct };
+                    };
+
+                    // ── Source 1: CMP finding nodes from overlayNodes (already P1–P5 resolved) ──
+                    // overlayNodes is built by buildOverlayNodes() at component scope.
+                    // Each anchored node has {left, top} already calibrated. We use left/top
+                    // directly as CSS percentage values.
+                    const cmpNodes = overlayNodes.filter(n =>
+                      n.anchored && (n.finding?.rule_id || '').startsWith('CMP-')
+                    );
+
+                    // ── Source 2: Equipment tag circles from tag_positions ─────────────────
+                    // Independently shows where compressor tags are located on the drawing.
+                    // Uses _pickPos() to correctly handle both data formats.
+                    const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                    const cmpRuleFindings = (activeDrawingData?.issues || []).filter(f =>
+                      (f.rule_id || '').startsWith('CMP-')
+                    );
+
+                    const allCmpMarkers = Object.entries(tagPositions)
+                      .filter(([tag]) => {
+                        const prefix = (tag.match(/^([A-Za-z]+)/) || [])[1] || '';
+                        return CMP_EQUIP_PREFIXES.has(prefix.toUpperCase());
+                      })
+                      .map(([tag, pos]) => {
+                        const coord = _pickPos(pos);
+                        if (!coord) return null;
+                        // Link any CMP findings that mention this tag
+                        const findings = cmpRuleFindings.filter(f => {
+                          const hay = `${f.evidence||''} ${f.issue_observed||''} ${f.location||''}`.toUpperCase();
+                          return hay.includes(tag.toUpperCase());
+                        });
+                        const topSev = findings.reduce((best, f) => {
+                          return (CMP_SEV_ORDER[(f.severity||'').toLowerCase()] || 0) >
+                                 (CMP_SEV_ORDER[best] || 0) ? f.severity : best;
+                        }, null);
+                        return { tag, xp: coord.xp, yp: coord.yp, findings, topSev };
+                      })
+                      .filter(Boolean);
+
+                    const markersWithFindings = allCmpMarkers.filter(m => m.findings.length > 0).length;
+                    const markersOK           = allCmpMarkers.filter(m => m.findings.length === 0).length;
+
+                    // The finding node for a selected chip or clicked overlay node
+                    const selMarker = cmpSelectedTag
+                      ? allCmpMarkers.find(m => m.tag === cmpSelectedTag) || null
+                      : null;
+
+                    // ── Chip filter: deduplicate by tag across both sources ─────────────
+                    const chipTags = allCmpMarkers.length > 0
+                      ? allCmpMarkers
+                      : cmpNodes.map(n => ({
+                          tag: n.finding?.rule_id || '?',
+                          xp: n.left, yp: n.top,
+                          findings: [n.finding],
+                          topSev: n.finding?.severity,
+                        }));
+
+                    return (
+                      <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                        {/* No drawing loaded guard */}
+                        {!drawingImageUrl && !drawingImageLoading && (
+                          <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                            style={{ background:'rgba(124,58,237,0.06)', borderColor:'rgba(124,58,237,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-violet-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-violet-700">No drawing loaded</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                Process a P&amp;ID drawing first to see compressor locations on the layout map.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {drawingImageLoading && (
+                          <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                            <Loader className="w-4 h-4 animate-spin text-violet-500" /> Loading drawing…
+                          </div>
+                        )}
+
+                        {!drawingImageLoading && drawingImageUrl && (<>
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                            {[
+                              { v: allCmpMarkers.length, label:'Equip. Tags',    color:'#7c3aed', bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.2)' },
+                              { v: cmpNodes.length,      label:'CMP Findings',   color:'#f97316', bg:'rgba(249,115,22,0.07)', border:'rgba(249,115,22,0.2)' },
+                              { v: markersWithFindings,  label:'Tags w/ Issues', color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                              { v: markersOK,            label:'Compliant',      color:'#22c55e', bg:'rgba(34,197,94,0.07)', border:'rgba(34,197,94,0.2)'  },
+                            ].map(c => (
+                              <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Legend */}
+                          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0" style={{ background:'#7c3aed', borderColor:'#5b21b6' }} />
+                              <span>Compressor tag (equipment)</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rotate-45 inline-block flex-shrink-0" style={{ background:'#f97316', border:'2px solid #c2410c' }} />
+                              <span>CMP finding (AI-located)</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 rotate-45 inline-block flex-shrink-0" style={{ background:'#dc2626', border:'2px solid #991b1b' }} />
+                              <span>Critical finding</span>
+                            </span>
+                            <span className="ml-auto font-medium" style={{ color:'#7c3aed' }}>Click any marker · API 618/670/672</span>
+                          </div>
+
+                          {/* No tags or findings info */}
+                          {allCmpMarkers.length === 0 && cmpNodes.length === 0 && Object.keys(tagPositions).length > 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-start gap-3"
+                              style={{ background:'rgba(245,158,11,0.06)', borderColor:'rgba(245,158,11,0.3)' }}>
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-amber-700 mb-0.5">No compressor tags auto-detected</p>
+                                <p className="text-[10px] text-slate-500 leading-relaxed">
+                                  Drawing tags: <span className="font-mono font-bold text-slate-700">
+                                    {Object.keys(tagPositions).slice(0, 7).join(', ')}{Object.keys(tagPositions).length > 7 ? ' …' : ''}
+                                  </span>. Compressor tags start with K, C, CM, CP, CMP.
+                                  CMP findings are plotted as diamonds if AI evidence is available.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          {allCmpMarkers.length === 0 && cmpNodes.length === 0 && Object.keys(tagPositions).length === 0 && (
+                            <div className="mx-5 mb-3 p-3 rounded-xl border flex items-center gap-2 text-[10px] text-slate-400"
+                              style={{ borderColor:'rgba(148,163,184,0.3)' }}>
+                              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                              No tag position data yet — process and analyse a P&amp;ID drawing first.
+                            </div>
+                          )}
+
+                          {/* Filter chips — only show when we have equipment tags */}
+                          {chipTags.length > 0 && (
+                            <div className="px-5 pb-2">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                                Filter — tap a tag to isolate on drawing
+                              </p>
+                              <div className="flex items-center gap-1.5 overflow-x-auto pb-1"
+                                style={{ scrollbarWidth:'thin', scrollbarColor:'#c4b5fd transparent' }}>
+                                <button onClick={() => setCmpSelectedTag(null)}
+                                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                  style={{
+                                    background: !cmpSelectedTag ? '#7c3aed'                        : 'rgba(124,58,237,0.08)',
+                                    color:      !cmpSelectedTag ? 'white'                          : '#7c3aed',
+                                    border:     `1px solid ${!cmpSelectedTag ? '#7c3aed'          : 'rgba(124,58,237,0.25)'}`,
+                                    boxShadow:   !cmpSelectedTag ? '0 0 10px rgba(124,58,237,0.4)' : 'none',
+                                  }}>
+                                  ◈ All
+                                </button>
+                                {[...chipTags]
+                                  .sort((a, b) => b.findings.length - a.findings.length || a.tag.localeCompare(b.tag))
+                                  .map(m => {
+                                    const isAct   = cmpSelectedTag === m.tag;
+                                    const cc      = m.findings.length > 0 ? (CMP_SEV_COLOR[(m.topSev||'').toLowerCase()]?.bg || '#f97316') : '#22c55e';
+                                    return (
+                                      <button key={m.tag}
+                                        onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                        style={{
+                                          background: isAct ? cc : `${cc}12`,
+                                          color:      isAct ? 'white' : cc,
+                                          border:     `1px solid ${isAct ? cc : `${cc}35`}`,
+                                          boxShadow:  isAct ? `0 0 10px ${cc}55` : 'none',
+                                        }}>
+                                        <span className="font-mono truncate" style={{ maxWidth:100 }}>{m.tag}</span>
+                                        {m.findings.length > 0 && (
+                                          <span className="text-[8px] font-black min-w-[16px] h-4 rounded-full flex items-center justify-center px-1 flex-shrink-0"
+                                            style={{ background: isAct ? 'rgba(255,255,255,0.3)' : cc, color:'white' }}>
+                                            {m.findings.length}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ── Drawing + overlay ─────────────────────────────────────── */}
+                          <div className="px-5 pb-3">
+                            <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                              <div className="overflow-auto" style={{ maxHeight:'55vh' }}>
+                                <div className="relative w-full" style={{ lineHeight:0 }}>
+                                  <img
+                                    src={drawingImageUrl}
+                                    alt={activeDrawing}
+                                    draggable={false}
+                                    className="w-full block"
+                                    style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                  />
+
+                                  {/* SVG + absolute overlay — same stacking as main drawing panel */}
+                                  <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                    {/* Dim backdrop when a tag is isolated */}
+                                    {cmpSelectedTag && (
+                                      <div className="absolute inset-0"
+                                        style={{ background:'rgba(15,23,42,0.55)', zIndex:5,
+                                                 pointerEvents:'none', transition:'opacity 0.25s ease' }} />
+                                    )}
+
+                                    {/* ── Layer A: Equipment tag circles (from tag_positions) ── */}
+                                    {allCmpMarkers
+                                      .filter(m => !cmpSelectedTag || m.tag === cmpSelectedTag)
+                                      .map(m => {
+                                        const isSel = cmpSelectedTag === m.tag;
+                                        const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
+                                        const bg    = sc ? sc.bg     : '#7c3aed';
+                                        const bord  = sc ? sc.border : '#5b21b6';
+                                        const sz    = isSel ? 22 : 15;
+                                        return (
+                                          <React.Fragment key={`eq-${m.tag}`}>
+                                            {/* Pulse ring */}
+                                            {!isSel && (
+                                              <div aria-hidden="true" style={{
+                                                position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:'24px', height:'24px', borderRadius:'50%',
+                                                border:`2px solid ${bg}`,
+                                                transform:'translate(-50%,-50%)',
+                                                animation:'markerPing 2800ms ease-out infinite',
+                                                pointerEvents:'none', zIndex:9,
+                                              }} />
+                                            )}
+                                            {/* Circle button */}
+                                            <button
+                                              onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                              title={`${m.tag} · ${m.findings.length > 0 ? m.findings.length + ' CMP finding(s)' : 'No findings'}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${m.xp}%`, top:`${m.yp}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                borderRadius:'50%',
+                                                backgroundColor: bg,
+                                                border:`2px solid ${bord}`,
+                                                transform:`translate(-50%,-50%) scale(${isSel ? 1.65 : 1})`,
+                                                boxShadow: isSel
+                                                  ? `0 0 0 4px ${bg}40, 0 2px 10px rgba(0,0,0,0.55)`
+                                                  : `0 1px 5px rgba(0,0,0,0.4)`,
+                                                zIndex: isSel ? 20 : 11,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                display:'flex', alignItems:'center', justifyContent:'center',
+                                                animation: !isSel ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                              }}>
+                                              {isSel && <span style={{ color:'white', fontSize:'8px', fontWeight:900, lineHeight:1 }}>⚙</span>}
+                                            </button>
+                                            {/* Tag label callout */}
+                                            {(isSel || allCmpMarkers.length <= 8) && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`calc(${m.xp}% + ${sz/2 + 5}px)`,
+                                                top:`${m.yp}%`,
+                                                transform:'translateY(-50%)',
+                                                background: isSel ? bg : `${bg}dd`,
+                                                color:'white', fontSize:'9px', fontWeight:900,
+                                                padding:'1px 5px', borderRadius:'4px',
+                                                whiteSpace:'nowrap', zIndex: isSel ? 21 : 12,
+                                                pointerEvents:'none',
+                                                boxShadow:'0 1px 4px rgba(0,0,0,0.4)',
+                                              }}>
+                                                {m.tag}
+                                                {m.findings.length > 0 && (
+                                                  <span style={{ marginLeft:3, opacity:0.85 }}>({m.findings.length})</span>
+                                                )}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+
+                                    {/* ── Layer B: CMP AI finding diamonds (from overlayNodes) ── */}
+                                    {/* These use the same P1-P5 coordinate resolution as the main
+                                        drawing panel — exact OCR-located positions. */}
+                                    {cmpNodes
+                                      .filter(n => {
+                                        if (!cmpSelectedTag) return true;
+                                        // When a tag is selected, only show findings mentioning it
+                                        const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                                        return hay.includes(cmpSelectedTag.toUpperCase());
+                                      })
+                                      .map((n, ni) => {
+                                        const sev    = (n.finding?.severity || '').toLowerCase();
+                                        const sc     = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.major;
+                                        const isHighl = cmpSelectedTag && `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase().includes(cmpSelectedTag.toUpperCase());
+                                        const sz     = isHighl ? 16 : 11;
+                                        return (
+                                          <React.Fragment key={`fn-${ni}`}>
+                                            {/* Ripple ping */}
+                                            <div aria-hidden="true" style={{
+                                              position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                              width:'18px', height:'18px',
+                                              border:`2px solid ${sc.bg}`,
+                                              transform:'translate(-50%,-50%) rotate(45deg)',
+                                              animation:'markerPing 2200ms ease-out infinite',
+                                              animationDelay:`${ni * 120}ms`,
+                                              pointerEvents:'none', zIndex:13,
+                                            }} />
+                                            {/* Diamond marker */}
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                              title={`${n.finding?.rule_id || 'CMP'}: ${n.finding?.issue_observed?.slice(0,80) || ''}`}
+                                              style={{
+                                                position:'absolute',
+                                                left:`${n.left}%`, top:`${n.top}%`,
+                                                width:`${sz}px`, height:`${sz}px`,
+                                                backgroundColor: sc.bg,
+                                                border:`2px solid ${sc.border}`,
+                                                transform:`translate(-50%,-50%) rotate(45deg) scale(${isHighl ? 1.5 : 1})`,
+                                                boxShadow: isHighl
+                                                  ? `0 0 0 3px ${sc.bg}40, 0 2px 8px rgba(0,0,0,0.5)`
+                                                  : `0 1px 4px rgba(0,0,0,0.4)`,
+                                                zIndex: isHighl ? 22 : 14,
+                                                pointerEvents:'all', cursor:'pointer',
+                                                animation: 'markerGlow 2200ms ease-in-out infinite',
+                                              }}
+                                            />
+                                            {/* Rule ID label */}
+                                            {(isHighl || cmpNodes.length <= 5) && n.finding?.rule_id && (
+                                              <div style={{
+                                                position:'absolute',
+                                                left:`calc(${n.left}% + ${sz/2 + 5}px)`,
+                                                top:`${n.top}%`,
+                                                transform:'translateY(-50%)',
+                                                background:`${sc.bg}ee`,
+                                                color:'white', fontSize:'9px', fontWeight:900,
+                                                padding:'1px 5px', borderRadius:'4px',
+                                                whiteSpace:'nowrap', zIndex:23,
+                                                pointerEvents:'none',
+                                                boxShadow:'0 1px 4px rgba(0,0,0,0.4)',
+                                              }}>
+                                                {n.finding.rule_id}
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        );
+                                      })}
+
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Selected tag detail card */}
+                          {selMarker && (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{
+                                borderColor: selMarker.topSev
+                                  ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.border || '#7c3aed')
+                                  : '#7c3aed',
+                                animation:'cardIn 0.2s ease-out both',
+                              }}>
+                              <div className="flex items-center gap-3 px-4 py-3"
+                                style={{
+                                  background: selMarker.topSev
+                                    ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.light || 'rgba(124,58,237,0.07)')
+                                    : 'rgba(124,58,237,0.07)',
+                                }}>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-base font-black"
+                                  style={{
+                                    background: selMarker.topSev
+                                      ? (CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.bg || '#7c3aed')
+                                      : '#7c3aed',
+                                    boxShadow:'0 4px 12px rgba(124,58,237,0.4)',
+                                  }}>
+                                  ⚙
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-black text-slate-900 font-mono">{selMarker.tag}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background:'#7c3aed' }}>Compressor</span>
+                                    {selMarker.topSev && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
+                                        style={{
+                                          color: CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.text,
+                                          background:`${CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.bg}15`,
+                                          borderColor:`${CMP_SEV_COLOR[(selMarker.topSev||'').toLowerCase()]?.border}40`,
+                                        }}>
+                                        {selMarker.topSev} severity
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 text-[9px] flex-shrink-0">
+                                  <span className="text-slate-400">X: <span className="font-bold text-slate-600">{selMarker.xp?.toFixed(1)}%</span></span>
+                                  <span className="text-slate-400">Y: <span className="font-bold text-slate-600">{selMarker.yp?.toFixed(1)}%</span></span>
+                                </div>
+                                <button onClick={() => setCmpSelectedTag(null)}
+                                  className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0 leading-none ml-1">✕</button>
+                              </div>
+                              {selMarker.findings.length > 0 ? (
+                                <div className="px-4 py-3 flex flex-col gap-1.5 bg-white">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                    {selMarker.findings.length} CMP Finding{selMarker.findings.length !== 1 ? 's' : ''} Detected
+                                  </p>
+                                  {selMarker.findings.map((f, fi) => {
+                                    const sev = (f.severity || '').toLowerCase();
+                                    const sc2 = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.info;
+                                    return (
+                                      <div key={fi} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                        style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ background:sc2.bg }} />
+                                        <div className="flex-1 min-w-0">
+                                          {f.rule_id && <span className="text-[9px] font-black mr-1.5" style={{ color:'#7c3aed' }}>{f.rule_id}</span>}
+                                          <span className="text-[9px] font-black capitalize mr-1.5" style={{ color:sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-700 font-medium">{f.issue_observed}</span>
+                                          {f.evidence && <p className="text-[9px] text-slate-400 mt-0.5 font-mono truncate" title={f.evidence}>{f.evidence}</p>}
+                                        </div>
+                                        <button
+                                          onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                          className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 text-white hover:opacity-80 transition-all"
+                                          style={{ background:'#7c3aed' }}>
+                                          Locate
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="px-4 py-2.5 flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-50">
+                                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  No CMP findings linked to this compressor tag — appears compliant.
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* All CMP AI findings table */}
+                          {cmpRuleFindings.length > 0 && (
+                            <div className="mx-5 mb-4">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <Wind className="w-3 h-3 text-violet-500" />
+                                CMP AI Findings — {cmpRuleFindings.length} item{cmpRuleFindings.length!==1?'s':''}
+                                <span className="text-[9px] font-normal text-slate-400">(click row → jump to drawing)</span>
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Rule','Sev.','Anchored','Issue','Evidence'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {cmpRuleFindings.map((f, fi) => {
+                                        const sev  = (f.severity || '').toLowerCase();
+                                        const sc   = CMP_SEV_COLOR[sev] || CMP_SEV_COLOR.info;
+                                        const node = overlayNodes.find(n => n.finding?.id === f.id);
+                                        const anchored = node?.anchored;
+                                        return (
+                                          <tr key={fi}
+                                            className="border-b border-slate-100 hover:bg-violet-50 transition-all cursor-pointer"
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}>
+                                            <td className="px-3 py-1.5 font-mono font-black text-violet-700 whitespace-nowrap">{f.rule_id || '—'}</td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white" style={{ background:sc.bg }}>{sev}</span>
+                                            </td>
+                                            <td className="px-3 py-1.5 whitespace-nowrap">
+                                              {anchored
+                                                ? <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {node.tier}</span>
+                                                : <span className="text-[9px] text-slate-400">–</span>}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-slate-700 max-w-[180px] truncate">{f.issue_observed}</td>
+                                            <td className="px-3 py-1.5 font-mono text-slate-400 text-[9px] max-w-[140px] truncate">{f.evidence || '—'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Compressor Equipment Register */}
+                          {allCmpMarkers.length > 0 && (
+                            <div className="mx-5 mb-5">
+                              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3 text-violet-500" />
+                                Compressor Equipment Register — {allCmpMarkers.length} tag{allCmpMarkers.length!==1?'s':''} located
+                              </p>
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="overflow-auto" style={{ maxHeight:'24vh' }}>
+                                  <table className="w-full text-[10px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50 border-b border-slate-200">
+                                        {['Tag','X%','Y%','Status','CMP Findings'].map(h => (
+                                          <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {allCmpMarkers.map(m => {
+                                        const isSel = cmpSelectedTag === m.tag;
+                                        const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
+                                        return (
+                                          <tr key={m.tag}
+                                            onClick={() => setCmpSelectedTag(p => p === m.tag ? null : m.tag)}
+                                            className="border-b border-slate-100 cursor-pointer hover:bg-violet-50 transition-all"
+                                            style={{ background: isSel ? 'rgba(124,58,237,0.07)' : 'white' }}>
+                                            <td className="px-3 py-1.5 font-mono font-bold text-slate-800 whitespace-nowrap">{m.tag}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                            <td className="px-3 py-1.5">
+                                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                style={{ background: sc ? sc.bg : '#22c55e' }}>
+                                                {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-1.5 font-bold"
+                                              style={{ color: m.findings.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                              {m.findings.length > 0 ? m.findings.length : '✓'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </>)}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                    <span style={{ color:'#7c3aed' }}>
+                      {cmpActiveView === 'checklist'
+                        ? `${total} checks · ${Object.keys(cmpCheckStates).length} manual override${Object.keys(cmpCheckStates).length!==1?'s':''}`
+                        : cmpActiveView === 'drawing'
+                          ? `${Object.entries(activeDrawingData?.metadata?.tag_positions||{}).filter(([t])=>/^[A-Za-z]+/.test(t)).length} equipment tags located · API 618/670/672 coordinates`
+                          : `QC score: ${qcScore}%`}
+                    </span>
+                    <span>API 618 · API 670 · API 672 · IEC 61511 · AI auto-detection active</span>
+                  </div>
+
+                </div>
+              );
+            })()}
+            </div>
+            )}
+            {/* ─── end COMPRESSOR panel ─── */}
+
+            {/* ─── CROSS-REF panel ─── */}
+            {activePanel === 'cross' && (() => {
+              // ── Soft-coded: Wrench API prefix ─────────────────────────────────────────
+              const WRENCH_API_PREFIX = `${API_BASE_URL}/wrench/sync`;
+
+              // ── Wrench DMS search handler ─────────────────────────────────────────────
+              // Builds drawing context from live state and calls the backend AI-ranking endpoint.
+              const runWrenchSearch = async (manualQuery = '') => {
+                setWrenchLoading(true);
+                setWrenchError('');
+                try {
+                  // Collect drawing context signals
+                  const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                  const tagList      = Object.keys(tagPositions).slice(0, 50);
+                  const issueList    = (activeDrawingData?.issues || []).map(f => ({
+                    category: f.category,
+                    severity: f.severity,
+                  })).slice(0, 30);
+
+                  const body = {
+                    drawing_name: results?.file_name || '',
+                    tags:         tagList,
+                    issues:       issueList,
+                    discipline:   null,
+                    free_text:    manualQuery || wrenchQuery || null,
+                    page:         1,
+                    page_size:    30,
+                  };
+
+                  const res = await axios.post(
+                    `${WRENCH_API_PREFIX}/pid-cross-search/`,
+                    body,
+                    { headers: authHeader(), timeout: 45000 },
+                  );
+                  setWrenchDocs(res.data.documents || []);
+                  setWrenchTotal(res.data.total || 0);
+                  setWrenchAiPowered(res.data.ai_powered || false);
+                  setWrenchQueryUsed(res.data.query_used || null);
+                  // Non-blocking warning (e.g. no document endpoint, transmittal fallback used)
+                  if (res.data.warning) setWrenchError(res.data.warning);
+                  setWrenchSearched(true);
+                } catch (err) {
+                  const msg = err?.response?.data?.detail || err?.message || 'Wrench search failed.';
+                  setWrenchError(msg);
+                  setWrenchSearched(true);
+                } finally {
+                  setWrenchLoading(false);
+                }
+              };
+
+              // Auto-search when Wrench tab first opens (if drawing data is available)
+              const handleWrenchTabOpen = () => {
+                setCrossActiveTab('wrench');
+                if (!wrenchSearched && (results?.file_name || (activeDrawingData?.issues || []).length > 0)) {
+                  runWrenchSearch();
+                }
+              };
+
+              // ── Relevance colour helper ────────────────────────────────────────────────
+              // Soft-coded: score thresholds and colours
+              const _relColor = (score) =>
+                score >= 70 ? { bg:'rgba(34,197,94,0.10)',  border:'rgba(34,197,94,0.35)',  text:'#16a34a' }
+              : score >= 40 ? { bg:'rgba(245,158,11,0.10)', border:'rgba(245,158,11,0.30)', text:'#d97706' }
+              :               { bg:'rgba(148,163,184,0.08)', border:'rgba(148,163,184,0.25)',text:'#64748b' };
+
+              // ── Match type badge config ────────────────────────────────────────────────
+              // Soft-coded: badge appearance per Wrench document/match type
+              const MATCH_BADGE = {
+                pid:        { bg:'rgba(59,130,246,0.10)',  text:'#1d4ed8',  label:'P&ID'       },
+                datasheet:  { bg:'rgba(139,92,246,0.10)', text:'#7c3aed',  label:'Datasheet'  },
+                spec:       { bg:'rgba(249,115,22,0.10)', text:'#ea580c',  label:'Spec'       },
+                sld:        { bg:'rgba(234,179,8,0.10)',  text:'#ca8a04',  label:'SLD'        },
+                iso:        { bg:'rgba(20,184,166,0.10)', text:'#0d9488',  label:'Isometric'  },
+                procedure:  { bg:'rgba(236,72,153,0.10)', text:'#be185d',  label:'Procedure'  },
+                vendor:     { bg:'rgba(75,85,99,0.10)',   text:'#374151',  label:'Vendor Doc' },
+                keyword:    { bg:'rgba(148,163,184,0.10)',text:'#64748b',  label:'Keyword'    },
+                other:      { bg:'rgba(148,163,184,0.10)',text:'#64748b',  label:'Other'      },
+              };
+
+              return (
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card, animation:'panelSlide 0.25s ease-out both' }}>
+
+                {/* ── Sub-tab switcher ── */}
+                <div className="flex items-center gap-0 border-b border-slate-100 bg-slate-50/70 px-4 pt-3">
+                  {CROSS_TABS.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => tab.id === 'wrench' ? handleWrenchTabOpen() : setCrossActiveTab('pfd')}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-t-lg mr-1 transition-all"
+                      style={{
+                        background:  crossActiveTab === tab.id ? 'white' : 'transparent',
+                        color:       crossActiveTab === tab.id ? '#0ea5e9' : '#64748b',
+                        borderTop:   crossActiveTab === tab.id ? '2px solid #0ea5e9' : '2px solid transparent',
+                        borderLeft:  crossActiveTab === tab.id ? '1px solid #e2e8f0' : 'none',
+                        borderRight: crossActiveTab === tab.id ? '1px solid #e2e8f0' : 'none',
+                        marginBottom: crossActiveTab === tab.id ? '-1px' : '0',
+                      }}>
+                      <span>{tab.icon}</span>
+                      {tab.label}
+                      {tab.id === 'wrench' && wrenchDocs.length > 0 && (
+                        <span className="ml-1 text-[8px] font-black px-1.5 py-0.5 rounded-full text-white"
+                          style={{ background: wrenchAiPowered ? '#0ea5e9' : '#64748b' }}>
+                          {wrenchDocs.length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {crossActiveTab === 'wrench' && wrenchAiPowered && (
+                    <span className="ml-auto mb-2 flex items-center gap-1 text-[8px] font-bold text-sky-600 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> AI Ranked
+                    </span>
+                  )}
+                </div>
+
+                {/* ── PFD Cross-Ref tab ── */}
+                {crossActiveTab === 'pfd' && (
+                  <CrossRecommendationPanel
+                    sourceType="pid"
+                    documentId={documentId || results?.document_id}
+                    projectId={selectedProject?.project_id || results?.project_id}
+                    fileName={results?.file_name}
+                  />
+                )}
+
+                {/* ── Wrench DMS tab ── */}
+                {crossActiveTab === 'wrench' && (
+                  <div className="p-4 flex flex-col gap-3">
+
+                    {/* Search bar + action button */}
+                    <div className="flex gap-2 items-center flex-wrap">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={wrenchQuery}
+                          onChange={e => setWrenchQuery(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && runWrenchSearch(wrenchQuery)}
+                          placeholder="Search Wrench DMS by doc number, keyword…"
+                          className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:border-sky-400"
+                          style={{ '--tw-ring-color':'#38bdf8' }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => runWrenchSearch(wrenchQuery)}
+                        disabled={wrenchLoading}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold text-white transition-all disabled:opacity-60"
+                        style={{ background: wrenchLoading ? '#94a3b8' : 'linear-gradient(135deg,#0ea5e9,#0284c7)' }}>
+                        {wrenchLoading
+                          ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Searching…</>
+                          : <><Search className="w-3 h-3" /> Search Wrench</>}
+                      </button>
+                    </div>
+
+                    {/* Query context pills (auto-derived from drawing) */}
+                    {wrenchQueryUsed && (
+                      <div className="flex flex-wrap gap-1.5 items-center text-[9px] text-slate-500">
+                        <span className="font-black uppercase tracking-wider text-slate-400">Auto-context:</span>
+                        {wrenchQueryUsed.discipline && (
+                          <span className="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 font-bold">
+                            Discipline: {wrenchQueryUsed.discipline}
+                          </span>
+                        )}
+                        {wrenchQueryUsed.doc_no && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-bold">
+                            Doc#: {wrenchQueryUsed.doc_no}
+                          </span>
+                        )}
+                        {(wrenchQueryUsed.term_hints || []).map(t => (
+                          <span key={t} className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono">
+                            {t}
+                          </span>
+                        ))}
+                        <span className="ml-auto text-[9px]">
+                          {wrenchAiPowered
+                            ? <span className="text-sky-600 font-bold flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5" /> GPT-4o-mini ranked</span>
+                            : <span className="text-slate-400">Keyword ranked</span>}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Loading state */}
+                    {wrenchLoading && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
+                        <div className="relative">
+                          <div className="w-10 h-10 border-3 border-sky-200 border-t-sky-500 rounded-full animate-spin" style={{ borderWidth:3 }} />
+                          <Sparkles className="w-4 h-4 text-sky-500 absolute inset-0 m-auto" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-bold text-slate-600">Searching Wrench DMS…</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">AI is ranking documents by P&ID relevance</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error state — hard error (no docs returned) */}
+                    {!wrenchLoading && wrenchError && wrenchDocs.length === 0 && (
+                      <div className="p-3 rounded-xl border border-red-200 bg-red-50 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-red-700">Wrench search failed</p>
+                          <p className="text-[10px] text-red-600 mt-0.5">{wrenchError}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Make sure Wrench is configured at{' '}
+                            <a href="/admin/wrench" className="text-sky-600 underline font-medium">Admin → Wrench</a>.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Soft warning — results loaded but via fallback or partial source */}
+                    {!wrenchLoading && wrenchError && wrenchDocs.length > 0 && (
+                      <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-700">{wrenchError}</p>
+                      </div>
+                    )}
+
+                    {/* Results */}
+                    {!wrenchLoading && wrenchSearched && wrenchDocs.length === 0 && !wrenchError && (
+                      <div className="py-10 text-center">
+                        <Database className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-xs font-medium text-slate-500">No Wrench documents matched this drawing context.</p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Try a manual keyword search above, or check the Wrench discipline configuration.
+                        </p>
+                      </div>
+                    )}
+
+                    {!wrenchLoading && wrenchDocs.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {/* Results header */}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 px-0.5">
+                          <span>
+                            Showing <strong className="text-slate-600">{wrenchDocs.length}</strong> of{' '}
+                            <strong className="text-slate-600">{wrenchTotal}</strong> documents
+                          </span>
+                          <span>Click a card to expand details</span>
+                        </div>
+
+                        {/* Document cards */}
+                        <div className="flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight:'55vh' }}>
+                          {wrenchDocs.map((doc, i) => {
+                            const score    = doc.relevance_score ?? 0;
+                            const rc       = _relColor(score);
+                            const mb       = MATCH_BADGE[doc.match_type] || MATCH_BADGE.other;
+                            const isExp    = wrenchExpandedDoc === doc.DOC_NO;
+                            const docNo    = doc.DOC_NO || '—';
+                            const desc     = doc.DOC_DESCRIPTION || '';
+                            const disc     = doc.DISCIPLINE || '';
+                            const approved = doc.APPROVED_ON || '';
+                            const orderNo  = doc.ORDER_NO || '';
+                            const reason   = doc.relevance_reason || '';
+
+                            return (
+                              <div key={docNo + i}
+                                className="rounded-xl border transition-all cursor-pointer"
+                                style={{ borderColor: isExp ? rc.border : 'rgba(226,232,240,0.8)',
+                                         background:  isExp ? rc.bg    : 'white' }}
+                                onClick={() => setWrenchExpandedDoc(isExp ? null : docNo)}>
+
+                                {/* Card header strip */}
+                                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                                  {/* Relevance score ring */}
+                                  <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-black border-2"
+                                    style={{ borderColor: rc.border, color: rc.text, background: rc.bg }}>
+                                    {score}
+                                  </div>
+
+                                  {/* Doc identity */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-xs font-black text-slate-800 font-mono">{docNo}</span>
+                                      {disc && (
+                                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
+                                          {disc}
+                                        </span>
+                                      )}
+                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{ background: mb.bg, color: mb.text }}>
+                                        {mb.label}
+                                      </span>
+                                      {wrenchAiPowered && (
+                                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border`}
+                                          style={{ background: rc.bg, borderColor: rc.border, color: rc.text }}>
+                                          {score >= 70 ? '✓ Highly Relevant' : score >= 40 ? '~ Possibly Relevant' : '○ Low Relevance'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-600 mt-0.5 truncate" title={desc}>{desc || '—'}</p>
+                                  </div>
+
+                                  {/* Chevron */}
+                                  <span className="text-slate-300 flex-shrink-0 text-xs">{isExp ? '▲' : '▼'}</span>
+                                </div>
+
+                                {/* Expanded detail body */}
+                                {isExp && (
+                                  <div className="px-3 pb-3 pt-0 border-t border-slate-100">
+                                    {/* AI reasoning */}
+                                    {reason && (
+                                      <div className="flex items-start gap-1.5 mb-2 p-2 rounded-lg"
+                                        style={{ background: rc.bg, border:`1px solid ${rc.border}` }}>
+                                        <Sparkles className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: rc.text }} />
+                                        <p className="text-[10px] font-medium" style={{ color: rc.text }}>
+                                          {wrenchAiPowered ? 'AI reasoning:' : 'Match info:'}{' '}{reason}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Meta grid */}
+                                    <div className="grid grid-cols-2 gap-1.5 text-[9px] mb-2">
+                                      {[
+                                        { label:'Doc No',     value: docNo },
+                                        { label:'Discipline', value: disc || '—' },
+                                        { label:'Order No',   value: orderNo || '—' },
+                                        { label:'Approved',   value: approved || '—' },
+                                        { label:'Description',value: desc || '—', full: true },
+                                        ...(doc.GENEALOGY_STRING
+                                          ? [{ label:'Genealogy', value: doc.GENEALOGY_STRING, full: true }]
+                                          : []),
+                                      ].map(row => (
+                                        <div key={row.label}
+                                          className={`px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-100 ${row.full ? 'col-span-2' : ''}`}>
+                                          <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">{row.label}</p>
+                                          <p className="text-[10px] font-medium text-slate-700 mt-0.5 break-words leading-tight">{row.value}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <a
+                                        href="/admin/wrench"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[9px] font-bold px-2.5 py-1.5 rounded-lg border transition-all hover:opacity-80"
+                                        style={{ background:'rgba(14,165,233,0.08)', borderColor:'rgba(14,165,233,0.3)', color:'#0284c7' }}
+                                        onClick={e => e.stopPropagation()}>
+                                        <ExternalLink className="w-2.5 h-2.5" />
+                                        Open in Wrench Admin
+                                      </a>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard?.writeText(docNo);
+                                        }}
+                                        className="flex items-center gap-1 text-[9px] font-bold px-2.5 py-1.5 rounded-lg border transition-all hover:opacity-80"
+                                        style={{ background:'rgba(100,116,139,0.06)', borderColor:'rgba(100,116,139,0.2)', color:'#64748b' }}>
+                                        Copy Doc#
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Not yet searched prompt */}
+                    {!wrenchLoading && !wrenchSearched && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                        <Database className="w-10 h-10 text-sky-200" />
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">Wrench Document Search</p>
+                          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">
+                            Search the Wrench DMS for related documents — datasheets, specs, vendor docs, ISOs —
+                            ranked by AI relevance to this P&ID.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => runWrenchSearch()}
+                          className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all"
+                          style={{ background:'linear-gradient(135deg,#0ea5e9,#0284c7)' }}>
+                          <Sparkles className="w-3.5 h-3.5" /> Auto-Search from Drawing Context
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              );
+            })()}
             {/* ─── end CROSS-REF panel ─── */}
 
-            {/* ─── INDEX / TAGS / EQUIPMENT panel ─── */}
+            {/* ─── INDEX / TAGS / EQUIPMENT / DRAWING LAYOUT / VALVE TRACKING panel ─── */}
             {activePanel === 'index' && (() => {
               // ── Build data from all drawings — pure derivation, no API calls ──
               const allDrawings = results?.drawings ?? [];
@@ -4087,9 +11565,8 @@ const PIDVerification = () => {
               );
 
               // 2. Tag inventory: extract instrument/equipment tag IDs from evidence + issue text
-              // P&ID tags follow patterns like PT-1234, FV-001, LT-42A, TIC-101, etc.
               const TAG_RE = /\b([A-Z]{1,4}(?:[A-Z])?[-_]?\d{2,6}[A-Z]?)\b/g;
-              const tagMap = {}; // tagId → { drawings: Set, severities: Set, rules: Set }
+              const tagMap = {};
               allDrawings.forEach(d => {
                 (d.issues ?? []).forEach(f => {
                   const text = `${f.evidence || ''} ${f.issue_observed || ''}`;
@@ -4106,7 +11583,7 @@ const PIDVerification = () => {
                 .map(([id, m]) => ({ id, drawings: [...m.drawings], severities: [...m.severities], rules: [...m.rules] }))
                 .sort((a, b) => b.drawings.length - a.drawings.length || a.id.localeCompare(b.id));
 
-              // 3. Equipment list: findings with category === 'valve' or patterns like *-V-*, *-E-*, *-P-*, *-K-*
+              // 3. Equipment list
               const EQUIP_PREFIXES = /^([A-Z]+-)?([PVEKCTFD])[A-Z]?[-_]\d/;
               const equipMap = {};
               allDrawings.forEach(d => {
@@ -4123,17 +11600,1654 @@ const PIDVerification = () => {
                 .map(([id, m]) => ({ id, drawings: [...m.drawings], category: m.category }))
                 .sort((a, b) => a.id.localeCompare(b.id));
 
+              // ── Soft-coded: top-level tab definitions ─────────────────────────────
+              const IDX_TABS = [
+                { id:'data',    label:'Index / Tags', icon: ClipboardList },
+                { id:'drawing', label:'Drawing Layout', icon: MapPin },
+                { id:'valves',  label:'Valve Tracking', icon: Gauge },
+              ];
+
               return (
-              <IndexTagsEquipmentPanel
-                masterIndex={masterIndex}
-                tagList={tagList}
-                equipList={equipList}
-                CATEGORY_LABELS={CATEGORY_LABELS}
-                accent="#6366f1"
-              />
+              <div className="rounded-2xl overflow-hidden"
+                style={{ background:'#fff', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', animation:'panelSlide 0.25s ease-out both' }}>
+
+                {/* ── Panel header ── */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3"
+                  style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.04))' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background:'linear-gradient(135deg,#6366f1,#818cf8)' }}>
+                      <ClipboardList className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">Index · Drawing Layout · Valve Tracking</h2>
+                      <p className="text-[10px] text-slate-500">
+                        {masterIndex.length} findings · {tagList.length} tags · Drawing overlay · IEC 61511 valve checks
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Top-level view switcher ── */}
+                <div className="flex border-b border-slate-100 bg-slate-50/60">
+                  {IDX_TABS.map(t => {
+                    const Icon   = t.icon;
+                    const active = idxActiveTab === t.id;
+                    return (
+                      <button key={t.id}
+                        onClick={() => setIdxActiveTab(t.id)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                          active ? 'text-indigo-600 border-indigo-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                        }`}>
+                        <Icon className="w-3.5 h-3.5" />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* ══ VIEW 1: Data Index (existing component) ══════════════════════ */}
+                {idxActiveTab === 'data' && (
+                  <IndexTagsEquipmentPanel
+                    masterIndex={masterIndex}
+                    tagList={tagList}
+                    equipList={equipList}
+                    CATEGORY_LABELS={CATEGORY_LABELS}
+                    accent="#6366f1"
+                  />
+                )}
+
+                {/* ══ VIEW 2: Drawing Layout — all critical findings on the P&ID ══ */}
+                {idxActiveTab === 'drawing' && (() => {
+                  // ── Soft-coded: severity colour map ────────────────────────────
+                  const IDX_SEV_COLOR = {
+                    critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                    major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                    minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                  };
+                  const IDX_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                  // All anchored finding nodes on active drawing (P1–P5 resolved)
+                  const allNodes   = overlayNodes.filter(n => n.anchored);
+                  const unanchored = overlayNodes.filter(n => !n.anchored);
+
+                  // Critical/major only for highlight
+                  const critNodes  = allNodes.filter(n => ['critical','major'].includes((n.finding?.severity||'').toLowerCase()));
+
+                  // Selected node detail
+                  const selNode = vlvSelectedTag
+                    ? allNodes.find(n => n.finding?.id === vlvSelectedTag) ||
+                      unanchored.find(n => n.finding?.id === vlvSelectedTag)
+                    : null;
+
+                  // Severity bar widths
+                  const sevBreakdown = ['critical','major','minor'].map(s => ({
+                    sev: s,
+                    count: overlayNodes.filter(n => (n.finding?.severity||'').toLowerCase() === s).length,
+                    color: IDX_SEV_COLOR[s]?.bg || '#94a3b8',
+                  }));
+                  const maxSev = Math.max(...sevBreakdown.map(s => s.count), 1);
+
+                  return (
+                    <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                      {/* No drawing guard */}
+                      {!drawingImageUrl && !drawingImageLoading && (
+                        <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                          style={{ background:'rgba(99,102,241,0.06)', borderColor:'rgba(99,102,241,0.25)' }}>
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-indigo-500" />
+                          <div>
+                            <p className="text-[11px] font-bold text-indigo-700">No drawing loaded</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Process a P&amp;ID to see all findings plotted on the layout map.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {drawingImageLoading && (
+                        <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                          <Loader className="w-4 h-4 animate-spin text-indigo-500" /> Loading drawing…
+                        </div>
+                      )}
+
+                      {!drawingImageLoading && drawingImageUrl && (<>
+
+                        {/* Stats row */}
+                        <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                          {[
+                            { v: overlayNodes.length, label:'Total Findings',    color:'#6366f1', bg:'rgba(99,102,241,0.07)',  border:'rgba(99,102,241,0.2)' },
+                            { v: allNodes.length,     label:'Exact Location',    color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'  },
+                            { v: unanchored.length,   label:'Est. Location',     color:'#94a3b8', bg:'rgba(148,163,184,0.07)', border:'rgba(148,163,184,0.2)'},
+                            { v: critNodes.length,    label:'Critical / Major',  color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'  },
+                          ].map(c => (
+                            <div key={c.label} className="rounded-xl p-2.5 text-center"
+                              style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                              <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                              <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Severity distribution bars */}
+                        <div className="px-5 pb-3">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Severity Distribution</p>
+                          <div className="space-y-1.5">
+                            {sevBreakdown.map(s => (
+                              <div key={s.sev} className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold capitalize w-14 flex-shrink-0" style={{ color: s.color }}>{s.sev}</span>
+                                <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width:`${Math.round((s.count/maxSev)*100)}%`, background:s.color }} />
+                                </div>
+                                <span className="text-[9px] font-bold text-slate-600 w-6 text-right">{s.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center gap-x-4 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-600" />Critical</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-orange-500" />Major</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-yellow-400" />Minor</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 border-2 border-slate-300" style={{ background:'transparent' }} />Estimated</span>
+                          <span className="ml-auto font-medium" style={{ color:'#6366f1' }}>Solid = OCR-located · Dashed = estimated position · Click to inspect</span>
+                        </div>
+
+                        {/* Drawing + Overlay */}
+                        <div className="px-5 pb-3">
+                          <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                            <div className="overflow-auto" style={{ maxHeight:'60vh' }}>
+                              <div className="relative w-full" style={{ lineHeight:0 }}>
+                                <img
+                                  src={drawingImageUrl}
+                                  alt={activeDrawing}
+                                  draggable={false}
+                                  className="w-full block"
+                                  style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                />
+                                <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                  {/* Dim backdrop when a finding is selected */}
+                                  {vlvSelectedTag && (
+                                    <div className="absolute inset-0"
+                                      style={{ background:'rgba(15,23,42,0.50)', zIndex:5, pointerEvents:'none' }} />
+                                  )}
+
+                                  {/* ── All overlay nodes ── */}
+                                  {overlayNodes.map((n, ni) => {
+                                    const sev   = (n.finding?.severity || '').toLowerCase();
+                                    const sc    = IDX_SEV_COLOR[sev] || IDX_SEV_COLOR.minor;
+                                    const isSel = vlvSelectedTag === n.finding?.id;
+                                    const sz    = isSel ? 18 : 12;
+                                    return (
+                                      <React.Fragment key={`idx-node-${ni}`}>
+                                        {/* Pulse ring */}
+                                        {!isSel && n.anchored && (
+                                          <div aria-hidden="true" style={{
+                                            position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                            width:'18px', height:'18px', borderRadius:'50%',
+                                            border:`2px solid ${sc.bg}`,
+                                            transform:'translate(-50%,-50%)',
+                                            animation:`markerPing 2800ms ease-out infinite`,
+                                            animationDelay:`${ni * 60}ms`,
+                                            pointerEvents:'none', zIndex:8,
+                                          }} />
+                                        )}
+                                        <button
+                                          onClick={() => setVlvSelectedTag(p => p === n.finding?.id ? null : n.finding?.id)}
+                                          title={`${n.finding?.rule_id||'—'} · ${sev} · ${n.finding?.issue_observed?.slice(0,60)||''}`}
+                                          style={{
+                                            position:'absolute',
+                                            left:`${n.left}%`, top:`${n.top}%`,
+                                            width:`${sz}px`, height:`${sz}px`,
+                                            borderRadius:'50%',
+                                            backgroundColor: sc.bg,
+                                            border:`${n.anchored ? '2px solid' : '2px dashed'} ${sc.border}`,
+                                            transform:`translate(-50%,-50%) scale(${isSel ? 1.65 : 1})`,
+                                            boxShadow: isSel
+                                              ? `0 0 0 3px ${sc.bg}40, 0 2px 8px rgba(0,0,0,0.45)`
+                                              : `0 1px 3px rgba(0,0,0,0.3)`,
+                                            zIndex: isSel ? 20 : 10,
+                                            pointerEvents:'all', cursor:'pointer',
+                                          }}
+                                        />
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Selected finding detail */}
+                        {selNode && (() => {
+                          const sev = (selNode.finding?.severity||'').toLowerCase();
+                          const sc  = IDX_SEV_COLOR[sev] || IDX_SEV_COLOR.minor;
+                          return (
+                            <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                              style={{ borderColor:sc.border, animation:'cardIn 0.2s ease-out both' }}>
+                              <div className="flex items-center gap-3 px-4 py-3" style={{ background:sc.light }}>
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                                  style={{ background:sc.bg }}>
+                                  {selNode.finding?.rule_id?.slice(-3) || '!'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-black text-slate-900">
+                                    <span className="mr-1.5" style={{ color:'#6366f1' }}>{selNode.finding?.rule_id}</span>
+                                    {selNode.finding?.issue_observed}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5 text-[9px] flex-wrap">
+                                    <span className="font-bold px-1.5 py-0.5 rounded text-white" style={{ background:sc.bg }}>{sev}</span>
+                                    <span className={`px-1.5 py-0.5 rounded font-bold ${selNode.anchored ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      {selNode.anchored ? `📍 ${selNode.tier}` : `≈ ${selNode.tier}`}
+                                    </span>
+                                    <span className="text-slate-400">X:{selNode.left?.toFixed(1)}% Y:{selNode.top?.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  <button
+                                    onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(selNode.finding?.id), 150); }}
+                                    className="text-[9px] font-bold px-2 py-1 rounded text-white"
+                                    style={{ background:'#6366f1' }}>
+                                    Locate
+                                  </button>
+                                  <button onClick={() => setVlvSelectedTag(null)}
+                                    className="text-slate-400 hover:text-slate-600 text-base font-bold">✕</button>
+                                </div>
+                              </div>
+                              {selNode.finding?.evidence && (
+                                <div className="px-4 py-2 bg-white flex items-center gap-2">
+                                  <span className="text-[9px] font-black text-slate-400 flex-shrink-0">EVIDENCE</span>
+                                  <span className="font-mono text-[10px] text-slate-600 truncate">{selNode.finding.evidence}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                      </>)}
+                    </div>
+                  );
+                })()}
+
+                {/* ══ VIEW 3: Valve Tracking ════════════════════════════════════════ */}
+                {idxActiveTab === 'valves' && (() => {
+
+                  // ── Soft-coded: valve tag prefixes ───────────────────────────────
+                  // Any tag whose letter prefix matches one of these is treated as a valve.
+                  const VLV_TAG_PREFIXES = new Set([
+                    'HV','FV','SDV','XV','BV','CV','RV','PSV','PRV','ISV',
+                    'PCV','TCV','FCV','LCV','BDV','ESDV','MOV','SOV','AOV',
+                    'PZV','NRV','BUV','TV',
+                  ]);
+                  const _isValveTag = (tag) => {
+                    const prefix = (tag.match(/^([A-Za-z]+)/) || [])[1] || '';
+                    return VLV_TAG_PREFIXES.has(prefix.toUpperCase());
+                  };
+
+                  // ── Soft-coded: 4 valve tracking checks ─────────────────────────
+                  // Based on: ISA 5.1, ASME B31.3, IEC 61511, API RP 14C
+                  const VLV_CHECKS = [
+                    {
+                      id: 'VLV-T01',
+                      category: 'Identification',
+                      label: 'Valve Tag Number Identification',
+                      desc: 'All valve items carry unique tag numbers formatted per ISA S5.1 and the project tagging philosophy.',
+                      refs: ['ISA 5.1', 'IEC 81714-3'],
+                      autoRules: ['VLV-001', 'VLV-002'],
+                    },
+                    {
+                      id: 'VLV-T02',
+                      category: 'Specification',
+                      label: 'Valve Type vs Pipe Spec & Legend P&ID',
+                      desc: 'Valve type symbols shown on the P&ID match the applicable piping class specification and the P&ID symbol legend sheet.',
+                      refs: ['ASME B31.3', 'ASME B16.34', 'ISO 10418'],
+                      autoRules: ['VLV-001', 'VLV-003', 'LSZ-001'],
+                    },
+                    {
+                      id: 'VLV-T03',
+                      category: 'Direction',
+                      label: 'Check Valve Directional Flow Identification',
+                      desc: 'Check (non-return) valves are oriented to match the designated process flow direction indicated by flow arrows on the P&ID.',
+                      refs: ['ASME B31.3', 'API 6D', 'ISO 14313'],
+                      autoRules: ['VLV-003', 'ANN-001'],
+                    },
+                    {
+                      id: 'VLV-T04',
+                      category: 'Isolation',
+                      label: 'Isolation Valve Consistency with Isolation Philosophy',
+                      desc: 'Isolation valves are provided in accordance with the project Isolation and Depressurisation Philosophy (IDP) — including double-block requirements, HIPPS, and PSV upstream isolation.',
+                      refs: ['IEC 61511', 'API RP 14C', 'EN 13463'],
+                      autoRules: ['VLV-002', 'VLV-004', 'VLV-005'],
+                    },
+                  ];
+
+                  // ── SEV colour scheme (shared) ───────────────────────────────────
+                  const VLV_SEV_COLOR = {
+                    critical: { bg:'#dc2626', border:'#991b1b', text:'#dc2626', light:'#fef2f2' },
+                    major:    { bg:'#f97316', border:'#c2410c', text:'#f97316', light:'#fff7ed' },
+                    minor:    { bg:'#fbbf24', border:'#d97706', text:'#d97706', light:'#fffbeb' },
+                    info:     { bg:'#3b82f6', border:'#1d4ed8', text:'#3b82f6', light:'#eff6ff' },
+                  };
+                  const VLV_SEV_ORDER = { critical:4, major:3, minor:2, info:1 };
+
+                  // ── Inline pickBestOcc for tag_positions ─────────────────────────
+                  const _vlvPickBest = (pos) => {
+                    if (!pos) return null;
+                    if (!pos.all || pos.all.length === 0)
+                      return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                    const inArea = pos.all.filter(o =>
+                      o.x_pct != null && o.y_pct != null &&
+                      o.x_pct >= 1 && o.x_pct <= 96 &&
+                      o.y_pct >= 1 && o.y_pct <= 87
+                    );
+                    const pool = inArea.length > 0 ? inArea : pos.all.filter(o => o.x_pct != null);
+                    if (!pool.length) return null;
+                    let best = pool[0]; let bestD = Infinity;
+                    for (const o of pool) {
+                      const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
+                      if (d < bestD) { bestD = d; best = o; }
+                    }
+                    return { xp: best.x_pct, yp: best.y_pct };
+                  };
+
+                  // ── VLV rule findings (from AI analysis) ────────────────────────
+                  const vlvRuleIssues = (activeDrawingData?.issues || []).filter(f =>
+                    !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
+                    (VLV_CHECKS.some(c => c.autoRules.includes(f.rule_id)) ||
+                     (f.category || '').toLowerCase() === 'valve')
+                  );
+
+                  // VLV finding nodes from overlayNodes (pre-calibrated positions)
+                  const vlvNodes = overlayNodes.filter(n => {
+                    const ruleId = n.finding?.rule_id || '';
+                    const cat    = (n.finding?.category || '').toLowerCase();
+                    return VLV_CHECKS.some(c => c.autoRules.includes(ruleId)) || cat === 'valve';
+                  });
+
+                  // ── Valve equipment markers from tag_positions ───────────────────
+                  const tagPositions = activeDrawingData?.metadata?.tag_positions || {};
+                  const vlvTagMarkers = Object.entries(tagPositions)
+                    .filter(([tag]) => _isValveTag(tag))
+                    .map(([tag, pos]) => {
+                      const coord = _vlvPickBest(pos);
+                      if (!coord) return null;
+                      // Link VLV findings that mention this tag
+                      const linked = vlvNodes.filter(n => {
+                        const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                        return hay.includes(tag.toUpperCase());
+                      });
+                      const topSev = linked.reduce((best, n) => {
+                        const s = (n.finding?.severity||'').toLowerCase();
+                        return (VLV_SEV_ORDER[s]||0) > (VLV_SEV_ORDER[best]||0) ? s : best;
+                      }, null);
+                      return { tag, xp: coord.xp, yp: coord.yp, linked, topSev };
+                    })
+                    .filter(Boolean);
+
+                  // ── Auto-detect check status from findings ───────────────────────
+                  const _autoStatus = (check) => {
+                    const hits = vlvRuleIssues.filter(f => check.autoRules.includes(f.rule_id));
+                    if (!hits.length) return 'pass';
+                    const maxSev = hits.reduce((best,f) => {
+                      const s = (f.severity||'').toLowerCase();
+                      return (VLV_SEV_ORDER[s]||0) > (VLV_SEV_ORDER[best]||0) ? s : best;
+                    }, 'info');
+                    if (maxSev === 'critical' || maxSev === 'major') return 'fail';
+                    return 'warn';
+                  };
+
+                  const total   = VLV_CHECKS.length;
+                  const passing = VLV_CHECKS.filter(c => {
+                    const m = vlvCheckStates[c.id];
+                    const a = _autoStatus(c);
+                    return (m || a) === 'pass';
+                  }).length;
+                  const qcScore = Math.round((passing / total) * 100);
+
+                  // Inner 3-tab switcher for Valve Tracking: Checklist | Summary | Drawing
+                  const VLV_VIEW_TABS = [
+                    { id:'checklist', label:'Checklist', icon: CheckSquare },
+                    { id:'summary',   label:'Summary',   icon: BarChart2   },
+                    { id:'drawing',   label:'Drawing',   icon: MapPin      },
+                  ];
+
+                  return (
+                    <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                      {/* ── Inner view switcher ── */}
+                      <div className="flex border-b border-slate-100 bg-slate-50/50">
+                        {VLV_VIEW_TABS.map(t => {
+                          const Icon   = t.icon;
+                          const active = vlvActiveView === t.id;
+                          return (
+                            <button key={t.id}
+                              onClick={() => setVlvActiveView(t.id)}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold transition-all border-b-2 ${
+                                active ? 'text-emerald-700 border-emerald-500 bg-white' : 'text-slate-400 border-transparent hover:text-slate-600'
+                              }`}>
+                              <Icon className="w-3 h-3" />
+                              {t.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* ── CHECKLIST view ── */}
+                      {vlvActiveView === 'checklist' && (
+                        <div className="overflow-y-auto" style={{ maxHeight:'65vh' }}>
+
+                          {/* QC score banner */}
+                          <div className="mx-5 mt-4 mb-3 rounded-xl p-3 flex items-center gap-3 border"
+                            style={{
+                              background: qcScore >= 100 ? 'rgba(34,197,94,0.07)' : qcScore >= 50 ? 'rgba(245,158,11,0.07)' : 'rgba(220,38,38,0.07)',
+                              borderColor: qcScore >= 100 ? 'rgba(34,197,94,0.3)' : qcScore >= 50 ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)',
+                            }}>
+                            <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center font-black text-xl text-white"
+                              style={{
+                                background: qcScore >= 100 ? '#22c55e' : qcScore >= 50 ? '#f59e0b' : '#dc2626',
+                                boxShadow: `0 4px 12px ${qcScore >= 100 ? '#22c55e' : qcScore >= 50 ? '#f59e0b' : '#dc2626'}40`,
+                              }}>
+                              {qcScore}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-black text-slate-900">Valve Compliance Score</p>
+                              <p className="text-[10px] text-slate-500">
+                                {passing} / {total} checks passed · {vlvTagMarkers.length} valve tags located · {vlvRuleIssues.length} AI findings
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Check rows */}
+                          {VLV_CHECKS.map(check => {
+                            const manual    = vlvCheckStates[check.id];
+                            const auto      = _autoStatus(check);
+                            const effective = manual || auto;
+                            const hits      = vlvRuleIssues.filter(f => check.autoRules.includes(f.rule_id));
+                            const isManual  = !!manual;
+                            const statusMeta = {
+                              pass: { color:'#22c55e', bg:'rgba(34,197,94,0.08)',  border:'rgba(34,197,94,0.25)',  icon:'✓', label:'Pass'    },
+                              warn: { color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.25)', icon:'△', label:'Warning' },
+                              fail: { color:'#dc2626', bg:'rgba(220,38,38,0.08)',  border:'rgba(220,38,38,0.25)',  icon:'✗', label:'Fail'    },
+                            };
+                            const sm = statusMeta[effective] || statusMeta.pass;
+                            return (
+                              <div key={check.id} className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                style={{ borderColor: sm.border, background: sm.bg }}>
+                                {/* Check header */}
+                                <div className="flex items-start gap-3 px-4 py-3">
+                                  <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-black text-white mt-0.5"
+                                    style={{ background: sm.color, boxShadow:`0 3px 8px ${sm.color}40` }}>
+                                    {sm.icon}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black text-slate-900 leading-snug">{check.label}</p>
+                                    <p className="text-[9px] font-mono text-indigo-600 mt-0.5">{check.id}</p>
+                                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">{check.desc}</p>
+                                  </div>
+                                </div>
+                                {/* Refs + manual controls */}
+                                <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
+                                  <div className="flex flex-wrap gap-1 flex-1">
+                                    {check.refs.map(r => (
+                                      <span key={r} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">{r}</span>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    {[{v:'pass',l:'✓ Pass',c:'#22c55e'},{v:'fail',l:'✗ Fail',c:'#dc2626'},{v:'na',l:'N/A',c:'#94a3b8'}].map(opt => {
+                                      const isActive = vlvCheckStates[check.id] === opt.v;
+                                      return (
+                                        <button key={opt.v}
+                                          onClick={() => setVlvCheckStates(prev => ({ ...prev, [check.id]: opt.v }))}
+                                          className="text-[9px] font-bold px-2 py-1 rounded-lg border transition-all"
+                                          style={{
+                                            background: isActive ? opt.c : 'white',
+                                            color:      isActive ? 'white' : opt.c,
+                                            borderColor: isActive ? opt.c : `${opt.c}50`,
+                                            boxShadow:   isActive ? `0 1px 6px ${opt.c}40` : 'none',
+                                          }}>
+                                          {opt.l}
+                                        </button>
+                                      );
+                                    })}
+                                    {vlvCheckStates[check.id] && (
+                                      <button
+                                        onClick={() => setVlvCheckStates(prev => { const n = {...prev}; delete n[check.id]; return n; })}
+                                        className="text-[9px] text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded border border-slate-200 bg-white">
+                                        ↺
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* AI findings for this check */}
+                                {hits.length > 0 && (
+                                  <div className="border-t border-slate-100 px-4 py-2 bg-white/70 space-y-1">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">AI Findings ({hits.length})</p>
+                                    {hits.map((f, fi) => {
+                                      const sev = (f.severity||'').toLowerCase();
+                                      const sc2 = VLV_SEV_COLOR[sev] || VLV_SEV_COLOR.info;
+                                      return (
+                                        <div key={fi} className="flex items-start gap-2 rounded py-1">
+                                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1" style={{ background: sc2.bg }} />
+                                          <span className="text-[9px] font-black mr-1" style={{ color:'#6366f1' }}>{f.rule_id}</span>
+                                          <span className="text-[9px] font-bold mr-1 capitalize" style={{ color: sc2.text }}>{sev}</span>
+                                          <span className="text-[10px] text-slate-600 flex-1 truncate">{f.issue_observed}</span>
+                                          <button
+                                            onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(f.id), 150); }}
+                                            className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white flex-shrink-0"
+                                            style={{ background:'#6366f1' }}>
+                                            Locate
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {isManual && (
+                                  <div className="border-t border-slate-100 px-4 py-1.5 bg-amber-50/60 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                                    <span className="text-[9px] text-amber-700 font-bold">Manual override active — auto-detection result overridden</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                        </div>
+                      )}
+
+                      {/* ── SUMMARY view ── */}
+                      {vlvActiveView === 'summary' && (() => {
+                        const catGroups = {};
+                        VLV_CHECKS.forEach(c => {
+                          if (!catGroups[c.category]) catGroups[c.category] = [];
+                          catGroups[c.category].push(c);
+                        });
+                        const vlvPrefixList = [...VLV_TAG_PREFIXES].sort().join(', ');
+                        return (
+                          <div className="overflow-y-auto px-5 py-4" style={{ maxHeight:'65vh' }}>
+
+                            {/* Score card */}
+                            <div className="rounded-xl border p-4 mb-4 flex items-center gap-4"
+                              style={{ background: qcScore >= 75 ? 'rgba(34,197,94,0.06)' : 'rgba(245,158,11,0.06)', borderColor: qcScore >= 75 ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)' }}>
+                              <div>
+                                <p className="text-3xl font-black" style={{ color: qcScore >= 75 ? '#22c55e' : '#f59e0b' }}>{qcScore}%</p>
+                                <p className="text-[10px] text-slate-500 font-medium">{passing}/{total} checks passed</p>
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width:`${qcScore}%`, background: qcScore >= 75 ? '#22c55e' : '#f59e0b' }} />
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-400">
+                                  <span>{vlvTagMarkers.length} valve tags located</span>
+                                  <span>{vlvRuleIssues.length} AI findings</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Category progress */}
+                            {Object.entries(catGroups).map(([cat, checks]) => {
+                              const catPass  = checks.filter(c => (vlvCheckStates[c.id] || _autoStatus(c)) === 'pass').length;
+                              const catTotal = checks.length;
+                              const pct      = Math.round((catPass / catTotal) * 100);
+                              return (
+                                <div key={cat} className="mb-4">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-wider">{cat}</p>
+                                    <span className="text-[10px] font-bold" style={{ color: pct === 100 ? '#22c55e' : '#f59e0b' }}>{catPass}/{catTotal}</span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden mb-2">
+                                    <div className="h-full rounded-full" style={{ width:`${pct}%`, background: pct === 100 ? '#22c55e' : '#f59e0b', transition:'width 0.4s ease' }} />
+                                  </div>
+                                  {checks.map(c => {
+                                    const eff = vlvCheckStates[c.id] || _autoStatus(c);
+                                    const hits = vlvRuleIssues.filter(f => c.autoRules.includes(f.rule_id));
+                                    const colr = eff === 'pass' ? '#22c55e' : eff === 'fail' ? '#dc2626' : '#f59e0b';
+                                    return (
+                                      <div key={c.id} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
+                                        <span className="w-5 h-5 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-black text-white"
+                                          style={{ background:colr }}>
+                                          {eff === 'pass' ? '✓' : eff === 'fail' ? '✗' : '△'}
+                                        </span>
+                                        <span className="flex-1 text-[10px] text-slate-700 font-medium">{c.label}</span>
+                                        {hits.length > 0 && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background:'#dc2626' }}>{hits.length}</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })}
+
+                            {/* Valve prefixes info */}
+                            <div className="rounded-xl border border-slate-200 p-3 bg-slate-50/50 mt-2">
+                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Valve Tag Prefixes Tracked</p>
+                              <p className="text-[10px] text-slate-600 font-mono leading-relaxed">{vlvPrefixList}</p>
+                            </div>
+
+                            {/* Reset manual overrides */}
+                            {Object.keys(vlvCheckStates).length > 0 && (
+                              <button onClick={() => setVlvCheckStates({})}
+                                className="mt-3 w-full py-2 rounded-xl border border-slate-200 text-[10px] font-bold text-slate-500 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all">
+                                Reset {Object.keys(vlvCheckStates).length} manual override{Object.keys(vlvCheckStates).length!==1?'s':''}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── DRAWING view (valve tags + VLV findings) ── */}
+                      {vlvActiveView === 'drawing' && (() => {
+                        const selVlvMarker = vlvSelectedTag
+                          ? vlvTagMarkers.find(m => m.tag === vlvSelectedTag)
+                          : null;
+                        const selVlvNode = vlvSelectedTag && !selVlvMarker
+                          ? vlvNodes.find(n => n.finding?.id === vlvSelectedTag)
+                          : null;
+
+                        return (
+                          <div className="flex flex-col" style={{ minHeight:0 }}>
+
+                            {/* No drawing guard */}
+                            {!drawingImageUrl && !drawingImageLoading && (
+                              <div className="mx-5 mt-4 mb-4 p-4 rounded-xl border flex items-start gap-3"
+                                style={{ background:'rgba(34,197,94,0.06)', borderColor:'rgba(34,197,94,0.25)' }}>
+                                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-500" />
+                                <div>
+                                  <p className="text-[11px] font-bold text-emerald-700">No drawing loaded</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5">Process a P&amp;ID to see valve tag locations on the map.</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {drawingImageLoading && (
+                              <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
+                                <Loader className="w-4 h-4 animate-spin text-emerald-500" /> Loading drawing…
+                              </div>
+                            )}
+
+                            {!drawingImageLoading && drawingImageUrl && (<>
+
+                              {/* Stats */}
+                              <div className="grid grid-cols-4 gap-2 px-5 pt-4 pb-3">
+                                {[
+                                  { v: vlvTagMarkers.length,                                              label:'Valves Located',   color:'#22c55e', bg:'rgba(34,197,94,0.07)',   border:'rgba(34,197,94,0.2)'   },
+                                  { v: vlvNodes.filter(n => n.anchored).length,                           label:'AI Findings',      color:'#f97316', bg:'rgba(249,115,22,0.07)', border:'rgba(249,115,22,0.2)' },
+                                  { v: vlvTagMarkers.filter(m => m.linked.length > 0).length,             label:'Tags w/ Issues',   color:'#dc2626', bg:'rgba(220,38,38,0.07)',  border:'rgba(220,38,38,0.2)'  },
+                                  { v: vlvTagMarkers.filter(m => m.linked.length === 0).length,           label:'Compliant Tags',   color:'#0891b2', bg:'rgba(8,145,178,0.07)',  border:'rgba(8,145,178,0.2)'  },
+                                ].map(c => (
+                                  <div key={c.label} className="rounded-xl p-2.5 text-center"
+                                    style={{ background:c.bg, border:`1px solid ${c.border}` }}>
+                                    <p className="font-black text-xl leading-none" style={{ color:c.color }}>{c.v}</p>
+                                    <p className="text-[9px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Legend */}
+                              <div className="flex items-center gap-x-4 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500" />Valve tag (OK)</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-600" />Valve tag (issue)</span>
+                                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rotate-45 inline-block bg-orange-500" />VLV finding</span>
+                                <span className="ml-auto font-medium" style={{ color:'#22c55e' }}>Click marker to inspect · IEC 61511 / ASME B31.3</span>
+                              </div>
+
+                              {/* No valve tags info */}
+                              {vlvTagMarkers.length === 0 && Object.keys(tagPositions).length > 0 && (
+                                <div className="mx-5 mb-3 p-3 rounded-xl border border-amber-200 bg-amber-50/70 text-[10px] text-amber-700 flex items-start gap-2">
+                                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                  <span>No standard valve tags (HV, FV, SDV, XV, CV, PSV…) found in drawing tag positions. Ensure the drawing was fully OCR-processed.</span>
+                                </div>
+                              )}
+
+                              {/* Filter chips */}
+                              {vlvTagMarkers.length > 0 && (
+                                <div className="px-5 pb-2">
+                                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth:'thin' }}>
+                                    <button onClick={() => setVlvSelectedTag(null)}
+                                      className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all"
+                                      style={{
+                                        background: !vlvSelectedTag ? '#22c55e' : 'rgba(34,197,94,0.08)',
+                                        color:      !vlvSelectedTag ? 'white'   : '#22c55e',
+                                        border:     `1px solid ${!vlvSelectedTag ? '#22c55e' : 'rgba(34,197,94,0.25)'}`,
+                                      }}>
+                                      ◈ All
+                                    </button>
+                                    {[...vlvTagMarkers]
+                                      .sort((a,b) => b.linked.length - a.linked.length || a.tag.localeCompare(b.tag))
+                                      .map(m => {
+                                        const isSel = vlvSelectedTag === m.tag;
+                                        const cc    = m.linked.length > 0 ? '#dc2626' : '#22c55e';
+                                        return (
+                                          <button key={m.tag}
+                                            onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold transition-all"
+                                            style={{
+                                              background: isSel ? cc : `${cc}12`,
+                                              color:      isSel ? 'white' : cc,
+                                              border:     `1px solid ${isSel ? cc : `${cc}35`}`,
+                                              boxShadow:  isSel ? `0 0 8px ${cc}50` : 'none',
+                                            }}>
+                                            <span className="font-mono truncate max-w-[90px]">{m.tag}</span>
+                                            {m.linked.length > 0 && (
+                                              <span className="text-[8px] font-black min-w-[14px] h-4 rounded-full flex items-center justify-center px-1"
+                                                style={{ background: isSel ? 'rgba(255,255,255,0.3)' : cc, color:'white' }}>
+                                                {m.linked.length}
+                                              </span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Drawing + overlay */}
+                              <div className="px-5 pb-3">
+                                <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-100">
+                                  <div className="overflow-auto" style={{ maxHeight:'52vh' }}>
+                                    <div className="relative w-full" style={{ lineHeight:0 }}>
+                                      <img
+                                        src={drawingImageUrl}
+                                        alt={activeDrawing}
+                                        draggable={false}
+                                        className="w-full block"
+                                        style={{ height:'auto', background:'#f8fafc', userSelect:'none' }}
+                                      />
+                                      <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
+
+                                        {vlvSelectedTag && (
+                                          <div className="absolute inset-0"
+                                            style={{ background:'rgba(15,23,42,0.50)', zIndex:5, pointerEvents:'none' }} />
+                                        )}
+
+                                        {/* ── Layer A: Valve tag circles ── */}
+                                        {vlvTagMarkers
+                                          .filter(m => !vlvSelectedTag || m.tag === vlvSelectedTag)
+                                          .map(m => {
+                                            const isSel = vlvSelectedTag === m.tag;
+                                            const bg    = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()]?.bg || '#dc2626') : '#22c55e';
+                                            const bord  = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()]?.border || '#991b1b') : '#16a34a';
+                                            const sz    = isSel ? 20 : 14;
+                                            return (
+                                              <React.Fragment key={`vlv-eq-${m.tag}`}>
+                                                {!isSel && (
+                                                  <div aria-hidden="true" style={{
+                                                    position:'absolute', left:`${m.xp}%`, top:`${m.yp}%`,
+                                                    width:'22px', height:'22px', borderRadius:'50%',
+                                                    border:`2px solid ${bg}`,
+                                                    transform:'translate(-50%,-50%)',
+                                                    animation:'markerPing 2800ms ease-out infinite',
+                                                    pointerEvents:'none', zIndex:9,
+                                                  }} />
+                                                )}
+                                                <button
+                                                  onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                  title={`${m.tag}${m.linked.length > 0 ? ` · ${m.linked.length} finding(s)` : ' · Compliant'}`}
+                                                  style={{
+                                                    position:'absolute',
+                                                    left:`${m.xp}%`, top:`${m.yp}%`,
+                                                    width:`${sz}px`, height:`${sz}px`,
+                                                    borderRadius:'50%',
+                                                    backgroundColor: bg,
+                                                    border:`2px solid ${bord}`,
+                                                    transform:`translate(-50%,-50%) scale(${isSel ? 1.6 : 1})`,
+                                                    boxShadow: isSel ? `0 0 0 3px ${bg}40, 0 2px 8px rgba(0,0,0,0.5)` : `0 1px 4px rgba(0,0,0,0.4)`,
+                                                    zIndex: isSel ? 20 : 11,
+                                                    pointerEvents:'all', cursor:'pointer',
+                                                    animation: !isSel ? 'markerGlow 2800ms ease-in-out infinite' : undefined,
+                                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                                  }}>
+                                                  {isSel && <span style={{ color:'white', fontSize:'7px', fontWeight:900 }}>▼</span>}
+                                                </button>
+                                                {(isSel || vlvTagMarkers.length <= 8) && (
+                                                  <div style={{
+                                                    position:'absolute',
+                                                    left:`calc(${m.xp}% + ${sz/2+4}px)`,
+                                                    top:`${m.yp}%`,
+                                                    transform:'translateY(-50%)',
+                                                    background: isSel ? bg : `${bg}ee`,
+                                                    color:'white', fontSize:'9px', fontWeight:900,
+                                                    padding:'1px 5px', borderRadius:'4px',
+                                                    whiteSpace:'nowrap', zIndex: isSel ? 21 : 12,
+                                                    pointerEvents:'none',
+                                                    boxShadow:'0 1px 4px rgba(0,0,0,0.35)',
+                                                  }}>
+                                                    {m.tag}{m.linked.length > 0 ? ` (${m.linked.length})` : ''}
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            );
+                                          })}
+
+                                        {/* ── Layer B: VLV-rule AI findings (diamonds, from overlayNodes) ── */}
+                                        {vlvNodes.filter(n => n.anchored)
+                                          .filter(n => {
+                                            if (!vlvSelectedTag) return true;
+                                            const hay = `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase();
+                                            return hay.includes(vlvSelectedTag.toUpperCase());
+                                          })
+                                          .map((n, ni) => {
+                                            const sev = (n.finding?.severity||'').toLowerCase();
+                                            const sc  = VLV_SEV_COLOR[sev] || VLV_SEV_COLOR.major;
+                                            const isHighl = vlvSelectedTag && `${n.finding?.evidence||''} ${n.finding?.issue_observed||''}`.toUpperCase().includes(vlvSelectedTag.toUpperCase());
+                                            const sz  = isHighl ? 14 : 10;
+                                            return (
+                                              <React.Fragment key={`vlv-fn-${ni}`}>
+                                                <div aria-hidden="true" style={{
+                                                  position:'absolute', left:`${n.left}%`, top:`${n.top}%`,
+                                                  width:'16px', height:'16px',
+                                                  border:`2px solid ${sc.bg}`,
+                                                  transform:'translate(-50%,-50%) rotate(45deg)',
+                                                  animation:'markerPing 2200ms ease-out infinite',
+                                                  animationDelay:`${ni*100}ms`,
+                                                  pointerEvents:'none', zIndex:13,
+                                                }} />
+                                                <button
+                                                  onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                                  title={`${n.finding?.rule_id}: ${n.finding?.issue_observed?.slice(0,60)||''}`}
+                                                  style={{
+                                                    position:'absolute',
+                                                    left:`${n.left}%`, top:`${n.top}%`,
+                                                    width:`${sz}px`, height:`${sz}px`,
+                                                    backgroundColor: sc.bg,
+                                                    border:`2px solid ${sc.border}`,
+                                                    transform:`translate(-50%,-50%) rotate(45deg) scale(${isHighl ? 1.5 : 1})`,
+                                                    boxShadow: isHighl ? `0 0 0 3px ${sc.bg}40, 0 2px 6px rgba(0,0,0,0.45)` : `0 1px 3px rgba(0,0,0,0.35)`,
+                                                    zIndex: isHighl ? 22 : 14,
+                                                    pointerEvents:'all', cursor:'pointer',
+                                                    animation: 'markerGlow 2200ms ease-in-out infinite',
+                                                  }}
+                                                />
+                                              </React.Fragment>
+                                            );
+                                          })}
+
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Selected valve detail card */}
+                              {selVlvMarker && (
+                                <div className="mx-5 mb-3 rounded-xl border overflow-hidden"
+                                  style={{
+                                    borderColor: selVlvMarker.linked.length > 0
+                                      ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.border || '#dc2626')
+                                      : '#22c55e',
+                                    animation:'cardIn 0.2s ease-out both',
+                                  }}>
+                                  <div className="flex items-center gap-3 px-4 py-3"
+                                    style={{ background: selVlvMarker.linked.length > 0 ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.light || '#fef2f2') : 'rgba(34,197,94,0.06)' }}>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-base"
+                                      style={{ background: selVlvMarker.linked.length > 0 ? (VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.bg || '#dc2626') : '#22c55e' }}>
+                                      ▼
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-black text-slate-900 font-mono">{selVlvMarker.tag}</p>
+                                      <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[9px]">
+                                        <span className="font-bold px-1.5 py-0.5 rounded text-white" style={{ background:'#22c55e' }}>Valve</span>
+                                        {selVlvMarker.topSev && (
+                                          <span className="font-bold px-1.5 py-0.5 rounded" style={{
+                                            color: VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.text,
+                                            background:`${VLV_SEV_COLOR[(selVlvMarker.topSev||'').toLowerCase()]?.bg}18`,
+                                          }}>{selVlvMarker.topSev} severity</span>
+                                        )}
+                                        <span className="text-slate-400">X:{selVlvMarker.xp?.toFixed(1)}% Y:{selVlvMarker.yp?.toFixed(1)}%</span>
+                                      </div>
+                                    </div>
+                                    <button onClick={() => setVlvSelectedTag(null)}
+                                      className="text-slate-400 hover:text-slate-600 text-lg font-bold flex-shrink-0">✕</button>
+                                  </div>
+                                  {selVlvMarker.linked.length > 0 ? (
+                                    <div className="px-4 py-3 bg-white space-y-1.5">
+                                      {selVlvMarker.linked.map((n, ni) => {
+                                        const sev2 = (n.finding?.severity||'').toLowerCase();
+                                        const sc2  = VLV_SEV_COLOR[sev2] || VLV_SEV_COLOR.info;
+                                        return (
+                                          <div key={ni} className="flex items-start gap-2 rounded-lg px-3 py-2 border"
+                                            style={{ background:sc2.light, borderColor:`${sc2.border}50` }}>
+                                            <span className="text-[9px] font-black mr-1" style={{ color:'#6366f1' }}>{n.finding?.rule_id}</span>
+                                            <span className="text-[10px] text-slate-700 flex-1 truncate">{n.finding?.issue_observed}</span>
+                                            <button
+                                              onClick={() => { setActivePanel('drawing'); setTimeout(() => jumpToFinding(n.finding?.id), 150); }}
+                                              className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white flex-shrink-0" style={{ background:'#6366f1' }}>
+                                              Locate
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="px-4 py-2 bg-emerald-50 flex items-center gap-2 text-[10px] text-emerald-700">
+                                      <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                      No VLV findings linked to this valve — appears compliant.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Valve register table */}
+                              {vlvTagMarkers.length > 0 && (
+                                <div className="mx-5 mb-5">
+                                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <Gauge className="w-3 h-3 text-emerald-500" />
+                                    Valve Register — {vlvTagMarkers.length} valve{vlvTagMarkers.length !== 1 ? 's' : ''} located
+                                  </p>
+                                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                    <div className="overflow-auto" style={{ maxHeight:'22vh' }}>
+                                      <table className="w-full text-[10px] border-collapse">
+                                        <thead>
+                                          <tr className="bg-slate-50 border-b border-slate-200">
+                                            {['Tag','Type','X%','Y%','Status','Issues'].map(h => (
+                                              <th key={h} className="px-3 py-2 text-[9px] font-black text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {vlvTagMarkers.map(m => {
+                                            const isSel  = vlvSelectedTag === m.tag;
+                                            const valveType = (m.tag.match(/^([A-Za-z]+)/) || [])[1] || '?';
+                                            const sc = m.linked.length > 0 ? (VLV_SEV_COLOR[(m.topSev||'').toLowerCase()] || null) : null;
+                                            return (
+                                              <tr key={m.tag}
+                                                onClick={() => setVlvSelectedTag(p => p === m.tag ? null : m.tag)}
+                                                className="border-b border-slate-100 hover:bg-emerald-50/40 cursor-pointer transition-all"
+                                                style={{ background: isSel ? 'rgba(34,197,94,0.07)' : 'white' }}>
+                                                <td className="px-3 py-1.5 font-mono font-bold text-slate-800">{m.tag}</td>
+                                                <td className="px-3 py-1.5 font-bold text-slate-500 text-[9px]">{valveType}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{m.xp?.toFixed(1)}</td>
+                                                <td className="px-3 py-1.5 text-slate-500">{m.yp?.toFixed(1)}</td>
+                                                <td className="px-3 py-1.5">
+                                                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white"
+                                                    style={{ background: sc ? sc.bg : '#22c55e' }}>
+                                                    {m.topSev ? m.topSev.toUpperCase() : 'OK'}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-1.5 font-bold" style={{ color: m.linked.length > 0 ? '#dc2626' : '#22c55e' }}>
+                                                  {m.linked.length > 0 ? m.linked.length : '✓'}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                            </>)}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Footer */}
+                      <div className="px-5 py-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[9px] text-slate-400">
+                        <span style={{ color:'#22c55e' }}>
+                          {vlvActiveView === 'checklist'
+                            ? `${total} checks · ${Object.keys(vlvCheckStates).length} manual override${Object.keys(vlvCheckStates).length!==1?'s':''}`
+                            : vlvActiveView === 'drawing'
+                              ? `${vlvTagMarkers.length} valve tags · ${vlvNodes.filter(n=>n.anchored).length} AI findings · IEC 61511 / ASME B31.3`
+                              : `QC score: ${qcScore}%`}
+                        </span>
+                        <span>IEC 61511 · ASME B31.3 · API 6D · ISA 5.1 · API RP 14C</span>
+                      </div>
+
+                    </div>
+                  );
+                })()}
+
+              </div>
               );
             })()}
-            {/* ─── end INDEX / TAGS / EQUIPMENT panel ─── */}
+            {/* ─── end INDEX / TAGS / EQUIPMENT / DRAWING LAYOUT / VALVE TRACKING panel ─── */}
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* PERFORMANCE & ACCURACY PANEL                               */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {activePanel === 'performance' && (() => {
+              const allDrawings = results?.drawings ?? [];
+
+              // ── Active-drawing marker placement stats ──────────────────
+              const tierCounts = {};
+              for (const n of overlayNodes) {
+                const t = n.tier || 'FH';
+                tierCounts[t] = (tierCounts[t] || 0) + 1;
+              }
+              const totalMarkers  = overlayNodes.length;
+              const anchoredCount = overlayNodes.filter(n => n.anchored).length;
+
+              // Weighted placement confidence score (0–100)
+              const placementScore = totalMarkers === 0 ? null
+                : Math.round(
+                    (Object.entries(tierCounts).reduce(
+                      (sum, [t, c]) => sum + c * (PERF_TIER_WEIGHT[t] ?? 0.3), 0
+                    ) / totalMarkers) * 100
+                  );
+              const anchorRate = totalMarkers === 0 ? null
+                : Math.round((anchoredCount / totalMarkers) * 100);
+
+              // Score quality helper (returns colour + label)
+              const scoreQuality = (val, thresholds) => {
+                if (val == null) return { color: '#94a3b8', label: 'No data' };
+                if (val >= thresholds.high)     return { color: '#10b981', label: 'High' };
+                if (val >= thresholds.moderate) return { color: '#f59e0b', label: 'Moderate' };
+                return { color: '#ef4444', label: 'Low' };
+              };
+              const confQuality   = scoreQuality(placementScore, PERF_SCORE_THRESHOLDS);
+              const anchorQuality = scoreQuality(anchorRate,     PERF_ANCHOR_THRESHOLDS);
+
+              // ── Document Accuracy Rate ─────────────────────────────────
+              // Blends three sub-scores (OCR quality, placement confidence,
+              // anchor rate) using PERF_DOC_ACCURACY_WEIGHTS.
+              const es = extractionSummary;   // shorthand — already declared above
+              const ocrScore = (() => {
+                if (!es || es.no_text_detected) return 0;
+                const len = es.raw_text_length ?? 0;
+                if (len >= PERF_OCR_GOOD_THRESHOLD) return 100;
+                return Math.round((len / PERF_OCR_GOOD_THRESHOLD) * 100);
+              })();
+              const docAccuracyRate = (placementScore == null && anchorRate == null && !es)
+                ? null
+                : Math.min(100, Math.round(
+                    (ocrScore              * PERF_DOC_ACCURACY_WEIGHTS.ocr)      +
+                    ((placementScore ?? 0) * PERF_DOC_ACCURACY_WEIGHTS.placement) +
+                    ((anchorRate     ?? 0) * PERF_DOC_ACCURACY_WEIGHTS.anchor)
+                  ));
+              const docAccQuality = scoreQuality(docAccuracyRate, PERF_DOC_ACCURACY_THRESHOLDS);
+
+              // Extraction entity counts for the accuracy breakdown row
+              const entityCounts = es ? [
+                { label: 'Tags',        val: es.tags        ?? 0, icon: '🏷' },
+                { label: 'Instruments', val: es.instruments  ?? 0, icon: '🔬' },
+                { label: 'Valves',      val: es.valves       ?? 0, icon: '🔧' },
+                { label: 'Equipment',   val: es.equipment    ?? 0, icon: '⚙️' },
+                { label: 'Line Sizes',  val: es.line_sizes   ?? 0, icon: '📏' },
+                { label: 'Line Tags',   val: es.line_tags    ?? 0, icon: '〰' },
+              ] : [];
+
+              // ── All-drawings aggregated findings ───────────────────────
+              const allIssues = allDrawings.flatMap(d =>
+                (d.issues ?? []).filter(f =>
+                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                )
+              );
+              const totalFindings = allIssues.length;
+
+              // Severity breakdown
+              const sevCount = {};
+              for (const f of allIssues) {
+                const s = (f.severity || 'minor').toLowerCase();
+                sevCount[s] = (sevCount[s] || 0) + 1;
+              }
+              const SEV_ORDER  = ['critical', 'major', 'minor'];
+              const SEV_COLORS = { critical: '#dc2626', major: '#f97316', minor: '#fbbf24' };
+
+              // Category breakdown
+              const catCount = {};
+              for (const f of allIssues) {
+                const c = CATEGORY_LABELS[f.category] || f.category || 'Unknown';
+                catCount[c] = (catCount[c] || 0) + 1;
+              }
+              const catList = Object.entries(catCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, PERF_TOP_CATS_COUNT);
+
+              // Rule leaderboard
+              const ruleCount = {};
+              for (const f of allIssues) {
+                const r = f.rule_id || '—';
+                ruleCount[r] = (ruleCount[r] || 0) + 1;
+              }
+              const ruleList = Object.entries(ruleCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, PERF_TOP_RULES_COUNT);
+
+              // Per-drawing summary
+              const drawingSummary = allDrawings.map(d => {
+                const issues = (d.issues ?? []).filter(f =>
+                  !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
+                );
+                const sevs   = issues.map(f => (f.severity || 'minor').toLowerCase());
+                const topSev = SEV_ORDER.find(s => sevs.includes(s)) || null;
+                return { id: d.drawing_id, count: issues.length, topSev };
+              });
+
+              // Bar component (inline helper, purely presentational)
+              const Bar = ({ value, max, color, h = '6px' }) => (
+                <div style={{ height: h, borderRadius: '4px', background: '#f1f5f9', overflow: 'hidden', flex: 1 }}>
+                  <div style={{
+                    height: '100%',
+                    width:  `${max > 0 ? Math.round((value / max) * 100) : 0}%`,
+                    background: color,
+                    borderRadius: '4px',
+                    transition: 'width 0.6s ease',
+                  }} />
+                </div>
+              );
+
+              // Gauge arc (SVG semi-circle) — purely cosmetic
+              const GaugeArc = ({ pct, color }) => {
+                const r = 36; const circ = Math.PI * r;
+                const dash = pct != null ? (pct / 100) * circ : 0;
+                return (
+                  <svg width="90" height="52" viewBox="0 0 90 52">
+                    <path d="M9,46 A36,36 0 0,1 81,46" fill="none" stroke="#e2e8f0" strokeWidth="8" strokeLinecap="round" />
+                    <path d="M9,46 A36,36 0 0,1 81,46" fill="none" stroke={color}
+                      strokeWidth="8" strokeLinecap="round"
+                      strokeDasharray={`${dash} ${circ}`}
+                      style={{ transition: 'stroke-dasharray 0.8s ease' }}
+                    />
+                  </svg>
+                );
+              };
+
+              return (
+                <div className="space-y-4" style={{ animation: 'panelSlide 0.25s ease-out both' }}>
+
+                  {/* ── Section 0: Document Accuracy Rate (hero) ─────────── */}
+                  <div className="rounded-2xl overflow-hidden" style={{
+                    ...T.card,
+                    border: `1.5px solid ${docAccQuality.color}40`,
+                    boxShadow: `0 4px 24px ${docAccQuality.color}18`,
+                  }}>
+                    <div className="px-5 py-4 flex items-center gap-4"
+                      style={{ background: `linear-gradient(135deg,${docAccQuality.color}12,${docAccQuality.color}06)` }}>
+                      {/* Big score */}
+                      <div className="flex flex-col items-center justify-center shrink-0"
+                        style={{ minWidth: '80px' }}>
+                        <svg width="80" height="46" viewBox="0 0 80 46">
+                          <path d="M7,42 A33,33 0 0,1 73,42" fill="none" stroke="#e2e8f0" strokeWidth="7" strokeLinecap="round" />
+                          <path d="M7,42 A33,33 0 0,1 73,42" fill="none" stroke={docAccQuality.color}
+                            strokeWidth="7" strokeLinecap="round"
+                            strokeDasharray={`${docAccuracyRate != null ? (docAccuracyRate / 100) * (Math.PI * 33) : 0} ${Math.PI * 33}`}
+                            style={{ transition: 'stroke-dasharray 0.9s ease' }}
+                          />
+                        </svg>
+                        <p className="text-2xl font-black -mt-3" style={{ color: docAccQuality.color }}>
+                          {docAccuracyRate != null ? `${docAccuracyRate}%` : '—'}
+                        </p>
+                      </div>
+
+                      {/* Label + breakdown */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm font-black text-slate-900">Document Accuracy Rate</p>
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full"
+                            style={{ background: `${docAccQuality.color}20`, color: docAccQuality.color }}>
+                            {docAccQuality.label}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mb-2.5">
+                          Composite score: OCR quality ({PERF_DOC_ACCURACY_WEIGHTS.ocr * 100}%) ·
+                          placement confidence ({PERF_DOC_ACCURACY_WEIGHTS.placement * 100}%) ·
+                          anchor rate ({PERF_DOC_ACCURACY_WEIGHTS.anchor * 100}%)
+                        </p>
+                        {/* Sub-score pills */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { label: 'OCR Quality',   val: ocrScore,       note: es?.no_text_detected ? 'No text' : `${es?.raw_text_length ?? 0} chars` },
+                            { label: 'Placement',     val: placementScore, note: `${totalMarkers} markers` },
+                            { label: 'Anchor Rate',   val: anchorRate,     note: `${anchoredCount}/${totalMarkers} anchored` },
+                          ].map(pill => (
+                            <div key={pill.label} className="flex flex-col rounded-lg px-2.5 py-1.5 gap-0.5"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{pill.label}</p>
+                              <p className="text-sm font-black text-slate-800">{pill.val != null ? `${pill.val}%` : '—'}</p>
+                              <p className="text-[8px] text-slate-400">{pill.note}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Entity extraction row */}
+                    {entityCounts.length > 0 && (
+                      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                          Extracted Entities — Active Drawing
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {entityCounts.map(e => (
+                            <div key={e.label} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                              style={{ background: '#fff', border: '1px solid #e2e8f0' }}>
+                              <span className="text-sm leading-none">{e.icon}</span>
+                              <div>
+                                <p className="text-[8px] text-slate-400 font-medium leading-tight">{e.label}</p>
+                                <p className="text-xs font-black text-slate-800 leading-tight">{e.val}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {es?.no_text_detected && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                              <span className="text-sm">⚠️</span>
+                              <p className="text-[9px] font-bold text-red-600">No OCR text detected</p>
+                            </div>
+                          )}
+                          {es?.line_tags_multi_angle > 0 && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                              style={{ background: '#f0fdfa', border: '1px solid #5eead4' }}>
+                              <span className="text-sm">↔↕</span>
+                              <div>
+                                <p className="text-[8px] text-teal-600 font-medium leading-tight">Multi-angle</p>
+                                <p className="text-xs font-black text-teal-800 leading-tight">{es.line_tags_multi_angle}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Section 0b: Model-Adjusted Document Accuracy ─────── */}
+                  {(() => {
+                    // ── Dynamic model accuracy ─────────────────────────────────────────
+                    // Derived live from the active drawing's resolved marker tiers.
+                    // High-confidence tiers (PERF_MODEL_HIGHCONF_TIERS) → model got it right.
+                    // Heuristic/fallback tiers (P3/P4/P5/FH) → model had to guess.
+                    // Falls back to PERF_MODEL_ACCURACY_PCT only when no drawing is loaded.
+                    const highConfCount        = overlayNodes.filter(n => PERF_MODEL_HIGHCONF_TIERS.has(n.tier)).length;
+                    const isFallback           = totalMarkers === 0;
+                    const dynamicModelAccuracy = isFallback
+                      ? PERF_MODEL_ACCURACY_PCT
+                      : Math.round((highConfCount / totalMarkers) * 100);
+
+                    // How many reported findings are estimated to be genuine
+                    const estTrue   = Math.round(totalFindings * dynamicModelAccuracy / 100);
+                    const estFalse  = totalFindings - estTrue;
+                    // Model-adjusted score = raw document score × dynamic model accuracy ceiling
+                    const adjScore  = docAccuracyRate != null
+                      ? Math.round(docAccuracyRate * dynamicModelAccuracy / 100)
+                      : null;
+                    const adjQual   = scoreQuality(adjScore, PERF_DOC_ACCURACY_THRESHOLDS);
+                    // Gauge fill for model accuracy badge — driven by dynamicModelAccuracy
+                    const modelCirc = Math.PI * 28;
+                    const modelDash = (dynamicModelAccuracy / 100) * modelCirc;
+                    return (
+                      <div className="rounded-2xl overflow-hidden" style={{
+                        ...T.card,
+                        border: '1.5px solid #6366f120',
+                        boxShadow: '0 4px 20px #6366f110',
+                      }}>
+                        {/* Header */}
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3"
+                          style={{ background: 'linear-gradient(135deg,#f5f3ff,#ede9fe)' }}>
+                          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#7c3aed,#8b5cf6)' }}>
+                            <span className="text-white text-sm font-black">AI</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-black text-slate-900">Model-Adjusted Document Accuracy</p>
+                            <p className="text-[10px] text-slate-500">
+                              {isFallback
+                                ? PERF_MODEL_ACCURACY_LABEL
+                                : `Live accuracy for this drawing: ${highConfCount} of ${totalMarkers} markers resolved via high-confidence tiers (P1 · P2 · CX). Baseline: ${PERF_MODEL_ACCURACY_PCT}%.`
+                              }
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Three-column metric row */}
+                        <div className="grid grid-cols-3 divide-x divide-slate-100">
+
+                          {/* Col 1 — AI Model Accuracy (live from tier data, fallback to constant) */}
+                          <div className="px-4 py-4 flex flex-col items-center gap-0.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1 text-center">AI Model Accuracy</p>
+                            <div className="relative flex flex-col items-center">
+                              <svg width="70" height="42" viewBox="0 0 70 42">
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke="#e2e8f0"
+                                  strokeWidth="7" strokeLinecap="round" />
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none"
+                                  stroke={isFallback ? '#94a3b8' : '#7c3aed'}
+                                  strokeWidth="7" strokeLinecap="round"
+                                  strokeDasharray={`${modelDash} ${modelCirc}`}
+                                  style={{ transition: 'stroke-dasharray 0.9s ease' }}
+                                />
+                              </svg>
+                              <p className="text-xl font-black -mt-2"
+                                style={{ color: isFallback ? '#94a3b8' : '#7c3aed' }}>
+                                {dynamicModelAccuracy}%
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1"
+                              style={{
+                                background: isFallback ? '#94a3b820' : '#7c3aed18',
+                                color:      isFallback ? '#94a3b8'   : '#7c3aed',
+                              }}>
+                              {isFallback ? 'Baseline' : 'Live — This Drawing'}
+                            </span>
+                            <p className="text-[9px] text-slate-400 text-center mt-0.5">
+                              {isFallback
+                                ? `Configured baseline (${PERF_MODEL_ACCURACY_PCT}%)`
+                                : `${highConfCount} / ${totalMarkers} high-conf markers`
+                              }
+                            </p>
+                          </div>
+
+                          {/* Col 2 — Model-Adjusted Score */}
+                          <div className="px-4 py-4 flex flex-col items-center gap-0.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1 text-center">Adjusted Doc Score</p>
+                            <div className="relative flex flex-col items-center">
+                              <svg width="70" height="42" viewBox="0 0 70 42">
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke="#e2e8f0"
+                                  strokeWidth="7" strokeLinecap="round" />
+                                <path d="M7,38 A28,28 0 0,1 63,38" fill="none" stroke={adjQual.color}
+                                  strokeWidth="7" strokeLinecap="round"
+                                  strokeDasharray={`${
+                                    adjScore != null ? (adjScore / 100) * modelCirc : 0
+                                  } ${modelCirc}`}
+                                  style={{ transition: 'stroke-dasharray 0.9s ease' }}
+                                />
+                              </svg>
+                              <p className="text-xl font-black -mt-2" style={{ color: adjQual.color }}>
+                                {adjScore != null ? `${adjScore}%` : '—'}
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1"
+                              style={{ background: `${adjQual.color}18`, color: adjQual.color }}>
+                              {adjQual.label || 'No data'}
+                            </span>
+                            <p className="text-[9px] text-slate-400 text-center mt-0.5">
+                              Doc score × {dynamicModelAccuracy}% model ceiling
+                            </p>
+                          </div>
+
+                          {/* Col 3 — Finding breakdown (genuine vs. false positives) */}
+                          <div className="px-4 py-4 flex flex-col items-center justify-center gap-2">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5 text-center">Findings Breakdown</p>
+                            {totalFindings > 0 ? (
+                              <>
+                                <div className="flex flex-col gap-1.5 w-full">
+                                  {/* Genuine findings bar */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-emerald-600 font-bold w-14 shrink-0">Genuine</span>
+                                    <div style={{ flex: 1, height: '6px', borderRadius: '4px',
+                                      background: '#f1f5f9', overflow: 'hidden' }}>
+                                      <div style={{
+                                        height: '100%',
+                                        width: `${dynamicModelAccuracy}%`,
+                                        background: '#10b981',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.7s ease',
+                                      }} />
+                                    </div>
+                                    <span className="text-[9px] font-black text-emerald-700 w-6 text-right shrink-0">{estTrue}</span>
+                                  </div>
+                                  {/* False positive bar */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-rose-500 font-bold w-14 shrink-0">False +ve</span>
+                                    <div style={{ flex: 1, height: '6px', borderRadius: '4px',
+                                      background: '#f1f5f9', overflow: 'hidden' }}>
+                                      <div style={{
+                                        height: '100%',
+                                        width: `${100 - dynamicModelAccuracy}%`,
+                                        background: '#f87171',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.7s ease',
+                                      }} />
+                                    </div>
+                                    <span className="text-[9px] font-black text-rose-500 w-6 text-right shrink-0">{estFalse}</span>
+                                  </div>
+                                </div>
+                                <p className="text-[9px] text-slate-500 text-center mt-0.5">
+                                  of {totalFindings} reported finding{totalFindings !== 1 ? 's' : ''}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-[10px] text-slate-400 text-center">No findings yet</p>
+                            )}
+                          </div>
+
+                        </div>
+
+                        {/* Footer note */}
+                        <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60">
+                          <p className="text-[9px] text-slate-500">
+                            <span className="font-bold text-violet-700">How to read this:</span>
+                            {' '}The raw Document Accuracy Rate reflects OCR, placement and anchor quality.
+                            The <span className="font-bold">Adjusted Score</span> accounts for the model's{' '}
+                            <span className="font-bold text-violet-700">{dynamicModelAccuracy}% precision</span>
+                            {isFallback
+                              ? ` (configured baseline — open a drawing to see the live value)`
+                              : ` (live — computed from ${highConfCount} high-confidence markers out of ${totalMarkers})`
+                            }{' '}—
+                            the highest confidence you can reliably assign to this document's AI-generated results.
+                            Of {totalFindings} flagged issue{totalFindings !== 1 ? 's' : ''},
+                            {' '}<span className="font-bold text-emerald-700">{estTrue} are estimated genuine</span> and
+                            {' '}<span className="font-bold text-rose-500">{estFalse} may be false alarms</span> worth
+                            manual verification.
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Section 1: Score gauges ─────────────────────────── */}
+                  <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                    {/* Header */}
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3"
+                      style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#059669,#10b981)' }}>
+                        <Zap className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-900">Model Performance &amp; Accuracy</h2>
+                        <p className="text-xs text-slate-500">
+                          Active drawing · {totalMarkers} marker{totalMarkers !== 1 ? 's' : ''} ·&nbsp;
+                          {allDrawings.length} drawing{allDrawings.length !== 1 ? 's' : ''} in project
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Gauge row */}
+                    <div className="grid grid-cols-3 divide-x divide-slate-100">
+                      {[
+                        {
+                          label: 'Placement Confidence',
+                          pct:   placementScore,
+                          qual:  confQuality,
+                          sub:   placementScore != null ? `${placementScore}% weighted score` : 'Open a drawing',
+                        },
+                        {
+                          label: 'Anchor Rate',
+                          pct:   anchorRate,
+                          qual:  anchorQuality,
+                          sub:   anchorRate != null
+                            ? `${anchoredCount} of ${totalMarkers} markers anchored`
+                            : 'Open a drawing',
+                        },
+                        {
+                          label: 'Total Findings',
+                          pct:   null,
+                          qual:  { color: totalFindings === 0 ? '#10b981' : totalFindings > 30 ? '#ef4444' : '#f59e0b', label: '' },
+                          sub:   `${allDrawings.length} drawing${allDrawings.length !== 1 ? 's' : ''} analysed`,
+                          staticValue: totalFindings,
+                        },
+                      ].map((g, i) => (
+                        <div key={i} className="px-4 py-4 flex flex-col items-center gap-0.5">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1 text-center">{g.label}</p>
+                          {g.staticValue != null ? (
+                            <p className="text-3xl font-black mt-1" style={{ color: g.qual.color }}>{g.staticValue}</p>
+                          ) : (
+                            <div className="relative flex flex-col items-center">
+                              <GaugeArc pct={g.pct} color={g.qual.color} />
+                              <p className="text-xl font-black -mt-2" style={{ color: g.qual.color }}>
+                                {g.pct != null ? `${g.pct}%` : '—'}
+                              </p>
+                            </div>
+                          )}
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1"
+                            style={{ background: `${g.qual.color}18`, color: g.qual.color }}>
+                            {g.qual.label}
+                          </span>
+                          <p className="text-[9px] text-slate-400 text-center mt-0.5">{g.sub}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Section 2: Tier breakdown (active drawing) ─────── */}
+                  {totalMarkers > 0 && (
+                    <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                      <div className="px-5 py-3 border-b border-slate-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          Marker Resolution Tiers — Active Drawing
+                        </p>
+                      </div>
+                      <div className="px-5 py-3 space-y-2.5">
+                        {Object.entries(tierCounts)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([tier, count]) => {
+                            const pct   = Math.round((count / totalMarkers) * 100);
+                            const color = PERF_TIER_COLOR[tier] || '#94a3b8';
+                            const label = PERF_TIER_LABEL[tier] || tier;
+                            return (
+                              <div key={tier} className="flex items-center gap-2.5">
+                                <span className="text-[9px] font-black w-5 text-right shrink-0"
+                                  style={{ color }}>{tier}</span>
+                                <Bar value={count} max={totalMarkers} color={color} h="7px" />
+                                <span className="text-[9px] text-slate-500 w-6 shrink-0">{pct}%</span>
+                                <span className="text-[9px] text-slate-400 shrink-0 hidden sm:block">{label}</span>
+                                <span className="text-[9px] font-bold text-slate-500 shrink-0">×{count}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Section 3: Severity & Category distribution ──────── */}
+                  {totalFindings > 0 && (
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Severity */}
+                      <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                        <div className="px-4 py-3 border-b border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Severity Breakdown</p>
+                        </div>
+                        <div className="px-4 py-3 space-y-2.5">
+                          {SEV_ORDER.map(sev => {
+                            const n = sevCount[sev] || 0;
+                            if (n === 0) return null;
+                            const pct = Math.round((n / totalFindings) * 100);
+                            return (
+                              <div key={sev} className="flex items-center gap-2">
+                                <span className="w-12 text-[9px] font-bold capitalize shrink-0"
+                                  style={{ color: SEV_COLORS[sev] }}>{sev}</span>
+                                <Bar value={n} max={totalFindings} color={SEV_COLORS[sev]} h="6px" />
+                                <span className="text-[9px] text-slate-500 w-7 text-right shrink-0">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                        <div className="px-4 py-3 border-b border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Top Categories</p>
+                        </div>
+                        <div className="px-4 py-3 space-y-2.5">
+                          {catList.map(([cat, n]) => {
+                            const pct = Math.round((n / totalFindings) * 100);
+                            return (
+                              <div key={cat} className="flex items-center gap-2">
+                                <span className="w-20 text-[9px] font-medium text-slate-600 shrink-0 truncate">{cat}</span>
+                                <Bar value={n} max={catList[0]?.[1] || 1} color="#6366f1" h="6px" />
+                                <span className="text-[9px] text-slate-500 w-7 text-right shrink-0">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Section 4: Rule leaderboard ──────────────────────── */}
+                  {ruleList.length > 0 && (
+                    <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                      <div className="px-5 py-3 border-b border-slate-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Top Triggered Rules</p>
+                      </div>
+                      <div className="px-5 py-3 space-y-2">
+                        {ruleList.map(([rule, cnt], i) => {
+                          const pct = Math.round((cnt / totalFindings) * 100);
+                          return (
+                            <div key={rule} className="flex items-center gap-2.5">
+                              <span className="text-[9px] font-black text-slate-300 w-4 shrink-0">{i + 1}</span>
+                              <code className="text-[9px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded w-20 shrink-0 truncate">{rule}</code>
+                              <Bar value={cnt} max={ruleList[0]?.[1] || 1} color="#6366f1" h="6px" />
+                              <span className="text-[9px] text-slate-500 w-6 text-right shrink-0">{pct}%</span>
+                              <span className="text-[9px] font-bold text-slate-600 shrink-0">×{cnt}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Section 5: Per-drawing summary table ─────────────── */}
+                  {drawingSummary.length > 0 && (
+                    <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                      <div className="px-5 py-3 border-b border-slate-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Per-Drawing Summary</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                              <th className="px-4 py-2 text-left">#</th>
+                              <th className="px-4 py-2 text-left">Drawing</th>
+                              <th className="px-4 py-2 text-right">Findings</th>
+                              <th className="px-4 py-2 text-center">Top Severity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {drawingSummary.map((row, i) => (
+                              <tr key={row.id} className={`border-t border-slate-100 ${i % 2 === 0 ? '' : 'bg-slate-50/40'}`}>
+                                <td className="px-4 py-2 text-slate-400 font-mono text-[9px]">{i + 1}</td>
+                                <td className="px-4 py-2 font-mono text-[10px] text-slate-700 max-w-[180px] truncate">{row.id}</td>
+                                <td className="px-4 py-2 text-right font-bold text-slate-800">{row.count}</td>
+                                <td className="px-4 py-2 text-center">
+                                  {row.topSev ? (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full capitalize"
+                                      style={{ background: `${SEV_COLORS[row.topSev]}20`, color: SEV_COLORS[row.topSev] }}>
+                                      {row.topSev}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] text-slate-300">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {allDrawings.length === 0 && (
+                    <div className="rounded-2xl flex flex-col items-center justify-center py-20 gap-3" style={{ ...T.card }}>
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg,#f0fdf4,#dcfce7)', border: '1px solid #86efac' }}>
+                        <Zap className="w-8 h-8 text-emerald-500" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">No drawings analysed yet</p>
+                      <p className="text-xs text-slate-400 text-center max-w-xs">
+                        Upload and process a P&amp;ID drawing to see model performance and accuracy metrics.
+                      </p>
+                    </div>
+                  )}
+
+                </div>
+              );
+            })()}
+            {/* ─── end PERFORMANCE & ACCURACY panel ─── */}
 
             </div>
 
@@ -4142,11 +13256,11 @@ const PIDVerification = () => {
             {/* ══ RIGHT ICON RAIL ══ */}
             <div
               className="flex-shrink-0 sticky top-4 self-start"
-              style={{ width:'76px', animation:'railIn 0.4s ease-out both' }}
+              style={{ width:`${NAV_RAIL_WIDTH}px`, animation:'railIn 0.4s ease-out both' }}
             >
               {/* Oil & gas animated header */}
               <div className="mb-3 rounded-2xl overflow-hidden" style={{
-                background:'linear-gradient(180deg,#0f172a 0%,#1e3a5f 100%)',
+                background: REJLERS_DARK_HEADER_BG,
                 padding:'10px 6px 8px',
                 boxShadow:'0 4px 24px rgba(0,0,0,0.4)',
               }}>
@@ -4173,41 +13287,114 @@ const PIDVerification = () => {
                 </svg>
                 <p className="text-[8px] font-black text-center text-sky-300 uppercase tracking-widest mt-0.5">P&amp;ID Nav</p>
               </div>
-              {/* Panel buttons */}
-              <div className="space-y-1.5">
-                {PANELS.map(tab => {
-                  const isActive = activePanel === tab.id;
+              {/* Panel buttons — pointer-event DnD with smooth translateY shifts + custom ghost */}
+              <div className="flex flex-col gap-1.5">
+                {orderedPanels.map((tab, idx) => {
+                  const isActive   = activePanel === tab.id;
+                  const isDragging = draggingId === tab.id;
+                  // Compute smooth translateY so items make space for the dragged item
+                  const draggedIdx = draggingId ? (dragStateRef.current?.startIdx ?? null) : null;
+                  const target     = dropTargetIdx;
+                  const itemH      = dragStateRef.current?.itemHeight ?? 46;
+                  let translateY = 0;
+                  if (!isDragging && draggingId !== null && draggedIdx !== null && target !== null) {
+                    if (draggedIdx < target) {
+                      // dragged DOWN — items between [draggedIdx+1 .. target] shift up
+                      if (idx > draggedIdx && idx <= target) translateY = -itemH;
+                    } else if (draggedIdx > target) {
+                      // dragged UP — items between [target .. draggedIdx-1] shift down
+                      if (idx >= target && idx < draggedIdx) translateY = itemH;
+                    }
+                  }
                   return (
                     <button
                       key={tab.id}
+                      ref={el => { railItemRefs.current[tab.id] = el; }}
                       onClick={() => setActivePanel(tab.id)}
-                      title={tab.label}
-                      className="w-full flex flex-col items-center gap-1 py-3 px-1 rounded-2xl border transition-all duration-200 group"
+                      title={`${tab.label} — grip to reorder`}
+                      className="relative w-full flex flex-row items-center gap-2.5 group"
                       style={{
+                        borderRadius: '12px',
+                        padding: '9px 10px 9px 12px',
                         background: isActive
-                          ? `linear-gradient(135deg,${tab.accent}22,${tab.accent}11)`
-                          : 'rgba(255,255,255,0.9)',
-                        border: isActive
-                          ? `1.5px solid ${tab.accent}60`
-                          : '1.5px solid rgba(203,213,225,0.6)',
+                          ? `linear-gradient(135deg, ${tab.accent} 0%, ${tab.accent}cc 100%)`
+                          : '#ffffff',
+                        border: isActive ? `1.5px solid ${tab.accent}` : '1.5px solid #e2e8f0',
                         boxShadow: isActive
-                          ? `0 4px 16px ${tab.glow || 'rgba(0,0,0,0.1)'}`
+                          ? `0 4px 16px ${tab.glow || 'rgba(0,0,0,0.15)'}, 0 1px 4px rgba(0,0,0,0.08)`
                           : '0 1px 4px rgba(0,0,0,0.05)',
-                        transform: isActive ? 'scale(1.04)' : 'scale(1)',
+                        animation: draggingId ? 'none' : `navTabIn ${NAV_RAIL_ENTRY_DURATION_MS}ms cubic-bezier(.22,.68,0,1.2) ${idx * NAV_RAIL_ENTRY_DELAY_MS}ms both`,
+                        transition: isDragging
+                          ? 'opacity 0.15s'
+                          : 'border 0.2s, box-shadow 0.2s, background 0.2s, transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94)',
+                        transform: isDragging
+                          ? `scale(${isActive ? 1.02 : 1})`
+                          : isActive
+                            ? `scale(1.02) translateY(${translateY}px)`
+                            : `scale(1) translateY(${translateY}px)`,
+                        opacity: isDragging ? 0.22 : 1,
+                        willChange: draggingId ? 'transform' : 'auto',
+                        cursor: 'pointer',
+                        userSelect: 'none',
                       }}
                     >
-                      <tab.icon
-                        cls={`w-5 h-5 transition-colors ${isActive ? '' : 'text-slate-400 group-hover:text-slate-600'}`}
-                        style={isActive ? { color: tab.accent } : undefined}
+                      {/* Hover tint (inactive only) */}
+                      {!isActive && (
+                        <span
+                          aria-hidden="true"
+                          className="group-hover:opacity-100"
+                          style={{
+                            position: 'absolute', inset: 0,
+                            borderRadius: '12px',
+                            background: `${tab.accent}0d`,
+                            opacity: 0,
+                            transition: 'opacity 0.18s',
+                          }}
+                        />
+                      )}
+
+                      {/* Drag grip — only this handle triggers pointer drag */}
+                      <GripVertical
+                        aria-hidden="true"
+                        onPointerDown={(e) => handleGripPointerDown(e, tab, idx)}
+                        className="absolute left-1 opacity-0 group-hover:opacity-40 transition-opacity"
+                        style={{ width:'10px', height:'14px', color: isActive ? '#fff' : '#64748b', flexShrink:0, cursor:'grab', zIndex:1 }}
                       />
-                      <span
-                        className="text-[9px] font-black uppercase tracking-widest leading-none"
-                        style={{ color: isActive ? tab.accent : '#94a3b8' }}
-                      >
-                        {tab.label}
+
+                      {/* Icon */}
+                      <span style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '26px', height: '26px', borderRadius: '8px', flexShrink: 0,
+                        background: isActive ? 'rgba(255,255,255,0.22)' : `${tab.accent}18`,
+                        transition: 'background 0.2s',
+                      }}>
+                        <tab.icon
+                          cls="w-3.5 h-3.5"
+                          style={{ color: isActive ? '#ffffff' : tab.accent, flexShrink: 0 }}
+                        />
+                      </span>
+
+                      {/* Label */}
+                      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <span style={{
+                          fontSize: '10px', fontWeight: 800,
+                          letterSpacing: '0.04em', textTransform: 'uppercase',
+                          lineHeight: 1.2, whiteSpace: 'nowrap',
+                          color: isActive ? '#ffffff' : '#475569',
+                          transition: 'color 0.18s',
+                        }}>
+                          {tab.label}
+                        </span>
                       </span>
                       {tab.badge != null && (
-                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none ${tab.badgeCls || 'bg-slate-200 text-slate-600'}`}>
+                        <span
+                          className={`absolute -top-1.5 -right-1.5 text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none ${tab.badgeCls || 'bg-slate-200 text-slate-600'}`}
+                          style={{
+                            background: isActive ? 'rgba(255,255,255,0.28)' : undefined,
+                            color:      isActive ? '#ffffff' : undefined,
+                            boxShadow:  '0 1px 4px rgba(0,0,0,0.15)',
+                          }}
+                        >
                           {tab.badge}
                         </span>
                       )}
@@ -4215,6 +13402,41 @@ const PIDVerification = () => {
                   );
                 })}
               </div>
+
+              {/* ── Custom drag ghost: fixed, follows cursor, no browser ghost ── */}
+              {draggingId && (() => {
+                const ghostTab = orderedPanels.find(p => p.id === draggingId);
+                if (!ghostTab) return null;
+                return (
+                  <div
+                    ref={dragGhostRef}
+                    style={{
+                      position: 'fixed',
+                      top:  `${dragInitialPos.current.y}px`,
+                      left: `${dragInitialPos.current.x}px`,
+                      width: `${NAV_RAIL_WIDTH}px`,
+                      pointerEvents: 'none',
+                      zIndex: 9999,
+                      borderRadius: '12px',
+                      padding: '9px 10px 9px 12px',
+                      background: `linear-gradient(135deg, ${ghostTab.accent} 0%, ${ghostTab.accent}dd 100%)`,
+                      border: `1.5px solid ${ghostTab.accent}`,
+                      boxShadow: `0 28px 56px rgba(0,0,0,0.24), 0 10px 22px rgba(0,0,0,0.14), 0 0 0 1px ${ghostTab.accent}33`,
+                      transform: 'rotate(2.5deg) scale(1.06)',
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span style={{ display:'flex', alignItems:'center', justifyContent:'center', width:'26px', height:'26px', borderRadius:'8px', background:'rgba(255,255,255,0.22)', flexShrink:0 }}>
+                      <ghostTab.icon cls="w-3.5 h-3.5" style={{ color:'#ffffff' }} />
+                    </span>
+                    <span style={{ fontSize:'10px', fontWeight:800, letterSpacing:'0.04em', textTransform:'uppercase', color:'#ffffff', whiteSpace:'nowrap', flex:1 }}>
+                      {ghostTab.label}
+                    </span>
+                    <GripVertical style={{ width:'10px', flexShrink:0, color:'rgba(255,255,255,0.55)' }} />
+                  </div>
+                );
+              })()}
             </div>
             {/* ══ end RIGHT ICON RAIL ══ */}
 
@@ -4262,6 +13484,25 @@ const PIDVerification = () => {
                       <a href={d.pdf_s3_url} target="_blank" rel="noopener noreferrer"
                         className="text-xs text-red-600 hover:underline flex-shrink-0">PDF</a>
                     )}
+                    {/* Re-check button — available for completed, failed and legend_pending docs */}
+                    {['completed', 'failed', 'legend_pending'].includes(d.status) && (
+                      <button
+                        onClick={() => recheckDocument(d.document_id, d.file_name)}
+                        disabled={recheckingDocId === d.document_id}
+                        title="Re-run quality check without re-uploading"
+                        className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all hover:-translate-y-px disabled:opacity-50 flex-shrink-0"
+                        style={{
+                          background: recheckingDocId === d.document_id ? '#f1f5f9' : '#f5f3ff',
+                          border: '1px solid #c4b5fd',
+                          color: '#7c3aed',
+                        }}
+                      >
+                        {recheckingDocId === d.document_id
+                          ? <><Loader className="w-3 h-3 animate-spin" /> Queuing…</>
+                          : <><RefreshCw className="w-3 h-3" /> Re-check</>
+                        }
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -4270,6 +13511,324 @@ const PIDVerification = () => {
         )}
 
       </div>
+
+      {/* ── Legend Sheet Detail Panel (slide-in drawer) ──────────────────── */}
+      {showLegendPanel && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end pointer-events-none">
+          {/* dim backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/40 pointer-events-auto"
+            onClick={() => setShowLegendPanel(false)}
+          />
+          {/* Drawer */}
+          <div className="relative w-full max-w-xl pointer-events-auto flex flex-col bg-white shadow-2xl"
+            style={{ animation: 'legendDrawerIn 0.25s ease-out' }}>
+            <style>{`
+              @keyframes legendDrawerIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to   { transform: translateX(0);    opacity: 1; }
+              }
+            `}</style>
+
+            {/* Drawer header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+              style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)' }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background:'linear-gradient(135deg,#16a34a,#15803d)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-white">
+                  <path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">
+                  {loadingLegendDetail ? 'Loading…' : (legendPanelSheet?.file_name || 'Legend Sheet')}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {legendPanelSheet?.extracted_data?.extraction_method === 'ai_vision' ? '🤖 Extracted via AI Vision' : '📝 Extracted via text parse'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLegendPanel(false)}
+                className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-slate-500">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Drawer body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {loadingLegendDetail && (
+                <div className="flex items-center justify-center py-16 gap-3">
+                  <Loader className="w-5 h-5 animate-spin text-emerald-500" />
+                  <span className="text-sm text-slate-400">Extracting data…</span>
+                </div>
+              )}
+
+              {!loadingLegendDetail && !legendPanelSheet && (
+                <p className="text-sm text-slate-400 text-center py-16">No data available</p>
+              )}
+
+              {!loadingLegendDetail && legendPanelSheet && (() => {
+                const d = legendPanelSheet.extracted_data || {};
+
+                // ── Soft-coded: drawer section definitions ─────────────────
+                // Add/remove entries here to change which categories appear.
+                const SECTIONS = [
+                  {
+                    key:   'line_representation',
+                    title: 'Line Representation',
+                    icon:  '—',
+                    empty: 'No line types found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((row, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="font-mono font-bold text-slate-700 w-24 flex-shrink-0 truncate">{row.key || '—'}</span>
+                            <span className="flex-1 text-slate-500">{row.description}</span>
+                            <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-slate-500 text-[10px] font-medium ${
+                              row.line_style === 'solid'  ? 'bg-blue-50 text-blue-600'  :
+                              row.line_style === 'dashed' ? 'bg-amber-50 text-amber-600':
+                              row.line_style === 'dotted' ? 'bg-purple-50 text-purple-600' :
+                              'bg-slate-100'
+                            }`}>{row.line_style}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'line_numbering_piping',
+                    title: 'Line Numbering — Piping',
+                    icon:  '⌗',
+                    empty: 'No piping numbering format found',
+                    render: (val) => (
+                      <div className="space-y-2">
+                        {val.format && (
+                          <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                            <p className="text-xs text-blue-500 font-medium mb-1">Format</p>
+                            <p className="font-mono text-sm font-bold text-blue-700">{val.format}</p>
+                            {val.example && <p className="text-xs text-blue-500 mt-1">e.g. <span className="font-mono">{val.example}</span></p>}
+                          </div>
+                        )}
+                        {val.fields?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {val.fields.map((f, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                                <span className="w-5 h-5 rounded flex items-center justify-center bg-blue-100 text-blue-700 font-bold text-[10px] flex-shrink-0 mt-0.5">{f.position}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-slate-700">{f.name}</p>
+                                  <p className="text-slate-400 truncate">{f.description}</p>
+                                </div>
+                                {f.example && <span className="font-mono text-slate-500 text-[10px]">{f.example}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                    isObj: true,
+                  },
+                  {
+                    key:   'line_numbering_pipeline',
+                    title: 'Line Numbering — Pipeline',
+                    icon:  '⌗',
+                    empty: 'No pipeline numbering format found',
+                    render: (val) => (
+                      <div className="space-y-2">
+                        {val.format && (
+                          <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                            <p className="text-xs text-purple-500 font-medium mb-1">Format</p>
+                            <p className="font-mono text-sm font-bold text-purple-700">{val.format}</p>
+                            {val.example && <p className="text-xs text-purple-400 mt-1">e.g. <span className="font-mono">{val.example}</span></p>}
+                          </div>
+                        )}
+                        {val.fields?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            {val.fields.map((f, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                                <span className="w-5 h-5 rounded flex items-center justify-center bg-purple-100 text-purple-700 font-bold text-[10px] flex-shrink-0 mt-0.5">{f.position}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-slate-700">{f.name}</p>
+                                  <p className="text-slate-400 truncate">{f.description}</p>
+                                </div>
+                                {f.example && <span className="font-mono text-slate-500 text-[10px]">{f.example}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                    isObj: true,
+                  },
+                  {
+                    key:   'abbreviations_process',
+                    title: 'Abbreviations — Process',
+                    icon:  'Aa',
+                    empty: 'No abbreviations found',
+                    render: (items) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {items.map((a, i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-amber-700 text-xs w-12 flex-shrink-0">{a.abbr}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={a.full_name}>{a.full_name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'inline_equipment',
+                    title: 'In-Line Equipment',
+                    icon:  '⊕',
+                    empty: 'No in-line equipment found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((e, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="font-mono font-bold text-slate-700 w-16 flex-shrink-0 truncate">{e.symbol}</span>
+                            <span className="flex-1 text-slate-500">{e.description}</span>
+                            {e.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 flex-shrink-0 capitalize">{e.type}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'service_codes',
+                    title: 'Service Codes',
+                    icon:  '⬡',
+                    empty: 'No service codes found',
+                    render: (obj) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-emerald-700 text-xs w-10 flex-shrink-0">{k}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={v}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                  {
+                    key:   'insulation_codes',
+                    title: 'Insulation Codes',
+                    icon:  '▣',
+                    empty: 'No insulation codes found',
+                    render: (obj) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-sky-700 text-xs w-8 flex-shrink-0">{k}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={v}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                  {
+                    key:   'piping_specs',
+                    title: 'Piping Specs',
+                    icon:  '≡',
+                    empty: 'No piping specs found',
+                    render: (obj) => (
+                      <div className="flex flex-col gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-2 bg-slate-50 rounded px-2 py-1.5 border border-slate-100 text-xs">
+                            <span className="font-mono font-bold text-rose-700 w-20 flex-shrink-0 truncate">{k}</span>
+                            <span className="text-slate-500 flex-1 min-w-0">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                ];
+
+                return (
+                  <>
+                    {SECTIONS.map(sec => {
+                      const val = d[sec.key];
+                      const isEmpty = !val ||
+                        (Array.isArray(val) && val.length === 0) ||
+                        (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0 && !val.format);
+                      if (isEmpty) return null;
+
+                      return (
+                        <div key={sec.key} className="rounded-xl border border-slate-200 overflow-hidden">
+                          {/* Section header */}
+                          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                            <span className="font-mono text-sm font-bold text-slate-400 w-6 text-center">{sec.icon}</span>
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{sec.title}</span>
+                            <span className="ml-auto text-xs text-slate-400">
+                              {Array.isArray(val) ? `${val.length} items` :
+                               sec.asEntries ? `${Object.keys(val).length} codes` :
+                               val.fields?.length ? `${val.fields.length} fields` : ''}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white">
+                            {isEmpty ? (
+                              <p className="text-xs text-slate-400 italic">{sec.empty}</p>
+                            ) : (
+                              sec.render(val)
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Instrument + Valve prefixes */}
+                    {(d.instrument_prefixes?.length > 0 || d.valve_prefixes?.length > 0) && (
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Tag Prefixes</span>
+                        </div>
+                        <div className="p-3 bg-white flex flex-col gap-2">
+                          {d.instrument_prefixes?.length > 0 && (
+                            <div>
+                              <p className="text-xs text-slate-400 font-medium mb-1">Instrument</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {d.instrument_prefixes.map((p, i) => (
+                                  <span key={i} className="font-mono text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 font-bold">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {d.valve_prefixes?.length > 0 && (
+                            <div>
+                              <p className="text-xs text-slate-400 font-medium mb-1">Valve</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {d.valve_prefixes.map((p, i) => (
+                                  <span key={i} className="font-mono text-xs px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 font-bold">{p}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extraction metadata */}
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-400 space-y-0.5">
+                      <p>Extracted: {legendPanelSheet.updated_at ? new Date(legendPanelSheet.updated_at).toLocaleString() : '—'}</p>
+                      {d.raw_text_chars !== undefined && <p>Raw text chars: {d.raw_text_chars}</p>}
+                      {d.extraction_method && <p>Method: {d.extraction_method}</p>}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── End Legend Sheet Detail Panel ────────────────────────────────── */}
+
     </DarkBg>
   );
 };

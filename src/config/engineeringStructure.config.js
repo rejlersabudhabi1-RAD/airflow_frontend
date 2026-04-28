@@ -15,7 +15,8 @@ import {
   DocumentTextIcon,
   TableCellsIcon,
   DocumentChartBarIcon,
-  CircleStackIcon
+  CircleStackIcon,
+  DocumentMagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 
 // SOFT-CODED: P&ID Feature Naming Configuration
@@ -143,11 +144,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'pms',
-        name: 'PMS',
-        fullName: 'Piping Material Specification',
+        name: 'Valve MTO',
+        fullName: 'Valve Material Take-Off',
         icon: TableCellsIcon,
         path: '/engineering/piping/pms',
-        description: 'Piping material specification management',
+        description: 'Valve material take-off list — quantities, specs and project rollup',
         moduleCode: 'piping_pms',
         badge: 'New'
       },
@@ -305,6 +306,16 @@ export const ENGINEERING_DISCIPLINES = {
         description: 'Digital transformation datasheets and documentation',
         moduleCode: 'digitization_datasheet',
         badge: 'New'
+      },
+      {
+        id: 'nonTeffMetadata',
+        name: 'SPF-NON-TEF',
+        fullName: 'Non-TEF Metadata Generator',
+        icon: DocumentMagnifyingGlassIcon,
+        path: '/engineering/digitization/non-teff-metadata',
+        description: 'Extract metadata from Non-TEFF documents (PDF, Excel, Word, AutoCAD)',
+        moduleCode: 'non_teff_metadata',
+        badge: 'AI'
       }
     ]
   }

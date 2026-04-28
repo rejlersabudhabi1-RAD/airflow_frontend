@@ -8,7 +8,21 @@ import { authService } from '../services/auth.service'
 /**
  * Register Page
  * Smart registration form with validation
+ *
+ * SOFT-CODED behaviour constants — change here without touching form logic.
  */
+
+// SOFT-CODED: message shown after a successful registration submission.
+// Reflects the admin-approval workflow: account is inactive until approved.
+const REGISTER_SUCCESS_TITLE = 'Registration submitted!'
+const REGISTER_SUCCESS_BODY  =
+  'Your account is pending administrator approval. ' +
+  'You will receive access once an admin activates your account.'
+
+// SOFT-CODED: route to navigate to after showing the approval notice.
+// '/login' lets the user attempt sign-in (they will see an informative
+// blocked-account message if they try before approval).
+const REGISTER_SUCCESS_REDIRECT = '/login'
 
 const registerSchema = Yup.object().shape({
   username: Yup.string()
@@ -34,8 +48,11 @@ const Register = () => {
 
     try {
       await authService.register(values)
-      toast.success('Registration successful! Please login.')
-      navigate('/login')
+      // SOFT-CODED: show approval-pending message (not "please login").
+      // The account is inactive until a super-admin activates it.
+      toast.success(REGISTER_SUCCESS_TITLE)
+      toast.info(REGISTER_SUCCESS_BODY, { autoClose: 8000 })
+      navigate(REGISTER_SUCCESS_REDIRECT)
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Registration failed'
       toast.error(errorMessage)
@@ -165,8 +182,13 @@ const Register = () => {
                   disabled={isLoading}
                   className="w-full px-5 sm:px-6 py-3 sm:py-4 text-sm sm:text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
-                  {isLoading ? 'Creating account...' : 'Create Account'}
+                  {isLoading ? 'Submitting request...' : 'Request Access'}
                 </button>
+
+                {/* SOFT-CODED: approval notice — visible below the submit button */}
+                <p className="text-center text-xs text-gray-500 mt-1">
+                  Accounts require administrator approval before you can sign in.
+                </p>
               </Form>
             )}
           </Formik>

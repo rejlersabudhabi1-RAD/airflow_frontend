@@ -113,16 +113,16 @@ export const FEATURES_CATALOG = {
       },
       {
         id: 'eng-piping-pms',
-        name: 'Piping Material Specification',
-        shortName: 'PMS',
-        description: 'Comprehensive piping material specification management',
+        name: 'Valve MTO',
+        shortName: 'Valve MTO',
+        description: 'Valve Material Take-Off — quantities, specs and project rollup',
         path: '/engineering/piping/pms',
         moduleCode: 'piping_pms',
         status: FEATURE_STATUS.NEW,
         badges: [FEATURE_BADGES.NEW],
         capabilities: [
-          'Material specification database',
-          'Piping class management',
+          'Valve register and take-off',
+          'Per-line valve quantification',
           'Compliance tracking',
           'Cost estimation'
         ],

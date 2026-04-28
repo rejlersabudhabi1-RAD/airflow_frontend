@@ -68,14 +68,13 @@ import DataGovernanceService from './pages/DataGovernanceService'
 import SecurityService from './pages/SecurityService'
 import About from './pages/About'
 import NotFound from './pages/NotFound'
-// DesignIQ Components
-import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
-import DesignIQLists from './pages/DesignIQ/DesignIQLists'
-import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
-// SOFT-CODED: PFD Verification disabled — import kept for reference
+// DesignIQ Components — SOFT-DISABLED: routes and sidebar hidden; source files untouched
+// import DesignIQDashboard from './pages/DesignIQ/DesignIQDashboard'
+// import DesignIQLists from './pages/DesignIQ/DesignIQLists'
+// import StressCriticalLineList from './pages/DesignIQ/StressCriticalLineList'
 // import PFDVerification from './pages/DesignIQ/PFDVerification'
-import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
-import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
+// import DesignIQProjectDetail from './pages/DesignIQ/DesignIQProjectDetail'
+// import DesignIQNewProject from './pages/DesignIQ/DesignIQNewProject'
 // Procurement Components
 import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
@@ -85,6 +84,7 @@ import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
+import PFDGeneratorPage from './pages/ProcessDatasheet/PFDAnalysis'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import SDVStreamsPage from './pages/ProcessDatasheet/SDVStreamsPage'
@@ -115,10 +115,11 @@ import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
 // Digitization Components
 import SpecCustomizationPage from './pages/Engineering/Digitization/SpecCustomizationPage'
 import DigitizationDatasheetPage from './pages/Engineering/Digitization/DigitizationDatasheetPage'
+import NonTeffMetadataPage from './pages/Engineering/Digitization/NonTeffMetadataPage'
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
-import PipingMaterialSpecification from './pages/Engineering/Piping/PipingMaterialSpecification'
+import ValveMTO from './pages/Engineering/Piping/ValveMTO'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -579,57 +580,15 @@ function App() {
           }
         />
 
-        {/* DesignIQ Routes */}
-        <Route
-          path="designiq"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQDashboard />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/new"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQNewProject />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/lists"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQLists />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="designiq/stress-critical-line-list"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <StressCriticalLineList />
-            </ModuleProtectedRoute>
-          }
-        />
-        {/* SOFT-CODED: PFD Verification route disabled — source files preserved
-        <Route
-          path="designiq/pfd-verification"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <PFDVerification />
-            </ModuleProtectedRoute>
-          }
-        />
+        {/* DesignIQ Routes — SOFT-DISABLED: all DesignIQ routes commented out;
+             source files in pages/DesignIQ/ are untouched and can be re-enabled here.
+        <Route path="designiq" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQDashboard /></ModuleProtectedRoute>} />
+        <Route path="designiq/new" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQNewProject /></ModuleProtectedRoute>} />
+        <Route path="designiq/lists" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQLists /></ModuleProtectedRoute>} />
+        <Route path="designiq/stress-critical-line-list" element={<ModuleProtectedRoute moduleCode="designiq"><StressCriticalLineList /></ModuleProtectedRoute>} />
+        <Route path="designiq/pfd-verification" element={<ModuleProtectedRoute moduleCode="designiq"><PFDVerification /></ModuleProtectedRoute>} />
+        <Route path="designiq/projects/:id" element={<ModuleProtectedRoute moduleCode="designiq"><DesignIQProjectDetail /></ModuleProtectedRoute>} />
         */}
-        <Route
-          path="designiq/projects/:id"
-          element={
-            <ModuleProtectedRoute moduleCode="designiq">
-              <DesignIQProjectDetail />
-            </ModuleProtectedRoute>
-          }
-        />
 
         {/* Procurement Routes */}
         <Route
@@ -684,12 +643,12 @@ function App() {
           }
         />
 
-        {/* Process Data Sheet - Pump Hydraulic Calculation Sub-Page */}
+        {/* Process Data Sheet - PFD Generator from P&ID */}
         <Route
           path="engineering/process/datasheet/pfd"
           element={
             <ModuleProtectedRoute moduleCode="process_datasheet">
-              <ComprehensivePumpForm />
+              <PFDGeneratorPage />
             </ModuleProtectedRoute>
           }
         />
@@ -801,12 +760,12 @@ function App() {
           }
         />
           {/* Piping Routes */}
-          {/* Piping Material Specification - Coming Soon */}
+          {/* Valve MTO (Material Take-Off) */}
           <Route
             path="engineering/piping/pms"
             element={
               <ProtectedRoute>
-                <PipingMaterialSpecification />
+                <ValveMTO />
               </ProtectedRoute>
             }
           />
@@ -982,6 +941,14 @@ function App() {
           element={
             <ProtectedRoute>
               <DigitizationDatasheetPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/digitization/non-teff-metadata"
+          element={
+            <ProtectedRoute>
+              <NonTeffMetadataPage />
             </ProtectedRoute>
           }
         />
