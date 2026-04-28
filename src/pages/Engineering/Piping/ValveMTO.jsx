@@ -306,10 +306,13 @@ const ValveMTOPage = () => {
           }
           lastSnapshot = snapshot;
 
-          // Reset the stall timer whenever the backend reports forward progress.
-          const p          = snapshot?.progress || {};
-          const rowsLen    = Array.isArray(snapshot?.rows) ? snapshot.rows.length : 0;
-          const progressKey = `${p.current || 0}:${p.total || 0}:${p.rows || rowsLen}`;
+          // Reset the stall timer whenever the backend reports forward progress
+          // OR a heartbeat (updated_at changes). The latter covers the slow
+          // PDF→JPEG render phase, which can take minutes on a slim-CPU
+          // container without producing AI rows yet.
+          const p           = snapshot?.progress || {};
+          const rowsLen     = Array.isArray(snapshot?.rows) ? snapshot.rows.length : 0;
+          const progressKey = `${p.current || 0}:${p.total || 0}:${p.rows || rowsLen}:${snapshot?.updated_at || ''}`;
           if (progressKey !== lastProgressKey) {
             lastProgressKey = progressKey;
             stallDeadline   = Date.now() + PDF_EXTRACTION_CONFIG.stallTimeoutMs;
