@@ -82,7 +82,7 @@ const PDF_EXTRACTION_CONFIG = {
   //                            (default 60 min). Raise this for very large
   //                            PDFs; it never aborts a job that's still
   //                            actively producing rows.
-  stallTimeoutMs:        8  * 60 * 1000,
+  stallTimeoutMs:        12 * 60 * 1000,
   absoluteMaxDurationMs: 60 * 60 * 1000,
 };
 
@@ -312,7 +312,7 @@ const ValveMTOPage = () => {
           // container without producing AI rows yet.
           const p           = snapshot?.progress || {};
           const rowsLen     = Array.isArray(snapshot?.rows) ? snapshot.rows.length : 0;
-          const progressKey = `${p.current || 0}:${p.total || 0}:${p.rows || rowsLen}:${snapshot?.updated_at || ''}`;
+          const progressKey = `${snapshot?.status || ''}:${p.current || 0}:${p.total || 0}:${p.rows || rowsLen}:${snapshot?.updated_at || ''}`;
           if (progressKey !== lastProgressKey) {
             lastProgressKey = progressKey;
             stallDeadline   = Date.now() + PDF_EXTRACTION_CONFIG.stallTimeoutMs;
