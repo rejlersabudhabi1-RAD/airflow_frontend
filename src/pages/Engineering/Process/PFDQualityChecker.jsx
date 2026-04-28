@@ -10,6 +10,11 @@ import {
   CircleDot, ExternalLink, Tag, Sliders, Ruler, Eye, MapPin,
 } from 'lucide-react';
 
+// Soft-coded: overlay marker animation config (mirrors PIDVerification)
+const PFD_OVERLAY_MARKER_ANIM_PING_SCALE  = 2.5;   // ripple ring final scale
+const PFD_OVERLAY_MARKER_ANIM_ENABLED      = true;  // toggle all marker animation
+const PFD_OVERLAY_MARKER_ANIM_DURATION_MS  = 2200;  // ping cycle ms
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Animation keyframes — PFD Quality Checker signature animations
 // Reference: P&ID Verification animation style, extended with PFD-specific
@@ -110,6 +115,23 @@ const KEYFRAMES = `
   /* ── PFD-specific: rotating rule-ring on hero ── */
   @keyframes spinSlow   { from{transform:rotate(0deg)}   to{transform:rotate(360deg)}  }
   @keyframes spinSlowRev{ from{transform:rotate(0deg)}   to{transform:rotate(-360deg)} }
+
+  /* ── Marker ping ring + glow (mirrors PID Verification) ── */
+  @keyframes markerPing {
+    0%   { transform: translate(-50%,-50%) scale(1);    opacity: 0;    }
+    12%  { transform: translate(-50%,-50%) scale(1.05); opacity: 0.85; }
+    100% { transform: translate(-50%,-50%) scale(${PFD_OVERLAY_MARKER_ANIM_PING_SCALE}); opacity: 0; }
+  }
+  @keyframes markerGlow {
+    0%, 100% { opacity: 1;    filter: brightness(1);    }
+    50%      { opacity: 0.55; filter: brightness(1.35); }
+  }
+
+  /* ── Nav rail tab slide-in ── */
+  @keyframes navTabIn {
+    from { opacity: 0; transform: translateX(18px) scale(0.92); }
+    to   { opacity: 1; transform: translateX(0)    scale(1);    }
+  }
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +306,41 @@ const CATEGORY_LABELS = {
 
 // Soft-coded: categories hidden from the findings table
 const HIDDEN_CATEGORIES = new Set([]);
+
+// Soft-coded: when false, suppresses the native browser tooltip that appears on
+// hover over every overlay marker on the PFD drawing. Core marker logic unchanged.
+const PFD_OVERLAY_SHOW_MARKER_TOOLTIP = false;
+
+// Soft-coded: localStorage keys for the engineer correction + stats system.
+// Corrections key format: 'drawingId:findingId' → { correctedLeft, correctedTop, … }
+// Stats key format: 'drawingId' → { tierCounts: { TAG:n, ZONE:n, CX:n }, timestamp }
+const PFD_CALIB_STORAGE_KEY = 'pfd_calib_corrections';
+const PFD_CALIB_STATS_KEY   = 'pfd_calib_stats';
+
+// Soft-coded: flip to true to render a tiny tier label (TAG / ZONE / CX) beside
+// each overlay marker for diagnosis. Default false for production.
+const PFD_SHOW_RESOLUTION_DEBUG = false;
+
+// Soft-coded: nav rail dimensions and animation timing
+const PFD_NAV_RAIL_ENTRY_DELAY_MS    = 55;
+const PFD_NAV_RAIL_ENTRY_DURATION_MS = 320;
+const PFD_NAV_RAIL_WIDTH             = 148;
+
+// Soft-coded: performance panel — tier placement weights, colours, labels
+const PFD_PERF_TIER_WEIGHT = { TAG: 1.00, ZONE: 0.50, CX: 0.95 };
+const PFD_PERF_TIER_COLOR  = { TAG: '#10b981', ZONE: '#f59e0b', CX: '#06b6d4' };
+const PFD_PERF_TIER_LABEL  = { TAG: 'Exact Tag Match', ZONE: 'Category Zone', CX: 'Engineer Corrected' };
+
+// Soft-coded: performance panel — score thresholds
+const PFD_PERF_SCORE_THRESHOLDS        = { high: 80, moderate: 55 };
+const PFD_PERF_ANCHOR_THRESHOLDS       = { high: 70, moderate: 40 };
+const PFD_PERF_DOC_ACCURACY_THRESHOLDS = { high: 75, moderate: 50 };
+
+// Soft-coded: weighted document accuracy formula
+const PFD_PERF_DOC_ACCURACY_WEIGHTS = { ocr: 0.30, placement: 0.45, anchor: 0.25 };
+const PFD_PERF_OCR_GOOD_THRESHOLD   = 500;   // chars — what counts as "good" OCR
+const PFD_PERF_TOP_RULES_COUNT      = 8;
+const PFD_PERF_TOP_CATS_COUNT       = 6;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SOFT-CODED: VIEW 1 hero capability badges
@@ -652,6 +709,11 @@ const PFDQualityChecker = () => {
   const [focusedFindingId,    setFocusedFindingId]    = useState(null);
   const [showHeuristic,       setShowHeuristic]       = useState(true);
   const [reextracting,        setReextracting]        = useState(false);
+  // Engineer correction mode — click a finding row to focus it, then click
+  // ⊹ Correct Marker to enter crosshair mode and pin the exact drawing location.
+  const [correctionMode,     setCorrectionMode]     = useState(false);
+  // Stored engineer corrections keyed 'drawingId:findingId' from localStorage.
+  const [calibCorrections,   setCalibCorrections]   = useState({});
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => { fetchProjects(); }, []);
@@ -683,7 +745,42 @@ const PFDQualityChecker = () => {
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [documentId, activeDrawing, results?.document_id]);
 
+  // Load stored calibration corrections from localStorage on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PFD_CALIB_STORAGE_KEY);
+      if (raw) setCalibCorrections(JSON.parse(raw));
+    } catch { /* non-fatal */ }
+  }, []);
+
   // ── Project API ───────────────────────────────────────────────────────────
+  const saveCalibration = (next) => {
+    setCalibCorrections(next);
+    try { localStorage.setItem(PFD_CALIB_STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const clearDrawingCorrections = () => {
+    if (!activeDrawing) return;
+    const next = { ...calibCorrections };
+    for (const k of Object.keys(next)) {
+      if (k.startsWith(`${activeDrawing}:`)) delete next[k];
+    }
+    saveCalibration(next);
+  };
+
+  const exportCalibrationData = () => {
+    try {
+      const corrections = JSON.parse(localStorage.getItem(PFD_CALIB_STORAGE_KEY) || '{}');
+      const stats      = JSON.parse(localStorage.getItem(PFD_CALIB_STATS_KEY)    || '{}');
+      const payload = { exportedAt: new Date().toISOString(), corrections, stats };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `pfd_calibration_${Date.now()}.json`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch {}
+  };
+
   const fetchProjects = async () => {
     setLoadingProjects(true);
     try {
@@ -1073,28 +1170,41 @@ const PFDQualityChecker = () => {
         const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
         if (usedKeys.has(cellKey)) continue;
         usedKeys.add(cellKey);
-        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true });
+        // Check for stored engineer correction (always wins)
+        const corrKey = `${activeDrawing || 'pfd'}:${f.id}`;
+        const storedCorr = calibCorrections[corrKey];
+        if (storedCorr) {
+          nodes.push({ finding: f, band, rawKey: tag, left: storedCorr.correctedLeft, top: storedCorr.correctedTop, anchored: true, tier: 'CX' });
+          placed++; break;
+        }
+        nodes.push({ finding: f, band, rawKey: tag, left, top, anchored: true, tier: 'TAG' });
         placed++;
       }
 
       // Fallback: use category semantic zone + small hash jitter per finding
       if (placed === 0) {
-        const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
-        const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
-        // Small jitter (±8%) so multiple findings in the same category don't overlap
-        const jx = (stableUnit(seed, 11) - 0.5) * 16;
-        const jy = (stableUnit(seed, 29) - 0.5) * 16;
-        const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
-        const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
-        const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
-        if (!usedKeys.has(cellKey)) {
-          usedKeys.add(cellKey);
-          nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false });
+        // Check engineer correction first
+        const corrKey = `${activeDrawing || 'pfd'}:${f.id}`;
+        const storedCorr = calibCorrections[corrKey];
+        if (storedCorr) {
+          nodes.push({ finding: f, band, rawKey: evidence, left: storedCorr.correctedLeft, top: storedCorr.correctedTop, anchored: true, tier: 'CX' });
+        } else {
+          const zone = CATEGORY_ZONES[f.category] ?? [50, 45];
+          const seed = `${activeDrawing || 'pfd'}:${f.rule_id}:${evidence}`;
+          const jx = (stableUnit(seed, 11) - 0.5) * 16;
+          const jy = (stableUnit(seed, 29) - 0.5) * 16;
+          const left = Math.min(AREA_X_MAX, Math.max(AREA_X_MIN, zone[0] + jx));
+          const top  = Math.min(AREA_Y_MAX, Math.max(AREA_Y_MIN, zone[1] + jy));
+          const cellKey = `${Math.round(left * 2)},${Math.round(top * 2)}`;
+          if (!usedKeys.has(cellKey)) {
+            usedKeys.add(cellKey);
+            nodes.push({ finding: f, band, rawKey: evidence, left, top, anchored: false, tier: 'ZONE' });
+          }
         }
       }
     }
     return nodes;
-  }, [activeDrawingData, activeDrawing]);
+  }, [activeDrawingData, activeDrawing, calibCorrections]);
 
   const jumpToFinding = (findingId) => {
     setFocusedFindingId(prev => prev === findingId ? null : findingId);
@@ -1706,6 +1816,21 @@ const PFDQualityChecker = () => {
           const overlayNodes    = buildOverlayNodes(activeDrawingData?.issues ?? []);
           const visibleNodes     = overlayNodes.filter(n => showHeuristic || n.anchored);
 
+          // Auto-record per-drawing tier stats to localStorage (runs on first render per drawing)
+          (() => {
+            if (!activeDrawing || overlayNodes.length === 0) return;
+            try {
+              const tc = {};
+              for (const n of overlayNodes) { const t = n.tier || 'ZONE'; tc[t] = (tc[t] || 0) + 1; }
+              const raw = localStorage.getItem(PFD_CALIB_STATS_KEY);
+              const all = raw ? JSON.parse(raw) : {};
+              if (!all[activeDrawing]) {
+                all[activeDrawing] = { drawingId: activeDrawing, timestamp: new Date().toISOString(), totalFindings: overlayNodes.length, tierCounts: tc, anchoredCount: overlayNodes.filter(n => n.anchored).length, correctedCount: overlayNodes.filter(n => n.tier === 'CX').length };
+                localStorage.setItem(PFD_CALIB_STATS_KEY, JSON.stringify(all));
+              }
+            } catch {}
+          })();
+
           // Soft-coded: severity → fill colour for overlay dots
           const SEV_COLOR = {
             critical: { bg:'#dc2626', border:'#991b1b', glow:'rgba(220,38,38,0.5)' },
@@ -1759,36 +1884,58 @@ const PFDQualityChecker = () => {
               accent: '#64748b',
               glow:   'rgba(100,116,139,0.25)',
             },
+            {
+              id: 'performance',
+              label: 'Accuracy',
+              icon: ({ cls }) => <Zap className={cls} />,
+              badge: null,
+              accent: '#0d9488',
+              glow:   'rgba(13,148,136,0.28)',
+            },
           ];
 
           return (
           <div className="flex gap-4 items-start" style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
 
             {/* ── ICON RAIL — left sidebar navigation ──────────────────────── */}
-            <div className="flex flex-col items-center gap-1 py-4 px-2 rounded-2xl sticky top-6 flex-shrink-0"
+            <div className="flex flex-col gap-1 py-3 px-2 rounded-2xl sticky top-6 flex-shrink-0"
               style={{ background:'rgba(255,255,255,0.9)', border:'1px solid #d1fae5',
                        backdropFilter:'blur(12px)', boxShadow:'0 2px 12px rgba(13,148,136,0.08)',
-                       animation:'railIn 0.3s ease-out both', minWidth:'64px' }}>
-              {PANELS.map((p) => {
+                       animation:'railIn 0.3s ease-out both', width:`${PFD_NAV_RAIL_WIDTH}px` }}>
+              {PANELS.map((p, pIdx) => {
                 const Icon     = p.icon;
                 const isActive = activePanel === p.id;
                 return (
-                  <button key={p.id} onClick={() => setActivePanel(p.id)} title={p.label}
-                    className={`relative flex flex-col items-center gap-1 px-2 py-3 rounded-xl w-full transition-all duration-200 ${
-                      isActive ? 'text-white' : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'
-                    }`}
-                    style={isActive
-                      ? { background:`linear-gradient(135deg,${p.accent},${p.accent}cc)`, boxShadow:`0 4px 14px ${p.glow}` }
-                      : undefined}>
-                    <Icon cls={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-white' : ''}`} />
-                    <span className={`text-[9px] font-bold uppercase tracking-wide leading-none ${isActive ? 'text-white/90' : ''}`}>
+                  <button key={p.id} onClick={() => setActivePanel(p.id)}
+                    className="relative flex items-center gap-2 pl-2.5 pr-3 py-2.5 rounded-xl w-full transition-all duration-200"
+                    style={{
+                      animation:`navTabIn ${PFD_NAV_RAIL_ENTRY_DURATION_MS}ms cubic-bezier(0.22,1,0.36,1) both`,
+                      animationDelay:`${pIdx * PFD_NAV_RAIL_ENTRY_DELAY_MS}ms`,
+                      ...(isActive
+                        ? { background:`linear-gradient(135deg,${p.accent},${p.accent}cc)`,
+                            boxShadow:`0 4px 14px ${p.glow}, 0 1px 3px rgba(0,0,0,0.08)`,
+                            border:`1px solid ${p.accent}` }
+                        : { background:'#ffffff', border:'1px solid #e2e8f0' }),
+                    }}>
+                    {/* Icon chip */}
+                    <span className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center"
+                      style={isActive
+                        ? { background:'rgba(255,255,255,0.22)' }
+                        : { background:`${p.accent}14`, border:`1px solid ${p.accent}28` }}>
+                      <span style={{ color: isActive ? '#ffffff' : p.accent }}>
+                        <Icon cls="w-3.5 h-3.5 flex-shrink-0" />
+                      </span>
+                    </span>
+                    {/* Label — always full width; badge floats absolute */}
+                    <span className={`text-[10px] font-bold uppercase tracking-normal leading-none whitespace-nowrap ${isActive ? 'text-white' : 'text-slate-600'}`}>
                       {p.label}
                     </span>
+                    {/* Badge — absolute so it never steals label space */}
                     {p.badge !== null && p.badge !== undefined && (
-                      <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-black px-1 ${
+                      <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-black px-1 ${
                         isActive ? 'bg-white text-slate-700' : (p.badgeCls || 'bg-teal-500 text-white')
                       }`}>
-                        {p.badge}
+                        {p.badge > 99 ? '99+' : p.badge}
                       </span>
                     )}
                   </button>
@@ -1923,9 +2070,48 @@ const PFDQualityChecker = () => {
                       className="text-xs text-teal-600 hover:text-teal-800 underline underline-offset-2 transition-colors">
                       View table
                     </button>
+                    {/* Correction mode — pin exact marker location */}
+                    <button
+                      onClick={() => setCorrectionMode(v => !v)}
+                      disabled={!focusedFindingId}
+                      title={focusedFindingId ? 'Click drawing to pin marker at exact location' : 'Click a finding below first'}
+                      className={`text-[10px] px-2 py-1 rounded border font-semibold transition-colors ${
+                        correctionMode
+                          ? 'bg-amber-400 text-white border-amber-500'
+                          : focusedFindingId
+                            ? 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                            : 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                      }`}
+                    >
+                      {correctionMode ? '⊕ Click drawing…' : '⊕ Correct Marker'}
+                    </button>
+                    <button
+                      onClick={exportCalibrationData}
+                      title="Export correction records and tier stats as JSON"
+                      className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-slate-600 border-slate-300 hover:border-teal-400 hover:text-teal-600 transition-colors"
+                    >
+                      ↓ Export Data
+                    </button>
+                    {activeDrawing && Object.keys(calibCorrections).some(k => k.startsWith(`${activeDrawing}:`)) && (
+                      <button
+                        onClick={clearDrawingCorrections}
+                        title="Remove all stored corrections for this drawing"
+                        className="text-[10px] px-2 py-1 rounded border font-semibold bg-white text-red-400 border-red-200 hover:border-red-400 transition-colors"
+                      >
+                        ✕ Clear Fixes
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="bg-slate-100">
+                  {/* Correction mode active banner */}
+                  {correctionMode && focusedFindingId && (
+                    <div className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 font-semibold">
+                      <span className="text-amber-500 text-base leading-none flex-shrink-0">⊕</span>
+                      <span>Click the <strong>exact location</strong> on the drawing to pin the marker for <strong>{visibleNodes.find(n => n.finding.id === focusedFindingId)?.rawKey ?? 'focused finding'}</strong>.</span>
+                      <button onClick={() => setCorrectionMode(false)} className="ml-auto text-amber-500 hover:text-amber-700 font-bold text-sm leading-none flex-shrink-0">✕</button>
+                    </div>
+                  )}
                   {drawingImageLoading && (
                     <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-xs">
                       <Loader className="w-4 h-4 animate-spin" />Loading drawing…
@@ -1957,7 +2143,30 @@ const PFDQualityChecker = () => {
                   )}
                   {!drawingImageLoading && drawingImageUrl && (
                     <div className="overflow-auto" style={{ maxHeight:'72vh' }}>
-                      <div className="relative w-full" style={{ lineHeight:0 }}>
+                      <div
+                        className="relative w-full"
+                        style={{ lineHeight:0, cursor: correctionMode && focusedFindingId ? 'crosshair' : 'default' }}
+                        onClick={(e) => {
+                          if (!correctionMode || !focusedFindingId) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const clL = Math.min(83, Math.max(2, ((e.clientX - rect.left)  / rect.width)  * 100));
+                          const clT = Math.min(87, Math.max(2, ((e.clientY - rect.top)   / rect.height) * 100));
+                          const corrKey  = `${activeDrawing || 'pfd'}:${focusedFindingId}`;
+                          const existing = overlayNodes.find(n => n.finding.id === focusedFindingId);
+                          saveCalibration({
+                            ...calibCorrections,
+                            [corrKey]: {
+                              drawingId: activeDrawing, findingId: focusedFindingId,
+                              ruleId: existing?.finding?.rule_id,
+                              evidenceKey: existing?.rawKey, tier: existing?.tier,
+                              originalLeft: existing?.left ?? null, originalTop: existing?.top ?? null,
+                              correctedLeft: clL, correctedTop: clT,
+                              timestamp: new Date().toISOString(),
+                            },
+                          });
+                          setCorrectionMode(false);
+                        }}
+                      >
                         <img src={drawingImageUrl} alt={activeDrawing} draggable={false}
                           className="w-full block" style={{ height:'auto', userSelect:'none' }} />
                         <div className="absolute inset-0" style={{ pointerEvents:'none' }}>
@@ -1972,25 +2181,41 @@ const PFDQualityChecker = () => {
                               ? { borderRadius:'3px', transform:`translate(-50%,-50%) rotate(45deg) scale(${scale})`, width:'13px', height:'13px' }
                               : { borderRadius:'50%', transform:`translate(-50%,-50%) scale(${scale})`, width:'16px', height:'16px' };
                             return (
-                              <button
-                                key={n.rawKey}
-                                onClick={() => jumpToFinding(n.finding.id)}
-                                title={`[${cat}] ${n.finding.issue_observed}`}
-                                className={`absolute border-2 transition-all ${isFocused ? 'z-20' : 'z-10 hover:opacity-90'}`}
-                                style={{
-                                  left: `${n.left}%`,
-                                  top:  `${n.top}%`,
-                                  backgroundColor: col.bg,
-                                  borderColor: col.border,
-                                  boxShadow: isFocused
-                                    ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
-                                    : '0 1px 4px rgba(0,0,0,0.4)',
-                                  pointerEvents: 'all',
-                                  outline: n.anchored ? undefined : '2px dashed rgba(100,116,139,0.7)',
-                                  outlineOffset: n.anchored ? undefined : '3px',
-                                  ...shapeStyle,
-                                }}
-                              />
+                              <React.Fragment key={n.rawKey}>
+                                {/* Ping ring — animates outward from the marker centre */}
+                                {PFD_OVERLAY_MARKER_ANIM_ENABLED && !isFocused && !isDiamond && (
+                                  <div aria-hidden="true" style={{
+                                    position:'absolute',
+                                    left:`${n.left}%`, top:`${n.top}%`,
+                                    width:'16px', height:'16px',
+                                    border:`2.5px solid ${col.bg}`,
+                                    backgroundColor:'transparent',
+                                    borderRadius:'50%',
+                                    animation:`markerPing ${PFD_OVERLAY_MARKER_ANIM_DURATION_MS}ms ease-out infinite`,
+                                    pointerEvents:'none', zIndex:9,
+                                  }} />
+                                )}
+                                <button
+                                  onClick={() => jumpToFinding(n.finding.id)}
+                                  title={PFD_OVERLAY_SHOW_MARKER_TOOLTIP ? `[${cat}] ${n.finding.issue_observed}` : undefined}
+                                  className={`absolute border-2 transition-all ${isFocused ? 'z-20' : 'z-10 hover:opacity-90'}`}
+                                  style={{
+                                    left: `${n.left}%`,
+                                    top:  `${n.top}%`,
+                                    backgroundColor: col.bg,
+                                    borderColor: col.border,
+                                    boxShadow: isFocused
+                                      ? `0 0 0 4px ${col.glow}, 0 2px 8px rgba(0,0,0,0.5)`
+                                      : '0 1px 4px rgba(0,0,0,0.4)',
+                                    pointerEvents: 'all',
+                                    outline: n.anchored ? undefined : '2px dashed rgba(100,116,139,0.7)',
+                                    outlineOffset: n.anchored ? undefined : '3px',
+                                    animation: PFD_OVERLAY_MARKER_ANIM_ENABLED && !isFocused && !isDiamond
+                                      ? `markerGlow ${PFD_OVERLAY_MARKER_ANIM_DURATION_MS}ms ease-in-out infinite` : undefined,
+                                    ...shapeStyle,
+                                  }}
+                                />
+                              </React.Fragment>
                             );
                           })}
                         </div>
@@ -2139,86 +2364,333 @@ const PFDQualityChecker = () => {
               {/* ─── end FINDINGS ─────────────────────────────────────── */}
 
               {/* ─── SUMMARY panel ────────────────────────────────────── */}
-              {activePanel === 'summary' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl overflow-hidden" style={T.card}>
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-center">
-                      <BarChart2 className="w-4 h-4 text-teal-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-900">Category Breakdown</h2>
-                      <p className="text-xs text-slate-500">{allIssues.length} total findings across all drawings</p>
-                    </div>
-                  </div>
-                  <div className="p-5 space-y-3">
-                    {(() => {
-                      const catCounts = {};
-                      allIssues.forEach(f => {
-                        const c = f.category || 'other';
-                        if (!catCounts[c]) catCounts[c] = { total:0, critical:0, major:0 };
-                        catCounts[c].total++;
-                        if (f.severity === 'critical') catCounts[c].critical++;
-                        if (f.severity === 'major')    catCounts[c].major++;
-                      });
-                      const sorted = Object.entries(catCounts).sort((a,b) => b[1].total - a[1].total);
-                      const maxCount = sorted[0]?.[1]?.total || 1;
-                      if (sorted.length === 0) return (
-                        <div className="py-8 text-center text-slate-400 text-sm">No findings to summarise.</div>
-                      );
-                      return sorted.map(([cat, counts]) => (
-                        <div key={cat}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-slate-700">{CATEGORY_LABELS[cat] ?? cat}</span>
-                            <div className="flex items-center gap-2">
-                              {counts.critical > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">{counts.critical} crit</span>}
-                              {counts.major    > 0 && <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">{counts.major} maj</span>}
-                              <span className="text-xs font-bold text-slate-600">{counts.total}</span>
-                            </div>
-                          </div>
-                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-700"
-                              style={{
-                                width:`${(counts.total / maxCount) * 100}%`,
-                                background: counts.critical > 0
-                                  ? 'linear-gradient(90deg,#ef4444,#f97316)'
-                                  : counts.major > 0
-                                    ? 'linear-gradient(90deg,#f97316,#fbbf24)'
-                                    : 'linear-gradient(90deg,#14b8a6,#0891b2)',
-                              }} />
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
+              {activePanel === 'summary' && (() => {
+                // ── Soft-coded: severity config ──────────────────────────
+                const SUMM_SEV_ORDER  = ['critical','major','minor','info'];
+                const SUMM_SEV_COLOR  = { critical:'#dc2626', major:'#f97316', minor:'#fbbf24', info:'#0d9488' };
+                const SUMM_SEV_LABEL  = { critical:'Critical',  major:'Major',   minor:'Minor',  info:'Info'   };
+                const SUMM_SEV_ICON   = { critical:'🔴',         major:'🟠',       minor:'🟡',      info:'🟢'     };
 
-                {results.drawings?.length > 0 && (
-                  <div className="rounded-2xl overflow-hidden" style={T.card}>
-                    <div className="px-5 py-4 border-b border-slate-100">
-                      <h2 className="text-sm font-bold text-slate-900">Drawings</h2>
-                      <p className="text-xs text-slate-500 mt-0.5">{results.drawings.length} page{results.drawings.length !== 1 ? 's' : ''} — click to inspect</p>
-                    </div>
-                    <div className="divide-y divide-slate-50">
-                      {results.drawings.map(d => (
-                        <div key={d.drawing_id}
-                          className="px-5 py-3 flex items-center gap-4 hover:bg-teal-50/30 transition-colors cursor-pointer"
-                          onClick={() => { setActiveDrawing(d.drawing_id); setActivePanel('findings'); }}>
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${(d.issue_count ?? 0) > 0 ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                            {(d.issue_count ?? 0) > 0 ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                // Soft-coded: category icons (extend here — no JSX changes needed)
+                const SUMM_CAT_ICON = {
+                  equipment:'⚙️', stream:'🌊', control:'🎛️',
+                  title_block:'📋', safety:'🛡️', utility:'🔁', notes:'📌',
+                };
+
+                // Soft-coded: quality score severity penalties
+                const SUMM_PENALTY = { critical:8, major:3, minor:1, info:0 };
+
+                // ── Derived data ─────────────────────────────────────────
+                const drawings = results.drawings ?? [];
+                const totalD   = drawings.length;
+                const passD    = drawings.filter(d => (d.issue_count ?? 0) === 0).length;
+                const failD    = totalD - passD;
+
+                const sevTotals = {};
+                for (const s of SUMM_SEV_ORDER) {
+                  sevTotals[s] = allIssues.filter(f => (f.severity || 'minor').toLowerCase() === s).length;
+                }
+
+                const catData = {};
+                for (const f of allIssues) {
+                  const c = f.category || 'other';
+                  if (!catData[c]) catData[c] = { total:0, critical:0, major:0, minor:0, info:0 };
+                  catData[c].total++;
+                  const sv = (f.severity || 'minor').toLowerCase();
+                  catData[c][sv] = (catData[c][sv] || 0) + 1;
+                }
+                const catSorted = Object.entries(catData).sort((a,b) => b[1].total - a[1].total);
+                const maxCat    = catSorted[0]?.[1]?.total || 1;
+
+                // Weighted quality score (100 = perfect, 0 = worst)
+                const penalty      = Object.entries(sevTotals).reduce((s,[sv,c]) => s + c * (SUMM_PENALTY[sv] ?? 0), 0);
+                const qualityScore = Math.max(0, Math.min(100, 100 - penalty));
+                const scoreColor   = qualityScore >= 80 ? '#10b981' : qualityScore >= 55 ? '#f59e0b' : '#ef4444';
+                const scoreLabel   = qualityScore >= 80 ? 'Good' : qualityScore >= 55 ? 'Fair' : 'Needs Work';
+
+                // SVG arc (270° sweep, starts bottom-left)
+                const arc = (cx, cy, r, pct) => {
+                  if (pct >= 100) pct = 99.99;
+                  const angle = ((pct / 100) * 270 - 135) * Math.PI / 180;
+                  const sx = cx + r * Math.cos(-135 * Math.PI / 180);
+                  const sy = cy + r * Math.sin(-135 * Math.PI / 180);
+                  return `M ${sx} ${sy} A ${r} ${r} 0 ${pct > 50 ? 1 : 0} 1 ${cx + r * Math.cos(angle)} ${cy + r * Math.sin(angle)}`;
+                };
+
+                return (
+                  <div className="space-y-4" style={{ animation:'panelSlide 0.25s ease-out both' }}>
+
+                    {/* ── KPI strip ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label:'Total Issues',    val:totalIssues,         icon:'🔍', col:'#0d9488', bg:'rgba(13,148,136,0.07)',  border:'rgba(13,148,136,0.18)' },
+                        { label:'Critical',        val:sevTotals.critical,  icon:'🔴', col:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.18)'  },
+                        { label:'Major',           val:sevTotals.major,     icon:'🟠', col:'#f97316', bg:'rgba(249,115,22,0.07)',  border:'rgba(249,115,22,0.18)' },
+                        { label:'Drawings Passed', val:`${passD}/${totalD}`,icon:'✅', col:'#10b981', bg:'rgba(16,185,129,0.07)', border:'rgba(16,185,129,0.18)' },
+                      ].map((k, i) => (
+                        <div key={k.label} className="rounded-2xl p-4 flex flex-col gap-2"
+                          style={{ background:k.bg, border:`1px solid ${k.border}`, animation:`countUp 0.5s ease-out ${i*0.07}s both` }}>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xl leading-none">{k.icon}</span>
+                            <span className="text-[9px] font-bold uppercase tracking-normal text-slate-400 text-right leading-tight">{k.label}</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate">{d.drawing_id}</p>
-                            <p className="text-xs text-slate-500">{d.issue_count ?? 0} issues</p>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-300" />
+                          <p className="text-3xl font-black leading-none" style={{ color:k.col }}>{k.val}</p>
                         </div>
                       ))}
                     </div>
+
+                    {/* ── Quality score + severity ring ── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                      {/* Quality Score */}
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3"
+                          style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff)' }}>
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 3px 10px rgba(13,148,136,0.28)' }}>
+                            <Activity className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">Overall Quality Score</h3>
+                            <p className="text-xs text-slate-500">Weighted penalty model per severity</p>
+                          </div>
+                        </div>
+                        <div className="p-5 flex flex-col items-center gap-4">
+                          <svg width="180" height="120" viewBox="0 0 180 120">
+                            {/* Track */}
+                            <path d={arc(90,100,68,100)} fill="none" stroke="#e2e8f0" strokeWidth="12" strokeLinecap="round"/>
+                            {/* Score arc */}
+                            <path d={arc(90,100,68,qualityScore)} fill="none"
+                              stroke={scoreColor} strokeWidth="12" strokeLinecap="round"
+                              style={{ filter:`drop-shadow(0 0 8px ${scoreColor}88)` }}/>
+                            {/* Score text */}
+                            <text x="90" y="94" textAnchor="middle" fontSize="30" fontWeight="900" fill={scoreColor} fontFamily="system-ui,sans-serif">{qualityScore}</text>
+                            <text x="90" y="114" textAnchor="middle" fontSize="11" fill="#64748b" fontWeight="700" fontFamily="system-ui,sans-serif">{scoreLabel}</text>
+                          </svg>
+                          <div className="grid grid-cols-2 gap-2 w-full">
+                            {[
+                              { label:'Drawings',  val:`${passD} / ${totalD} passed`, col:'#10b981' },
+                              { label:'Findings',  val:`${totalIssues} total`,         col: totalIssues > 0 ? '#dc2626' : '#10b981' },
+                            ].map(s => (
+                              <div key={s.label} className="rounded-xl p-3 text-center"
+                                style={{ background:'rgba(248,250,252,0.9)', border:'1px solid #e2e8f0' }}>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-normal mb-1.5">{s.label}</p>
+                                <p className="text-xs font-black leading-none" style={{ color:s.col }}>{s.val}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Severity distribution */}
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3"
+                          style={{ background:'linear-gradient(135deg,#fff7ed,#fef3c7)' }}>
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#f97316,#fbbf24)', boxShadow:'0 3px 10px rgba(249,115,22,0.25)' }}>
+                            <AlertTriangle className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">Severity Distribution</h3>
+                            <p className="text-xs text-slate-500">{totalIssues} findings across {totalD} drawing{totalD !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="p-5 space-y-3.5">
+                          {SUMM_SEV_ORDER.map(s => {
+                            const cnt = sevTotals[s] ?? 0;
+                            const pct = totalIssues > 0 ? Math.round((cnt / totalIssues) * 100) : 0;
+                            const col = SUMM_SEV_COLOR[s];
+                            return (
+                              <div key={s} className="flex items-center gap-3">
+                                <span className="text-base flex-shrink-0 w-5 text-center">{SUMM_SEV_ICON[s]}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-bold text-slate-700">{SUMM_SEV_LABEL[s]}</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm font-black tabular-nums" style={{ color:col }}>{cnt}</span>
+                                      <span className="text-[10px] text-slate-400">({pct}%)</span>
+                                    </div>
+                                  </div>
+                                  <div className="h-2.5 rounded-full overflow-hidden" style={{ background:`${col}18` }}>
+                                    <div className="h-full rounded-full transition-all duration-700"
+                                      style={{ width:`${pct}%`, background:col, boxShadow:`0 0 8px ${col}66` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {totalIssues === 0 && (
+                            <div className="py-6 text-center flex flex-col items-center gap-2">
+                              <CheckCircle className="w-8 h-8 text-emerald-400" style={{ animation:'checkPop 0.4s ease-out both' }} />
+                              <p className="text-sm font-semibold text-emerald-700">No findings detected</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Category breakdown (segmented stacked bars) ── */}
+                    {catSorted.length > 0 && (
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#f0fdfa,#ccfbf1)', border:'1px solid #99f6e4' }}>
+                            <BarChart2 className="w-4 h-4 text-teal-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-bold text-slate-900">Category Breakdown</h3>
+                            <p className="text-xs text-slate-500">{catSorted.length} rule categories · segmented by severity</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full flex-shrink-0">ISO 10628</span>
+                        </div>
+                        <div className="p-5 space-y-4">
+                          {catSorted.map(([cat, counts], i) => {
+                            const label   = CATEGORY_LABELS[cat] ?? cat;
+                            const icon    = SUMM_CAT_ICON[cat] ?? '📌';
+                            const critPct = (counts.critical / maxCat) * 100;
+                            const majPct  = (counts.major    / maxCat) * 100;
+                            const minPct  = (counts.minor    / maxCat) * 100;
+                            const infPct  = (counts.info     / maxCat) * 100;
+                            return (
+                              <div key={cat} style={{ animation:`fadeUp 0.35s ease-out ${i * 0.04}s both` }}>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <span className="text-base flex-shrink-0 w-6 text-center">{icon}</span>
+                                  <span className="flex-1 text-xs font-bold text-slate-800">{label}</span>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {counts.critical > 0 && (
+                                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                                        style={{ background:'rgba(220,38,38,0.10)', color:'#dc2626', border:'1px solid rgba(220,38,38,0.20)' }}>
+                                        {counts.critical} crit
+                                      </span>
+                                    )}
+                                    {counts.major > 0 && (
+                                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                                        style={{ background:'rgba(249,115,22,0.10)', color:'#f97316', border:'1px solid rgba(249,115,22,0.20)' }}>
+                                        {counts.major} maj
+                                      </span>
+                                    )}
+                                    <span className="text-xs font-black text-slate-700 min-w-[20px] text-right">{counts.total}</span>
+                                  </div>
+                                </div>
+                                {/* Segmented stacked bar */}
+                                <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex gap-0">
+                                  {critPct > 0 && <div className="h-full transition-all duration-700" style={{ width:`${critPct}%`, background:'#dc2626' }} />}
+                                  {majPct  > 0 && <div className="h-full transition-all duration-700" style={{ width:`${majPct}%`,  background:'#f97316' }} />}
+                                  {minPct  > 0 && <div className="h-full transition-all duration-700" style={{ width:`${minPct}%`,  background:'#fbbf24' }} />}
+                                  {infPct  > 0 && <div className="h-full transition-all duration-700" style={{ width:`${infPct}%`,  background:'#0d9488' }} />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Legend */}
+                        <div className="px-5 py-3 border-t border-slate-100 flex items-center gap-5 flex-wrap"
+                          style={{ background:'rgba(240,253,250,0.5)' }}>
+                          {[['Critical','#dc2626'],['Major','#f97316'],['Minor','#fbbf24'],['Info','#0d9488']].map(([lbl, col]) => (
+                            <span key={lbl} className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+                              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background:col }} />{lbl}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Drawings health grid ── */}
+                    {drawings.length > 0 && (
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#f0fdfa,#ccfbf1)', border:'1px solid #99f6e4' }}>
+                            <Layers className="w-4 h-4 text-teal-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-bold text-slate-900">Drawings Health</h3>
+                            <p className="text-xs text-slate-500">Click any card to inspect its findings</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{passD} ✓ passed</span>
+                            {failD > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{failD} ✗ issues</span>}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+                          {drawings.map((d, i) => {
+                            const cnt   = d.issue_count ?? 0;
+                            const draws = d.issues ?? [];
+                            const critC = draws.filter(f => f.severity === 'critical').length;
+                            const majC  = draws.filter(f => f.severity === 'major').length;
+                            const minC  = draws.filter(f => f.severity === 'minor').length;
+                            const topSev = critC > 0 ? 'critical' : majC > 0 ? 'major' : cnt > 0 ? 'minor' : null;
+                            const health = cnt === 0 ? 100 : Math.max(5, Math.round(100 - critC*8 - majC*3 - minC));
+                            const hCol   = health >= 80 ? '#10b981' : health >= 55 ? '#f59e0b' : '#ef4444';
+                            const sevCol = topSev ? SUMM_SEV_COLOR[topSev] : '#10b981';
+                            return (
+                              <div key={d.drawing_id}
+                                className="relative rounded-xl border p-4 flex flex-col gap-3 cursor-pointer group transition-all duration-200 hover:-translate-y-0.5"
+                                style={{
+                                  background: cnt === 0 ? 'linear-gradient(135deg,#f0fdf4,#dcfce7)' : '#ffffff',
+                                  borderColor: cnt === 0 ? '#86efac' : `${sevCol}55`,
+                                  boxShadow: cnt === 0 ? '0 2px 12px rgba(16,185,129,0.10)' : '0 1px 4px rgba(0,0,0,0.05)',
+                                  animation:`cardIn 0.35s ease-out ${i * 0.05}s both`,
+                                }}
+                                onClick={() => { setActiveDrawing(d.drawing_id); setActivePanel('findings'); }}>
+                                {/* Top accent bar */}
+                                <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl"
+                                  style={{ background: cnt === 0 ? '#10b981' : sevCol }} />
+                                {/* Header row */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                      style={{ background: cnt === 0 ? 'rgba(16,185,129,0.12)' : `${sevCol}14`, border:`1px solid ${cnt === 0 ? '#86efac' : sevCol+'44'}` }}>
+                                      {cnt === 0
+                                        ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                        : <AlertTriangle className="w-4 h-4" style={{ color:sevCol }} />}
+                                    </div>
+                                    <code className="text-xs font-mono font-bold text-slate-800 truncate">{d.drawing_id}</code>
+                                  </div>
+                                  {topSev ? (
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                                      style={{ background:`${sevCol}15`, color:sevCol, border:`1px solid ${sevCol}30` }}>
+                                      {topSev}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                      ✓ pass
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Issue count chips */}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-lg font-black leading-none ${cnt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{cnt}</span>
+                                  <span className="text-xs text-slate-400">issue{cnt !== 1 ? 's' : ''}</span>
+                                  {critC > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{critC} crit</span>}
+                                  {majC  > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">{majC} maj</span>}
+                                </div>
+                                {/* Health bar */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] text-slate-400 font-medium">Drawing Health</span>
+                                    <span className="text-[10px] font-black tabular-nums" style={{ color:hCol }}>{health}%</span>
+                                  </div>
+                                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full transition-all duration-700"
+                                      style={{ width:`${health}%`, background:hCol, boxShadow:`0 0 6px ${hCol}55` }} />
+                                  </div>
+                                </div>
+                                {/* CTA */}
+                                <div className="w-full py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all group-hover:opacity-90"
+                                  style={{ background: cnt === 0 ? 'rgba(16,185,129,0.10)' : 'rgba(13,148,136,0.08)', color: cnt === 0 ? '#10b981' : '#0d9488', border:`1px solid ${cnt === 0 ? '#86efac' : '#99f6e4'}` }}>
+                                  {cnt === 0 ? '✓ All Clear' : <><ScanLine className="w-3 h-3" /> Inspect Findings</>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                   </div>
-                )}
-              </div>
-              )}
+                );
+              })()}
               {/* ─── end SUMMARY ──────────────────────────────────────── */}
 
               {/* ─── CROSS-REF panel ─────────────────────────────────── */}
@@ -2307,6 +2779,398 @@ const PFDQualityChecker = () => {
               </div>
               )}
               {/* ─── end HISTORY ─────────────────────────────────────── */}
+
+              {/* ─── PERFORMANCE / ACCURACY panel ───────────────────── */}
+              {activePanel === 'performance' && (() => {
+                const allDrawings = results?.drawings ?? [];
+
+                // ── Active-drawing marker placement stats ──────────────
+                const tierCounts = {};
+                for (const n of overlayNodes) {
+                  const t = n.tier || 'ZONE';
+                  tierCounts[t] = (tierCounts[t] || 0) + 1;
+                }
+                const totalMarkers  = overlayNodes.length;
+                const anchoredCount = overlayNodes.filter(n => n.anchored).length;
+
+                const placementScore = totalMarkers === 0 ? null
+                  : Math.round(
+                      (Object.entries(tierCounts).reduce(
+                        (sum, [t, c]) => sum + c * (PFD_PERF_TIER_WEIGHT[t] ?? 0.3), 0
+                      ) / totalMarkers) * 100
+                    );
+                const anchorRate = totalMarkers === 0 ? null
+                  : Math.round((anchoredCount / totalMarkers) * 100);
+
+                const scoreQuality = (val, thresholds) => {
+                  if (val == null) return { color: '#94a3b8', label: 'No data' };
+                  if (val >= thresholds.high)     return { color: '#10b981', label: 'High' };
+                  if (val >= thresholds.moderate) return { color: '#f59e0b', label: 'Moderate' };
+                  return { color: '#ef4444', label: 'Low' };
+                };
+                const confQuality   = scoreQuality(placementScore, PFD_PERF_SCORE_THRESHOLDS);
+                const anchorQuality = scoreQuality(anchorRate,     PFD_PERF_ANCHOR_THRESHOLDS);
+
+                // ── Document Accuracy Rate ─────────────────────────────
+                const es = activeDrawingData?.metadata?.extraction_summary || null;
+                const ocrScore = (() => {
+                  if (!es || es.no_text_detected) return 0;
+                  const len = es.raw_text_length ?? 0;
+                  if (len >= PFD_PERF_OCR_GOOD_THRESHOLD) return 100;
+                  return Math.round((len / PFD_PERF_OCR_GOOD_THRESHOLD) * 100);
+                })();
+                const docAccuracyRate = (placementScore == null && anchorRate == null && !es)
+                  ? null
+                  : Math.min(100, Math.round(
+                      (ocrScore              * PFD_PERF_DOC_ACCURACY_WEIGHTS.ocr)      +
+                      ((placementScore ?? 0) * PFD_PERF_DOC_ACCURACY_WEIGHTS.placement) +
+                      ((anchorRate     ?? 0) * PFD_PERF_DOC_ACCURACY_WEIGHTS.anchor)
+                    ));
+                const docAccQuality = scoreQuality(docAccuracyRate, PFD_PERF_DOC_ACCURACY_THRESHOLDS);
+
+                const entityCounts = es ? [
+                  { label:'Equipment', val: es.equipment  ?? 0, icon:'⚙️' },
+                  { label:'Streams',   val: es.streams    ?? 0, icon:'🌊' },
+                  { label:'Tags',      val: es.tags       ?? 0, icon:'🏷'  },
+                  { label:'Valves',    val: es.valves     ?? 0, icon:'🔧' },
+                ] : [];
+
+                // ── All-drawings aggregated findings ───────────────────
+                const allIssuesSrc    = allDrawings.flatMap(d => d.issues ?? []);
+                const totalFindingsAll = allIssuesSrc.length;
+
+                const sevCountP = {};
+                for (const f of allIssuesSrc) {
+                  const s = (f.severity || 'minor').toLowerCase();
+                  sevCountP[s] = (sevCountP[s] || 0) + 1;
+                }
+                const SEV_ORDER_P  = ['critical','major','minor'];
+                const SEV_COLORS_P = { critical:'#dc2626', major:'#f97316', minor:'#fbbf24' };
+
+                const catCountP = {};
+                for (const f of allIssuesSrc) {
+                  const c = CATEGORY_LABELS[f.category] || f.category || 'Unknown';
+                  catCountP[c] = (catCountP[c] || 0) + 1;
+                }
+                const catListP = Object.entries(catCountP)
+                  .sort((a, b) => b[1] - a[1]).slice(0, PFD_PERF_TOP_CATS_COUNT);
+
+                const ruleCountP = {};
+                for (const f of allIssuesSrc) {
+                  const r = f.rule_id || '—';
+                  ruleCountP[r] = (ruleCountP[r] || 0) + 1;
+                }
+                const ruleListP = Object.entries(ruleCountP)
+                  .sort((a, b) => b[1] - a[1]).slice(0, PFD_PERF_TOP_RULES_COUNT);
+
+                const drawingSummaryP = allDrawings.map(d => {
+                  const iss  = d.issues ?? [];
+                  const sevs = iss.map(f => (f.severity || 'minor').toLowerCase());
+                  const topSev = SEV_ORDER_P.find(s => sevs.includes(s)) || null;
+                  return { id: d.drawing_id, count: iss.length, topSev };
+                });
+
+                // SVG arc helper (270° sweep starting at bottom-left)
+                const describeArc = (cx, cy, r, pct) => {
+                  if (pct >= 100) pct = 99.99;
+                  const a  = ((pct / 100) * 270 - 135) * Math.PI / 180;
+                  const sx = cx + r * Math.cos(-135 * Math.PI / 180);
+                  const sy = cy + r * Math.sin(-135 * Math.PI / 180);
+                  const ex = cx + r * Math.cos(a);
+                  const ey = cy + r * Math.sin(a);
+                  const laf = pct > 50 ? 1 : 0;
+                  return `M ${sx} ${sy} A ${r} ${r} 0 ${laf} 1 ${ex} ${ey}`;
+                };
+
+                return (
+                  <div className="space-y-4" style={{ animation:'panelSlide 0.25s ease-out both' }}>
+
+                    {/* ── Hero: Document Accuracy Rate ── */}
+                    <div className="rounded-2xl overflow-hidden" style={T.card}>
+                      <div className="px-5 pt-5 pb-4"
+                        style={{ background:'linear-gradient(135deg,#f0fdfa,#ecfeff,#f0f9ff)', borderBottom:'1px solid #99f6e4' }}>
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 4px 12px rgba(13,148,136,0.3)' }}>
+                            <Zap className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <h2 className="text-sm font-bold text-slate-900">Document Accuracy Rate</h2>
+                            <p className="text-xs text-slate-500">Composite OCR + placement + anchor score</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center gap-6">
+                          {/* Arc gauge */}
+                          <div className="flex-shrink-0 flex flex-col items-center">
+                            <svg width="140" height="100" viewBox="0 0 140 100">
+                              <path d={describeArc(70,80,52,100)} fill="none" stroke="#e2e8f0" strokeWidth="10" strokeLinecap="round" />
+                              {docAccuracyRate != null && (
+                                <path d={describeArc(70,80,52,docAccuracyRate)} fill="none"
+                                  stroke={docAccQuality.color} strokeWidth="10" strokeLinecap="round"
+                                  style={{ filter:`drop-shadow(0 0 6px ${docAccQuality.color}88)` }} />
+                              )}
+                              <text x="70" y="76" textAnchor="middle" fontSize="22" fontWeight="900" fill={docAccQuality.color} fontFamily="system-ui">
+                                {docAccuracyRate != null ? `${docAccuracyRate}%` : '—'}
+                              </text>
+                              <text x="70" y="93" textAnchor="middle" fontSize="9" fill="#64748b" fontWeight="600" fontFamily="system-ui">
+                                {docAccQuality.label}
+                              </text>
+                            </svg>
+                          </div>
+                          {/* Sub-score pills */}
+                          <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+                            {[
+                              { label:'OCR Quality',  val:ocrScore,       weight:`${Math.round(PFD_PERF_DOC_ACCURACY_WEIGHTS.ocr*100)}%`,       color:'#0d9488' },
+                              { label:'Placement',    val:placementScore, weight:`${Math.round(PFD_PERF_DOC_ACCURACY_WEIGHTS.placement*100)}%`,  color:'#0891b2' },
+                              { label:'Anchor Rate',  val:anchorRate,     weight:`${Math.round(PFD_PERF_DOC_ACCURACY_WEIGHTS.anchor*100)}%`,     color:'#06b6d4' },
+                            ].map(sub => (
+                              <div key={sub.label} className="rounded-xl p-3 flex flex-col gap-1"
+                                style={{ background:'rgba(255,255,255,0.7)', border:'1px solid rgba(153,246,228,0.6)' }}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{sub.label}</span>
+                                  <span className="text-[10px] font-semibold text-slate-400">×{sub.weight}</span>
+                                </div>
+                                <p className="text-lg font-black leading-none" style={{ color: sub.color }}>
+                                  {sub.val != null ? `${sub.val}%` : '—'}
+                                </p>
+                                <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width:`${sub.val ?? 0}%`, background: sub.color, transition:'width 0.8s ease-out' }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {entityCounts.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <span className="text-[10px] text-slate-400 font-medium flex items-center">Extracted:</span>
+                            {entityCounts.map(e => (
+                              <span key={e.label} className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg"
+                                style={{ background:'rgba(255,255,255,0.8)', border:'1px solid #99f6e4', color:'#0d9488' }}>
+                                {e.icon} {e.val} {e.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── Gauges row ── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {[
+                        { label:'Placement Confidence', val:placementScore, q:confQuality,   maxLabel:true,  icon:<Activity className="w-4 h-4" /> },
+                        { label:'Anchor Rate',          val:anchorRate,     q:anchorQuality, maxLabel:true,  icon:<MapPin className="w-4 h-4" /> },
+                        { label:'Total Findings',       val:totalFindingsAll, q:{ color:'#0d9488', label:'' }, maxLabel:false, icon:<GitBranch className="w-4 h-4" /> },
+                      ].map(g => (
+                        <div key={g.label} className="rounded-2xl p-5 flex flex-col items-center gap-3" style={T.card}>
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                            style={{ background:`${g.q.color}18`, border:`1px solid ${g.q.color}38`, color:g.q.color }}>
+                            {g.icon}
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide text-center">{g.label}</p>
+                          <p className="text-3xl font-black" style={{ color: g.q.color }}>
+                            {g.val != null ? (g.maxLabel ? `${g.val}%` : g.val) : '—'}
+                          </p>
+                          {g.q.label && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{ background:`${g.q.color}18`, color:g.q.color }}>
+                              {g.q.label}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Marker tier breakdown ── */}
+                    {totalMarkers > 0 && (
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#f0fdfa,#ccfbf1)', border:'1px solid #99f6e4' }}>
+                            <CircleDot className="w-4 h-4 text-teal-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">Marker Resolution Tiers</h3>
+                            <p className="text-xs text-slate-500">{totalMarkers} markers on active drawing</p>
+                          </div>
+                        </div>
+                        <div className="p-5 space-y-3">
+                          {Object.entries(PFD_PERF_TIER_WEIGHT).map(([tier, weight]) => {
+                            const cnt = tierCounts[tier] ?? 0;
+                            const pct = totalMarkers > 0 ? Math.round((cnt / totalMarkers) * 100) : 0;
+                            const col = PFD_PERF_TIER_COLOR[tier] ?? '#94a3b8';
+                            const lbl = PFD_PERF_TIER_LABEL[tier] ?? tier;
+                            return (
+                              <div key={tier}>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background:col }} />
+                                    <span className="text-xs font-bold text-slate-700">{tier}</span>
+                                    <span className="text-[10px] text-slate-400">{lbl}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-slate-500">×{weight.toFixed(2)}</span>
+                                    <span className="text-xs font-black" style={{ color:col }}>{cnt}</span>
+                                    <span className="text-[10px] text-slate-400">({pct}%)</span>
+                                  </div>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full transition-all duration-700"
+                                    style={{ width:`${pct}%`, background:col, boxShadow:`0 0 8px ${col}66` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Severity + Category breakdown ── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Severity */}
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-3.5 border-b border-slate-100">
+                          <h3 className="text-sm font-bold text-slate-900">Severity Breakdown</h3>
+                          <p className="text-xs text-slate-400">{totalFindingsAll} total findings</p>
+                        </div>
+                        <div className="p-4 space-y-2.5">
+                          {SEV_ORDER_P.map(s => {
+                            const cnt = sevCountP[s] ?? 0;
+                            const pct = totalFindingsAll > 0 ? Math.round((cnt / totalFindingsAll) * 100) : 0;
+                            const col = SEV_COLORS_P[s] ?? '#94a3b8';
+                            return (
+                              <div key={s}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-semibold text-slate-700 capitalize">{s}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-black" style={{ color:col }}>{cnt}</span>
+                                    <span className="text-[10px] text-slate-400">({pct}%)</span>
+                                  </div>
+                                </div>
+                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width:`${pct}%`, background:col, transition:'width 0.8s ease-out' }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {totalFindingsAll === 0 && <p className="text-center text-xs text-slate-400 py-4">No findings</p>}
+                        </div>
+                      </div>
+                      {/* Category */}
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-3.5 border-b border-slate-100">
+                          <h3 className="text-sm font-bold text-slate-900">Top Categories</h3>
+                          <p className="text-xs text-slate-400">Top {PFD_PERF_TOP_CATS_COUNT} by finding count</p>
+                        </div>
+                        <div className="p-4 space-y-2.5">
+                          {catListP.length === 0
+                            ? <p className="text-center text-xs text-slate-400 py-4">No findings</p>
+                            : catListP.map(([cat, cnt], i) => {
+                                const pct = totalFindingsAll > 0 ? Math.round((cnt / totalFindingsAll) * 100) : 0;
+                                const tealHues = ['#0d9488','#0891b2','#06b6d4','#14b8a6','#10b981','#059669'];
+                                const col = tealHues[i % tealHues.length];
+                                return (
+                                  <div key={cat}>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-xs font-semibold text-slate-700 truncate max-w-[120px]" title={cat}>{cat}</span>
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <span className="text-xs font-black" style={{ color:col }}>{cnt}</span>
+                                        <span className="text-[10px] text-slate-400">({pct}%)</span>
+                                      </div>
+                                    </div>
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full" style={{ width:`${pct}%`, background:col, transition:'width 0.8s ease-out' }} />
+                                    </div>
+                                  </div>
+                                );
+                              })
+                          }
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Rule leaderboard ── */}
+                    {ruleListP.length > 0 && (
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,#f0fdfa,#ccfbf1)', border:'1px solid #99f6e4' }}>
+                            <Shield className="w-4 h-4 text-teal-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">Top Triggered Rules</h3>
+                            <p className="text-xs text-slate-500">Top {PFD_PERF_TOP_RULES_COUNT} rules by finding frequency</p>
+                          </div>
+                        </div>
+                        <div className="divide-y divide-slate-50">
+                          {ruleListP.map(([rule, cnt], i) => {
+                            const pct  = totalFindingsAll > 0 ? Math.round((cnt / totalFindingsAll) * 100) : 0;
+                            const barW = ruleListP[0]?.[1] > 0 ? Math.round((cnt / ruleListP[0][1]) * 100) : 0;
+                            return (
+                              <div key={rule} className="px-5 py-2.5 flex items-center gap-3 hover:bg-teal-50/20 transition-colors">
+                                <span className="w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-black flex-shrink-0"
+                                  style={{ background: i < 3 ? 'linear-gradient(135deg,#0d9488,#0891b2)' : '#f1f5f9', color: i < 3 ? '#fff' : '#64748b' }}>
+                                  {i+1}
+                                </span>
+                                <code className="text-xs font-mono font-bold text-teal-700 flex-shrink-0 w-24 truncate">{rule}</code>
+                                <div className="flex-1 min-w-0">
+                                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width:`${barW}%`, background:'linear-gradient(90deg,#0d9488,#0891b2)', transition:'width 0.8s ease-out' }} />
+                                  </div>
+                                </div>
+                                <span className="text-xs font-black text-teal-700 flex-shrink-0 w-6 text-right">{cnt}</span>
+                                <span className="text-[10px] text-slate-400 flex-shrink-0 w-8 text-right">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Per-drawing summary table ── */}
+                    {drawingSummaryP.length > 1 && (
+                      <div className="rounded-2xl overflow-hidden" style={T.card}>
+                        <div className="px-5 py-4 border-b border-slate-100">
+                          <h3 className="text-sm font-bold text-slate-900">Per-Drawing Summary</h3>
+                          <p className="text-xs text-slate-500">{drawingSummaryP.length} drawing{drawingSummaryP.length !== 1 ? 's' : ''} analysed</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-100">
+                                {['Drawing ID','Findings','Top Severity','Action'].map(h => (
+                                  <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {drawingSummaryP.map(d => (
+                                <tr key={d.id} className="hover:bg-teal-50/20 transition-colors cursor-pointer"
+                                  onClick={() => { setActiveDrawing(d.id); setActivePanel('findings'); }}>
+                                  <td className="px-4 py-2.5"><code className="text-xs font-mono font-bold text-teal-700">{d.id}</code></td>
+                                  <td className="px-4 py-2.5">
+                                    <span className={`text-xs font-black ${d.count > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{d.count}</span>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    {d.topSev
+                                      ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background:`${SEV_COLORS_P[d.topSev]}18`, color:SEV_COLORS_P[d.topSev] }}>{d.topSev}</span>
+                                      : <span className="text-[10px] text-emerald-600 font-bold">✓ Pass</span>
+                                    }
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <button className="text-[10px] font-semibold text-teal-600 hover:text-teal-800 underline underline-offset-2">View →</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })()}
+              {/* ─── end PERFORMANCE panel ───────────────────────────── */}
 
               </div>
             </div>

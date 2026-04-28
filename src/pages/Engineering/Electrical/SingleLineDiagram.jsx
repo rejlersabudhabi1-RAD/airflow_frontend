@@ -22,6 +22,11 @@ const KEYFRAMES = `
   @keyframes orbitA { 0%{transform:rotate(0deg) translateX(52px) rotate(0deg)} 100%{transform:rotate(360deg) translateX(52px) rotate(-360deg)} }
   @keyframes orbitB { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg) translateX(52px) rotate(-480deg)} }
   @keyframes orbitC { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg) translateX(52px) rotate(-600deg)} }
+  @keyframes sweepLine { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+  @keyframes sparkPulse { 0%,100%{opacity:0.25;transform:scale(0.95)} 50%{opacity:1;transform:scale(1.05)} }
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+  @keyframes spinSlow { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes glowPulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0.45)} 50%{box-shadow:0 0 0 14px rgba(59,130,246,0)} }
 `;
 
 const T = {
@@ -97,6 +102,63 @@ const CATEGORY_LABELS = {
   labeling:   'Equipment Labeling',
   symbols:    'Symbol Standards',
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLD UI Config — fully soft-coded copy, palette, hero stats, feature cards,
+// supported formats and workflow steps. Change this block to retheme/rewrite
+// the entire page without touching markup.
+// ─────────────────────────────────────────────────────────────────────────────
+const SLD_UI = {
+  brand: {
+    name:        'SLD Quality Checker',
+    tagline:     'AI-Powered IEC 60617 compliance & protection-coordination engine',
+    description: 'Drop a Single Line Diagram. Our engine extracts symbols, validates ratings, audits protection selectivity, and flags non-compliance — typically in under 30 seconds.',
+    accentFrom:  '#eab308',
+    accentVia:   '#3b82f6',
+    accentTo:    '#6366f1',
+  },
+  heroStats: [
+    { id: 'rules',    value: '25+',  label: 'Verification Rules',    icon: Shield,   tint: 'yellow' },
+    { id: 'speed',    value: '<30s', label: 'Avg. Analysis Time',    icon: Zap,      tint: 'blue'   },
+    { id: 'standard', value: 'IEC',  label: '60617 Symbol Library',  icon: Award,    tint: 'purple' },
+    { id: 'accuracy', value: '99%',  label: 'Detection Accuracy',    icon: Brain,    tint: 'emerald'},
+  ],
+  features: [
+    { id: 'protection', title: 'Protection Coordination', desc: 'Breaker selectivity, CT/PT ratios, relay grading',     icon: Shield,   tint: 'yellow' },
+    { id: 'ratings',    title: 'Voltage & Current',       desc: 'Equipment ratings vs. fault-level limits',             icon: Zap,      tint: 'blue'   },
+    { id: 'symbols',    title: 'IEC 60617 Symbols',       desc: 'Standardised symbols & legend cross-check',            icon: Award,    tint: 'purple' },
+    { id: 'labels',     title: 'Equipment Labeling',      desc: 'Tags, nomenclature, KKS/ISA conformance',              icon: Activity, tint: 'green'  },
+    { id: 'busbars',    title: 'Bus Connections',         desc: 'Busbar continuity, segregation & ampacity',            icon: Layers,   tint: 'cyan'   },
+    { id: 'earthing',   title: 'Grounding / Earthing',    desc: 'TN/TT/IT scheme integrity, earth-bar references',      icon: Power,    tint: 'rose'   },
+  ],
+  workflow: [
+    { id: 1, title: 'Upload',   desc: 'Drop your SLD (PDF/PNG/DWG)',          icon: UploadIcon },
+    { id: 2, title: 'Extract',  desc: 'AI parses symbols, ratings & labels',  icon: ScanLine   },
+    { id: 3, title: 'Validate', desc: '25+ rules across 7 categories',         icon: Brain      },
+    { id: 4, title: 'Report',   desc: 'Severity-ranked findings + Excel',     icon: FileText   },
+  ],
+  acceptedFormats: ['PDF', 'PNG', 'JPG', 'DWG'],
+  uploaderCopy: {
+    title:    'Upload Single Line Diagram',
+    subtitle: 'Drag & drop or click to browse — files stay in your project workspace.',
+    cta:      'Run Quality Check',
+    browse:   'Browse Files',
+  },
+};
+
+// Soft tint → utility class lookup. Keeps Tailwind happy with full class names.
+const TINT_CLASSES = {
+  yellow:  { bg:'bg-yellow-100',  text:'text-yellow-600',  ring:'ring-yellow-200',  grad:'from-yellow-400/30 to-amber-500/10'  },
+  blue:    { bg:'bg-blue-100',    text:'text-blue-600',    ring:'ring-blue-200',    grad:'from-blue-400/30 to-sky-500/10'      },
+  purple:  { bg:'bg-purple-100',  text:'text-purple-600',  ring:'ring-purple-200',  grad:'from-purple-400/30 to-fuchsia-500/10'},
+  green:   { bg:'bg-green-100',   text:'text-green-600',   ring:'ring-green-200',   grad:'from-green-400/30 to-emerald-500/10' },
+  emerald: { bg:'bg-emerald-100', text:'text-emerald-600', ring:'ring-emerald-200', grad:'from-emerald-400/30 to-teal-500/10'  },
+  cyan:    { bg:'bg-cyan-100',    text:'text-cyan-600',    ring:'ring-cyan-200',    grad:'from-cyan-400/30 to-sky-500/10'      },
+  rose:    { bg:'bg-rose-100',    text:'text-rose-600',    ring:'ring-rose-200',    grad:'from-rose-400/30 to-pink-500/10'     },
+};
+
+const tint = (k) => TINT_CLASSES[k] || TINT_CLASSES.blue;
+
 
 const authHeader = () => {
   const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
@@ -405,61 +467,156 @@ const SingleLineDiagram = () => {
   return (
     <DarkBg>
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center gap-4 px-1" style={{ animation: 'fadeUp 0.3s ease-out both' }}>
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-               style={{ background: 'linear-gradient(135deg,#eab308,#3b82f6)', boxShadow: '0 4px 12px rgba(234,179,8,0.3)' }}>
-            <Zap className="w-7 h-7 text-white" />
+        {/* ───────────────────────── Hero Banner ───────────────────────── */}
+        <div className="relative mb-6 rounded-3xl overflow-hidden border border-white/60"
+             style={{
+               background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #4338ca 100%)',
+               boxShadow:  '0 25px 60px -15px rgba(67,56,202,0.45)',
+               animation:  'fadeUp 0.4s ease-out both',
+             }}>
+          {/* circuit-grid texture */}
+          <div className="absolute inset-0 pointer-events-none opacity-[0.18]"
+               style={{
+                 backgroundImage:
+                   'linear-gradient(rgba(255,255,255,0.4) 1px,transparent 1px),' +
+                   'linear-gradient(90deg, rgba(255,255,255,0.4) 1px,transparent 1px)',
+                 backgroundSize: '52px 52px',
+                 maskImage: 'radial-gradient(ellipse at top right, black 30%, transparent 75%)',
+               }} />
+          {/* energy sweep */}
+          <div className="absolute inset-y-0 w-1/3 pointer-events-none"
+               style={{
+                 background: 'linear-gradient(90deg, transparent, rgba(234,179,8,0.18), transparent)',
+                 animation: 'sweepLine 6s ease-in-out infinite',
+               }} />
+          {/* accent bar */}
+          <div className="absolute inset-x-0 top-0 h-[3px]"
+               style={{
+                 background: `linear-gradient(90deg, ${SLD_UI.brand.accentFrom}, ${SLD_UI.brand.accentVia}, ${SLD_UI.brand.accentTo}, ${SLD_UI.brand.accentFrom})`,
+                 backgroundSize: '200% auto', animation: 'gradShift 5s linear infinite',
+               }} />
+
+          <div className="relative px-6 py-8 md:px-10 md:py-10 grid grid-cols-1 lg:grid-cols-5 gap-8 items-center">
+            <div className="lg:col-span-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase
+                              bg-white/10 text-yellow-300 ring-1 ring-yellow-300/30 backdrop-blur">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-300" style={{ animation: 'pulse2 1.4s ease-in-out infinite' }} />
+                Electrical · AI Quality Engine
+              </div>
+              <h1 className="mt-3 text-3xl md:text-4xl font-extrabold text-white leading-tight">
+                {SLD_UI.brand.name}
+              </h1>
+              <p className="mt-2 text-base md:text-lg text-blue-100/90 font-medium">
+                {SLD_UI.brand.tagline}
+              </p>
+              <p className="mt-3 text-sm text-blue-200/80 max-w-2xl leading-relaxed">
+                {SLD_UI.brand.description}
+              </p>
+
+              {/* hero stats */}
+              <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {SLD_UI.heroStats.map((s, i) => {
+                  const Icon = s.icon;
+                  return (
+                    <div key={s.id}
+                         className="relative group rounded-2xl p-3 bg-white/10 backdrop-blur-md border border-white/15 hover:bg-white/15 transition-all overflow-hidden"
+                         style={{ animation: `fadeUp 0.5s ease-out both ${0.1 + i * 0.07}s` }}>
+                      <div className={`absolute -inset-px rounded-2xl bg-gradient-to-br ${tint(s.tint).grad} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                      <div className="relative flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-xl ${tint(s.tint).bg} flex items-center justify-center`}>
+                          <Icon className={`w-4.5 h-4.5 ${tint(s.tint).text}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xl font-extrabold text-white leading-none tabular-nums">{s.value}</div>
+                          <div className="text-[11px] text-blue-200/80 leading-tight mt-1">{s.label}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* animated emblem */}
+            <div className="lg:col-span-2 flex items-center justify-center">
+              <div className="relative w-56 h-56">
+                <div className="absolute inset-0 rounded-full"
+                     style={{
+                       background: `conic-gradient(from 0deg, ${SLD_UI.brand.accentFrom}, ${SLD_UI.brand.accentVia}, ${SLD_UI.brand.accentTo}, ${SLD_UI.brand.accentFrom})`,
+                       animation: 'spinSlow 12s linear infinite',
+                       filter: 'blur(2px)', opacity: 0.55,
+                     }} />
+                <div className="absolute inset-3 rounded-full bg-slate-900/70 backdrop-blur-md border border-white/15" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-24 h-24 rounded-full flex items-center justify-center"
+                       style={{
+                         background: `linear-gradient(135deg, ${SLD_UI.brand.accentFrom}, ${SLD_UI.brand.accentVia})`,
+                         animation: 'glowPulse 2.4s ease-in-out infinite',
+                       }}>
+                    <Zap className="w-12 h-12 text-white drop-shadow" />
+                  </div>
+                </div>
+                {[0, 120, 240].map((deg, i) => (
+                  <div key={i} className="absolute top-1/2 left-1/2"
+                       style={{ transform: `translate(-50%,-50%) rotate(${deg}deg) translateY(-92px)` }}>
+                    <div className="w-3 h-3 rounded-full bg-yellow-300"
+                         style={{ animation: `sparkPulse 1.8s ease-in-out infinite ${i * 0.3}s` }} />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">SLD Quality Checker</h1>
-            <p className="text-sm text-slate-600">
-              Automated compliance engine — 25+ electrical verification rules per drawing. 
-              Protection, ratings, symbols & IEC 60617 validation.
-            </p>
+
+          {/* Workflow strip */}
+          <div className="relative border-t border-white/10 bg-black/20 backdrop-blur-sm px-6 py-4 md:px-10">
+            <div className="flex flex-wrap items-center gap-3">
+              {SLD_UI.workflow.map((w, i) => {
+                const Icon = w.icon;
+                return (
+                  <React.Fragment key={w.id}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/10 border border-white/15">
+                        <Icon className="w-4 h-4 text-yellow-300" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] uppercase tracking-wider text-blue-200/70 font-semibold">Step {w.id}</div>
+                        <div className="text-xs text-white font-semibold leading-tight">{w.title}</div>
+                        <div className="text-[11px] text-blue-200/70 leading-tight">{w.desc}</div>
+                      </div>
+                    </div>
+                    {i < SLD_UI.workflow.length - 1 && (
+                      <ChevronRight className="w-4 h-4 text-blue-300/60 flex-shrink-0" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Feature Highlights */}
-        <div className="mb-6 rounded-2xl p-5 border" style={{ ...T.card, animation: 'fadeUp 0.4s ease-out both 0.1s' }}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-yellow-600" />
+        {/* ──────────────────── Feature Highlights Grid ──────────────────── */}
+        <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+             style={{ animation: 'fadeUp 0.4s ease-out both 0.1s' }}>
+          {SLD_UI.features.map((f, i) => {
+            const Icon = f.icon;
+            const t = tint(f.tint);
+            return (
+              <div key={f.id}
+                   className={`group relative rounded-2xl p-4 bg-white border border-slate-200 hover:shadow-lg hover:-translate-y-0.5 transition-all overflow-hidden`}
+                   style={{ animation: `fadeUp 0.4s ease-out both ${0.1 + i * 0.04}s` }}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${t.grad} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                <div className="relative flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${t.bg} ring-4 ${t.ring} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                    <Icon className={`w-5 h-5 ${t.text}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900">{f.title}</h3>
+                    <p className="text-xs text-slate-600 leading-relaxed mt-0.5">{f.desc}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Protection Coordination</h3>
-                <p className="text-xs text-slate-600">Breaker ratings & selectivity</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <Zap className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Voltage & Current</h3>
-                <p className="text-xs text-slate-600">Rating verification & limits</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-                <Award className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">IEC 60617 Symbols</h3>
-                <p className="text-xs text-slate-600">Standard compliance checks</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                <Activity className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Equipment Labeling</h3>
-                <p className="text-xs text-slate-600">Tags & nomenclature rules</p>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         {/* Project Selection */}
@@ -476,16 +633,32 @@ const SingleLineDiagram = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {projects.map((project, idx) => (
                 <div key={project.id} onClick={() => setSelectedProject(project)}
-                  className="group p-5 rounded-xl border border-slate-200 bg-white hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer"
+                  className="group relative p-5 rounded-2xl border border-slate-200 bg-white hover:border-blue-400 hover:shadow-xl hover:-translate-y-0.5 transition-all cursor-pointer overflow-hidden"
                   style={{ animation: `fadeUp 0.4s ease-out both ${0.1 + idx * 0.05}s` }}>
+                  <div className="absolute inset-x-0 top-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                       style={{
+                         background: `linear-gradient(90deg, ${SLD_UI.brand.accentFrom}, ${SLD_UI.brand.accentVia}, ${SLD_UI.brand.accentTo})`,
+                       }} />
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+                         style={{ background: 'linear-gradient(135deg,#dbeafe,#ede9fe)' }}>
                       <Layers className="w-5 h-5 text-blue-600" />
                     </div>
-                    <span className="text-xs bg-slate-100 px-2 py-1 rounded">{project.document_count || 0} docs</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-1 rounded-full">
+                      <FileText className="w-3 h-3" /> {project.document_count || 0} docs
+                    </span>
                   </div>
-                  <h3 className="font-semibold text-slate-900 mb-1 group-hover:text-blue-600 transition-colors">{project.project_name}</h3>
-                  <p className="text-xs text-slate-500 line-clamp-2">{project.description || 'No description'}</p>
+                  <h3 className="font-bold text-slate-900 mb-1 group-hover:text-blue-700 transition-colors truncate">{project.project_name}</h3>
+                  <p className="text-xs text-slate-500 line-clamp-2 min-h-[2rem]">{project.description || 'No description'}</p>
+                  <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {project.created_at ? new Date(project.created_at).toLocaleDateString() : '—'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-blue-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+                      Open <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -511,20 +684,40 @@ const SingleLineDiagram = () => {
               <div className="rounded-2xl p-8 border" style={{ ...T.card, animation: 'fadeUp 0.4s ease-out both 0.1s' }}>
                 <div className="max-w-2xl mx-auto">
                   <div className="text-center mb-6">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center relative"
                          style={{ background: 'linear-gradient(135deg,#dbeafe,#fef3c7)', border: '2px dashed #93c5fd' }}>
                       <UploadIcon className="w-8 h-8 text-blue-600" />
+                      <div className="absolute -inset-2 rounded-2xl pointer-events-none"
+                           style={{ animation: 'glowPulse 2.4s ease-in-out infinite' }} />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2">Upload SLD Drawing</h3>
-                    <p className="text-sm text-slate-600">Drop your SLD file here or click to browse</p>
+                    <h3 className="text-xl font-bold text-slate-900 mb-1">{SLD_UI.uploaderCopy.title}</h3>
+                    <p className="text-sm text-slate-600">{SLD_UI.uploaderCopy.subtitle}</p>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                      {SLD_UI.acceptedFormats.map((f) => (
+                        <span key={f}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider
+                                         bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-700 border border-blue-200">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="border-2 border-dashed rounded-2xl p-8 text-center transition-all"
+                  <div className="border-2 border-dashed rounded-2xl p-8 text-center transition-all relative overflow-hidden"
                        style={{ borderColor: file ? '#10b981' : '#cbd5e1', background: file ? '#ecfdf5' : '#f8fafc' }}
                        onDrop={(e) => { e.preventDefault(); handleFileSelect(e.dataTransfer.files[0]); }}
                        onDragOver={(e) => e.preventDefault()}>
+                    {!file && (
+                      <div className="absolute inset-0 pointer-events-none opacity-30"
+                           style={{
+                             backgroundImage:
+                               'linear-gradient(rgba(99,102,241,0.15) 1px,transparent 1px),' +
+                               'linear-gradient(90deg, rgba(99,102,241,0.15) 1px,transparent 1px)',
+                             backgroundSize: '24px 24px',
+                           }} />
+                    )}
                     {file ? (
-                      <div>
+                      <div className="relative">
                         <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
                         <p className="font-medium text-slate-900 mb-1">{file.name}</p>
                         <p className="text-sm text-slate-500 mb-3">{(file.size / 1024).toFixed(1)} KB</p>
@@ -534,10 +727,10 @@ const SingleLineDiagram = () => {
                         </button>
                       </div>
                     ) : (
-                      <div>
+                      <div className="relative">
                         <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                        <p className="text-slate-700 mb-1">Supported formats</p>
-                        <p className="text-sm text-slate-500">PDF, PNG, JPG, DWG</p>
+                        <p className="text-slate-700 mb-1 font-medium">Drag & drop your SLD here</p>
+                        <p className="text-sm text-slate-500">or click <em>Browse Files</em> below</p>
                       </div>
                     )}
                   </div>
@@ -549,13 +742,17 @@ const SingleLineDiagram = () => {
                     <button onClick={() => fileInputRef.current?.click()}
                       className="flex-1 flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-3 rounded-xl hover:bg-slate-200 transition-all font-medium">
                       <FileText className="w-5 h-5" />
-                      Browse Files
+                      {SLD_UI.uploaderCopy.browse}
                     </button>
                     {file && (
                       <button onClick={handleUpload}
-                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium shadow-lg hover:shadow-xl">
+                        className="flex-1 flex items-center justify-center gap-2 text-white py-3 rounded-xl transition-all font-semibold shadow-lg hover:shadow-xl active:scale-[0.98]"
+                        style={{
+                          background: `linear-gradient(135deg, ${SLD_UI.brand.accentFrom}, ${SLD_UI.brand.accentVia}, ${SLD_UI.brand.accentTo})`,
+                          backgroundSize: '200% auto', animation: 'gradShift 4s linear infinite',
+                        }}>
                         <Zap className="w-5 h-5" />
-                        Analyze SLD
+                        {SLD_UI.uploaderCopy.cta}
                       </button>
                     )}
                   </div>
@@ -592,17 +789,40 @@ const SingleLineDiagram = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-5 gap-3">
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                  <div className="text-3xl font-bold text-slate-900">{stats.total}</div>
-                  <div className="text-xs text-slate-600 mt-1">Total Findings</div>
-                </div>
-                {['critical', 'major', 'minor', 'info'].map(sev => (
-                  <div key={sev} className={`rounded-xl p-4 border ${SEVERITY_STYLES[sev]}`}>
-                    <div className="text-3xl font-bold">{stats[sev] || 0}</div>
-                    <div className="text-xs mt-1 capitalize">{sev}</div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="rounded-xl p-4 border border-slate-200 relative overflow-hidden"
+                     style={{ background: 'linear-gradient(135deg,#f8fafc,#eef2ff)' }}>
+                  <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-indigo-100/60 blur-2xl" />
+                  <div className="relative">
+                    <div className="text-3xl font-extrabold text-slate-900 tabular-nums">{stats.total}</div>
+                    <div className="text-xs font-semibold text-slate-600 mt-1 uppercase tracking-wider">Total Findings</div>
                   </div>
-                ))}
+                </div>
+                {['critical', 'major', 'minor', 'info'].map((sev) => {
+                  const count = stats[sev] || 0;
+                  const pct = stats.total ? Math.round((count / stats.total) * 100) : 0;
+                  return (
+                    <div key={sev} className={`rounded-xl p-4 border ${SEVERITY_STYLES[sev]} relative overflow-hidden`}>
+                      <div className="absolute inset-0 opacity-30 pointer-events-none"
+                           style={{
+                             background: 'linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
+                             backgroundSize: '200% 100%',
+                             animation: count > 0 ? 'shimmer 4s linear infinite' : 'none',
+                           }} />
+                      <div className="relative">
+                        <div className="text-3xl font-extrabold tabular-nums">{count}</div>
+                        <div className="text-xs mt-1 capitalize font-semibold flex items-center justify-between">
+                          <span>{sev}</span>
+                          <span className="text-[10px] font-bold opacity-70">{pct}%</span>
+                        </div>
+                        <div className="mt-2 h-1 rounded-full bg-white/50 overflow-hidden">
+                          <div className="h-full rounded-full bg-current opacity-70 transition-all"
+                               style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

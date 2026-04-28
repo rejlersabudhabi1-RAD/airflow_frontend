@@ -56,6 +56,135 @@ const STATUS_COLORS = {
 
 
 
+// ---------------------------------------------------------------------------
+// Soft-coded UI theme — edit freely, no logic depends on this.
+// Keeps visual styling centralised so future tweaks don't need to touch JSX.
+// ---------------------------------------------------------------------------
+const CLL_THEME = {
+  pageBg:       'linear-gradient(145deg, #f8fafc 0%, #eef2ff 45%, #f1f5f9 100%)',
+  heroGrad:     'linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #0891b2 100%)',
+  heroAccent:   '#4f46e5',
+  cardBg:       'rgba(255,255,255,0.82)',
+  cardBorder:   '1px solid rgba(79,70,229,0.12)',
+  cardShadow:   '0 10px 30px -12px rgba(15,23,42,0.12)',
+  subtleDivider:'1px solid rgba(148,163,184,0.18)',
+};
+
+// Enrichment breakdown shown in the hero banner (soft-coded, no duplication).
+// Column counts are indicative — real backend returns 35 columns total.
+const CLL_ENRICHMENT_SOURCES = [
+  { key: 'pid',    label: 'P&ID',              cols: 8, color: '#3b82f6', desc: 'Base columns (Line No, Size, Fluid, Area, From/To)' },
+  { key: 'hmb',    label: 'HMB/PFD',           cols: 6, color: '#059669', desc: 'Temp, Pressure, Flow Rate, Density' },
+  { key: 'pms',    label: 'PMS',               cols: 8, color: '#d97706', desc: 'Material Grade, Schedule, Flanges, Gaskets' },
+  { key: 'nace',   label: 'NACE',              cols: 6, color: '#dc2626', desc: 'Corrosion, Inspection, Coating class' },
+  { key: 'stress', label: 'Stress Criticality', cols: 7, color: '#ca8a04', desc: 'Critical-line class, temp zone, stress tags' },
+];
+const CLL_TOTAL_DOCS = CLL_ENRICHMENT_SOURCES.length;       // 5
+const CLL_TOTAL_COLS = CLL_ENRICHMENT_SOURCES.reduce((s, x) => s + x.cols, 0); // 35
+
+// Hero capability chips — short marketing strip.
+const CLL_CHIPS = [
+  { icon: '🧪', label: 'Stress-critical' },
+  { icon: '🧩', label: `${CLL_TOTAL_COLS}-column enrichment` },
+  { icon: '🤖', label: 'AI-assisted extraction' },
+  { icon: '📐', label: 'Format-aware regex' },
+];
+
+// Format selector definitions — central source of truth for labels & accents.
+// `autoDetect: true` marks a format that internally delegates to every other
+// sub-format and merges results (backend: GENERAL_STRATEGY='merge' in
+// pid_ocr_extractor_v2.py). Keep this flag in sync with backend behaviour.
+const CLL_FORMATS = [
+  {
+    id: 'onshore',
+    label: 'Onshore',
+    hint: 'No area · 2-D-5777-033842',
+    accent: '#2563eb',
+    icon: '🏭',
+    pattern: 'SIZE-FLUID-SEQUENCE-PIPECLASS',
+  },
+  {
+    id: 'general',
+    label: 'General',
+    hint: 'Auto-detect · tries every format',
+    accent: '#059669',
+    icon: '🧭',
+    autoDetect: true,
+    badge: 'AUTO',
+    recommended: true,
+    pattern: 'Auto-detect · merges Onshore + Offshore + ADNOC + Industrial',
+    coversFormats: ['onshore', 'offshore', 'adnoc', 'industrial'],
+  },
+  {
+    id: 'offshore',
+    label: 'Offshore',
+    hint: 'Area first · 604-HO-8-BC2GA0',
+    accent: '#7c3aed',
+    icon: '🌊',
+    pattern: 'AREA-FLUID-SIZE-PIPECLASS-SEQUENCE',
+  },
+];
+
+// One-time keyframes — scoped via the `cll-` prefix so they don't collide.
+const CLL_KEYFRAMES = `
+  @keyframes cllFadeUp   { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: translateY(0);} }
+  @keyframes cllGradShift{ 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+  @keyframes cllPulse    { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @keyframes cllCountIn  { from { opacity: 0; transform: translateY(6px) scale(0.95);} to { opacity: 1; transform: translateY(0) scale(1);} }
+  @keyframes cllOrbit    { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+  @keyframes cllOrbitRev { from { transform: rotate(0deg);} to { transform: rotate(-360deg);} }
+  @keyframes cllShimmer  { 0% { background-position: -200% 0;} 100% { background-position: 200% 0;} }
+  @keyframes cllBlob     { 0%,100% { transform: translate(0,0) scale(1);} 33% { transform: translate(20px,-18px) scale(1.08);} 66% { transform: translate(-16px,14px) scale(0.95);} }
+  @keyframes cllBarGlow  { 0%,100% { box-shadow: 0 0 12px rgba(124,58,237,0.45);} 50% { box-shadow: 0 0 22px rgba(124,58,237,0.85);} }
+  @keyframes cllTipSlide { 0% { opacity: 0; transform: translateY(8px);} 10% { opacity: 1; transform: translateY(0);} 90% { opacity: 1; transform: translateY(0);} 100% { opacity: 0; transform: translateY(-6px);} }
+  @keyframes cllScan     { 0% { transform: translateY(-100%);} 100% { transform: translateY(200%);} }
+  .cll-fade-up    { animation: cllFadeUp 0.5s ease both; }
+  .cll-count-in   { animation: cllCountIn 0.55s cubic-bezier(0.4,0,0.2,1) both; }
+  .cll-grad-bar   { background-size: 280% 280%; animation: cllGradShift 7s ease infinite; }
+  .cll-stat-card  { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .cll-stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 26px -10px rgba(79,70,229,0.28); }
+  .cll-format-btn { transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), box-shadow 0.2s ease, border-color 0.2s ease; }
+  .cll-format-btn:hover:not(.cll-format-btn--active) { transform: translateY(-2px); }
+  .cll-pulse-dot  { animation: cllPulse 1.8s ease-in-out infinite; }
+  .cll-orbit-ring { animation: cllOrbit 18s linear infinite; }
+  .cll-orbit-ring-rev { animation: cllOrbitRev 26s linear infinite; }
+  .cll-blob       { animation: cllBlob 9s ease-in-out infinite; filter: blur(40px); }
+  .cll-bar-fill   { background-image: linear-gradient(90deg,#6366f1,#8b5cf6,#06b6d4,#8b5cf6,#6366f1); background-size: 300% 100%; animation: cllGradShift 3.5s ease infinite, cllBarGlow 2.2s ease-in-out infinite; }
+  .cll-bar-shimmer{ background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%); background-size: 200% 100%; animation: cllShimmer 2.2s linear infinite; }
+  .cll-scan       { background: linear-gradient(180deg, transparent, rgba(99,102,241,0.28), transparent); animation: cllScan 2.4s ease-in-out infinite; }
+`;
+
+// Processing modal — doc chips displayed around animated orbit
+const CLL_DOC_ORBIT = [
+  { key: 'pid',    label: 'P&ID',    icon: '📐', color: '#3b82f6' },
+  { key: 'hmb',    label: 'HMB',     icon: '📊', color: '#059669' },
+  { key: 'pms',    label: 'PMS',     icon: '🔧', color: '#d97706' },
+  { key: 'nace',   label: 'NACE',    icon: '⚗️', color: '#dc2626' },
+  { key: 'stress', label: 'STRESS',  icon: '🧪', color: '#ca8a04' },
+];
+
+// Processing modal — stage tracker (keyed to percent ranges from processAllDocuments)
+const CLL_PROC_STAGES = [
+  { key: 'init',    label: 'Initialize',   icon: '🚀', from: 0,  to: 10 },
+  { key: 'upload',  label: 'Upload',       icon: '📤', from: 10, to: 30 },
+  { key: 'ocr',     label: 'OCR & Parse',  icon: '🔍', from: 30, to: 60 },
+  { key: 'enrich',  label: 'AI Enrich',    icon: '🤖', from: 60, to: 95 },
+  { key: 'finalize',label: 'Finalize',     icon: '✨', from: 95, to: 100 },
+];
+
+// Processing modal — rotating tips
+const CLL_PROC_TIPS = [
+  { icon: '💡', text: 'Line numbers are extracted via format-aware regex — your choice (Onshore / General / Offshore) drives the pattern.' },
+  { icon: '🧠', text: 'HMB supplies temperature & pressure; PMS adds material grade; NACE tags corrosion service.' },
+  { icon: '⚡', text: 'All 35 columns are reconciled in-memory — you only download the final, validated table.' },
+  { icon: '🔒', text: 'Your documents stay inside your project. Extraction is project-scoped end-to-end.' },
+  { icon: '📈', text: 'Stress-critical lines are auto-flagged from Section 7 + temperature analysis.' },
+];
+const CLL_PROC_TIP_ROTATE_MS = 5000;
+
+
+
+
 const CriticalLineList = () => {
 
   const navigate = useNavigate();
@@ -99,6 +228,12 @@ const CriticalLineList = () => {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
 
   const [processingProgress, setProcessingProgress] = useState({ step: '', percent: 0 });
+
+  const [procTipIndex, setProcTipIndex] = useState(0);
+
+  const [procStartedAt, setProcStartedAt] = useState(null);
+
+  const [procElapsedMs, setProcElapsedMs] = useState(0);
 
   
 
@@ -405,6 +540,27 @@ const CriticalLineList = () => {
   }, [fetchData, fetchPreviousOutputs]);
 
 
+  // Processing modal — rotate tips + track elapsed time while visible
+  useEffect(() => {
+    if (!showProcessingModal) {
+      setProcTipIndex(0);
+      setProcStartedAt(null);
+      setProcElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    setProcStartedAt(start);
+    setProcElapsedMs(0);
+    const tipTimer = setInterval(() => {
+      setProcTipIndex((i) => (i + 1) % CLL_PROC_TIPS.length);
+    }, CLL_PROC_TIP_ROTATE_MS);
+    const clockTimer = setInterval(() => {
+      setProcElapsedMs(Date.now() - start);
+    }, 1000);
+    return () => { clearInterval(tipTimer); clearInterval(clockTimer); };
+  }, [showProcessingModal]);
+
+
 
   const handleSearch = () => {
 
@@ -472,19 +628,32 @@ const CriticalLineList = () => {
 
   const pollTaskStatus = async (taskId) => {
 
-    const maxAttempts = 120; // 10 minutes (5 sec intervals)
+    // Soft-coded polling configuration
+    // Poll budget must exceed the Celery hard time limit
+    // (backend/apps/designiq/tasks.py :: DESIGNIQ_TASK_HARD_LIMIT = 2700s / 45 min)
+    // 600 attempts × 5s = 3000s = 50 min total → 5 min safety buffer over backend.
 
-    let attempts = 0;
+    const POLL_INTERVAL_MS = 5000;           // 5 sec between polls
 
-    
+    const POLL_MAX_ATTEMPTS = 600;           // 50 minutes total (> 45-min Celery cap)
 
-    const poll = async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+
+
+    // Awaitable loop — keeps the processing modal open until a terminal state
+
+    // (SUCCESS / FAILURE / timeout) is reached. Previous recursive-setTimeout
+
+    // implementation resolved the outer await immediately, causing the modal
+
+    // to flash and close before the task finished.
+
+    for (let attempts = 1; attempts <= POLL_MAX_ATTEMPTS; attempts++) {
 
       try {
-
-        attempts++;
-
-        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
 
         const response = await fetch(`${API_BASE_URL}/designiq/lists/upload_pid_status/${taskId}/`, {
 
@@ -492,43 +661,39 @@ const CriticalLineList = () => {
 
         });
 
-        
+
 
         if (!response.ok) throw new Error('Failed to check status');
 
-        
+
 
         const status = await response.json();
 
-        console.log(`📊 Poll ${attempts}/${maxAttempts}: ${status.state} - ${status.status}`);
+        console.log(`📊 Poll ${attempts}/${POLL_MAX_ATTEMPTS}: ${status.state} - ${status.status}`);
 
-        
 
-        // Update progress if available
 
         if (status.percent) {
 
-          setProcessingProgress({ 
+          setProcessingProgress({
 
-            step: status.status || 'Processing...', 
+            step: status.status || 'Processing...',
 
-            percent: Math.min(status.percent, 99) 
+            percent: Math.min(status.percent, 99)
 
           });
 
         }
 
-        
+
 
         if (status.state === 'SUCCESS' && status.result) {
-
-          // Task completed successfully
 
           console.log('✅ Task completed:', status.result);
 
           setProcessingProgress({ step: '✅ Complete!', percent: 100 });
 
-          
+
 
           if (status.result.enriched_data && status.result.enriched_data.length > 0) {
 
@@ -544,7 +709,7 @@ const CriticalLineList = () => {
 
           }
 
-          
+
 
           setUploadResult({
 
@@ -558,31 +723,27 @@ const CriticalLineList = () => {
 
           });
 
-          
+
 
           await fetchData();
 
           return;
 
-        } else if (status.state === 'FAILURE') {
+        }
+
+
+
+        if (status.state === 'FAILURE') {
 
           throw new Error(status.error || 'Task failed');
 
-        } else if (status.state === 'PENDING' || status.state === 'PROCESSING') {
-
-          // Continue polling
-
-          if (attempts < maxAttempts) {
-
-            setTimeout(() => poll(), 5000); // Poll every 5 seconds
-
-          } else {
-
-            throw new Error('Timeout: Processing took too long');
-
-          }
-
         }
+
+
+
+        // PENDING / PROCESSING / anything else → wait and poll again
+
+        await sleep(POLL_INTERVAL_MS);
 
       } catch (error) {
 
@@ -596,19 +757,23 @@ const CriticalLineList = () => {
 
         });
 
-        setShowProcessingModal(false);
-
-        setProcessing(false);
-
-        setUploadingPID(false);
+        return;
 
       }
 
-    };
+    }
 
-    
 
-    await poll();
+
+    // Exhausted maxAttempts without terminal state
+
+    setUploadResult({
+
+      success: false,
+
+      message: 'Timeout: Processing took too long'
+
+    });
 
   };
 
@@ -1282,109 +1447,207 @@ const CriticalLineList = () => {
 
   return (
 
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen p-6" style={{ background: CLL_THEME.pageBg }}>
 
       {/* Apply control styles for fullscreen and sidebar */}
 
       <style>{pageControls.styles}</style>
+      <style>{CLL_KEYFRAMES}</style>
 
 
 
-      {/* Header with Controls */}
+      {/* ── Hero Header ─────────────────────────────────────────────────── */}
 
-      <div className="flex items-center justify-between mb-6">
-
-        <div>
-
-          <h1 className="text-3xl font-bold text-gray-900">Stress Critical Line List</h1>
-
-        </div>
-
-
-
-        {/* Page Control Buttons */}
-
-        <PageControlButtons
-
-          sidebarVisible={pageControls.sidebarVisible}
-
-          setSidebarVisible={pageControls.toggleSidebar}
-
-          autoRefreshEnabled={pageControls.autoRefreshEnabled}
-
-          setAutoRefreshEnabled={pageControls.toggleAutoRefresh}
-
-          isFullscreen={pageControls.isFullscreen}
-
-          toggleFullscreen={pageControls.toggleFullscreen}
-
-          isRefreshing={isRefreshing}
-
-          autoRefreshInterval={30}
-
+      <div
+        className="cll-fade-up"
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          borderRadius: 20,
+          padding: '22px 26px',
+          marginBottom: 22,
+          background: CLL_THEME.heroGrad,
+          boxShadow: '0 14px 40px -14px rgba(79,70,229,0.45)',
+        }}
+      >
+        {/* Decorative animated shine stripe */}
+        <div
+          className="cll-grad-bar"
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+            background: 'linear-gradient(90deg,#fbbf24,#ffffff,#22d3ee,#a78bfa,#fbbf24)',
+            opacity: 0.75,
+          }}
         />
+        {/* Ambient blobs */}
+        <div style={{
+          position: 'absolute', top: -40, right: -30,
+          width: 220, height: 220, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.18), transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: -60, left: '30%',
+          width: 260, height: 260, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(14,165,233,0.18), transparent 70%)',
+          pointerEvents: 'none',
+        }} />
 
-      </div>
-
-
-
-      {/* Simplified - No list type selection needed */}
-
-      <div className="bg-white rounded-lg shadow-sm mb-6">
-
-
-
-        {/* Stats Cards */}
-
-        {stats && (
-
-          <div className="grid grid-cols-5 gap-6 p-6">
-
-            <div className="text-center">
-
-              <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
-
-              <div className="text-sm text-gray-600">Total Items</div>
-
+        <div style={{
+          position: 'relative', zIndex: 2,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+            {/* Icon pod */}
+            <div style={{
+              width: 52, height: 52, borderRadius: 14,
+              background: 'rgba(255,255,255,0.18)',
+              border: '1px solid rgba(255,255,255,0.28)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(8px)',
+              flexShrink: 0,
+            }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 12h3l2-5 4 10 2-5h7" />
+                <circle cx="18" cy="6" r="1.6" fill="#fff" stroke="none" />
+              </svg>
             </div>
 
-            <div className="text-center">
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h1 style={{
+                  margin: 0, color: '#fff', fontSize: '1.6rem', fontWeight: 800,
+                  letterSpacing: '-0.02em', lineHeight: 1.15,
+                }}>
+                  Stress Critical Line List
+                </h1>
+                <span style={{
+                  background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)',
+                  color: '#fff', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
+                  padding: '3px 10px', borderRadius: 999,
+                }}>AI-ENRICHED · {CLL_TOTAL_COLS} COLS</span>
+              </div>
+              <p style={{
+                margin: '4px 0 10px', color: 'rgba(255,255,255,0.88)',
+                fontSize: '0.85rem', lineHeight: 1.5, maxWidth: 620,
+              }}>
+                Upload a P&ID with HMB, PMS, NACE and Stress Criticality documents — RAD AI builds a {CLL_TOTAL_COLS}-column
+                stress-critical register in one pass.
+              </p>
 
-              <div className="text-3xl font-bold text-green-600">{stats.by_status.active}</div>
-
-              <div className="text-sm text-gray-600">Active</div>
-
+              {/* Capability chip strip */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {CLL_CHIPS.map((c) => (
+                  <span key={c.label} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: 'rgba(255,255,255,0.14)',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    color: '#fff',
+                    fontSize: '0.7rem', fontWeight: 600, letterSpacing: 0.1,
+                    padding: '3px 10px', borderRadius: 999,
+                    backdropFilter: 'blur(6px)',
+                  }}>
+                    <span>{c.icon}</span>{c.label}
+                  </span>
+                ))}
+              </div>
             </div>
-
-            <div className="text-center">
-
-              <div className="text-3xl font-bold text-yellow-600">{stats.by_status.pending}</div>
-
-              <div className="text-sm text-gray-600">Pending</div>
-
-            </div>
-
-            <div className="text-center">
-
-              <div className="text-3xl font-bold text-blue-600">{stats.by_status.approved}</div>
-
-              <div className="text-sm text-gray-600">Approved</div>
-
-            </div>
-
-            <div className="text-center">
-
-              <div className="text-3xl font-bold text-indigo-600">{stats.validated}</div>
-
-              <div className="text-sm text-gray-600">Validated</div>
-
-            </div>
-
           </div>
 
-        )}
+          {/* Page control buttons — on a soft translucent pod so they read clearly */}
+          <div style={{
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.22)',
+            borderRadius: 14, padding: 4,
+            backdropFilter: 'blur(6px)',
+          }}>
+            <PageControlButtons
+
+              sidebarVisible={pageControls.sidebarVisible}
+
+              setSidebarVisible={pageControls.toggleSidebar}
+
+              autoRefreshEnabled={pageControls.autoRefreshEnabled}
+
+              setAutoRefreshEnabled={pageControls.toggleAutoRefresh}
+
+              isFullscreen={pageControls.isFullscreen}
+
+              toggleFullscreen={pageControls.toggleFullscreen}
+
+              isRefreshing={isRefreshing}
+
+              autoRefreshInterval={30}
+
+            />
+          </div>
+        </div>
 
       </div>
+
+
+
+      {/* ── Stats cards — glass tiles with icons & subtle hover lift ─── */}
+
+      {stats && (
+        <div
+          className="cll-fade-up"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: 14,
+            marginBottom: 22,
+            animationDelay: '0.08s',
+          }}
+        >
+          {[
+            { label: 'Total Items', value: stats.total,              color: '#1f2937', icon: '📋', accent: '#e2e8f0' },
+            { label: 'Active',      value: stats.by_status.active,   color: '#059669', icon: '✓',  accent: '#d1fae5' },
+            { label: 'Pending',     value: stats.by_status.pending,  color: '#d97706', icon: '⏳', accent: '#fef3c7' },
+            { label: 'Approved',    value: stats.by_status.approved, color: '#2563eb', icon: '★',  accent: '#dbeafe' },
+            { label: 'Validated',   value: stats.validated,          color: '#7c3aed', icon: '🛡', accent: '#ede9fe' },
+          ].map((s, i) => (
+            <div
+              key={s.label}
+              className="cll-stat-card cll-count-in"
+              style={{
+                animationDelay: `${0.1 + i * 0.06}s`,
+                background: CLL_THEME.cardBg,
+                backdropFilter: 'blur(8px)',
+                border: CLL_THEME.cardBorder,
+                borderRadius: 14,
+                padding: '14px 16px',
+                boxShadow: CLL_THEME.cardShadow,
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: s.accent, color: s.color,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.15rem', flexShrink: 0,
+              }}>
+                {s.icon}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontSize: '1.6rem', fontWeight: 800, color: s.color,
+                  lineHeight: 1, letterSpacing: '-0.02em',
+                }}>
+                  {s.value ?? 0}
+                </div>
+                <div style={{
+                  fontSize: '0.72rem', color: '#64748b',
+                  fontWeight: 600, marginTop: 3, letterSpacing: 0.2,
+                }}>
+                  {s.label}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
 
 
@@ -1448,209 +1711,325 @@ const CriticalLineList = () => {
 
         
 
-        {/* P&ID Upload Notice - Full Width Banner */}
-
-        <div className="w-full bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-300 rounded-xl p-4">
-
-            <div className="flex items-center space-x-3">
-
-              <svg className="w-8 h-8 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-
-              </svg>
-
-              <div className="flex-1">
-
-                <h3 className="text-lg font-bold text-indigo-900 mb-1">📄 P&ID Processing Interface</h3>
-
-                <p className="text-sm text-indigo-700">
-
-                  Use the <strong>4-document enriched extraction interface below</strong> to upload and process P&ID files with full 34-column enrichment (P&ID + HMB + PMS + NACE)
-
-                </p>
-
-              </div>
-
-              <div className="flex-shrink-0">
-
-                <span className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">
-
-                  Scroll Down ↓
-
-                </span>
-
-              </div>
-
-            </div>
-
-          </div>
+        {/* P&ID Upload Notice — hidden: content merged into unified workflow card below */}
 
       </div>
 
       
 
-      {/* 4-DOCUMENT ENRICHED EXTRACTION - Systematic Upload Interface */}
+      {/* ── Unified Workflow Card — replaces the two stacked banners ─── */}
 
-      <div className="border-t-2 border-purple-200 pt-4 mt-4">
+      <div
+        className="cll-fade-up"
+        style={{
+          position: 'relative',
+          background: CLL_THEME.cardBg,
+          backdropFilter: 'blur(10px)',
+          border: CLL_THEME.cardBorder,
+          borderRadius: 18,
+          padding: '20px 22px',
+          marginBottom: 18,
+          boxShadow: CLL_THEME.cardShadow,
+          animationDelay: '0.14s',
+        }}
+      >
+        {/* Left-edge accent stripe */}
+        <div style={{
+          position: 'absolute', top: 12, bottom: 12, left: 0, width: 4,
+          background: 'linear-gradient(180deg,#4f46e5,#0891b2)',
+          borderRadius: '0 4px 4px 0',
+        }} />
 
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-4 mb-4">
-
-              <div className="flex items-center space-x-3 mb-2">
-
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-
-                </svg>
-
-                <h3 className="text-lg font-bold text-purple-900">Smart Enriched Extraction (34 Columns)</h3>
-
-              </div>
-
-              <p className="text-sm text-purple-800 mb-2">
-
-                Upload <strong>P&ID + 3 Technical Documents</strong> to get full enriched table with 34 columns (8 base + 26 enriched)
-
-              </p>
-
-              <div className="flex items-center space-x-2 text-xs text-purple-700">
-
-                <span className="font-semibold">Output:</span>
-
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">8 Base Columns from P&ID</span>
-
-                <span className="text-purple-600">+</span>
-
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">10 from HMB</span>
-
-                <span className="text-purple-600">+</span>
-
-                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">8 from PMS</span>
-
-                <span className="text-purple-600">+</span>
-
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">8 from NACE</span>
-
-                <span className="text-purple-600">=</span>
-
-                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-bold">34 Total Columns</span>
-
-              </div>
-
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10,
+          flexWrap: 'wrap',
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+            color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 16px -4px rgba(79,70,229,0.45)',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{
+              fontSize: '1.0rem', fontWeight: 800, color: '#1f2937',
+              letterSpacing: '-0.01em', lineHeight: 1.2,
+            }}>
+              Smart Enriched Extraction
             </div>
+            <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 2 }}>
+              Upload <strong>P&ID + HMB + PMS + NACE + Stress Criticality</strong> — RAD AI returns a unified {CLL_TOTAL_COLS}-column register.
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem' }}>
+            <span style={{
+              background: 'linear-gradient(135deg,#4f46e5,#0891b2)',
+              color: '#fff', fontWeight: 800, letterSpacing: 0.4,
+              padding: '5px 12px', borderRadius: 999,
+            }}>
+              {CLL_TOTAL_COLS} COLS · {CLL_TOTAL_DOCS} DOCS
+            </span>
+          </div>
+        </div>
 
-
-
-            {/* FORMAT SELECTION - CRITICAL FOR REGEX PATTERNS */}
-
-            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4">
-
-              <div className="flex items-center space-x-2 mb-3">
-
-                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-
-                </svg>
-
-                <h4 className="text-sm font-bold text-yellow-900">Step 1: Select Project Format (Required)</h4>
-
-              </div>
-
-              <p className="text-xs text-yellow-800 mb-3">Choose your project type - this determines the line number format and regex patterns used for extraction</p>
-
-              <div className="grid grid-cols-3 gap-3">
-
-                <button
-
-                  onClick={() => setSelectedFormat('onshore')}
-
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-
-                    selectedFormat === 'onshore'
-
-                      ? 'bg-blue-500 text-white border-blue-600 shadow-lg'
-
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
-
-                  }`}
-
-                >
-
-                  <div className="text-sm font-bold">Onshore</div>
-
-                  <div className="text-xs mt-1">No area (2-D-5777-033842)</div>
-
-                </button>
-
-                <button
-
-                  onClick={() => setSelectedFormat('general')}
-
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-
-                    selectedFormat === 'general'
-
-                      ? 'bg-green-500 text-white border-green-600 shadow-lg'
-
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
-
-                  }`}
-
-                >
-
-                  <div className="text-sm font-bold">General</div>
-
-                  <div className="text-xs mt-1">With area (1"-41-SWS-64544)</div>
-
-                </button>
-
-                <button
-
-                  onClick={() => setSelectedFormat('offshore')}
-
-                  className={`px-4 py-3 rounded-lg border-2 transition-all ${
-
-                    selectedFormat === 'offshore'
-
-                      ? 'bg-purple-500 text-white border-purple-600 shadow-lg'
-
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
-
-                  }`}
-
-                >
-
-                  <div className="text-sm font-bold">Offshore</div>
-
-                  <div className="text-xs mt-1">Area first (604-HO-8-BC2GA0)</div>
-
-                </button>
-
-              </div>
-
-              {!selectedFormat && (
-
-                <div className="mt-3 flex items-center space-x-2 text-red-600 text-sm font-medium">
-
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-
-                  </svg>
-
-                  <span>Please select a format before uploading documents</span>
-
-                </div>
-
+        {/* Enrichment breakdown — compact chip row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          flexWrap: 'wrap', fontSize: '0.72rem',
+          padding: '8px 10px', borderRadius: 10,
+          background: 'rgba(248,250,252,0.7)',
+          border: '1px dashed rgba(148,163,184,0.3)',
+        }}>
+          {CLL_ENRICHMENT_SOURCES.map((src, i) => (
+            <React.Fragment key={src.key}>
+              <span
+                title={src.desc}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 10px', borderRadius: 8,
+                  background: `${src.color}14`,
+                  color: src.color,
+                  border: `1px solid ${src.color}30`,
+                  fontWeight: 700,
+                }}
+              >
+                {src.label}
+                <span style={{
+                  background: src.color, color: '#fff',
+                  borderRadius: 999, padding: '0 6px',
+                  fontSize: '0.64rem', lineHeight: 1.5,
+                }}>
+                  +{src.cols}
+                </span>
+              </span>
+              {i < CLL_ENRICHMENT_SOURCES.length - 1 && (
+                <span style={{ color: '#94a3b8', fontWeight: 700 }}>+</span>
               )}
+            </React.Fragment>
+          ))}
+          <span style={{ color: '#94a3b8', fontWeight: 700 }}>=</span>
+          <span style={{
+            background: 'linear-gradient(90deg,#4f46e5,#7c3aed)',
+            color: '#fff', padding: '3px 10px', borderRadius: 8,
+            fontWeight: 800, letterSpacing: 0.2,
+          }}>
+            {CLL_TOTAL_COLS} total
+          </span>
+        </div>
+      </div>
+
+
+
+      {/* ── 5-Document Enriched Extraction — Upload workflow ─── */}
+
+      <div className="cll-fade-up" style={{ animationDelay: '0.2s' }}>
+
+            {/* Step 1 — Format selection (refined from loud yellow banner) */}
+
+            <div
+              style={{
+                background: CLL_THEME.cardBg,
+                backdropFilter: 'blur(10px)',
+                border: CLL_THEME.cardBorder,
+                borderRadius: 16,
+                padding: '18px 20px',
+                marginBottom: 16,
+                boxShadow: CLL_THEME.cardShadow,
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 26, height: 26, borderRadius: '50%',
+                  background: selectedFormat ? '#059669' : '#f59e0b',
+                  color: '#fff', fontSize: '0.75rem', fontWeight: 800,
+                  transition: 'background 0.3s ease',
+                }}>
+                  {selectedFormat ? '✓' : '1'}
+                </span>
+                <span style={{
+                  fontSize: '0.88rem', fontWeight: 700, color: '#1f2937',
+                  letterSpacing: '-0.01em',
+                }}>
+                  Select project format
+                </span>
+                {!selectedFormat && (
+                  <span className="cll-pulse-dot" style={{
+                    fontSize: '0.68rem', fontWeight: 600, color: '#b45309',
+                    background: '#fef3c7', border: '1px solid #fde68a',
+                    padding: '2px 8px', borderRadius: 999,
+                  }}>
+                    Required
+                  </span>
+                )}
+                <span style={{
+                  marginLeft: 'auto', fontSize: '0.7rem', color: '#64748b',
+                }}>
+                  Determines regex patterns for line-number parsing
+                </span>
+              </div>
+
+
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 10, marginTop: 12,
+              }}>
+                {CLL_FORMATS.map((f) => {
+                  const active = selectedFormat === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFormat(f.id)}
+                      className={`cll-format-btn ${active ? 'cll-format-btn--active' : ''}`}
+                      style={{
+                        position: 'relative',
+                        textAlign: 'left', cursor: 'pointer',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: active ? `2px solid ${f.accent}` : '1px solid rgba(148,163,184,0.28)',
+                        background: active
+                          ? `linear-gradient(135deg, ${f.accent}, ${f.accent}dd)`
+                          : f.autoDetect
+                          ? `linear-gradient(135deg, rgba(255,255,255,0.92), ${f.accent}10)`
+                          : 'rgba(255,255,255,0.75)',
+                        color: active ? '#fff' : '#374151',
+                        boxShadow: active
+                          ? `0 8px 22px -8px ${f.accent}88`
+                          : f.autoDetect
+                          ? `0 4px 14px -6px ${f.accent}55`
+                          : 'none',
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                      }}
+                    >
+                      {/* Recommended ribbon for auto-detect */}
+                      {f.recommended && !active && (
+                        <span style={{
+                          position: 'absolute', top: -8, right: 10,
+                          fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.1em',
+                          background: `linear-gradient(135deg, ${f.accent}, ${f.accent}cc)`,
+                          color: '#fff', padding: '2px 8px', borderRadius: 999,
+                          boxShadow: `0 4px 10px -2px ${f.accent}66`,
+                        }}>
+                          ★ RECOMMENDED
+                        </span>
+                      )}
+
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                        background: active ? 'rgba(255,255,255,0.22)' : `${f.accent}14`,
+                        border: active ? '1px solid rgba(255,255,255,0.35)' : `1px solid ${f.accent}30`,
+                        color: active ? '#fff' : f.accent,
+                        fontSize: '1rem', fontWeight: 800,
+                      }}>
+                        {f.icon}
+                      </span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                            {f.label}
+                          </span>
+                          {f.badge && (
+                            <span style={{
+                              fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.12em',
+                              background: active ? 'rgba(255,255,255,0.25)' : `${f.accent}1f`,
+                              color: active ? '#fff' : f.accent,
+                              border: active ? '1px solid rgba(255,255,255,0.4)' : `1px solid ${f.accent}55`,
+                              padding: '2px 7px', borderRadius: 999,
+                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                            }}>
+                              <span className="cll-pulse-dot" style={{
+                                width: 5, height: 5, borderRadius: '50%',
+                                background: active ? '#fff' : f.accent,
+                                display: 'inline-block',
+                              }} />
+                              {f.badge}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{
+                          fontSize: '0.68rem',
+                          color: active ? 'rgba(255,255,255,0.88)' : '#64748b',
+                          marginTop: 2,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          {f.hint}
+                        </div>
+                        {/* Sub-format coverage chips (auto-detect only) */}
+                        {f.autoDetect && f.coversFormats && (
+                          <div style={{
+                            display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6,
+                          }}>
+                            {f.coversFormats.map((sub) => (
+                              <span key={sub} style={{
+                                fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.04em',
+                                padding: '1px 6px', borderRadius: 6,
+                                background: active ? 'rgba(255,255,255,0.2)' : `${f.accent}14`,
+                                color: active ? 'rgba(255,255,255,0.95)' : f.accent,
+                                border: active ? '1px solid rgba(255,255,255,0.3)' : `1px solid ${f.accent}30`,
+                                textTransform: 'uppercase',
+                              }}>
+                                {sub}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {active && (
+                        <span style={{
+                          marginLeft: 'auto', alignSelf: 'center',
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: '#fff', boxShadow: '0 0 8px rgba(255,255,255,0.9)',
+                        }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Auto-detect explainer — appears when General (auto) is selected */}
+              {(() => {
+                const fmt = CLL_FORMATS.find(f => f.id === selectedFormat);
+                if (!fmt || !fmt.autoDetect) return null;
+                return (
+                  <div style={{
+                    marginTop: 12, padding: '10px 14px', borderRadius: 10,
+                    background: `linear-gradient(135deg, ${fmt.accent}10, ${fmt.accent}05)`,
+                    border: `1px dashed ${fmt.accent}55`,
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    fontSize: '0.75rem', color: '#334155',
+                  }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: `${fmt.accent}20`, color: fmt.accent, fontWeight: 800,
+                    }}>
+                      🤖
+                    </span>
+                    <div>
+                      <strong style={{ color: fmt.accent }}>Auto-detection enabled.</strong>{' '}
+                      RAD AI will run every known pattern ({fmt.coversFormats.map(s => s.toUpperCase()).join(' · ')})
+                      against each line and merge unique matches — no need to guess your project's format.
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
 
 
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
 
               {/* Document 1: P&ID (Mandatory) */}
 
@@ -2258,8 +2637,6 @@ const CriticalLineList = () => {
 
           </div>
 
-          )}
-
 
 
         {/* Filter Panel */}
@@ -2486,113 +2863,210 @@ const CriticalLineList = () => {
 
       {/* Processing Modal with Progress */}
 
-      {showProcessingModal && (
+      {showProcessingModal && (() => {
+        const pct = Math.max(0, Math.min(100, processingProgress.percent || 0));
+        const activeStage =
+          CLL_PROC_STAGES.find(s => pct >= s.from && pct < s.to) ||
+          CLL_PROC_STAGES[CLL_PROC_STAGES.length - 1];
+        const elapsedSec = Math.floor(procElapsedMs / 1000);
+        const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+        const ss = String(elapsedSec % 60).padStart(2, '0');
+        const tip = CLL_PROC_TIPS[procTipIndex] || CLL_PROC_TIPS[0];
 
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        return (
+          <div
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            style={{
+              background: 'radial-gradient(circle at 30% 20%, rgba(79,70,229,0.22), rgba(8,11,28,0.85) 55%, rgba(0,0,0,0.92) 100%)',
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <div
+              className="cll-fade-up"
+              style={{
+                position: 'relative',
+                width: '100%', maxWidth: 720,
+                borderRadius: 24,
+                overflow: 'hidden',
+                background: 'linear-gradient(160deg, rgba(15,17,37,0.96) 0%, rgba(24,22,58,0.96) 50%, rgba(12,28,50,0.96) 100%)',
+                border: '1px solid rgba(148,163,255,0.22)',
+                boxShadow: '0 30px 80px -20px rgba(79,70,229,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset',
+                color: '#e2e8f0',
+              }}
+            >
+              {/* Ambient blobs */}
+              <div className="cll-blob" style={{ position:'absolute', width:260, height:260, borderRadius:'50%', background:'#6366f1', opacity:0.35, top:-80, left:-60, pointerEvents:'none' }} />
+              <div className="cll-blob" style={{ position:'absolute', width:220, height:220, borderRadius:'50%', background:'#06b6d4', opacity:0.28, bottom:-70, right:-50, animationDelay:'-3s', pointerEvents:'none' }} />
 
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8">
-
-            <div className="text-center">
-
-              <div className="mb-6">
-
-                <svg className="animate-spin h-16 w-16 mx-auto text-purple-600" fill="none" viewBox="0 0 24 24">
-
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-
-                </svg>
-
-              </div>
-
-              
-
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Processing 4 Documents</h2>
-
-              <p className="text-gray-600 mb-6">
-
-                P&ID + HMB + PMS + NACE → 34-column enriched table
-
-              </p>
-
-              
-
-              {/* Progress Bar */}
-
-              <div className="mb-4">
-
-                <div className="bg-gray-200 rounded-full h-4 overflow-hidden">
-
-                  <div 
-
-                    className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-500 ease-out"
-
-                    style={{ width: `${processingProgress.percent}%` }}
-
-                  ></div>
-
+              <div style={{ position:'relative', padding:'28px 28px 24px' }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:18 }}>
+                  <span style={{
+                    fontSize:'0.62rem', fontWeight:800, letterSpacing:'0.16em',
+                    background:'linear-gradient(135deg,#6366f1,#06b6d4)', color:'#fff',
+                    padding:'4px 10px', borderRadius:999,
+                  }}>
+                    RAD AI · LIVE
+                  </span>
+                  <div style={{ height:6, width:6, borderRadius:'50%', background:'#22c55e', boxShadow:'0 0 10px #22c55e' }} className="cll-pulse-dot" />
+                  <span style={{ fontSize:'0.72rem', color:'#94a3b8' }}>Stress-Critical Line List · 5-document pipeline</span>
+                  <span style={{ marginLeft:'auto', fontVariantNumeric:'tabular-nums', fontSize:'0.78rem', color:'#c7d2fe', background:'rgba(99,102,241,0.14)', padding:'4px 10px', borderRadius:999, border:'1px solid rgba(99,102,241,0.3)' }}>
+                    ⏱ {mm}:{ss}
+                  </span>
                 </div>
 
-                <p className="text-sm text-gray-700 mt-2 font-semibold">{processingProgress.percent}%</p>
+                {/* Orbit + central percent */}
+                <div style={{ position:'relative', width:230, height:230, margin:'4px auto 16px' }}>
+                  {/* Outer scanning ring */}
+                  <div style={{
+                    position:'absolute', inset:0, borderRadius:'50%',
+                    border:'1px dashed rgba(148,163,255,0.35)',
+                  }} className="cll-orbit-ring" />
+                  {/* Inner ring */}
+                  <div style={{
+                    position:'absolute', inset:22, borderRadius:'50%',
+                    border:'1px solid rgba(6,182,212,0.35)',
+                  }} className="cll-orbit-ring-rev" />
 
+                  {/* Doc chips around the outer ring */}
+                  {CLL_DOC_ORBIT.map((d, i) => {
+                    const angle = (i / CLL_DOC_ORBIT.length) * 2 * Math.PI - Math.PI/2;
+                    const r = 108;
+                    const x = 115 + r * Math.cos(angle) - 22;
+                    const y = 115 + r * Math.sin(angle) - 22;
+                    return (
+                      <div key={d.key}
+                        title={d.label}
+                        style={{
+                          position:'absolute', left:x, top:y,
+                          width:44, height:44, borderRadius:12,
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          background:`linear-gradient(135deg, ${d.color}33, ${d.color}11)`,
+                          border:`1px solid ${d.color}80`,
+                          boxShadow:`0 0 18px -4px ${d.color}88`,
+                          fontSize:'1.2rem',
+                          animation:`cllPulse 2.4s ease-in-out ${i * 0.25}s infinite`,
+                        }}
+                      >
+                        {d.icon}
+                      </div>
+                    );
+                  })}
+
+                  {/* Center percent dial */}
+                  <div style={{
+                    position:'absolute', inset:48, borderRadius:'50%',
+                    display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                    background:'radial-gradient(circle, rgba(79,70,229,0.4), rgba(15,17,37,0.9) 70%)',
+                    border:'1px solid rgba(148,163,255,0.4)',
+                    boxShadow:'0 0 40px rgba(99,102,241,0.5) inset',
+                  }}>
+                    <div style={{
+                      fontSize:'2.6rem', fontWeight:900,
+                      background:'linear-gradient(135deg,#a5b4fc,#67e8f9)',
+                      WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
+                      fontVariantNumeric:'tabular-nums', lineHeight:1,
+                    }}>
+                      {pct}<span style={{ fontSize:'1.1rem' }}>%</span>
+                    </div>
+                    <div style={{ marginTop:4, fontSize:'0.68rem', color:'#94a3b8', letterSpacing:'0.14em', fontWeight:700 }}>
+                      {activeStage.icon} {activeStage.label.toUpperCase()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stage tracker */}
+                <div style={{
+                  display:'grid',
+                  gridTemplateColumns:`repeat(${CLL_PROC_STAGES.length}, 1fr)`,
+                  gap:6, marginBottom:14,
+                }}>
+                  {CLL_PROC_STAGES.map((s) => {
+                    const done = pct >= s.to;
+                    const active = pct >= s.from && pct < s.to;
+                    return (
+                      <div key={s.key} style={{
+                        padding:'8px 6px', borderRadius:10,
+                        textAlign:'center',
+                        background: active
+                          ? 'linear-gradient(135deg, rgba(99,102,241,0.35), rgba(6,182,212,0.25))'
+                          : done
+                          ? 'rgba(34,197,94,0.14)'
+                          : 'rgba(148,163,184,0.08)',
+                        border: active
+                          ? '1px solid rgba(165,180,252,0.55)'
+                          : done
+                          ? '1px solid rgba(34,197,94,0.45)'
+                          : '1px solid rgba(148,163,184,0.18)',
+                        transition:'all 0.3s ease',
+                      }}>
+                        <div style={{ fontSize:'1.05rem', lineHeight:1 }}>
+                          {done ? '✓' : s.icon}
+                        </div>
+                        <div style={{
+                          marginTop:4, fontSize:'0.62rem', fontWeight:700,
+                          letterSpacing:'0.04em',
+                          color: active ? '#e0e7ff' : done ? '#86efac' : '#94a3b8',
+                        }}>
+                          {s.label}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ position:'relative', height:12, borderRadius:999, background:'rgba(148,163,184,0.14)', overflow:'hidden', marginBottom:10 }}>
+                  <div className="cll-bar-fill" style={{
+                    height:'100%', width:`${pct}%`,
+                    borderRadius:999,
+                    transition:'width 0.6s cubic-bezier(0.4,0,0.2,1)',
+                    position:'relative',
+                  }}>
+                    <div className="cll-bar-shimmer" style={{ position:'absolute', inset:0, borderRadius:999 }} />
+                  </div>
+                </div>
+
+                {/* Current step message */}
+                <div style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'10px 14px', borderRadius:12,
+                  background:'rgba(15,17,37,0.55)',
+                  border:'1px solid rgba(99,102,241,0.3)',
+                  marginBottom:12,
+                }}>
+                  <span style={{
+                    display:'inline-block', width:8, height:8, borderRadius:'50%',
+                    background:'#a5b4fc', boxShadow:'0 0 10px #a5b4fc',
+                  }} className="cll-pulse-dot" />
+                  <span style={{ fontSize:'0.85rem', color:'#e0e7ff', fontWeight:600, flex:1 }}>
+                    {processingProgress.step || 'Warming up the pipeline…'}
+                  </span>
+                </div>
+
+                {/* Rotating tip */}
+                <div
+                  key={procTipIndex}
+                  style={{
+                    display:'flex', alignItems:'flex-start', gap:10,
+                    padding:'10px 14px', borderRadius:12,
+                    background:'linear-gradient(135deg, rgba(6,182,212,0.12), rgba(99,102,241,0.12))',
+                    border:'1px solid rgba(103,232,249,0.25)',
+                    animation:'cllTipSlide 5s ease infinite',
+                  }}
+                >
+                  <span style={{ fontSize:'1rem' }}>{tip.icon}</span>
+                  <span style={{ fontSize:'0.78rem', color:'#cbd5e1', lineHeight:1.5 }}>{tip.text}</span>
+                </div>
+
+                <p style={{ marginTop:14, fontSize:'0.7rem', color:'#64748b', textAlign:'center' }}>
+                  Typically completes in 1–3 minutes · you can switch tabs, we'll keep processing
+                </p>
               </div>
-
-              
-
-              {/* Current Step */}
-
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mt-4">
-
-                <p className="text-sm text-blue-900 font-medium">{processingProgress.step}</p>
-
-              </div>
-
-              
-
-              {/* Info Box */}
-
-              <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg text-left">
-
-                <h3 className="font-semibold text-purple-900 mb-2 flex items-center">
-
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-
-                  </svg>
-
-                  What's Happening?
-
-                </h3>
-
-                <ul className="text-sm text-purple-800 space-y-1">
-
-                  <li>• <strong>Step 1:</strong> Extract 8 base columns from P&ID (locked logic)</li>
-
-                  <li>• <strong>Step 2:</strong> AI analyzes 3 documents for +26 enrichment columns</li>
-
-                  <li>• <strong>Step 3:</strong> Merge into guaranteed 34-column table</li>
-
-                </ul>
-
-              </div>
-
-              
-
-              <p className="text-xs text-gray-500 mt-4">
-
-                This may take 1-3 minutes depending on file sizes and AI processing time
-
-              </p>
-
             </div>
-
           </div>
-
-        </div>
-
-      )}
+        );
+      })()}
 
 
 

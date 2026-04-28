@@ -111,6 +111,18 @@ export const MODULE_CATEGORIES_CONFIG = {
       badgeColor: 'bg-gray-100'
     },
     {
+      id: 'digitization',
+      name: 'Digitization',
+      icon: '🔍',
+      color: 'emerald',
+      description: 'Digital document extraction and metadata processing',
+      order: 9,
+      bgColor: 'bg-emerald-50',
+      borderColor: 'border-emerald-200',
+      textColor: 'text-emerald-700',
+      badgeColor: 'bg-emerald-100'
+    },
+    {
       id: 'other',
       name: 'Other Features',
       icon: '📦',
@@ -150,7 +162,10 @@ export const MODULE_CATEGORIES_CONFIG = {
     
     // Admin
     admin: ['admin', 'user_management', 'settings', 'system_', 'rbac_'],
-    
+
+    // Digitization — SOFT-CODED: extend list when adding new digitization modules
+    digitization: ['digitization', 'non_teff', 'teff_', 'metadata_extract'],
+
     // Other (catch-all)
     other: []
   },

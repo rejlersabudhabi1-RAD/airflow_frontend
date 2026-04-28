@@ -1,340 +1,255 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FEATURES_CATALOG } from '../../config/featuresCatalog.config';
-import { 
-  ArrowLeftIcon,
-  CloudArrowUpIcon,
-  DocumentTextIcon,
-  ChartBarIcon,
-  CheckCircleIcon
-} from '@heroicons/react/24/outline';
-
 /**
- * PFD Analysis Page - Process Flow Diagram Analysis
- * AI-powered PFD processing and P&ID conversion
+ * Pump Hydraulic Calculation — Tabbed Workspace
+ * =============================================
+ * Route: /engineering/process/datasheet/pfd
+ *
+ * Aligns the page with the standard Pump Hydraulic Calculation Excel
+ * template (10 sub-sheets) while preserving the existing AI extraction
+ * pipeline. The first tab embeds the working `DatasheetGeneratorTemplate`
+ * (P&ID upload → async analyze → download .xlsx) — its backend contract
+ * is NOT modified. The remaining tabs are rendered from a soft-coded
+ * config so visuals follow the template exactly.
  */
-const PFDAnalysis = () => {
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Droplets, Sparkles, Download, History as HistoryIcon, Save } from 'lucide-react';
+import DatasheetGeneratorTemplate from './_shared/DatasheetGeneratorTemplate';
+import PumpHydraulicSheetRenderer from '../../components/ProcessDatasheet/PumpHydraulicSheetRenderer';
+import PumpHydraulicHistoryPanel from '../../components/ProcessDatasheet/PumpHydraulicHistoryPanel';
+import PUMP_HYDRAULIC_TABS from '../../config/pumpHydraulicTemplate.config';
+import { applyExtractedDataToForm } from '../../config/pumpHydraulicAIMapper';
+import exportPumpHydraulicWorkbook from '../../config/pumpHydraulicExporter';
+import { saveSnapshot, SNAPSHOT_SOURCES } from '../../config/pumpHydraulicHistory';
+
+// ─── Soft-coded page config ───────────────────────────────────────────────
+const BACK_ROUTE   = '/engineering/process/datasheet';
+const PAGE_TITLE   = 'Pump Hydraulic Calculation';
+const PAGE_SUBTITLE = 'Standard 10-section workbook · AI-assisted extraction · Soft-coded template alignment';
+
+// Soft-coded: the tab to auto-jump to once AI extraction completes.
+const POST_EXTRACTION_TAB = 'pump_cal';
+
+// Existing AI / upload contract — preserved verbatim from previous page.
+// `onResults` is added (callback only — no backend change) to map extracted
+// equipment data into the local form state.
+const buildUploadConfig = ({ onResults }) => ({
+  pageTitle:    'Upload & AI Extract',
+  pageSubtitle: 'Upload P&ID → AI extracts pumps and process conditions → Auto-fills datasheet & generates Excel',
+  headerIcon:   Droplets,
+  accent:       'blue',
+  backRoute:    BACK_ROUTE,
+  mode: 'async_external',
+  endpoints: {
+    analyze:  '/pid/equipment/analyze/',
+    status:   (id) => `/pid/equipment/status/${id}/`,
+    results:  (id) => `/pid/equipment/results/${id}/`,
+    download: (id) => `/pid/equipment/download-excel/${id}/`,
+  },
+  documents: [
+    { key: 'file',       label: 'P&ID Drawing',                       required: true,  accent: 'blue',   hint: 'PDF — primary drawing for pump tag detection' },
+    { key: 'hmb_file',   label: 'Heat & Material Balance (HMB) / PFD', required: false, accent: 'indigo', hint: 'Optional PDF — improves operating-condition + fluid-property accuracy' },
+    { key: 'pump_curve', label: 'Pump Curves / Vendor Datasheets',     required: false, accent: 'purple', hint: 'Optional PDF — boosts head, NPSH and efficiency extraction' },
+  ],
+  submitLabel:    'Extract & Auto-Fill Datasheet',
+  successTitle:   'Pump Hydraulic Datasheet Generated!',
+  successBody:    'Datasheet auto-populated from extracted data. Review the sub-pages or download the .xlsx.',
+  resultFilename: 'Pump_Hydraulic_Datasheet.xlsx',
+  buildSuccessMessage: (results) =>
+    `Extracted ${results?.total ?? 0} pump(s)`
+    + (results?.drawing_ref ? ` from ${results.drawing_ref}` : '')
+    + ' — datasheet fields auto-populated. Switch to any sub-page to review.',
+  whatThisDoes: [
+    'Detects every pump tag (P-XXX, P-XXXX, etc.) in the P&ID',
+    'Reads suction / discharge pressures, temperatures and fluid data from HMB',
+    'Calculates differential head, hydraulic & shaft power, and NPSH available',
+    'Pulls vendor performance points from supplied pump curves',
+    'Auto-populates all datasheet sub-pages (Cover, Pump Cal, Result Summary, Pressure Drop Cal …)',
+    'Outputs a populated Pump Hydraulic Calculation Excel datasheet',
+  ],
+  onResults,
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+const PumpHydraulicTabbedPage = () => {
   const navigate = useNavigate();
-  
-  // Get module name from centralized config
-  const moduleConfig = FEATURES_CATALOG.engineering.features.find(
-    feature => feature.id === 'eng-process-datasheet'
+  const [activeId, setActiveId] = useState(PUMP_HYDRAULIC_TABS[0].id);
+  const [extractionInfo, setExtractionInfo] = useState(null); // { applied, total, drawing_ref }
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [savedNotice, setSavedNotice] = useState(null); // { label, when }
+  const activeTab = PUMP_HYDRAULIC_TABS.find((t) => t.id === activeId) || PUMP_HYDRAULIC_TABS[0];
+
+  // Build the upload config once — `onResults` maps extracted equipment data
+  // into the form's localStorage and surfaces a summary banner.
+  const uploadConfig = useMemo(
+    () => buildUploadConfig({
+      onResults: (resultsData) => {
+        const { applied } = applyExtractedDataToForm(resultsData);
+        const summary = {
+          applied,
+          total: resultsData?.total ?? 0,
+          drawing_ref: resultsData?.drawing_ref || '',
+        };
+        setExtractionInfo(summary);
+        // Auto-switch to the Pump Cal tab so user sees populated data immediately.
+        if (applied > 0) setActiveId(POST_EXTRACTION_TAB);
+        // Auto-archive a history snapshot so the user can always return to
+        // this AI-extracted state — defer one tick so localStorage has been
+        // written by the renderer's debounced save.
+        setTimeout(() => {
+          saveSnapshot({
+            label:   `AI Extraction — ${summary.drawing_ref || 'P&ID'}`.trim(),
+            source:  SNAPSHOT_SOURCES.AI_EXTRACTION,
+            context: { total: summary.total, drawing_ref: summary.drawing_ref, applied },
+          });
+        }, 800);
+      },
+    }),
+    [],
   );
-  const MODULE_NAME = moduleConfig?.name || 'Process Datasheets';
-  
-  const [selectedProject, setSelectedProject] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState({
-    pfd: null,
-    pid: null,
-    scope: null
-  });
-
-  const projectTypes = [
-    { value: 'offshore', label: 'Offshore Platform', icon: '🌊' },
-    { value: 'onshore', label: 'Onshore Facility', icon: '🏭' },
-    { value: 'refinery', label: 'Refinery', icon: '⚗️' },
-    { value: 'petrochemical', label: 'Petrochemical Plant', icon: '🧪' },
-    { value: 'general', label: 'General Process', icon: '⚙️' }
-  ];
-
-  const analysisSteps = [
-    {
-      id: 1,
-      title: 'Select Project Type',
-      description: 'Choose your project category for optimized analysis',
-      icon: DocumentTextIcon,
-      status: selectedProject ? 'completed' : 'current'
-    },
-    {
-      id: 2,
-      title: 'Upload PFD Documents',
-      description: 'Upload Process Flow Diagrams for AI analysis',
-      icon: CloudArrowUpIcon,
-      status: uploadedFiles.pfd ? 'completed' : 'pending'
-    },
-    {
-      id: 3,
-      title: 'AI Processing',
-      description: 'Automated equipment and stream identification',
-      icon: ChartBarIcon,
-      status: 'pending'
-    },
-    {
-      id: 4,
-      title: 'Generate Results',
-      description: 'Review equipment list, stream tables, and P&ID conversion',
-      icon: CheckCircleIcon,
-      status: 'pending'
-    }
-  ];
-
-  const handleFileUpload = (type, event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setUploadedFiles(prev => ({
-        ...prev,
-        [type]: file
-      }));
-    }
-  };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-      {/* Header with Back Button */}
-      <div className="max-w-7xl mx-auto mb-8">
-        <button
-          onClick={() => navigate('/engineering/process/datasheet')}
-          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-        >
-          <ArrowLeftIcon className="w-5 h-5" />
-          <span>Back to {MODULE_NAME}</span>
-        </button>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Process Flow Diagram Analysis
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              AI-powered PFD processing and automatic P&ID conversion
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium">
-              AI Powered
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Project Type Selection */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Step 1: Select Project Type
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {projectTypes.map((project) => (
-                  <button
-                    key={project.value}
-                    onClick={() => setSelectedProject(project.value)}
-                    className={`
-                      p-4 rounded-lg border-2 transition-all duration-300
-                      ${selectedProject === project.value
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'}
-                    `}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">{project.icon}</span>
-                      <div className="text-left">
-                        <div className="font-semibold text-gray-900 dark:text-white">
-                          {project.label}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-slate-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(BACK_ROUTE)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+              <div className="h-8 w-px bg-slate-200" />
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                <Droplets className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">{PAGE_TITLE}</h1>
+                <p className="text-xs text-slate-500">{PAGE_SUBTITLE}</p>
               </div>
             </div>
-
-            {/* File Upload Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Step 2: Upload Documents
-              </h2>
-              
-              <div className="space-y-4">
-                {/* Mandatory: PFD Upload */}
-                <div className="border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-lg p-6 bg-blue-50 dark:bg-blue-900/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Process Flow Diagram (PFD) *
-                    </label>
-                    <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
-                      Required
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Upload your PFD for AI-powered analysis and equipment identification
-                  </p>
-                  <input
-                    type="file"
-                    onChange={(e) => handleFileUpload('pfd', e)}
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="block w-full text-sm text-gray-500 dark:text-gray-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-lg file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-blue-600 file:text-white
-                      hover:file:bg-blue-700
-                      file:cursor-pointer cursor-pointer"
-                  />
-                  {uploadedFiles.pfd && (
-                    <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400">
-                      <CheckCircleIcon className="w-5 h-5" />
-                      <span className="text-sm">{uploadedFiles.pfd.name}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Optional: P&ID Upload */}
-                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-900 dark:text-white">
-                      P&ID (Optional)
-                    </label>
-                    <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
-                      Optional
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Upload existing P&ID for comparison and validation
-                  </p>
-                  <input
-                    type="file"
-                    onChange={(e) => handleFileUpload('pid', e)}
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="block w-full text-sm text-gray-500 dark:text-gray-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-lg file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-gray-600 file:text-white
-                      hover:file:bg-gray-700
-                      file:cursor-pointer cursor-pointer"
-                  />
-                  {uploadedFiles.pid && (
-                    <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400">
-                      <CheckCircleIcon className="w-5 h-5" />
-                      <span className="text-sm">{uploadedFiles.pid.name}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Optional: Scope Document */}
-                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Project Scope Document (Optional)
-                    </label>
-                    <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
-                      Optional
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Upload project scope for enhanced context and analysis
-                  </p>
-                  <input
-                    type="file"
-                    onChange={(e) => handleFileUpload('scope', e)}
-                    accept=".pdf,.doc,.docx"
-                    className="block w-full text-sm text-gray-500 dark:text-gray-400
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-lg file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-gray-600 file:text-white
-                      hover:file:bg-gray-700
-                      file:cursor-pointer cursor-pointer"
-                  />
-                  {uploadedFiles.scope && (
-                    <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400">
-                      <CheckCircleIcon className="w-5 h-5" />
-                      <span className="text-sm">{uploadedFiles.scope.name}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Submit Button */}
+            <div className="flex items-center gap-2">
               <button
-                disabled={!selectedProject || !uploadedFiles.pfd}
-                className={`
-                  mt-6 w-full py-3 px-6 rounded-lg font-semibold text-white
-                  transition-all duration-300
-                  ${selectedProject && uploadedFiles.pfd
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg hover:from-blue-600 hover:to-blue-700'
-                    : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}
-                `}
+                onClick={() => {
+                  const snap = saveSnapshot({ source: SNAPSHOT_SOURCES.MANUAL });
+                  if (snap) setSavedNotice({ label: snap.label || snap.projectKey, when: Date.now() });
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm transition-colors"
+                title="Capture the current form state as a history snapshot"
               >
-                Start AI Analysis
+                <Save className="w-4 h-4" />
+                Save to History
+              </button>
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg shadow-sm transition-colors"
+                title="View past snapshots — load, re-download or delete old documents"
+              >
+                <HistoryIcon className="w-4 h-4" />
+                History
+              </button>
+              <button
+                onClick={() => exportPumpHydraulicWorkbook()}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-lg shadow-sm transition-colors"
+                title="Export the populated 10-sheet Pump Hydraulic Calculation workbook"
+              >
+                <Download className="w-4 h-4" />
+                Download Datasheet (.xlsx)
               </button>
             </div>
           </div>
+        </div>
 
-          {/* Progress Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 sticky top-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                Analysis Progress
-              </h3>
-              <div className="space-y-4">
-                {analysisSteps.map((step, index) => {
-                  const IconComponent = step.icon;
-                  const isCompleted = step.status === 'completed';
-                  const isCurrent = step.status === 'current';
-                  
-                  return (
-                    <div key={step.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className={`
-                          w-10 h-10 rounded-full flex items-center justify-center
-                          ${isCompleted 
-                            ? 'bg-green-100 dark:bg-green-900/30' 
-                            : isCurrent
-                            ? 'bg-blue-100 dark:bg-blue-900/30'
-                            : 'bg-gray-100 dark:bg-gray-700'}
-                        `}>
-                          <IconComponent className={`
-                            w-5 h-5
-                            ${isCompleted 
-                              ? 'text-green-600 dark:text-green-400' 
-                              : isCurrent
-                              ? 'text-blue-600 dark:text-blue-400'
-                              : 'text-gray-400 dark:text-gray-500'}
-                          `} />
-                        </div>
-                        {index < analysisSteps.length - 1 && (
-                          <div className="w-0.5 h-12 bg-gray-200 dark:bg-gray-700 mt-2" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className={`
-                          font-semibold text-sm
-                          ${isCompleted || isCurrent
-                            ? 'text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400'}
-                        `}>
-                          {step.title}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                          {step.description}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Info Box */}
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-xs text-blue-800 dark:text-blue-200">
-                  <strong>💡 AI Analysis Includes:</strong><br/>
-                  • Equipment identification & tagging<br/>
-                  • Stream table generation<br/>
-                  • Material balance analysis<br/>
-                  • Automated P&ID conversion<br/>
-                  • Process validation checks
-                </p>
-              </div>
-            </div>
+        {/* ── Tab Bar (sub-pages) ──────────────────────────────────── */}
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-1 overflow-x-auto -mb-px">
+            {PUMP_HYDRAULIC_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = tab.id === activeId;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveId(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                    active
+                      ? 'border-blue-600 text-blue-700 bg-blue-50/50'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  {Icon && <Icon className="w-4 h-4" />}
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
+
+      {/* ── Tab Content ────────────────────────────────────────────── */}
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {savedNotice && (
+          <div className="mb-4 flex items-center gap-2 p-3 rounded-lg border border-slate-200 bg-white shadow-sm text-sm text-slate-700">
+            <Save className="w-4 h-4 text-blue-600" />
+            <span>Snapshot saved to history{savedNotice.label ? ` — ${savedNotice.label}` : ''}.</span>
+            <button
+              onClick={() => { setHistoryOpen(true); setSavedNotice(null); }}
+              className="ml-2 text-blue-700 hover:underline text-xs font-semibold"
+            >
+              Open History
+            </button>
+            <button
+              onClick={() => setSavedNotice(null)}
+              className="ml-auto text-slate-400 hover:text-slate-700 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {extractionInfo && (
+          <div className="mb-4 flex items-start gap-3 p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Sparkles className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <div className="font-semibold">
+                AI extraction complete — {extractionInfo.applied} field{extractionInfo.applied === 1 ? '' : 's'} auto-populated
+              </div>
+              <div className="text-emerald-800/80">
+                {extractionInfo.total} pump(s) detected
+                {extractionInfo.drawing_ref ? ` from drawing ${extractionInfo.drawing_ref}` : ''}.
+                Switch between sub-pages to review and refine the values; computed cells (amber) update automatically.
+              </div>
+            </div>
+            <button
+              onClick={() => setExtractionInfo(null)}
+              className="ml-auto text-emerald-700 hover:text-emerald-900 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {activeTab.isUploadTab ? (
+          <DatasheetGeneratorTemplate config={uploadConfig} />
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="mb-4 pb-4 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                {activeTab.icon && <activeTab.icon className="w-5 h-5 text-blue-600" />}
+                {activeTab.label}
+              </h2>
+            </div>
+            <PumpHydraulicSheetRenderer tab={activeTab} />
+          </div>
+        )}
+      </div>
+
+      {/* ── History Panel (slide-over) ─────────────────────────────── */}
+      <PumpHydraulicHistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onAfterLoad={() => setActiveId(POST_EXTRACTION_TAB)}
+      />
     </div>
   );
 };
 
-export default PFDAnalysis;
+export default PumpHydraulicTabbedPage;
