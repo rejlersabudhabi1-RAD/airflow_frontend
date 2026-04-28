@@ -57,19 +57,33 @@ const AUTOSAVE_DEBOUNCE = 500;
 const ACCEPTED_TYPES   = '.pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // Backend endpoint config for PDF extraction (vision-assisted, async).
+// All timeouts are SOFT-CODED — adjust here, no other code changes needed.
 const PDF_EXTRACTION_CONFIG = {
   startEndpoint: '/pid-verification/extract-valve-mto/',
   // The status endpoint takes the job_id appended.
   statusEndpoint: (jobId) => `/pid-verification/extract-valve-mto/${jobId}/`,
   fileFieldName: 'pid_file',
   pdfRegex:      /\.pdf$/i,
-  // Per-request timeouts — each call now finishes fast (start ≈ 1–3s,
-  // status ≈ 100ms). The total job runtime is unbounded by HTTP.
+
+  // Per-request timeouts — each call finishes fast (start ≈ 1–3s, status ≈ 100ms).
+  // The total job runtime is unbounded by HTTP — we poll instead.
   startTimeoutMs:  60000,
   statusTimeoutMs: 15000,
-  // Polling cadence (ms) and overall safety cap (ms).
+
+  // Polling cadence.
   pollIntervalMs:  2000,
-  pollMaxDurationMs: 15 * 60 * 1000,    // 15 min ceiling
+
+  // ── Adaptive timeout strategy ───────────────────────────────────────────
+  // Instead of a single hard cap, we use TWO deadlines:
+  //   • stallTimeoutMs       — abort if the backend stops reporting progress
+  //                            (default 8 min of silence). Resets whenever
+  //                            page-count or row-count advances.
+  //   • absoluteMaxDurationMs— hard ceiling regardless of progress
+  //                            (default 60 min). Raise this for very large
+  //                            PDFs; it never aborts a job that's still
+  //                            actively producing rows.
+  stallTimeoutMs:        8  * 60 * 1000,
+  absoluteMaxDurationMs: 60 * 60 * 1000,
 };
 
 // Stat cards rendered above the table — fully soft-coded.
@@ -255,12 +269,27 @@ const ValveMTOPage = () => {
         if (!jobId) throw new Error('Backend did not return a job_id.');
 
         // ── 2) Poll until done ────────────────────────────────────────────────────────────────────
-        const startedAt = Date.now();
-        let lastSnapshot = null;
+        // Adaptive deadlines:
+        //   • absoluteDeadline — hard ceiling, never extended.
+        //   • stallDeadline    — extends whenever the backend reports forward
+        //                        progress (page advanced or row count grew).
+        const startedAt        = Date.now();
+        const absoluteDeadline = startedAt + PDF_EXTRACTION_CONFIG.absoluteMaxDurationMs;
+        let   stallDeadline    = startedAt + PDF_EXTRACTION_CONFIG.stallTimeoutMs;
+        let   lastProgressKey  = '';   // "<current>:<total>:<rowCount>"
+        let   lastSnapshot     = null;
+
         while (true) {
-          if (Date.now() - startedAt > PDF_EXTRACTION_CONFIG.pollMaxDurationMs) {
-            throw new Error('Extraction is still running after 15 min — aborting poll.');
+          const now = Date.now();
+          if (now > absoluteDeadline) {
+            const mins = Math.round(PDF_EXTRACTION_CONFIG.absoluteMaxDurationMs / 60000);
+            throw new Error(`Extraction exceeded the safety ceiling of ${mins} min. The backend job is still running — refresh the page and any partial rows already saved will reappear.`);
           }
+          if (now > stallDeadline) {
+            const mins = Math.round(PDF_EXTRACTION_CONFIG.stallTimeoutMs / 60000);
+            throw new Error(`No progress reported from the backend for ${mins} min. The server may be stuck — try again with a smaller PDF or check the deployment logs.`);
+          }
+
           await new Promise((res) => setTimeout(res, PDF_EXTRACTION_CONFIG.pollIntervalMs));
 
           let snapshot;
@@ -276,6 +305,15 @@ const ValveMTOPage = () => {
             continue;
           }
           lastSnapshot = snapshot;
+
+          // Reset the stall timer whenever the backend reports forward progress.
+          const p          = snapshot?.progress || {};
+          const rowsLen    = Array.isArray(snapshot?.rows) ? snapshot.rows.length : 0;
+          const progressKey = `${p.current || 0}:${p.total || 0}:${p.rows || rowsLen}`;
+          if (progressKey !== lastProgressKey) {
+            lastProgressKey = progressKey;
+            stallDeadline   = Date.now() + PDF_EXTRACTION_CONFIG.stallTimeoutMs;
+          }
 
           // Live progress UI (also used for partial rows as they arrive).
           if (snapshot?.progress) {
