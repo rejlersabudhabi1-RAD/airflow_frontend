@@ -144,11 +144,11 @@ export const ENGINEERING_DISCIPLINES = {
       },
       {
         id: 'pms',
-        name: 'PMS',
-        fullName: 'Piping Material Specification',
+        name: 'Valve MTO',
+        fullName: 'Valve Material Take-Off',
         icon: TableCellsIcon,
         path: '/engineering/piping/pms',
-        description: 'Piping material specification management',
+        description: 'Valve material take-off list — quantities, specs and project rollup',
         moduleCode: 'piping_pms',
         badge: 'New'
       },

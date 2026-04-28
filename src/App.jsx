@@ -84,6 +84,7 @@ import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
+import PFDGeneratorPage from './pages/ProcessDatasheet/PFDAnalysis'
 import PumpDataSheetView from './pages/ProcessDatasheet/PumpDataSheetView'
 import PressureInstrumentPage from './pages/ProcessDatasheet/PressureInstrumentPage'
 import SDVStreamsPage from './pages/ProcessDatasheet/SDVStreamsPage'
@@ -118,7 +119,7 @@ import NonTeffMetadataPage from './pages/Engineering/Digitization/NonTeffMetadat
 // Piping Components
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
-import PipingMaterialSpecification from './pages/Engineering/Piping/PipingMaterialSpecification'
+import ValveMTO from './pages/Engineering/Piping/ValveMTO'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -642,12 +643,12 @@ function App() {
           }
         />
 
-        {/* Process Data Sheet - Pump Hydraulic Calculation Sub-Page */}
+        {/* Process Data Sheet - PFD Generator from P&ID */}
         <Route
           path="engineering/process/datasheet/pfd"
           element={
             <ModuleProtectedRoute moduleCode="process_datasheet">
-              <ComprehensivePumpForm />
+              <PFDGeneratorPage />
             </ModuleProtectedRoute>
           }
         />
@@ -759,12 +760,12 @@ function App() {
           }
         />
           {/* Piping Routes */}
-          {/* Piping Material Specification - Coming Soon */}
+          {/* Valve MTO (Material Take-Off) */}
           <Route
             path="engineering/piping/pms"
             element={
               <ProtectedRoute>
-                <PipingMaterialSpecification />
+                <ValveMTO />
               </ProtectedRoute>
             }
           />
