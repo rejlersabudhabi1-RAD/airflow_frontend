@@ -494,6 +494,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
           description: 'Wrench Project Platform sync'
+        },
+        {
+          id: 'aiChampion',
+          title: '8.4 AI Champion',
+          icon: SparklesIcon,
+          path: '/admin/ai-champion',
+          description: 'Top AI users leaderboard & badges'
         }
         // SOFT-CODED: Subscription feature disabled for in-house deployment
         // {

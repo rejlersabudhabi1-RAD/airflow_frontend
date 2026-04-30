@@ -94,6 +94,135 @@ const DASHBOARD_STATS_CONFIG = [
   }
 ];
 
+// Soft-coded thresholds for live system health indicators
+const HEALTH_THRESHOLDS = {
+  cpu: { warning: 70, critical: 90 },
+  memory_mb: { warning: 1024, critical: 2048 },
+  response_time_ms: { warning: 200, critical: 500 },
+  error_rate_pct: { warning: 1, critical: 5 },
+  storage_pct: { warning: 75, critical: 90 },
+  health_score: { warning: 80, critical: 60 }
+};
+
+// Soft-coded recommendation rules engine — generates AI insights from real metrics
+const RECOMMENDATION_RULES = [
+  {
+    id: 'response_time',
+    evaluate: (d, m) => {
+      const rt = d?.avg_response_time_ms ?? 0;
+      if (rt >= HEALTH_THRESHOLDS.response_time_ms.critical) {
+        return { level: 'red', title: 'API Latency: Critical', detail: `Average response time is ${rt.toFixed(0)}ms — investigate slow endpoints and DB queries.` };
+      }
+      if (rt >= HEALTH_THRESHOLDS.response_time_ms.warning) {
+        return { level: 'yellow', title: 'API Latency: Elevated', detail: `Response time at ${rt.toFixed(0)}ms is above target. Review caching and N+1 queries.` };
+      }
+      return { level: 'green', title: 'API Performance: Optimal', detail: `Average response time ${rt.toFixed(0)}ms — within target SLA.` };
+    }
+  },
+  {
+    id: 'error_rate',
+    evaluate: (d) => {
+      const er = 100 - (d?.success_rate_percentage ?? 100);
+      if (er >= HEALTH_THRESHOLDS.error_rate_pct.critical) {
+        return { level: 'red', title: 'Error Rate: Critical', detail: `${er.toFixed(2)}% of requests are failing — immediate investigation required.` };
+      }
+      if (er >= HEALTH_THRESHOLDS.error_rate_pct.warning) {
+        return { level: 'yellow', title: 'Error Rate: Elevated', detail: `${er.toFixed(2)}% failure rate detected — check error logs.` };
+      }
+      return null;
+    }
+  },
+  {
+    id: 'storage',
+    evaluate: (d) => {
+      const used = d?.storage_used_gb;
+      const total = d?.storage_total_gb;
+      if (!used || !total) return null;
+      const pct = (used / total) * 100;
+      if (pct >= HEALTH_THRESHOLDS.storage_pct.critical) {
+        return { level: 'red', title: 'Storage: Critical', detail: `Storage at ${pct.toFixed(1)}% — capacity expansion required.` };
+      }
+      if (pct >= HEALTH_THRESHOLDS.storage_pct.warning) {
+        return { level: 'yellow', title: 'Storage: Monitor', detail: `Storage at ${pct.toFixed(1)}% — plan capacity expansion.` };
+      }
+      return { level: 'green', title: 'Storage: Healthy', detail: `${pct.toFixed(1)}% utilized of ${total} GB.` };
+    }
+  },
+  {
+    id: 'security',
+    evaluate: (d) => {
+      const crit = d?.critical_alerts_count ?? 0;
+      const total = d?.active_alerts_count ?? 0;
+      if (crit > 0) {
+        return { level: 'red', title: 'Security: Critical Alerts', detail: `${crit} critical alert(s) need immediate attention.` };
+      }
+      if (total > 5) {
+        return { level: 'yellow', title: 'Security: Multiple Alerts', detail: `${total} active alerts — review security tab.` };
+      }
+      return { level: 'green', title: 'Security: Stable', detail: `No critical alerts detected.` };
+    }
+  },
+  {
+    id: 'engagement',
+    evaluate: (d) => {
+      const growth = d?.user_growth_percentage ?? 0;
+      if (growth > 10) {
+        return { level: 'blue', title: 'User Growth: Strong', detail: `+${growth.toFixed(1)}% growth — consider scaling resources proactively.` };
+      }
+      if (growth > 0) {
+        return { level: 'blue', title: 'User Growth: Positive', detail: `+${growth.toFixed(1)}% growth this period.` };
+      }
+      if (growth < 0) {
+        return { level: 'yellow', title: 'User Growth: Declining', detail: `${growth.toFixed(1)}% — investigate retention.` };
+      }
+      return null;
+    }
+  },
+  {
+    id: 'cpu',
+    evaluate: (d, m) => {
+      const cpu = m?.cpu_usage_percentage;
+      if (cpu == null) return null;
+      if (cpu >= HEALTH_THRESHOLDS.cpu.critical) {
+        return { level: 'red', title: 'CPU: Critical', detail: `CPU usage at ${cpu.toFixed(1)}% — scale workers immediately.` };
+      }
+      if (cpu >= HEALTH_THRESHOLDS.cpu.warning) {
+        return { level: 'yellow', title: 'CPU: High', detail: `CPU at ${cpu.toFixed(1)}% — monitor for sustained load.` };
+      }
+      return null;
+    }
+  }
+];
+
+// Soft-coded refresh interval options
+const REFRESH_INTERVAL_OPTIONS = [
+  { value: 5000, label: '5s refresh' },
+  { value: 10000, label: '10s refresh' },
+  { value: 30000, label: '30s refresh' },
+  { value: 60000, label: '1m refresh' },
+  { value: 300000, label: '5m refresh' }
+];
+
+// Map indicator level to Tailwind classes
+const LEVEL_DOT_CLASS = {
+  green: 'bg-green-500',
+  yellow: 'bg-yellow-500',
+  red: 'bg-red-500',
+  blue: 'bg-blue-500'
+};
+
+// Format relative time (live "x seconds ago")
+const formatRelativeTime = (date) => {
+  if (!date) return '—';
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+};
+
 // Soft-coded tab configuration
 const DASHBOARD_TABS = [
   { id: 'overview', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -124,7 +253,13 @@ const AdminDashboard = () => {
   const [securityAlerts, setSecurityAlerts] = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [realtimeActivity, setRealtimeActivity] = useState([]);
+  const [latestMetrics, setLatestMetrics] = useState(null);
+  const [metricsHistory, setMetricsHistory] = useState([]);
+  const [featureUsage, setFeatureUsage] = useState([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [nextRefreshAt, setNextRefreshAt] = useState(null);
+  const [, setTick] = useState(0); // forces re-render for live timers
   const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds default
 
   // Real-time ML Detection Hook
@@ -152,60 +287,51 @@ const AdminDashboard = () => {
     return () => clearInterval(interval);
   }, [dispatch, refreshInterval]);
 
+  // Live "x seconds ago" / countdown ticker — updates every second
+  useEffect(() => {
+    const tickInterval = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(tickInterval);
+  }, []);
+
   const loadAIAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const [overview, health, alerts, insights, activity] = await Promise.all([
-        analyticsService.getDashboardOverview().catch(() => ({ 
-          total_users: stats?.total_users || 12, 
-          active_users_count: stats?.active_users || 11,
-          user_growth_percentage: 8.5,
-          system_health_score: 97.8,
-          active_connections: 24,
-          active_alerts_count: 3,
-          critical_alerts_count: 0,
-          active_predictions_count: 7,
-          high_impact_insights_count: 3,
-          total_api_requests_today: 1247,
-          avg_response_time_ms: 142,
-          success_rate_percentage: 99.2,
-          storage_used_gb: 23.4,
-          storage_total_gb: 100,
-          total_documents: 456,
-          documents_processed_today: 34
-        })),
-        analyticsService.getLatestHealthCheck().catch(() => ({ status: 'healthy', score: 97.8 })),
+      const [overview, health, alerts, insights, activity, metrics, history, features] = await Promise.all([
+        analyticsService.getDashboardOverview().catch(() => null),
+        analyticsService.getLatestHealthCheck().catch(() => null),
         analyticsService.getCriticalAlerts().catch(() => []),
         analyticsService.getHighPriorityInsights().catch(() => []),
-        analyticsService.getRealTimeActivity(10).catch(() => [])
+        analyticsService.getRealTimeActivity(10).catch(() => []),
+        analyticsService.getLatestMetrics().catch(() => null),
+        analyticsService.getSystemPerformance(1).catch(() => []),
+        analyticsService.getFeatureUsageSummary(7).catch(() => [])
       ]);
-      
-      setAnalyticsData(overview);
+
+      // Merge live system metrics into overview so storage/CPU/memory cards work without fabrication
+      const merged = overview ? {
+        ...overview,
+        // Backend returns `active_users_today`; expose as `active_users_count` for backwards compat
+        active_users_count: overview.active_users_count ?? overview.active_users_today,
+        cpu_usage_percentage: metrics?.cpu_usage_percentage ?? overview.cpu_usage_percentage,
+        memory_usage_mb: metrics?.memory_usage_mb ?? overview.memory_usage_mb,
+        storage_used_gb: overview.storage_used_gb ?? metrics?.disk_usage_gb,
+        storage_total_gb: overview.storage_total_gb,
+        total_documents: overview.total_documents,
+        documents_processed_today: overview.documents_processed_today
+      } : null;
+
+      setAnalyticsData(merged);
       setSystemHealth(health);
-      setSecurityAlerts(alerts);
-      setPredictions(insights);
-      setRealtimeActivity(activity);
+      setSecurityAlerts(Array.isArray(alerts) ? alerts : (alerts?.results || []));
+      setPredictions(Array.isArray(insights) ? insights : (insights?.results || []));
+      setRealtimeActivity(Array.isArray(activity) ? activity : (activity?.results || []));
+      setLatestMetrics(metrics);
+      setMetricsHistory(Array.isArray(history) ? history : (history?.results || []));
+      setFeatureUsage(Array.isArray(features) ? features : (features?.results || []));
+      setLastUpdated(new Date());
+      setNextRefreshAt(new Date(Date.now() + refreshInterval));
     } catch (error) {
       console.error('Failed to load analytics:', error);
-      // Set fallback data for better UX
-      setAnalyticsData({
-        total_users: stats?.total_users || 12,
-        active_users_count: stats?.active_users || 11,
-        user_growth_percentage: 8.5,
-        system_health_score: 97.8,
-        active_connections: 24,
-        active_alerts_count: 3,
-        critical_alerts_count: 0,
-        active_predictions_count: 7,
-        high_impact_insights_count: 3,
-        total_api_requests_today: 1247,
-        avg_response_time_ms: 142,
-        success_rate_percentage: 99.2,
-        storage_used_gb: 23.4,
-        storage_total_gb: 100,
-        total_documents: 456,
-        documents_processed_today: 34
-      });
     } finally {
       setLoadingAnalytics(false);
     }
@@ -330,6 +456,21 @@ const AdminDashboard = () => {
             
             {/* Quick Actions & Settings */}
             <div className="flex items-center space-x-3">
+              {/* Live status pill: last updated + countdown to next refresh */}
+              <div className="hidden md:flex items-center space-x-2 px-3 py-2 bg-white rounded-lg shadow-md text-xs">
+                <div className={`w-2 h-2 rounded-full ${loadingAnalytics ? 'bg-blue-500 animate-pulse' : 'bg-green-500 animate-pulse'}`}></div>
+                <div className="flex flex-col leading-tight">
+                  <span className="text-gray-700 font-medium">
+                    Updated {formatRelativeTime(lastUpdated)}
+                  </span>
+                  {nextRefreshAt && (
+                    <span className="text-gray-500">
+                      Next in {Math.max(0, Math.ceil((nextRefreshAt.getTime() - Date.now()) / 1000))}s
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {/* Refresh Control */}
               <button
                 onClick={loadAIAnalytics}
@@ -348,10 +489,9 @@ const AdminDashboard = () => {
                 onChange={(e) => setRefreshInterval(Number(e.target.value))}
                 className="px-3 py-2 bg-white rounded-lg shadow-md text-sm font-medium text-gray-700 border-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value={10000}>10s refresh</option>
-                <option value={30000}>30s refresh</option>
-                <option value={60000}>1m refresh</option>
-                <option value={300000}>5m refresh</option>
+                {REFRESH_INTERVAL_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -395,7 +535,7 @@ const AdminDashboard = () => {
                     <svg className="w-4 h-4 text-green-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
                       <circle cx="10" cy="10" r="8" />
                     </svg>
-                    <span>Last updated: {new Date().toLocaleTimeString()}</span>
+                    <span>Last updated: {lastUpdated ? formatRelativeTime(lastUpdated) : '—'}</span>
                   </div>
                 </div>
 
@@ -522,7 +662,108 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                {/* AI Recommendations */}
+                {/* Live System Metrics — driven by real /system-metrics/latest/ + /system_performance/ */}
+                {(latestMetrics || metricsHistory?.length > 0) && (
+                  <div className="bg-white rounded-xl p-6 border-2 border-gray-100 shadow-md mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-bold text-gray-900 flex items-center space-x-2">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <span>Live System Metrics</span>
+                      </h4>
+                      <span className="text-xs text-gray-500">
+                        {latestMetrics?.timestamp ? `Sample: ${new Date(latestMetrics.timestamp).toLocaleTimeString()}` : '—'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {(() => {
+                        const liveCards = [
+                          {
+                            id: 'cpu',
+                            label: 'CPU Usage',
+                            value: latestMetrics?.cpu_usage_percentage,
+                            format: (v) => `${(v ?? 0).toFixed(1)}%`,
+                            thresholds: HEALTH_THRESHOLDS.cpu,
+                            invert: false
+                          },
+                          {
+                            id: 'mem',
+                            label: 'Memory',
+                            value: latestMetrics?.memory_usage_mb,
+                            format: (v) => `${(v ?? 0).toFixed(0)} MB`,
+                            thresholds: HEALTH_THRESHOLDS.memory_mb,
+                            invert: false
+                          },
+                          {
+                            id: 'errs',
+                            label: 'Errors Today',
+                            value: analyticsData?.errors_today,
+                            format: (v) => v ?? 0,
+                            thresholds: { warning: 5, critical: 20 },
+                            invert: false
+                          },
+                          {
+                            id: 'health',
+                            label: 'Health Score',
+                            value: analyticsData?.system_health_score,
+                            format: (v) => `${(v ?? 0).toFixed(1)}%`,
+                            thresholds: HEALTH_THRESHOLDS.health_score,
+                            invert: true
+                          }
+                        ];
+                        return liveCards.map(card => {
+                          const v = card.value;
+                          let tone = 'text-gray-700';
+                          if (v != null) {
+                            const { warning, critical } = card.thresholds;
+                            if (card.invert) {
+                              tone = v <= critical ? 'text-red-600' : v <= warning ? 'text-yellow-600' : 'text-green-600';
+                            } else {
+                              tone = v >= critical ? 'text-red-600' : v >= warning ? 'text-yellow-600' : 'text-green-600';
+                            }
+                          }
+                          return (
+                            <div key={card.id} className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg">
+                              <p className="text-xs text-gray-600 font-medium mb-1">{card.label}</p>
+                              <p className={`text-2xl font-bold ${tone}`}>{v == null ? '—' : card.format(v)}</p>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Inline sparkline of response time over last 24h — pure SVG, no extra deps */}
+                    {metricsHistory.length > 1 && (() => {
+                      const points = metricsHistory
+                        .map(p => p.avg_response_time_ms)
+                        .filter(v => v != null);
+                      if (points.length < 2) return null;
+                      const max = Math.max(...points, 1);
+                      const min = Math.min(...points, 0);
+                      const range = max - min || 1;
+                      const width = 600;
+                      const height = 60;
+                      const stepX = width / (points.length - 1);
+                      const path = points
+                        .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * stepX).toFixed(2)},${(height - ((v - min) / range) * height).toFixed(2)}`)
+                        .join(' ');
+                      return (
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                            <span>Response time (last 24h) — {points.length} samples</span>
+                            <span>min {min.toFixed(0)}ms · max {max.toFixed(0)}ms</span>
+                          </div>
+                          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16" preserveAspectRatio="none">
+                            <path d={path} fill="none" stroke="#3b82f6" strokeWidth="2" />
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* AI Recommendations — generated dynamically from real metrics */}
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
                   <div className="flex items-center space-x-3 mb-4">
                     <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
@@ -531,29 +772,30 @@ const AdminDashboard = () => {
                       </svg>
                     </div>
                     <h4 className="text-lg font-bold text-gray-900">AI-Powered Recommendations</h4>
+                    <span className="text-xs text-gray-500 ml-auto">Auto-generated from live metrics</span>
                   </div>
                   <div className="space-y-3">
-                    <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                      <div>
-                        <p className="font-medium text-gray-900">System Performance: Excellent</p>
-                        <p className="text-sm text-gray-600">Response times are within optimal range. Continue monitoring.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                      <div>
-                        <p className="font-medium text-gray-900">User Engagement: Growing</p>
-                        <p className="text-sm text-gray-600">User activity increased by 8.5% this month. Consider scaling resources.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm">
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
-                      <div>
-                        <p className="font-medium text-gray-900">Storage Usage: Monitor</p>
-                        <p className="text-sm text-gray-600">Storage is at {((analyticsData?.storage_used_gb / analyticsData?.storage_total_gb) * 100 || 0).toFixed(1)}%. Plan capacity expansion.</p>
-                      </div>
-                    </div>
+                    {(() => {
+                      const recs = RECOMMENDATION_RULES
+                        .map(r => ({ id: r.id, ...(r.evaluate(analyticsData, latestMetrics) || {}) }))
+                        .filter(r => r.title);
+                      if (recs.length === 0) {
+                        return (
+                          <div className="p-3 bg-white rounded-lg shadow-sm text-sm text-gray-500">
+                            Awaiting live metrics — recommendations will appear once data is collected.
+                          </div>
+                        );
+                      }
+                      return recs.map(rec => (
+                        <div key={rec.id} className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm">
+                          <div className={`w-2 h-2 ${LEVEL_DOT_CLASS[rec.level] || 'bg-gray-400'} rounded-full mt-2`}></div>
+                          <div>
+                            <p className="font-medium text-gray-900">{rec.title}</p>
+                            <p className="text-sm text-gray-600">{rec.detail}</p>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
               </div>
@@ -633,7 +875,7 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Feature Usage */}
+                  {/* Feature Usage — real data from /feature-usage/summary/ */}
                   <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200 shadow-lg hover:shadow-xl transition-all">
                     <div className="flex items-center space-x-3 mb-4">
                       <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center">
@@ -643,22 +885,27 @@ const AdminDashboard = () => {
                       </div>
                       <div>
                         <h4 className="font-bold text-gray-900">Feature Usage</h4>
-                        <p className="text-sm text-gray-600">Module adoption stats</p>
+                        <p className="text-sm text-gray-600">Top modules (last 7d)</p>
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">CRS Module:</span>
-                        <span className="font-bold text-green-600">87%</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">PFD Analysis:</span>
-                        <span className="font-bold text-green-600">72%</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">P&ID QC:</span>{/* SOFT-CODED: renamed from 'P&ID Verification' */}
-                        <span className="font-bold text-green-600">64%</span>
-                      </div>
+                      {featureUsage.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">No usage data collected yet.</p>
+                      ) : (
+                        featureUsage.slice(0, 5).map((f, idx) => {
+                          const label = f.feature_name || f.feature || f.name || `Feature ${idx + 1}`;
+                          const value = f.usage_count ?? f.total_usage ?? f.count ?? 0;
+                          const adoption = f.adoption_rate ?? f.adoption_percentage;
+                          return (
+                            <div key={`${label}-${idx}`} className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 truncate" title={label}>{label}:</span>
+                              <span className="font-bold text-green-600 ml-2">
+                                {adoption != null ? `${Number(adoption).toFixed(0)}%` : value}
+                              </span>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
 
@@ -740,11 +987,11 @@ const AdminDashboard = () => {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">Critical Errors:</span>
-                        <span className="font-bold text-red-600">0</span>
+                        <span className="font-bold text-red-600">{analyticsData?.critical_errors_count ?? 0}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Warnings:</span>
-                        <span className="font-bold text-yellow-600">{analyticsData?.active_alerts_count || 0}</span>
+                        <span className="text-sm text-gray-600">Errors Today:</span>
+                        <span className="font-bold text-yellow-600">{analyticsData?.errors_today ?? 0}</span>
                       </div>
                     </div>
                   </div>

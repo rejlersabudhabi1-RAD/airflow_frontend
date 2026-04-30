@@ -188,6 +188,72 @@ const analyticsService = {
     const response = await apiClient.get('/rbac/analytics/health-checks/component_status/');
     return response.data;
   },
+
+  // ===== AI Champion of the Month =====
+  trackActivity: async (payload) => {
+    const response = await apiClient.post('/rbac/ai-champion/track/activity/', payload);
+    return response.data;
+  },
+
+  trackAIUsage: async (payload) => {
+    const response = await apiClient.post('/rbac/ai-champion/track/ai-usage/', payload);
+    return response.data;
+  },
+
+  getChampionLeaderboard: async (days = 30, limit = 20) => {
+    const response = await apiClient.get('/rbac/ai-champion/leaderboard/', {
+      params: { days, limit }
+    });
+    return response.data;
+  },
+
+  getCurrentChampion: async () => {
+    const response = await apiClient.get('/rbac/ai-champion/champion/current/');
+    return response.data;
+  },
+
+  getChampionHistory: async (limit = 12) => {
+    const response = await apiClient.get('/rbac/ai-champion/champion/history/', {
+      params: { limit }
+    });
+    return response.data;
+  },
+
+  getCostReport: async (days = 30) => {
+    const response = await apiClient.get('/rbac/ai-champion/cost-report/', {
+      params: { days }
+    });
+    return response.data;
+  },
+
+  getMonthlySummary: async (year, month) => {
+    const response = await apiClient.get('/rbac/ai-champion/monthly-summary/', {
+      params: { year, month }
+    });
+    return response.data;
+  },
+
+  getUserChampionScore: async (userId, days = 30) => {
+    const response = await apiClient.get(`/rbac/ai-champion/${userId}/score/`, {
+      params: { days }
+    });
+    return response.data;
+  },
+
+  recomputeChampion: async (year, month) => {
+    const response = await apiClient.post('/rbac/ai-champion/recompute/', null, {
+      params: { year, month }
+    });
+    return response.data;
+  },
+
+  exportLeaderboardCSV: async (days = 30) => {
+    const response = await apiClient.get('/rbac/ai-champion/export/csv/', {
+      params: { days },
+      responseType: 'blob'
+    });
+    return response.data;
+  },
 };
 
 export default analyticsService;
