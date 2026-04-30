@@ -18,7 +18,15 @@ import {
 
   ClockIcon,
 
-  FunnelIcon
+  FunnelIcon,
+
+  PencilSquareIcon,
+
+  TrashIcon,
+
+  ArrowPathIcon,
+
+  ExclamationTriangleIcon
 
 } from '@heroicons/react/24/outline';
 
@@ -242,6 +250,20 @@ const CriticalLineList = () => {
   const [previousOutputs, setPreviousOutputs] = useState([]);
 
   const [loadingOutputs, setLoadingOutputs] = useState(false);
+
+  // Inline action state — Modify modal + per-row Recheck/Delete progress
+
+  const [editingOutput, setEditingOutput] = useState(null); // current output being edited
+
+  const [editForm, setEditForm] = useState({}); // editable values
+
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [rowActionId, setRowActionId] = useState(null); // id of row currently in delete/recheck
+
+  const [rowActionType, setRowActionType] = useState(null); // 'delete' | 'recheck'
+
+  const [recheckResults, setRecheckResults] = useState({}); // { [outputId]: { health, issues, drift, stats } }
 
   
 
@@ -619,6 +641,300 @@ const CriticalLineList = () => {
       console.error('Error downloading output:', error);
 
       alert('Failed to download file');
+
+    }
+
+  };
+
+
+
+  // ----------------------------------------------------------------------
+
+  // SOFT-CODED output management — Delete / Modify / Recheck
+
+  // ----------------------------------------------------------------------
+
+  // Editable fields exposed in the Modify modal. Adding a row here is the
+
+  // ONLY change required to expose a new field; the modal renders dynamically.
+
+  const OUTPUT_EDITABLE_FIELDS = [
+
+    { key: 'pid_number',          label: 'P&ID Number',     type: 'text',     required: true },
+
+    { key: 'pid_revision',        label: 'Revision',        type: 'text' },
+
+    { key: 'list_type',           label: 'List Type',       type: 'select',
+
+      options: ['line_list', 'critical_line_list', 'stress_line_list', 'equipment_list'] },
+
+    { key: 'format_type',         label: 'Format',          type: 'select',
+
+      options: ['general', 'onshore', 'offshore', 'adnoc'] },
+
+    { key: 'enrichment_enabled',  label: 'Enrichment',      type: 'boolean' },
+
+    { key: 'include_area',        label: 'Include Area',    type: 'boolean' },
+
+  ];
+
+  const RECHECK_HEALTH_BADGE = {
+
+    healthy: { label: '✓ Healthy',     cls: 'bg-green-100 text-green-700 border-green-200' },
+
+    warning: { label: '⚠ Warning',    cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+
+    invalid: { label: '✕ Invalid',     cls: 'bg-rose-100 text-rose-700 border-rose-200' },
+
+    error:   { label: '✕ Error',       cls: 'bg-rose-100 text-rose-700 border-rose-200' },
+
+    missing_file: { label: '✕ Missing File', cls: 'bg-slate-100 text-slate-700 border-slate-300' },
+
+  };
+
+
+
+  const openEditModal = (output) => {
+
+    setEditingOutput(output);
+
+    setEditForm({
+
+      pid_number: output.pid_number || '',
+
+      pid_revision: output.pid_revision || '',
+
+      list_type: output.list_type || 'line_list',
+
+      format_type: output.format_type || 'general',
+
+      enrichment_enabled: !!output.enrichment_enabled,
+
+      include_area: !!output.include_area,
+
+    });
+
+  };
+
+
+
+  const closeEditModal = () => {
+
+    setEditingOutput(null);
+
+    setEditForm({});
+
+  };
+
+
+
+  const handleSaveEdit = async () => {
+
+    if (!editingOutput) return;
+
+    if (!editForm.pid_number || !String(editForm.pid_number).trim()) {
+
+      alert('P&ID Number is required');
+
+      return;
+
+    }
+
+    setSavingEdit(true);
+
+    try {
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      const res = await fetch(
+
+        `${API_BASE_URL}/designiq/lists/update_output/${editingOutput.id}/`,
+
+        {
+
+          method: 'PATCH',
+
+          headers: {
+
+            'Authorization': `Bearer ${token}`,
+
+            'Content-Type': 'application/json',
+
+          },
+
+          body: JSON.stringify(editForm),
+
+        }
+
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+
+        throw new Error(data?.error || `Update failed (HTTP ${res.status})`);
+
+      }
+
+      // Apply locally so UI updates without a full refetch
+
+      setPreviousOutputs((prev) =>
+
+        prev.map((o) => (o.id === editingOutput.id ? { ...o, ...data.applied } : o))
+
+      );
+
+      closeEditModal();
+
+    } catch (err) {
+
+      console.error('Error updating output:', err);
+
+      alert(`Failed to modify: ${err.message || err}`);
+
+    } finally {
+
+      setSavingEdit(false);
+
+    }
+
+  };
+
+
+
+  const handleDeleteOutput = async (output) => {
+
+    const confirmText = `Delete "${output.excel_filename || output.pid_number}"? This cannot be undone.`;
+
+    if (!window.confirm(confirmText)) return;
+
+    setRowActionId(output.id);
+
+    setRowActionType('delete');
+
+    try {
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      const res = await fetch(
+
+        `${API_BASE_URL}/designiq/lists/delete_output/${output.id}/`,
+
+        {
+
+          method: 'DELETE',
+
+          headers: { 'Authorization': `Bearer ${token}` },
+
+        }
+
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) throw new Error(data?.error || `Delete failed (HTTP ${res.status})`);
+
+      setPreviousOutputs((prev) => prev.filter((o) => o.id !== output.id));
+
+      setRecheckResults((prev) => {
+
+        const { [output.id]: _, ...rest } = prev;
+
+        return rest;
+
+      });
+
+    } catch (err) {
+
+      console.error('Error deleting output:', err);
+
+      alert(`Failed to delete: ${err.message || err}`);
+
+    } finally {
+
+      setRowActionId(null);
+
+      setRowActionType(null);
+
+    }
+
+  };
+
+
+
+  const handleRecheckOutput = async (output) => {
+
+    setRowActionId(output.id);
+
+    setRowActionType('recheck');
+
+    try {
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      const res = await fetch(
+
+        `${API_BASE_URL}/designiq/lists/recheck_output/${output.id}/`,
+
+        {
+
+          method: 'POST',
+
+          headers: { 'Authorization': `Bearer ${token}` },
+
+        }
+
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) throw new Error(data?.error || `Recheck failed (HTTP ${res.status})`);
+
+      // Update row stats with refreshed values (drift may have corrected stale counts)
+
+      if (data.stats) {
+
+        setPreviousOutputs((prev) =>
+
+          prev.map((o) => o.id === output.id
+
+            ? {
+
+                ...o,
+
+                total_lines: data.stats.total_lines,
+
+                total_columns: data.stats.total_columns,
+
+                file_size_mb: data.stats.file_size_mb,
+
+              }
+
+            : o)
+
+        );
+
+      }
+
+      setRecheckResults((prev) => ({ ...prev, [output.id]: data }));
+
+    } catch (err) {
+
+      console.error('Error rechecking output:', err);
+
+      setRecheckResults((prev) => ({
+
+        ...prev,
+
+        [output.id]: { success: false, health: 'error', issues: [err.message || String(err)] },
+
+      }));
+
+    } finally {
+
+      setRowActionId(null);
+
+      setRowActionType(null);
 
     }
 
@@ -3797,19 +4113,115 @@ const CriticalLineList = () => {
 
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
 
-                        <button
+                        <div className="flex items-center gap-1.5">
 
-                          onClick={() => handleDownloadOutput(output.id, output.excel_filename)}
+                          <button
 
-                          className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
+                            onClick={() => handleDownloadOutput(output.id, output.excel_filename)}
 
-                        >
+                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
 
-                          <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
+                            title="Download Excel"
 
-                          Download
+                          >
 
-                        </button>
+                            <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
+
+                            Download
+
+                          </button>
+
+                          <button
+
+                            onClick={() => handleRecheckOutput(output)}
+
+                            disabled={rowActionId === output.id}
+
+                            className="flex items-center px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors text-xs font-semibold"
+
+                            title="Re-validate this Excel file (line/column count, structural checks)"
+
+                          >
+
+                            <ArrowPathIcon className={`w-4 h-4 mr-1 ${rowActionId === output.id && rowActionType === 'recheck' ? 'animate-spin' : ''}`} />
+
+                            {rowActionId === output.id && rowActionType === 'recheck' ? 'Checking…' : 'Recheck'}
+
+                          </button>
+
+                          <button
+
+                            onClick={() => openEditModal(output)}
+
+                            className="flex items-center px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-xs font-semibold"
+
+                            title="Modify metadata"
+
+                          >
+
+                            <PencilSquareIcon className="w-4 h-4 mr-1" />
+
+                            Modify
+
+                          </button>
+
+                          <button
+
+                            onClick={() => handleDeleteOutput(output)}
+
+                            disabled={rowActionId === output.id}
+
+                            className="flex items-center px-3 py-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors text-xs font-semibold"
+
+                            title="Delete this output"
+
+                          >
+
+                            <TrashIcon className="w-4 h-4 mr-1" />
+
+                            {rowActionId === output.id && rowActionType === 'delete' ? 'Deleting…' : 'Delete'}
+
+                          </button>
+
+                        </div>
+
+                        {recheckResults[output.id] && (
+
+                          <div className="mt-2 max-w-xs">
+
+                            <span className={`inline-block px-2 py-0.5 rounded-full border text-[11px] font-semibold ${(RECHECK_HEALTH_BADGE[recheckResults[output.id].health] || RECHECK_HEALTH_BADGE.error).cls}`}>
+
+                              {(RECHECK_HEALTH_BADGE[recheckResults[output.id].health] || RECHECK_HEALTH_BADGE.error).label}
+
+                            </span>
+
+                            {Array.isArray(recheckResults[output.id].issues) && recheckResults[output.id].issues.length > 0 && (
+
+                              <ul className="mt-1 text-[11px] text-amber-700 list-disc list-inside">
+
+                                {recheckResults[output.id].issues.slice(0, 3).map((iss, idx) => (
+
+                                  <li key={idx}>{iss}</li>
+
+                                ))}
+
+                              </ul>
+
+                            )}
+
+                            {recheckResults[output.id].drift && Object.keys(recheckResults[output.id].drift).length > 0 && (
+
+                              <div className="mt-1 text-[11px] text-slate-500">
+
+                                Updated: {Object.keys(recheckResults[output.id].drift).join(', ')}
+
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        )}
 
                       </td>
 
@@ -4328,6 +4740,178 @@ const CriticalLineList = () => {
               >
 
                 Save Configuration
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+
+
+      {/* ------------------------------------------------------------------ */}
+
+      {/* Modify Output Modal — soft-coded fields from OUTPUT_EDITABLE_FIELDS */}
+
+      {/* ------------------------------------------------------------------ */}
+
+      {editingOutput && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+
+            <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center gap-2">
+
+              <PencilSquareIcon className="w-5 h-5" />
+
+              <h3 className="font-bold text-lg">Modify Output</h3>
+
+              <button
+
+                onClick={closeEditModal}
+
+                className="ml-auto text-white/80 hover:text-white text-2xl leading-none"
+
+                title="Close"
+
+              >
+
+                ×
+
+              </button>
+
+            </div>
+
+            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+              <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2">
+
+                <div><span className="font-semibold text-slate-700">File:</span> {editingOutput.excel_filename}</div>
+
+                <div><span className="font-semibold text-slate-700">Date:</span> {editingOutput.processing_date}</div>
+
+                <div><span className="font-semibold text-slate-700">Lines:</span> {editingOutput.total_lines} · <span className="font-semibold text-slate-700">Cols:</span> {editingOutput.total_columns}</div>
+
+              </div>
+
+              {OUTPUT_EDITABLE_FIELDS.map((f) => (
+
+                <div key={f.key}>
+
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+
+                    {f.label}{f.required && <span className="text-rose-500"> *</span>}
+
+                  </label>
+
+                  {f.type === 'select' ? (
+
+                    <select
+
+                      value={editForm[f.key] ?? ''}
+
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+
+                    >
+
+                      {f.options.map((opt) => (
+
+                        <option key={opt} value={opt}>{opt}</option>
+
+                      ))}
+
+                    </select>
+
+                  ) : f.type === 'boolean' ? (
+
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+
+                      <input
+
+                        type="checkbox"
+
+                        checked={!!editForm[f.key]}
+
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.checked }))}
+
+                        className="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400"
+
+                      />
+
+                      <span className="text-sm text-slate-700">
+
+                        {editForm[f.key] ? 'Enabled' : 'Disabled'}
+
+                      </span>
+
+                    </label>
+
+                  ) : (
+
+                    <input
+
+                      type="text"
+
+                      value={editForm[f.key] ?? ''}
+
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+
+                      placeholder={f.label}
+
+                    />
+
+                  )}
+
+                </div>
+
+              ))}
+
+              <div className="flex items-start gap-2 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg p-2">
+
+                <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+
+                <span>Modifying metadata only affects the database record — the underlying Excel file is unchanged. Use <span className="font-semibold">Recheck</span> to re-validate the file contents.</span>
+
+              </div>
+
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+
+              <button
+
+                onClick={closeEditModal}
+
+                disabled={savingEdit}
+
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-50"
+
+              >
+
+                Cancel
+
+              </button>
+
+              <button
+
+                onClick={handleSaveEdit}
+
+                disabled={savingEdit}
+
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:shadow-lg disabled:opacity-50 text-sm font-semibold"
+
+              >
+
+                {savingEdit ? 'Saving…' : 'Save Changes'}
 
               </button>
 
