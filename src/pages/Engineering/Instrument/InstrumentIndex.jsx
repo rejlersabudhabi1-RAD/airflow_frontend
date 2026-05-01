@@ -1318,6 +1318,23 @@ const InstrumentIndex = () => {
                     {(pidFile.size / 1024 / 1024).toFixed(2)} MB
                     &nbsp;·&nbsp;Click to change
                   </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      // Stop the parent drop-zone click that would re-open the picker.
+                      e.stopPropagation();
+                      setPidFile(null);
+                      setDrawingNumber('');
+                      // Reset the underlying <input type="file"> so the same
+                      // filename can be re-selected later if the user wishes.
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="mt-2 inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-md transition-colors"
+                    title="Remove selected P&ID"
+                  >
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                    Remove
+                  </button>
                 </>
               ) : (
                 <>

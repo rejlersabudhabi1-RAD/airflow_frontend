@@ -788,16 +788,14 @@ const _ADNOC_ONSHORE_TEMPLATE = {
      { label: 'Revision',       key: 'result.revision',       span: 1 },
      { label: 'Project Code',   key: 'project.code',          span: 2 }],
   ],
-  // Top merged-header strip — totals MUST equal columns.length (18).
+  // Top merged-header strip — totals MUST equal columns.length (17).
   groupHeader: [
-    { label: '',                              span: 11 }, // Sr…Device Status
+    { label: '',                              span: 10 }, // Tag…Device Status
     { label: 'Inst range (Refer Gen Note 5)', span: 3  }, // Min/Max/Unit
     { label: 'Calibration range',             span: 3  }, // Min/Max/Unit
     { label: '',                              span: 1  }, // Remarks
   ],
   columns: [
-    { key: 'index_no',           header: 'Sr No.',          width:  6, align: 'right',
-      accessor: (i, ctx) => i.index_no ?? (ctx.idx + 1) },
     { key: 'tag_number',         header: 'Tag No.',         width: 18, mono: true,
       accessor: i => {
         const t = _str(i.tag_number).trim();
