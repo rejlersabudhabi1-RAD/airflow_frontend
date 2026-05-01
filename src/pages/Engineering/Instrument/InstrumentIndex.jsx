@@ -632,9 +632,46 @@ const InstrumentIndex = () => {
   // ── Auto-sync project context into drawing metadata ─────────────────
   // When the active project changes, prefill the project name field so
   // every extraction is tagged with the current project context.
+  //
+  // SOFT-CODED PROJECT-SCOPED RESET:
+  // Whenever the active project changes (including a brand-new project
+  // just created by the user), we wipe every piece of upload + result
+  // state so the workspace starts fresh — no stale P&ID, legend, drawing
+  // metadata or extraction result leaking across projects. The list of
+  // resetters below is the single place to extend if new per-project
+  // state is added in the future.
   useEffect(() => {
+    // 1) Per-project state resetters (soft-coded list).
+    const PROJECT_SCOPED_RESETTERS = [
+      () => setPidFile(null),
+      () => setLegendFile(null),
+      () => setDrawingNumber(''),
+      () => setDrawingTitle(''),
+      () => setRevision('0'),
+      () => setResult(null),
+      () => setError(null),
+      () => setSelectedRows(new Set()),
+      () => setEditingRow(null),
+      () => setLayoutSelected(null),
+      () => setLayoutHovered(null),
+      () => setProgress(0),
+      () => setStatusMessage(''),
+      () => setFilterCategory('All'),
+      () => setFilterText(''),
+      () => setActiveView('table'),
+    ];
+    PROJECT_SCOPED_RESETTERS.forEach(fn => { try { fn(); } catch (_) { /* no-op */ } });
+
+    // 2) Clear native <input type="file"> values so the browser shows no
+    //    leftover filename in the picker for the new project.
+    if (fileInputRef.current)   fileInputRef.current.value = '';
+    if (legendInputRef.current) legendInputRef.current.value = '';
+
+    // 3) Prefill project-name field from the active project (if any).
     if (activeProject && activeProject.name) {
       setProjectName(activeProject.name);
+    } else {
+      setProjectName('');
     }
   }, [activeProject?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
