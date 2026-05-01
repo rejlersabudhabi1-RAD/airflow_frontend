@@ -681,47 +681,207 @@ const _ADNOC_GAS_TEMPLATE = {
 // ─────────────────────────────────────────────────────────────────────────────
 // ADNOC ONSHORE — fully isolated template & editable-fields registry
 // ─────────────────────────────────────────────────────────────────────────────
-// Soft-coded twin of the default template, scoped exclusively to the
-// `adnoc_onshore` category. Decoupling Onshore from `_DEFAULT_TEMPLATE`
-// guarantees:
-//   • Edits aimed at ADNOC Onshore (column tweaks, new editable fields,
-//     ISA-vocabulary changes) NEVER leak into ADNOC Gas or the generic
+// Soft-coded sibling of the ADNOC Gas template, scoped exclusively to the
+// `adnoc_onshore` category. Mirrors the manual "Instrument Index" Excel
+// sheet (Doc. No. ...-IN-LST-00001) — 18 columns with two merged
+// "Inst range" + "Calibration range" group headers. Decoupling Onshore
+// from both `_DEFAULT_TEMPLATE` and the ADNOC Gas constants guarantees:
+//   • Edits aimed at ADNOC Onshore (column tweaks, ISA vocabulary,
+//     editable fields) NEVER leak into ADNOC Gas or the generic
 //     fallback template.
-//   • Edits aimed at ADNOC Gas (the manual-Excel-style `_ADNOC_GAS_*`
-//     constants) NEVER affect ADNOC Onshore — those branches were
-//     already isolated by the `if category === 'adnoc_gas'` gate.
+//   • Edits aimed at ADNOC Gas NEVER affect ADNOC Onshore — those
+//     branches were already isolated by the
+//     `if category === 'adnoc_gas'` backend gate.
 //   • The generic `default` fallback stays a clean baseline for any
 //     future category (Saudi Aramco, Qatar Energy, etc.).
 //
 // To customise ADNOC Onshore, edit only the constants in this section.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ISA → verbose instrument-type label vocabulary (Onshore-only).
+// Some ISA codes have multiple Onshore variants; map the bare code to the
+// most common label and rely on AI-extracted text when more specificity
+// (e.g. "GWR" vs "DP" for LT) is needed.
+const _ADNOC_ONSHORE_TYPE_LABELS = {
+  FT:  'Flow Transmitter',
+  FE:  'Flow Element (Orifice)',
+  FIT: 'Flow Indicating Transmitter',
+  FI:  'Flow Indicator',
+  FV:  'Control Valve',
+  FCV: 'Control Valve',
+  FZT: 'Position Transmitter',
+  FZI: 'Position Indicator',
+  FAL: 'Flow Alarm Low',
+  LT:  'Level Transmitter',
+  LIT: 'Level Indicating Transmitter',
+  LI:  'Level Indicator',
+  LG:  'Level Gauge (Mag)',
+  LV:  'Control Valve',
+  LCV: 'Control Valve',
+  LIC: 'Level Indicator Controller',
+  LSL: 'Level Switch Low',
+  LSH: 'Level Switch High',
+  LSLL:'Level Switch Low Low',
+  LSHH:'Level Switch High High',
+  LALL:'Level Alarm Low Low',
+  PG:  'Pressure Gauge',
+  PT:  'Pressure Transmitter',
+  PIT: 'Pressure Indicating Transmitter',
+  PI:  'Pressure Indicator',
+  PV:  'Control Valve',
+  PCV: 'Control Valve',
+  PIC: 'Pressure Indicator Controller',
+  PSV: 'Pressure Safety Valve',
+  PSH: 'Pressure Switch High',
+  PSL: 'Pressure Switch Low',
+  TG:  'Temperature Gauge',
+  TT:  'Temperature Transmitter',
+  TIT: 'Temperature Indicating Transmitter',
+  TI:  'Temperature Indicator',
+  TE:  'Temperature Element',
+  TW:  'Thermowell',
+  TIC: 'Temperature Indicator Controller',
+  TV:  'Control Valve',
+  HS:  'Hand Switch',
+  VAH: 'Vibration Alarm High',
+  VSH: 'Vibration Switch High',
+  SDV: 'Shutdown Valve',
+  BDV: 'Blowdown Valve',
+  SOV: 'Solenoid Valve',
+  MOV: 'Motor Operated Valve',
+};
+
+// I/O type, IS/NIS, System, Location dropdown vocabularies (Onshore-only).
+const _ADNOC_ONSHORE_IO_OPTIONS       = ['', 'AI', 'AO', 'DI', 'DO', 'N/A'];
+const _ADNOC_ONSHORE_IS_NIS_OPTIONS   = ['', 'IS', 'NIS', 'N/A'];
+const _ADNOC_ONSHORE_SYSTEM_OPTIONS   = ['', 'DCS', 'ESD', 'F&G', 'PLC', 'Local', 'N/A'];
+const _ADNOC_ONSHORE_LOCATION_OPTIONS = ['', 'Field', 'Local Panel', 'Control Room', 'CCR', 'Vessel'];
+const _ADNOC_ONSHORE_STATUS_OPTIONS   = ['', 'New', 'Existing', 'Modified', 'Removed'];
 const _ADNOC_ONSHORE_FAILSAFE_OPTIONS = ['', 'FO', 'FC', 'FL', 'FAI'];
 
+// Soft-coded helpers — purely visual upgrades, no AI extraction changes.
+const _onshoreIsa = (tag) => {
+  const m = String(tag || '').toUpperCase().match(/^\d+\s*-\s*([A-Z]{1,5})\s*-/);
+  return m ? m[1] : '';
+};
+const _onshoreEqOrLine = (i) => {
+  // Manual-sheet convention: column 6 holds either a piping line number
+  // (vessel-mounted instruments use the equipment tag instead).
+  const ln = _str(i.line_number).trim();
+  if (!_isEmpty(ln) && ln !== '-') return ln;
+  const eq = _str(i.equipment_number).trim();
+  if (!_isEmpty(eq) && eq !== '-') return eq;
+  return '';
+};
+
 const _ADNOC_ONSHORE_TEMPLATE = {
-  ..._DEFAULT_TEMPLATE,
   id:         'adnoc_onshore',
   label:      'ADNOC Onshore — Instrument Index',
   sheetTitle: 'Instrument Index',
-  // Deep-clone columns/metaRows so accessor/header edits stay scoped to Onshore.
-  columns:    _DEFAULT_TEMPLATE.columns.map(col => ({ ...col })),
-  metaRows:   _DEFAULT_TEMPLATE.metaRows.map(row => row.map(cell => ({ ...cell }))),
+  emptyDash:  '',
+  // Project / drawing meta block — mirrors the manual sheet header.
+  metaRows: [
+    [{ label: 'Project',        key: 'project.name',          span: 4 },
+     { label: 'Document No.',   key: 'result.drawing_number', span: 2 },
+     { label: 'Location',       key: 'project.location',      span: 1 }],
+    [{ label: 'Title',          key: 'result.drawing_title',  span: 4 },
+     { label: 'Revision',       key: 'result.revision',       span: 1 },
+     { label: 'Project Code',   key: 'project.code',          span: 2 }],
+  ],
+  // Top merged-header strip — totals MUST equal columns.length (18).
+  groupHeader: [
+    { label: '',                              span: 11 }, // Sr…Device Status
+    { label: 'Inst range (Refer Gen Note 5)', span: 3  }, // Min/Max/Unit
+    { label: 'Calibration range',             span: 3  }, // Min/Max/Unit
+    { label: '',                              span: 1  }, // Remarks
+  ],
+  columns: [
+    { key: 'index_no',           header: 'Sr No.',          width:  6, align: 'right',
+      accessor: (i, ctx) => i.index_no ?? (ctx.idx + 1) },
+    { key: 'tag_number',         header: 'Tag No.',         width: 18, mono: true,
+      accessor: i => {
+        const t = _str(i.tag_number).trim();
+        return _isEmpty(t) ? '' : t.toUpperCase();
+      } },
+    { key: 'instrument_type',    header: 'Instrument Type', width: 24,
+      accessor: i => {
+        const cur = _str(i.instrument_type).trim();
+        const isa = _onshoreIsa(i.tag_number);
+        const verbose = _ADNOC_ONSHORE_TYPE_LABELS[isa];
+        if (_isEmpty(cur)) return verbose || '';
+        // Upgrade bare ISA code (e.g. "FT") to verbose label.
+        if (verbose && cur.toUpperCase() === isa) return verbose;
+        return cur;
+      } },
+    { key: 'service_description',header: 'Service Description', width: 40,
+      accessor: i => _str(i.service_description).trim() },
+    { key: 'location',           header: 'Location',        width: 12,
+      accessor: i => _get(i, 'location') },
+    { key: 'equipment_or_line',  header: 'Equipment / Line No.', width: 26, mono: true,
+      accessor: _onshoreEqOrLine },
+    { key: 'pid_no',             header: 'P&ID No.',        width: 24, mono: true,
+      accessor: i => _get(i, 'pid_no') },
+    { key: 'io_type',            header: 'I/O Type',        width:  8, align: 'center',
+      accessor: i => _empty(i.io_type) },
+    { key: 'is_nis',             header: 'IS/NIS',          width:  8, align: 'center',
+      accessor: i => _empty(i.is_nis) },
+    { key: 'system',             header: 'System',          width: 10, align: 'center',
+      accessor: i => _empty(i.system) },
+    { key: 'device_status',      header: 'Device Status',   width: 10, align: 'center',
+      accessor: i => _empty(i.device_status ?? 'New') },
+    // Inst range
+    { key: 'inst_range_min',  header: 'Min',  sub: 'Inst range', width: 8, align: 'center',
+      accessor: i => _get(i, 'inst_range_min') },
+    { key: 'inst_range_max',  header: 'Max',  sub: 'Inst range', width: 8, align: 'center',
+      accessor: i => _get(i, 'inst_range_max') },
+    { key: 'inst_range_unit', header: 'Unit', sub: 'Inst range', width: 8, align: 'center',
+      accessor: i => _get(i, 'inst_range_unit') },
+    // Calibration range — reuses the same backend keys as ADNOC Gas to
+    // maximise extractor reuse, but the column headings stay distinct.
+    { key: 'calibration_min',  header: 'Min',  sub: 'Calibration range', width: 8, align: 'center',
+      accessor: i => _get(i, 'calibration_min') },
+    { key: 'calibration_max',  header: 'Max',  sub: 'Calibration range', width: 8, align: 'center',
+      accessor: i => _get(i, 'calibration_max') },
+    { key: 'calibration_unit', header: 'Unit', sub: 'Calibration range', width: 8, align: 'center',
+      accessor: i => _get(i, 'calibration_unit') },
+    { key: 'remarks',         header: 'Remarks', width: 28,
+      accessor: i => _empty(i.instrument_remark ?? i.notes) },
+  ],
 };
 
 const _ADNOC_ONSHORE_EDITABLE_FIELDS = [
-  { key: 'tag_number',          label: 'Tag Number',           type: 'text',     group: 'Identification' },
-  { key: 'control_system_tag',  label: 'Control System Tag',   type: 'text',     group: 'Identification' },
-  { key: 'instrument_type',     label: 'Instrument Type',      type: 'text',     group: 'Identification' },
-  { key: 'category',            label: 'Category',             type: 'text',     group: 'Identification' },
-  { key: 'service_description', label: 'Service Description',  type: 'textarea', group: 'Service' },
-  { key: 'line_number',         label: 'Line Number',          type: 'text',     group: 'Service' },
-  { key: 'equipment_number',    label: 'Equipment Number',     type: 'text',     group: 'Service' },
-  { key: 'loop_number',         label: 'Loop Number',          type: 'text',     group: 'Service' },
-  { key: 'fail_safe',           label: 'Fail-Safe',            type: 'select',   options: _ADNOC_ONSHORE_FAILSAFE_OPTIONS, group: 'I/O' },
-  { key: 'signal_type',         label: 'Signal Type',          type: 'text',     group: 'I/O' },
-  { key: 'set_point',           label: 'Set Point',            type: 'text',     group: 'I/O' },
-  { key: 'pid_no',              label: 'P&ID No.',             type: 'text',     group: 'Docs' },
-  { key: 'revision',            label: 'Revision',             type: 'text',     group: 'Docs' },
+  // Identification
+  { key: 'tag_number',          label: 'Tag No.',              type: 'text',     group: 'Identification' },
+  { key: 'instrument_type',     label: 'Instrument Type',      type: 'text',     group: 'Identification',
+    hint: 'Verbose label, e.g. "Flow Transmitter", "Level Transmitter (GWR)".' },
+  { key: 'pid_no',              label: 'P&ID No.',             type: 'text',     group: 'Identification' },
+
+  // Service & process
+  { key: 'service_description', label: 'Service Description',  type: 'textarea', group: 'Service & Process' },
+  { key: 'line_number',         label: 'Line Number',          type: 'text',     group: 'Service & Process' },
+  { key: 'equipment_number',    label: 'Equipment Number',     type: 'text',     group: 'Service & Process' },
+
+  // Location & I/O
+  { key: 'location',            label: 'Location',             type: 'select',   options: _ADNOC_ONSHORE_LOCATION_OPTIONS, group: 'Location & I/O' },
+  { key: 'io_type',             label: 'I/O Type',             type: 'select',   options: _ADNOC_ONSHORE_IO_OPTIONS,       group: 'Location & I/O' },
+  { key: 'is_nis',              label: 'IS / NIS',             type: 'select',   options: _ADNOC_ONSHORE_IS_NIS_OPTIONS,   group: 'Location & I/O' },
+  { key: 'system',              label: 'System',               type: 'select',   options: _ADNOC_ONSHORE_SYSTEM_OPTIONS,   group: 'Location & I/O' },
+  { key: 'device_status',       label: 'Device Status',        type: 'select',   options: _ADNOC_ONSHORE_STATUS_OPTIONS,   group: 'Location & I/O' },
+  { key: 'fail_safe',           label: 'Fail-Safe',            type: 'select',   options: _ADNOC_ONSHORE_FAILSAFE_OPTIONS, group: 'Location & I/O' },
+
+  // Instrument range (Note-5)
+  { key: 'inst_range_min',      label: 'Inst Range Min',       type: 'text',     group: 'Inst Range' },
+  { key: 'inst_range_max',      label: 'Inst Range Max',       type: 'text',     group: 'Inst Range' },
+  { key: 'inst_range_unit',     label: 'Inst Range Unit',      type: 'text',     group: 'Inst Range',
+    hint: 'e.g. mmH₂O, barg, °C, mm, %' },
+
+  // Calibration range
+  { key: 'calibration_min',     label: 'Calibration Min',      type: 'text',     group: 'Calibration Range' },
+  { key: 'calibration_max',     label: 'Calibration Max',      type: 'text',     group: 'Calibration Range' },
+  { key: 'calibration_unit',    label: 'Calibration Unit',     type: 'text',     group: 'Calibration Range' },
+
+  // Notes / remarks
+  { key: 'instrument_remark',   label: 'Remarks',              type: 'textarea', group: 'Notes' },
   { key: 'notes',               label: 'Notes',                type: 'textarea', group: 'Notes' },
 ];
 
