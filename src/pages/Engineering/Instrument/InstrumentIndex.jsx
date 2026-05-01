@@ -17,7 +17,7 @@
  * Build: v1.0.0
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   DocumentTextIcon,
   CloudArrowUpIcon,
@@ -25,11 +25,294 @@ import {
   ArrowDownTrayIcon,
   ChartBarIcon,
   ListBulletIcon,
+  FolderPlusIcon,
+  FolderIcon,
+  ChevronRightIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  ArrowLeftIcon,
+  ArrowTopRightOnSquareIcon,
+  BoltIcon,
+  CpuChipIcon,
+  ShieldCheckIcon,
+  TagIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import { STORAGE_KEYS } from '../../../config/app.config';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
+import {
+  useInstrumentProjects,
+  ProjectBanner,
+  ProjectManagerModal,
+  CategoryBadge,
+  ProjectSetupPanel,
+  INSTRUMENT_PROJECT_CATEGORIES,
+  PROJECT_FORM_LIMITS,
+  getInstrumentTemplate,
+} from './InstrumentProjectManager';
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PFD-FORMAT REDESIGN — theme, animations & landing-page primitives
+// (mirrors the structure of PFDQualityChecker.jsx so /engineering/instrument/index
+//  matches the same projects-grid + workspace pattern).
+// All visual values are SOFT-CODED in T_INST; JSX consumes T_INST.* only.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const T_INST = {
+  // Page background — soft indigo/violet sky for the instrument suite
+  bg: 'linear-gradient(145deg, #f5f3ff 0%, #eef2ff 30%, #f0f9ff 65%, #f5f3ff 100%)',
+
+  blobs: [
+    { color: 'rgba(139,92,246,0.10)', size: '580px', top: '-100px',  left: '15%',    anim: 'instFloatA 14s ease-in-out infinite' },
+    { color: 'rgba(99,102,241,0.08)', size: '460px', top: '25%',     right: '-80px', anim: 'instFloatB 17s ease-in-out infinite' },
+    { color: 'rgba(168,85,247,0.07)', size: '400px', bottom: '-80px', left: '30%',    anim: 'instFloatC 12s ease-in-out infinite' },
+    { color: 'rgba(14,165,233,0.07)', size: '320px', top: '60%',     left: '-60px',  anim: 'instFloatA 10s ease-in-out infinite 3s' },
+  ],
+
+  card:  { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04)' },
+  cardH: { boxShadow: '0 12px 40px rgba(99,102,241,0.16),0 2px 8px rgba(0,0,0,0.05)', borderColor: '#a5b4fc', transform: 'translateY(-2px)' },
+  panel: { background: 'rgba(255,255,255,0.92)', border: '1px solid #e0e7ff', backdropFilter: 'blur(16px)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
+
+  accent:        'linear-gradient(135deg,#7c3aed,#4f46e5)',
+  accentHex:     '#6366f1',
+  accentShadow:  '0 4px 18px rgba(99,102,241,0.38)',
+  accentShadowLg:'0 8px 28px rgba(99,102,241,0.42)',
+
+  gradBar: 'linear-gradient(90deg,#a78bfa,#6366f1,#3b82f6,#8b5cf6,#a78bfa)',
+  gridDot: 'radial-gradient(circle, rgba(139,92,246,0.07) 1px, transparent 1px)',
+};
+
+const KEYFRAMES_INST = `
+  @keyframes instFloatA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.06)} }
+  @keyframes instFloatB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-35px,25px) scale(1.04)} }
+  @keyframes instFloatC { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,35px) scale(1.05)} }
+  @keyframes instFadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes instCardIn { from{opacity:0;transform:translateY(10px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes instChipPop { 0%{transform:scale(0.7) translateY(6px);opacity:0} 70%{transform:scale(1.08) translateY(-1px)} 100%{transform:scale(1) translateY(0);opacity:1} }
+  @keyframes instSpinSlow    { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes instSpinSlowRev { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+  @keyframes instGradShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+  @keyframes instNodeGlow { 0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,0);transform:scale(1)} 50%{box-shadow:0 0 18px 4px rgba(99,102,241,0.30);transform:scale(1.03)} }
+  @keyframes instCountUp { from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1} }
+  @keyframes instPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+`;
+
+// Soft-coded hero capability badges (instrument flavor)
+const INST_HERO_BADGES = [
+  { label: 'ISA 5.1 compliant',   icon: '🏷️', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+  { label: 'AI Vision multi-pass', icon: '🤖', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { label: 'Legend cross-check',   icon: '🔍', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { label: 'Excel export',         icon: '📊', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+];
+
+// Soft-coded: 3-step "How it works" cards (mirrors PFD layout)
+const INST_HOW_IT_WORKS = [
+  {
+    step: '1',
+    title: 'Upload P&ID PDF',
+    desc:  'Drop your P&ID drawing. Single or multi-page supported, with optional legend sheet for symbol cross-verification.',
+    icon:  CloudArrowUpIcon,
+    accent: '#7c3aed',
+    border: '#ddd6fe',
+    bg: 'linear-gradient(135deg,#faf5ff,#f5f3ff)',
+  },
+  {
+    step: '2',
+    title: 'AI Vision Multi-Pass Scan',
+    desc:  '7-pass scan: standard + 90°/270° rotations + 4 quadrant tiles. Catches every instrument bubble, no matter the orientation.',
+    icon:  CpuChipIcon,
+    accent: '#4f46e5',
+    border: '#c7d2fe',
+    bg: 'linear-gradient(135deg,#eef2ff,#e0e7ff)',
+  },
+  {
+    step: '3',
+    title: 'Indexed & Ready to Export',
+    desc:  'Categorised by ISA 5.1, deduplicated, cross-checked against the legend, and one-click Excel export with summary sheet.',
+    icon:  ShieldCheckIcon,
+    accent: '#0891b2',
+    border: '#a5f3fc',
+    bg: 'linear-gradient(135deg,#ecfeff,#e0f2fe)',
+  },
+];
+
+// Soft-coded ring tick angles (decorative SVG on hero — mirrors PFD's RULE_RING_TICKS)
+const INST_RING_TICKS = Array.from({ length: 12 }, (_, i) => i * 30);
+
+// ─── Full-page animated background (PFD-format DarkBg, instrument palette) ───
+const InstBg = ({ children }) => (
+  <div className="min-h-screen relative overflow-hidden" style={{ background: T_INST.bg }}>
+    <style>{KEYFRAMES_INST}</style>
+    <div className="absolute inset-0 pointer-events-none"
+      style={{ backgroundImage: T_INST.gridDot, backgroundSize: '44px 44px' }} />
+    {T_INST.blobs.map((b, i) => (
+      <div key={i} className="absolute rounded-full pointer-events-none"
+        style={{
+          width: b.size, height: b.size, top: b.top, bottom: b.bottom, left: b.left, right: b.right,
+          background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
+          animation: b.anim,
+        }} />
+    ))}
+    <div className="absolute inset-x-0 top-0 h-[3px] pointer-events-none"
+      style={{ backgroundImage: T_INST.gradBar, backgroundSize: '300% auto', animation: 'instGradShift 3s linear infinite' }} />
+    <div className="relative z-10">{children}</div>
+  </div>
+);
+
+// ─── Project card (PFD-format card grid item) ───────────────────────────────
+function InstProjectCard({ project, idx, onSelect, onEdit, onDelete }) {
+  const cat = INSTRUMENT_PROJECT_CATEGORIES.find(c => c.id === project.category) || INSTRUMENT_PROJECT_CATEGORIES[0];
+  return (
+    <div
+      onClick={() => onSelect(project.id)}
+      className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 overflow-hidden"
+      style={{ ...T_INST.card, animation: `instCardIn 0.55s ease-out ${0.05 + idx * 0.07}s both` }}
+      onMouseEnter={e => Object.assign(e.currentTarget.style, T_INST.cardH)}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = T_INST.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = ''; }}>
+      {/* Animated accent bar on hover */}
+      <div className="absolute top-0 left-0 right-0 rounded-t-2xl overflow-hidden h-[3px]">
+        <div className="h-full w-0 group-hover:w-full transition-all duration-500 ease-out rounded-t-2xl"
+          style={{ background: T_INST.accent }} />
+      </div>
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-colors text-xl"
+          style={{ background: '#eef2ff', border: '1px solid #c7d2fe', animation: 'instNodeGlow 3s ease-in-out infinite' }}>
+          {cat.icon}
+        </div>
+        <ChevronRightIcon className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all duration-300" />
+      </div>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${cat.badgeBg} ${cat.badgeText} border ${cat.badgeBorder}`}>
+          {cat.label}
+        </span>
+      </div>
+      <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-indigo-700 transition-colors line-clamp-1">{project.name}</h3>
+      {project.description && <p className="text-xs text-slate-400 line-clamp-2 mb-3">{project.description}</p>}
+      <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100 mb-3">
+        <span className="font-mono">{project.code || '—'}</span>
+        <span>{project.created_at ? new Date(project.created_at).toLocaleDateString() : '—'}</span>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={ev => { ev.stopPropagation(); onEdit(project); }}
+          className="flex-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-xs font-medium">
+          <PencilSquareIcon className="w-3.5 h-3.5" />Edit
+        </button>
+        <button onClick={ev => { ev.stopPropagation(); onDelete(project); }}
+          className="flex-1 px-3 py-1.5 bg-red-50 border border-red-100 text-red-500 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5 text-xs font-medium">
+          <TrashIcon className="w-3.5 h-3.5" />Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Quick-create modal (single name + category, PFD-format) ────────────────
+function InstQuickCreateModal({ open, onClose, onCreate }) {
+  const [name, setName] = useState('');
+  const [categoryId, setCategoryId] = useState(INSTRUMENT_PROJECT_CATEGORIES[0].id);
+  const [err, setErr] = useState(null);
+  useEffect(() => { if (open) { setName(''); setCategoryId(INSTRUMENT_PROJECT_CATEGORIES[0].id); setErr(null); } }, [open]);
+  if (!open) return null;
+  const submit = (e) => {
+    e?.preventDefault?.();
+    const n = name.trim();
+    if (!n) { setErr('Enter a project name to continue.'); return; }
+    if (n.length > PROJECT_FORM_LIMITS.nameMax) { setErr(`Name must be ${PROJECT_FORM_LIMITS.nameMax} characters or less.`); return; }
+    onCreate({ name: n, category: categoryId });
+  };
+  return (
+    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      style={{ background: 'rgba(15,23,42,0.45)' }}>
+      <form onSubmit={submit} className="rounded-2xl max-w-lg w-full p-6 bg-white border border-slate-200 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+              <FolderPlusIcon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">New Instrument Project</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Name it now — code, client &amp; metadata can be added later.</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg">
+            <XMarkIcon className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Project Name</label>
+            <input
+              autoFocus
+              type="text"
+              value={name}
+              maxLength={PROJECT_FORM_LIMITS.nameMax}
+              onChange={(e) => { setName(e.target.value); if (err) setErr(null); }}
+              placeholder="e.g. SAHIL Phase 3 — Pig Receiver"
+              className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+            />
+            <div className="text-[10px] text-slate-400 mt-1 text-right">{name.length}/{PROJECT_FORM_LIMITS.nameMax}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Category</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+            >
+              {INSTRUMENT_PROJECT_CATEGORIES.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.icon}  {c.label}{c.short ? ` — ${c.short}` : ''}
+                </option>
+              ))}
+            </select>
+            {(() => {
+              const sel = INSTRUMENT_PROJECT_CATEGORIES.find(c => c.id === categoryId);
+              return sel?.description ? (
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">{sel.description}</p>
+              ) : null;
+            })()}
+          </div>
+          {err && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">⚠ {err}</div>}
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button type="submit"
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all hover:-translate-y-px"
+            style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+            <FolderPlusIcon className="w-4 h-4" />Create Project
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ─── Confirm-delete modal ───────────────────────────────────────────────────
+function InstConfirmModal({ open, title, message, onCancel, onConfirm, danger }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      style={{ background: 'rgba(15,23,42,0.45)' }}>
+      <div className="rounded-2xl max-w-md w-full p-6 bg-white border border-slate-200 shadow-2xl">
+        <h3 className="text-base font-bold text-slate-900 mb-2">{title}</h3>
+        <p className="text-sm text-slate-600 mb-5">{message}</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+          <button onClick={onConfirm}
+            className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-all ${danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+            {danger ? 'Delete' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_BASE = getApiBaseUrl();
@@ -59,9 +342,243 @@ function categoryStyle(cat) {
   return CATEGORY_COLOURS[cat] || DEFAULT_COLOUR;
 }
 
+// ─── Soft-coded Step-by-Step Workflow ────────────────────────────────────────
+// Each step is gated by `isUnlocked(state)` and marked complete via
+// `isComplete(state)`. Add or reorder steps here without changing JSX.
+const WORKFLOW_STEPS = [
+  {
+    id: 'project',
+    num: 1,
+    title: 'Project Setup',
+    subtitle: 'Pick or create the project this drawing belongs to.',
+    isUnlocked: () => true,
+    isComplete: (s) => Boolean(s.activeProject),
+  },
+  {
+    id: 'upload',
+    num: 2,
+    title: 'Upload P&ID Drawing (PDF)',
+    subtitle: 'Drop the main P&ID PDF — single or multi-page supported.',
+    isUnlocked: (s) => Boolean(s.activeProject),
+    isComplete: (s) => Boolean(s.pidFile),
+  },
+  {
+    id: 'legend',
+    num: 3,
+    title: 'Attach Legend / Symbol Sheet',
+    subtitle: 'Optional — used for symbol cross-verification.',
+    optional: true,
+    isUnlocked: (s) => Boolean(s.pidFile),
+    isComplete: (s) => Boolean(s.legendFile),
+  },
+  {
+    id: 'metadata',
+    num: 4,
+    title: 'Drawing Info',
+    subtitle: 'Optional — drawing number, title, revision.',
+    optional: true,
+    isUnlocked: (s) => Boolean(s.pidFile),
+    isComplete: (s) => Boolean(s.drawingNumber || s.drawingTitle),
+  },
+  {
+    id: 'extract',
+    num: 5,
+    title: 'Extract Instrument Index',
+    subtitle: 'Run AI Vision extraction on the uploaded drawing.',
+    isUnlocked: (s) => Boolean(s.activeProject && s.pidFile),
+    isComplete: (s) => Boolean(s.result),
+  },
+];
+
+// Compact horizontal stepper (soft-coded — renders WORKFLOW_STEPS).
+function WorkflowStepper({ steps, state }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
+      <ol className="flex flex-wrap items-center gap-2">
+        {steps.map((step, idx) => {
+          const complete = step.isComplete(state);
+          const unlocked = step.isUnlocked(state);
+          const active   = unlocked && !complete;
+          const tone = complete
+            ? 'bg-emerald-500 text-white border-emerald-500'
+            : active
+              ? 'bg-purple-600 text-white border-purple-600 ring-2 ring-purple-200'
+              : 'bg-gray-100 text-gray-400 border-gray-200';
+          const labelTone = complete
+            ? 'text-emerald-700'
+            : active ? 'text-purple-700' : 'text-gray-400';
+          return (
+            <li key={step.id} className="flex items-center gap-2">
+              <span className={`flex items-center justify-center h-7 w-7 rounded-full text-xs font-bold border ${tone}`}>
+                {complete ? '✓' : step.num}
+              </span>
+              <div className="flex flex-col">
+                <span className={`text-xs font-semibold ${labelTone}`}>
+                  {step.title}
+                  {step.optional && <span className="ml-1 text-[10px] font-normal text-gray-400">(optional)</span>}
+                </span>
+              </div>
+              {idx < steps.length - 1 && (
+                <span className={`hidden sm:block w-6 h-px ${complete ? 'bg-emerald-300' : 'bg-gray-200'}`} />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// Soft-coded "locked" placeholder shown for steps whose prerequisites are unmet.
+function LockedStepCard({ step, hint, action }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-dashed border-gray-200 p-6 mb-6 opacity-90">
+      <div className="flex items-start gap-4">
+        <span className="flex items-center justify-center h-8 w-8 rounded-full bg-gray-100 text-gray-400 text-sm font-bold border border-gray-200 shrink-0">
+          {step.num}
+        </span>
+        <div className="flex-1">
+          <h3 className="text-base font-semibold text-gray-500 flex items-center gap-2">
+            <span>🔒</span> {step.title}
+          </h3>
+          <p className="text-xs text-gray-400 mt-1">{hint || step.subtitle}</p>
+        </div>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit-Row Modal ──────────────────────────────────────────────────────────
+// Soft-coded: renders one input per entry in `template.editableFields`.
+// Adding a new field to the registry on InstrumentProjectManager is enough —
+// no edits required here.
+function EditInstrumentModal({ open, draft, fields, onChange, onClose, onSave }) {
+  if (!open || !draft || !Array.isArray(fields) || fields.length === 0) return null;
+
+  // Group fields by their `group` attribute (preserving first-seen order).
+  const groups = [];
+  const seen = new Map();
+  fields.forEach(f => {
+    const g = f.group || 'Fields';
+    if (!seen.has(g)) {
+      seen.set(g, groups.length);
+      groups.push({ name: g, items: [] });
+    }
+    groups[seen.get(g)].items.push(f);
+  });
+
+  const setField = (key, value) => onChange({ ...draft, [key]: value });
+
+  const tag = draft.tag_number || '(new)';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+         onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+           onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-violet-50 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Edit Instrument</h2>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">{tag}</p>
+          </div>
+          <button onClick={onClose} title="Close"
+                  className="p-1.5 rounded-md hover:bg-white/70 text-slate-500 hover:text-slate-800 transition">
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body — scrollable, grouped accordion-style */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {groups.map(grp => (
+            <fieldset key={grp.name} className="border border-slate-200 rounded-lg p-4">
+              <legend className="px-2 text-[11px] font-bold uppercase tracking-wider text-indigo-600">
+                {grp.name}
+              </legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                {grp.items.map(f => {
+                  const v = draft[f.key] ?? '';
+                  const common =
+                    'mt-1 w-full px-2.5 py-1.5 text-sm rounded-md border border-slate-300 ' +
+                    'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ' +
+                    'bg-white text-slate-800';
+                  return (
+                    <label key={f.key} className={f.type === 'textarea' ? 'sm:col-span-2' : ''}>
+                      <span className="text-[11px] font-semibold text-slate-600">{f.label}</span>
+                      {f.type === 'textarea' ? (
+                        <textarea
+                          rows={2}
+                          value={v}
+                          onChange={e => setField(f.key, e.target.value)}
+                          className={common + ' resize-y'}
+                          placeholder={f.hint || ''}
+                        />
+                      ) : f.type === 'select' ? (
+                        <select
+                          value={v}
+                          onChange={e => setField(f.key, e.target.value)}
+                          className={common}
+                        >
+                          {(f.options || ['']).map(opt => (
+                            <option key={opt} value={opt}>{opt === '' ? '— (blank) —' : opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={f.type === 'number' ? 'number' : 'text'}
+                          value={v}
+                          onChange={e => setField(f.key, e.target.value)}
+                          className={common}
+                          placeholder={f.hint || ''}
+                        />
+                      )}
+                      {f.hint && f.type !== 'textarea' && (
+                        <span className="text-[10px] text-slate-400 italic mt-0.5 block">{f.hint}</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+          <button onClick={onClose}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-md border border-slate-300 text-slate-600 bg-white hover:bg-slate-100 transition">
+            Cancel
+          </button>
+          <button onClick={onSave}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-md bg-gradient-to-r from-indigo-500 to-violet-600 text-white hover:from-indigo-600 hover:to-violet-700 shadow-sm transition">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const InstrumentIndex = () => {
   const navigate = useNavigate();
+
+  // ── Project Management (Phase 1) ────────────────────────────────────
+  const {
+    projects, activeProject, activeId, setActiveId,
+    upsertProject, archiveProject, restoreProject, deleteProject,
+  } = useInstrumentProjects();
+  const [projectManagerOpen, setProjectManagerOpen] = useState(false);
+  const [pmInitialView, setPmInitialView] = useState(null);
+  const [pmInitialCategory, setPmInitialCategory] = useState(null);
+
+  // Open the manager in a specific mode (used by ProjectSetupPanel quick-picks)
+  const openManager = (opts = {}) => {
+    setPmInitialView(opts.view || null);
+    setPmInitialCategory(opts.category || null);
+    setProjectManagerOpen(true);
+  };
 
   // Upload state
   const [pidFile, setPidFile]             = useState(null);
@@ -85,13 +602,41 @@ const InstrumentIndex = () => {
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterText, setFilterText]         = useState('');
   const [activeView, setActiveView]         = useState('table'); // 'table' | 'summary' | 'layout'
+  // Row selection (Set of zero-based instrument indices in result.instruments)
+  const [selectedRows, setSelectedRows]     = useState(() => new Set());
+  // Reset selection whenever a fresh extraction lands
+  useEffect(() => { setSelectedRows(new Set()); }, [result?.total]);
   // Layout view state
   const [layoutSelected, setLayoutSelected] = useState(null); // { measured, fn } cell selected
   const [layoutHovered,  setLayoutHovered]  = useState(null);
 
+  // Edit-row modal state — { idx, draft } when open, null when closed.
+  const [editingRow, setEditingRow] = useState(null);
+
+  // Apply the draft back to result.instruments[idx] (immutable update).
+  const handleSaveEditedRow = useCallback(() => {
+    if (!editingRow) return;
+    const { idx, draft } = editingRow;
+    setResult(prev => {
+      if (!prev || !Array.isArray(prev.instruments)) return prev;
+      const next = prev.instruments.map((inst, j) => (j === idx ? { ...inst, ...draft } : inst));
+      return { ...prev, instruments: next };
+    });
+    setEditingRow(null);
+  }, [editingRow]);
+
   const fileInputRef = useRef(null);
   const legendInputRef = useRef(null);
   const elapsedRef   = useRef(null);
+
+  // ── Auto-sync project context into drawing metadata ─────────────────
+  // When the active project changes, prefill the project name field so
+  // every extraction is tagged with the current project context.
+  useEffect(() => {
+    if (activeProject && activeProject.name) {
+      setProjectName(activeProject.name);
+    }
+  }, [activeProject?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Elapsed timer ────────────────────────────────────────────────────
   useEffect(() => {
@@ -184,6 +729,11 @@ const InstrumentIndex = () => {
   // ── Extract ──────────────────────────────────────────────────────────
   const handleExtract = async () => {
     if (!pidFile) { setError('Please upload a P&ID (PDF) first.'); return; }
+    if (!activeProject) {
+      setError('Please select or create an active project first.');
+      openManager({ view: 'list' });
+      return;
+    }
 
     setIsProcessing(true);
     setError(null);
@@ -197,7 +747,15 @@ const InstrumentIndex = () => {
     formData.append('drawing_number', drawingNumber || pidFile.name.replace(/\.pdf$/i, ''));
     formData.append('drawing_title', drawingTitle);
     formData.append('revision', revision);
-    formData.append('project_name', projectName);
+    formData.append('project_name', projectName || activeProject.name);
+    // Project context (Phase 1 — sent for backend awareness; ignored if unused)
+    formData.append('project_id', activeProject.id);
+    formData.append('project_code', activeProject.code || '');
+    formData.append('project_category', activeProject.category);
+    formData.append('project_client', activeProject.client || '');
+    // Explicit unit / area code (e.g. ADNOC Gas '562'). Drives the {unit}
+    // prefix in tag-format normalisation when present.
+    formData.append('project_unit', activeProject.unit || '');
 
     const token  = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     const url    = `${API_BASE}/pid/instrument-index/analyze/`;
@@ -257,46 +815,115 @@ const InstrumentIndex = () => {
   };
 
   // ── Client-side Excel fallback (browser XLSX) ────────────────────────
+  // Template-driven: the active project's category selects the template
+  // (ADNOC Gas → 25-col manual sheet layout; default → legacy 15-col view).
   const handleDownloadClientExcel = () => {
     if (!result?.instruments?.length) return;
+    const tpl = getInstrumentTemplate(activeProject?.category);
+    const ctx = { project: activeProject || {}, result };
 
-    const headers = [
-      'Index No.', 'Tag Number', 'CS Tag', 'Instrument Type', 'Category',
-      'P&ID No.', 'Service Description', 'Line Number', 'Equipment No.',
-      'Loop No.', 'Fail Safe', 'Signal Type', 'Set Point',
-      'Drawing No.', 'Rev.', 'Notes',
-    ];
-    const rows = result.instruments.map(i => [
-      i.index_no              || '',
-      i.tag_number            || '',
-      i.control_system_tag    || '',
-      i.instrument_type       || '',
-      i.category              || '',
-      i.pid_no                || '',
-      i.service_description   || '',
-      i.line_number           || '',
-      i.equipment_number      || '',
-      i.loop_number           || '',
-      i.fail_safe             || '',
-      i.signal_type           || '',
-      i.set_point             || '',
-      i.drawing_number        || '',
-      i.revision              || '',
-      i.notes                 || '',
-    ]);
+    // Honor row selection: if any rows are selected, export those only;
+    // otherwise export everything in the result.
+    const sourceList = selectedRows.size > 0
+      ? result.instruments.filter((_, i) => selectedRows.has(i))
+      : result.instruments;
 
-    const wsData = [headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = headers.map((h, ci) => {
-      let max = h.length;
-      for (let r = 1; r < wsData.length; r++) {
-        const v = String(wsData[r][ci] || '');
-        if (v.length > max) max = v.length;
-      }
-      return { wch: Math.min(Math.max(max + 2, 10), 50) };
+    // Resolve a metaRow cell value via dotted "scope.key" lookup
+    const _resolveMeta = (key) => {
+      if (!key) return '';
+      const [scope, ...rest] = key.split('.');
+      const path = rest.join('.');
+      const root = scope === 'project' ? ctx.project
+                 : scope === 'result'  ? ctx.result
+                 : ctx;
+      return path.split('.').reduce((acc, k) => (acc == null ? acc : acc[k]), root) ?? '';
+    };
+
+    // Prepend "SL No." auto-column so exported Excel mirrors the on-screen view
+    let _slCounter = 0;
+    const SL_COL = {
+      key: '__sl_no__', header: 'SL No.', width: 6, align: 'center',
+      accessor: () => (++_slCounter),
+    };
+    const xCols = [SL_COL, ...tpl.columns];
+    const COL_COUNT = xCols.length;
+
+    const wsData = [];
+
+    // 1) Title row
+    wsData.push([tpl.sheetTitle.toUpperCase(), ...Array(COL_COUNT - 1).fill('')]);
+    // 2) Metadata rows
+    (tpl.metaRows || []).forEach(row => {
+      const line = [];
+      row.forEach(cell => {
+        line.push(`${cell.label}: ${_resolveMeta(cell.key)}`);
+        const span = (cell.span || 1) - 1;
+        for (let s = 0; s < span; s++) line.push('');
+      });
+      while (line.length < COL_COUNT) line.push('');
+      wsData.push(line);
     });
+    wsData.push(Array(COL_COUNT).fill('')); // spacer
 
-    // Summary sheet
+    // 3) Optional grouped header strip (extend with empty cell over SL No)
+    if (tpl.groupHeader && tpl.groupHeader.length) {
+      const groupRow = [''];
+      tpl.groupHeader.forEach(g => {
+        groupRow.push(g.label || '');
+        for (let s = 1; s < (g.span || 1); s++) groupRow.push('');
+      });
+      while (groupRow.length < COL_COUNT) groupRow.push('');
+      wsData.push(groupRow);
+    }
+
+    // 4) Column header row(s)
+    wsData.push(xCols.map(c => (c.header || '').replace(/\n/g, ' ')));
+
+    // 5) Body rows — with optional equipment grouping
+    const groupedRows = [];
+    if (tpl.groupBy) {
+      const groups = new Map();
+      const ungrouped = [];
+      sourceList.forEach(i => {
+        const key = tpl.groupBy(i);
+        if (!key) { ungrouped.push(i); return; }
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(i);
+      });
+      const dash = tpl.emptyDash || '-';
+      // Each group gets a section banner row (label in col 1, blanks elsewhere)
+      groups.forEach((items, key) => {
+        const label = (tpl.groupHeaderLabel ? tpl.groupHeaderLabel(key, items) : key) || key;
+        const banner = [label, ...Array(COL_COUNT - 1).fill('')];
+        groupedRows.push(banner);
+        items.forEach((inst, gIdx) =>
+          groupedRows.push(xCols.map(c => {
+            try { const v = c.accessor(inst, { idx: gIdx, ctx }); return v == null || v === '' ? dash : v; }
+            catch (_) { return dash; }
+          }))
+        );
+      });
+      ungrouped.forEach((inst, gIdx) =>
+        groupedRows.push(xCols.map(c => {
+          try { const v = c.accessor(inst, { idx: gIdx, ctx }); return v == null || v === '' ? dash : v; }
+          catch (_) { return dash; }
+        }))
+      );
+    } else {
+      const dash = tpl.emptyDash || '—';
+      sourceList.forEach((inst, idx) =>
+        groupedRows.push(xCols.map(c => {
+          try { const v = c.accessor(inst, { idx, ctx }); return v == null || v === '' ? dash : v; }
+          catch (_) { return dash; }
+        }))
+      );
+    }
+    wsData.push(...groupedRows);
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = xCols.map(c => ({ wch: Math.max(6, Math.min(c.width || 14, 50)) }));
+
+    // Summary sheet (kept generic — independent of template)
     const summaryData = [
       ['Category', 'Count'],
       ...Object.entries(result.category_summary || {}).sort(),
@@ -306,7 +933,7 @@ const InstrumentIndex = () => {
     ws2['!cols'] = [{ wch: 28 }, { wch: 10 }];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Instrument Index');
+    XLSX.utils.book_append_sheet(wb, ws,  tpl.sheetTitle);
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
     XLSX.writeFile(wb, `instrument_index_${(drawingNumber || 'export').replace(/[^a-zA-Z0-9_-]/g, '_')}.xlsx`);
   };
@@ -326,49 +953,304 @@ const InstrumentIndex = () => {
     : ['All'];
 
   // ─────────────────────────────────────────────────────────────────────
-  // RENDER
+  // RENDER — PFD-format two-view layout
   // ─────────────────────────────────────────────────────────────────────
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/40 p-6">
-      <div className="max-w-7xl mx-auto">
 
-        {/* ── Hero Header ───────────────────────────────────────────── */}
-        <div className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 shadow-lg">
-          {/* Decorative blobs */}
-          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-pink-300/20 blur-3xl" />
-          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 p-6 sm:p-8">
-            <div className="flex items-start gap-4 flex-1">
-              <div className="shrink-0 h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center shadow-inner">
-                <ListBulletIcon className="h-8 w-8 text-white" />
+  // Local UI state for the new landing-page modals (declared inside component
+  // because they need to read/write the projects hook).
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [deletingProject, setDeletingProject] = useState(null);
+
+  const liveProjects = (projects || []).filter(p => !p.archived);
+
+  const handleCreateInline = ({ name, category }) => {
+    const id = `prj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    upsertProject({ id, name, category });
+    setActiveId(id);
+    setCreateOpen(false);
+  };
+
+  const handleEditSave = () => {
+    if (!editingProject) return;
+    upsertProject({ ...editingProject, name: editName.trim() || editingProject.name, description: editDesc });
+    setEditingProject(null);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingProject) return;
+    deleteProject(deletingProject.id);
+    setDeletingProject(null);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VIEW 1 — Landing (no active project)
+  // ═══════════════════════════════════════════════════════════════════════
+  if (!activeProject) {
+    return (
+      <InstBg>
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+
+          {/* ── Hero ── */}
+          <div className="mb-10 flex flex-col lg:flex-row lg:items-center gap-8" style={{ animation: 'instFadeUp 0.6s ease-out both' }}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-7 rounded-full" style={{ background: 'linear-gradient(180deg,#7c3aed,#4f46e5)' }} />
+                <span className="text-indigo-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Instrument Engineering</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Instrument Index</h1>
-                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white border border-white/30">
-                    AI · ISA 5.1
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3 whitespace-nowrap">
+                Instrument{' '}
+                <span style={{ background: 'linear-gradient(90deg,#7c3aed,#4f46e5)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                  Index Extractor
+                </span>
+              </h1>
+              <p className="text-slate-500 max-w-xl text-sm sm:text-base mb-4">
+                Extract every instrument tag from any P&amp;ID — Flow, Pressure, Temperature, Level,
+                SDV/BDV, MOV, Safety valves &amp; more. AI Vision multi-pass with ISA 5.1 intelligence.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {INST_HERO_BADGES.map((b, i) => (
+                  <span key={b.label}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}
+                    style={{ animation: 'instChipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both', animationDelay: `${0.08 + i * 0.07}s` }}>
+                    <span>{b.icon}</span>{b.label}
                   </span>
-                </div>
-                <p className="text-sm text-purple-100 max-w-3xl leading-relaxed">
-                  Extract every instrument tag from any P&amp;ID — Flow, Pressure, Temperature, Level,
-                  SDV/BDV, MOV, Safety valves and more. Cross-verified against legend sheets and
-                  enriched with ISA 5.1 intelligence.
-                </p>
+                ))}
+              </div>
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
+                style={{ animation: 'instChipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' }}>
+                <BoltIcon className="w-3.5 h-3.5" style={{ animation: 'instPulse 2s ease-in-out infinite' }} />
+                Cross-linked with
+                <a href="/engineering/process/line-list"
+                  className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
+                  Line List <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                </a>
               </div>
             </div>
+
+            {/* Right: animated ring decoration */}
+            <div className="flex-none hidden lg:flex items-center justify-center w-44 h-44 relative">
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation: 'instSpinSlow 22s linear infinite' }}>
+                <circle cx="88" cy="88" r="80" fill="none" stroke="rgba(124,58,237,0.18)" strokeWidth="1.5" strokeDasharray="4 6" />
+                {INST_RING_TICKS.map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 80 * Math.cos(rad), y1 = 88 + 80 * Math.sin(rad);
+                  const x2 = 88 + 72 * Math.cos(rad), y2 = 88 + 72 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              <svg className="absolute inset-0" width="176" height="176" viewBox="0 0 176 176"
+                style={{ animation: 'instSpinSlowRev 16s linear infinite' }}>
+                <circle cx="88" cy="88" r="58" fill="none" stroke="rgba(79,70,229,0.20)" strokeWidth="1.5" strokeDasharray="3 9" />
+                {INST_RING_TICKS.filter((_, j) => j % 3 === 0).map(deg => {
+                  const rad = (deg - 90) * Math.PI / 180;
+                  const x1 = 88 + 58 * Math.cos(rad), y1 = 88 + 58 * Math.sin(rad);
+                  const x2 = 88 + 50 * Math.cos(rad), y2 = 88 + 50 * Math.sin(rad);
+                  return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#4f46e5" strokeWidth="1.5" strokeLinecap="round" />;
+                })}
+              </svg>
+              <div className="relative z-10 w-20 h-20 rounded-2xl flex flex-col items-center justify-center"
+                style={{ background: T_INST.accent, boxShadow: T_INST.accentShadowLg }}>
+                <TagIcon className="w-7 h-7 text-white" style={{ animation: 'instCountUp 0.6s ease-out 0.4s both' }} />
+                <span className="text-[10px] font-semibold text-indigo-100 tracking-wider uppercase mt-0.5">ISA 5.1</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Projects header row ── */}
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+            <p className="text-slate-500 text-sm">
+              {liveProjects.length > 0
+                ? `${liveProjects.length} project${liveProjects.length !== 1 ? 's' : ''} — select one to upload a P&ID drawing`
+                : 'Create your first project to get started'}
+            </p>
+            <button onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 font-bold rounded-xl transition-all text-sm text-white hover:-translate-y-px"
+              style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+              <FolderPlusIcon className="w-4 h-4" />New Project
+            </button>
+          </div>
+
+          {/* ── Projects grid / empty state ── */}
+          {liveProjects.length === 0 ? (
+            <div className="rounded-2xl p-16 text-center" style={T_INST.card}>
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5 bg-indigo-50 border border-indigo-100">
+                <FolderIcon className="w-10 h-10 text-indigo-400" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">No Projects Yet</h3>
+              <p className="text-slate-500 text-sm mb-6">Create a project to start uploading and indexing P&amp;ID drawings.</p>
+              <button onClick={() => setCreateOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 font-bold rounded-xl text-white hover:-translate-y-px transition-all"
+                style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+                <FolderPlusIcon className="w-5 h-5" />Create First Project
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {liveProjects.map((p, idx) => (
+                <InstProjectCard
+                  key={p.id}
+                  project={p}
+                  idx={idx}
+                  onSelect={(id) => setActiveId(id)}
+                  onEdit={(proj) => { setEditingProject(proj); setEditName(proj.name || ''); setEditDesc(proj.description || ''); }}
+                  onDelete={(proj) => setDeletingProject(proj)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* ── How it works ── */}
+          <div className="relative flex items-center my-12">
+            <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg,transparent,#c7d2fe,transparent)' }} />
+            <span className="mx-4 text-xs font-bold text-indigo-600 tracking-[0.25em] uppercase px-3 py-1.5 rounded-full"
+              style={{ background: 'rgba(238,242,255,0.95)', border: '1px solid #c7d2fe' }}>
+              How It Works
+            </span>
+            <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg,transparent,#c7d2fe,transparent)' }} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+            {INST_HOW_IT_WORKS.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.step} className="relative rounded-2xl p-6 overflow-hidden"
+                  style={{ background: step.bg, border: `1px solid ${step.border}`,
+                    animation: `instCardIn 0.55s ease-out ${0.1 + i * 0.12}s both` }}>
+                  <span className="absolute -top-2 -right-1 text-[80px] font-black leading-none select-none pointer-events-none"
+                    style={{ color: step.accent, opacity: 0.07 }}>{step.step}</span>
+                  <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl" style={{ background: step.accent }} />
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3"
+                    style={{ background: '#fff', border: `1px solid ${step.border}` }}>
+                    <Icon className="w-6 h-6" style={{ color: step.accent }} />
+                  </div>
+                  <h4 className="text-base font-bold text-slate-900 mb-1.5">{step.title}</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">{step.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Modals */}
+        <InstQuickCreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreate={handleCreateInline} />
+        <InstConfirmModal
+          open={Boolean(deletingProject)}
+          title="Delete project?"
+          message={`This will permanently delete "${deletingProject?.name}" and remove it from your project list.`}
+          onCancel={() => setDeletingProject(null)}
+          onConfirm={handleDeleteConfirm}
+          danger
+        />
+        {/* Edit modal — minimal inline */}
+        {editingProject && (
+          <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            style={{ background: 'rgba(15,23,42,0.45)' }}>
+            <div className="rounded-2xl max-w-md w-full p-6 bg-white border border-slate-200 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-slate-900">Edit Project</h3>
+                <button onClick={() => setEditingProject(null)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                  <XMarkIcon className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Project Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    maxLength={PROJECT_FORM_LIMITS.nameMax}
+                    onChange={e => setEditName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
+                  <textarea
+                    rows={3}
+                    value={editDesc}
+                    maxLength={PROJECT_FORM_LIMITS.descriptionMax}
+                    onChange={e => setEditDesc(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => setEditingProject(null)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                <button onClick={handleEditSave}
+                  className="px-5 py-2 text-sm font-semibold text-white rounded-lg"
+                  style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>Save</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <ProjectManagerModal
+          open={projectManagerOpen}
+          onClose={() => setProjectManagerOpen(false)}
+          projects={projects}
+          activeId={activeId}
+          setActiveId={setActiveId}
+          upsertProject={upsertProject}
+          archiveProject={archiveProject}
+          restoreProject={restoreProject}
+          deleteProject={deleteProject}
+          initialView={pmInitialView}
+          initialCategory={pmInitialCategory}
+        />
+      </InstBg>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VIEW 2 — Project workspace (active project selected)
+  // ═══════════════════════════════════════════════════════════════════════
+  return (
+    <InstBg>
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* ── Slim project header / breadcrumb ── */}
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-3" style={{ animation: 'instFadeUp 0.4s ease-out both' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setActiveId(null)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white/60 rounded-lg border border-slate-200 transition-colors">
+              <ArrowLeftIcon className="w-3.5 h-3.5" />Projects
+            </button>
+            <ChevronRightIcon className="w-4 h-4 text-slate-300" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <CategoryBadge categoryId={activeProject.category} />
+                {activeProject.code && <span className="font-mono text-[10px] text-slate-400">{activeProject.code}</span>}
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate">
+                {activeProject.name}
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openManager({ view: 'list' })}
+              className="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors">
+              Switch / Edit
+            </button>
             <button
               onClick={() => navigate('/engineering/process/line-list')}
-              className="shrink-0 px-4 py-2 text-sm font-semibold text-white bg-white/15 backdrop-blur-sm border border-white/30 rounded-lg hover:bg-white/25 transition-all shadow-sm"
-            >
-              → Line List Extraction
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-lg transition-all hover:-translate-y-px"
+              style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+              Line List <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* ── Upload + Metadata ──────────────────────────────────────── */}
+        {/* ── Step 2 · Upload P&ID Drawing card ── */}
         <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <span className="h-6 w-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">1</span>
+            <span className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">1</span>
             Upload P&amp;ID Drawing (PDF)
           </h2>
 
@@ -379,7 +1261,7 @@ const InstrumentIndex = () => {
             className={`border-2 border-dashed rounded-xl p-8 transition-all cursor-pointer mb-4 ${
               pidFile
                 ? 'border-green-300 bg-gradient-to-br from-green-50 to-emerald-50'
-                : 'border-purple-200 bg-gradient-to-br from-purple-50/40 to-indigo-50/40 hover:border-purple-400 hover:from-purple-50 hover:to-indigo-50 hover:shadow-inner'
+                : 'border-indigo-200 bg-gradient-to-br from-indigo-50/40 to-violet-50/40 hover:border-indigo-400 hover:from-indigo-50 hover:to-violet-50 hover:shadow-inner'
             }`}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -414,12 +1296,18 @@ const InstrumentIndex = () => {
             </div>
           </div>
 
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">
-            2. Attach Legend / Symbol Sheet (optional)
+          <h2 className={`text-lg font-semibold mb-3 flex items-center gap-2 ${pidFile ? 'text-gray-800' : 'text-gray-400'}`}>
+            <span className={`h-6 w-6 rounded-full text-xs font-bold flex items-center justify-center ${pidFile ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-100 text-gray-400'}`}>2</span>
+            Attach Legend / Symbol Sheet <span className="text-xs font-normal text-gray-400">(optional)</span>
+            {!pidFile && <span className="text-xs">🔒</span>}
           </h2>
           <div
-            className="border border-dashed border-cyan-300 rounded-lg p-4 mb-4 bg-cyan-50/50 cursor-pointer hover:border-cyan-400 transition-colors"
-            onClick={() => legendInputRef.current?.click()}
+            className={`border border-dashed rounded-lg p-4 mb-4 transition-colors ${
+              !pidFile
+                ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                : 'border-cyan-300 bg-cyan-50/50 cursor-pointer hover:border-cyan-400'
+            }`}
+            onClick={() => pidFile && legendInputRef.current?.click()}
           >
             <input
               ref={legendInputRef}
@@ -443,8 +1331,10 @@ const InstrumentIndex = () => {
           </div>
 
           {/* Metadata fields */}
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">
-            3. Drawing Info (optional)
+          <h2 className={`text-lg font-semibold mb-3 flex items-center gap-2 ${pidFile ? 'text-gray-800' : 'text-gray-400'}`}>
+            <span className={`h-6 w-6 rounded-full text-xs font-bold flex items-center justify-center ${pidFile ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>3</span>
+            Drawing Info <span className="text-xs font-normal text-gray-400">(optional)</span>
+            {!pidFile && <span className="text-xs">🔒</span>}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
@@ -460,8 +1350,8 @@ const InstrumentIndex = () => {
                   value={val}
                   onChange={e => set(e.target.value)}
                   placeholder={placeholder}
-                  disabled={isProcessing}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
+                  disabled={isProcessing || !pidFile}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
             ))}
@@ -472,9 +1362,10 @@ const InstrumentIndex = () => {
         <div className="flex flex-wrap gap-4 mb-6">
           <button
             onClick={handleExtract}
-            disabled={!pidFile || isProcessing}
+            disabled={!pidFile || isProcessing || !activeProject}
+            title={!activeProject ? 'Select or create an active project first' : ''}
             className={`flex-1 sm:flex-none px-8 py-3.5 rounded-xl font-semibold text-white transition-all shadow-md ${
-              !pidFile || isProcessing
+              !pidFile || isProcessing || !activeProject
                 ? 'bg-gray-300 cursor-not-allowed'
                 : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 hover:shadow-xl hover:-translate-y-0.5'
             }`}
@@ -623,9 +1514,60 @@ const InstrumentIndex = () => {
             </div>
 
             {/* ── TABLE VIEW ─────────────────────────────────────────── */}
-            {activeView === 'table' && (
+            {activeView === 'table' && (() => {
+              // Soft-coded: pick the right template for the active project
+              const tpl = getInstrumentTemplate(activeProject?.category);
+              const useTpl = tpl.id !== 'default'; // ADNOC Gas (and future bespoke templates)
+              const dash = tpl.emptyDash || '—';
+
+              // ── Build grouped row blocks when template requests it ──
+              const buildBlocks = () => {
+                if (!useTpl || !tpl.groupBy) {
+                  return [{ key: '__all__', label: null, items: filteredInstruments }];
+                }
+                const groups = new Map();
+                const ungrouped = [];
+                filteredInstruments.forEach(i => {
+                  const k = tpl.groupBy(i);
+                  if (!k) { ungrouped.push(i); return; }
+                  if (!groups.has(k)) groups.set(k, []);
+                  groups.get(k).push(i);
+                });
+                const blocks = [];
+                groups.forEach((items, k) =>
+                  blocks.push({
+                    key: k,
+                    label: tpl.groupHeaderLabel ? tpl.groupHeaderLabel(k, items) : k,
+                    items,
+                  })
+                );
+                if (ungrouped.length) blocks.push({ key: '__ungrouped__', label: 'Other / Unassigned', items: ungrouped });
+                return blocks;
+              };
+              const blocks = buildBlocks();
+
+              // ── Selection helpers ──────────────────────────────────
+              // Map each instrument back to its index in result.instruments
+              // so a single Set keeps selection stable across grouping/filtering.
+              const indexOfInst = (inst) => result.instruments.indexOf(inst);
+              const visibleIdx  = filteredInstruments.map(indexOfInst);
+              const allVisibleSelected = visibleIdx.length > 0 && visibleIdx.every(i => selectedRows.has(i));
+              const someVisibleSelected = visibleIdx.some(i => selectedRows.has(i));
+              const toggleRow = (i) => {
+                const next = new Set(selectedRows);
+                if (next.has(i)) next.delete(i); else next.add(i);
+                setSelectedRows(next);
+              };
+              const toggleAllVisible = () => {
+                const next = new Set(selectedRows);
+                if (allVisibleSelected) visibleIdx.forEach(i => next.delete(i));
+                else                    visibleIdx.forEach(i => next.add(i));
+                setSelectedRows(next);
+              };
+
+              return (
               <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-                {/* Filters */}
+                {/* Filters + template badge + download */}
                 <div className="px-5 py-4 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-gray-200 flex flex-wrap gap-3 items-center">
                   <h3 className="text-base font-semibold text-gray-800 mr-2 flex items-center gap-2">
                     <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-black tabular-nums">
@@ -634,6 +1576,23 @@ const InstrumentIndex = () => {
                     Instrument{filteredInstruments.length !== 1 ? 's' : ''}
                     {filterCategory !== 'All' ? <span className="text-gray-400 font-normal"> · {filterCategory}</span> : ''}
                   </h3>
+                  {useTpl && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      title={tpl.label}>
+                      🔥 {tpl.label}
+                    </span>
+                  )}
+                  {selectedRows.size > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      ☑ {selectedRows.size} selected
+                      <button
+                        onClick={() => setSelectedRows(new Set())}
+                        className="ml-1 text-indigo-500 hover:text-indigo-800"
+                        title="Clear selection">
+                        ✕
+                      </button>
+                    </span>
+                  )}
                   <div className="relative flex-1 min-w-[200px] max-w-xs">
                     <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
                     <input
@@ -661,25 +1620,185 @@ const InstrumentIndex = () => {
                       Clear
                     </button>
                   )}
+                  {/* Download Excel — exports selection if any, else everything */}
+                  <button
+                    onClick={handleDownloadClientExcel}
+                    className="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:from-emerald-600 hover:to-green-700 shadow-sm hover:shadow transition-all"
+                    title={selectedRows.size > 0 ? `Download ${selectedRows.size} selected rows` : 'Download all rows'}
+                  >
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                    {selectedRows.size > 0 ? `Download ${selectedRows.size}` : 'Download Excel'}
+                  </button>
                 </div>
 
+                {/* ── Template-driven table (ADNOC Gas etc.) ───────────── */}
+                {useTpl ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-xs">
+                      <thead className="bg-gradient-to-b from-slate-100 to-slate-50 text-[10px] uppercase tracking-wider text-slate-700">
+                        {tpl.groupHeader && tpl.groupHeader.length > 0 && (
+                          <tr>
+                            {/* Empty span over checkbox + SL No */}
+                            <th colSpan={2} className="px-2 py-2 border-b border-slate-200" />
+                            {tpl.groupHeader.map((g, gi) => (
+                              <th key={gi} colSpan={g.span || 1}
+                                className={`px-3 py-2 text-center font-bold border-b border-slate-200 ${g.label ? 'bg-emerald-50 text-emerald-800' : ''}`}>
+                                {g.label || ''}
+                              </th>
+                            ))}
+                            {/* Empty span over the Action column */}
+                            <th className="px-2 py-2 border-b border-slate-200" />
+                          </tr>
+                        )}
+                        <tr>
+                          <th className="px-2 py-2.5 text-center font-semibold border-b border-slate-200 w-8 sticky left-0 bg-slate-100 z-10">
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 accent-indigo-600 cursor-pointer"
+                              checked={allVisibleSelected}
+                              ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
+                              onChange={toggleAllVisible}
+                              title={allVisibleSelected ? 'Deselect all' : 'Select all'}
+                            />
+                          </th>
+                          <th className="px-2 py-2.5 text-center font-semibold border-b border-slate-200 w-10">SL No.</th>
+                          {tpl.columns.map((c) => (
+                            <th key={c.key}
+                              className="px-3 py-2.5 text-left font-semibold whitespace-pre-line align-bottom border-b border-slate-200"
+                              style={{ minWidth: `${(c.width || 12) * 7}px` }}>
+                              {c.header}
+                            </th>
+                          ))}
+                          <th className="px-2 py-2.5 text-center font-semibold border-b border-slate-200 w-16 sticky right-0 bg-slate-100 z-10">
+                            Action
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredInstruments.length === 0 ? (
+                          <tr>
+                            <td colSpan={tpl.columns.length + 3} className="px-4 py-12 text-center">
+                              <div className="flex flex-col items-center gap-2 text-gray-400">
+                                <svg className="h-12 w-12 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
+                                <p className="text-sm font-medium">No instruments match the current filter.</p>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          (() => {
+                            // Continuous SL No across grouped blocks
+                            let _sl = 0;
+                            return blocks.map(block => {
+                              const rows = [];
+                              if (block.label) {
+                                rows.push(
+                                  <tr key={`hdr-${block.key}`} className="bg-amber-50">
+                                    <td colSpan={tpl.columns.length + 3}
+                                      className="px-3 py-2 text-[11px] font-black uppercase tracking-wider text-amber-900 border-y border-amber-200">
+                                      {block.label}
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                              block.items.forEach((inst, gIdx) => {
+                                _sl += 1;
+                                const sl = _sl;
+                                const realIdx = indexOfInst(inst);
+                                const isSelected = selectedRows.has(realIdx);
+                                const style = categoryStyle(inst.category);
+                                const hasWarnings = Array.isArray(inst.warnings) && inst.warnings.length > 0;
+                                const isInferred  = inst.inferred === true;
+                                const rowBg = isSelected ? 'bg-indigo-50/60'
+                                              : isInferred ? 'bg-fuchsia-50/30'
+                                              : hasWarnings ? 'bg-amber-50/40' : '';
+                                rows.push(
+                                  <tr key={`${block.key}-${gIdx}`} className={`${rowBg} hover:bg-emerald-50/40 transition-colors`}>
+                                    <td className="px-2 py-2 text-center sticky left-0 bg-inherit">
+                                      <input
+                                        type="checkbox"
+                                        className="h-3.5 w-3.5 accent-indigo-600 cursor-pointer"
+                                        checked={isSelected}
+                                        onChange={() => toggleRow(realIdx)}
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2 text-center text-slate-500 tabular-nums font-medium">{sl}</td>
+                                    {tpl.columns.map((c, ci) => {
+                                      let v;
+                                      try { v = c.accessor(inst, { idx: gIdx, ctx: { project: activeProject, result } }); }
+                                      catch (_) { v = dash; }
+                                      if (v == null || v === '') v = dash;
+                                      const isTag = c.key === 'tag_number';
+                                      const baseCls = `px-3 py-2 ${c.align === 'center' ? 'text-center' : c.align === 'right' ? 'text-right' : 'text-left'} ${c.mono ? 'font-mono' : ''} whitespace-nowrap`;
+                                      return (
+                                        <td key={ci} className={baseCls}
+                                          style={isTag ? { color: style.text, fontWeight: 700 } : undefined}>
+                                          {isTag ? (
+                                            <div className="flex items-center gap-1.5">
+                                              <span>{v}</span>
+                                              {isInferred && (
+                                                <span title={`Inferred accessory of ${inst.parent_tag || 'parent'}`}
+                                                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200">INFERRED</span>
+                                              )}
+                                              {hasWarnings && (
+                                                <span title={inst.warnings.join(' · ')}
+                                                  className="inline-flex items-center justify-center h-4 w-4 rounded-full text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 cursor-help">!</span>
+                                              )}
+                                            </div>
+                                          ) : v}
+                                        </td>
+                                      );
+                                    })}
+                                    {/* Action column — Edit row button */}
+                                    <td className="px-2 py-2 text-center sticky right-0 bg-inherit">
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingRow({ idx: realIdx, draft: { ...inst } })}
+                                        title="Edit this row"
+                                        className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 text-slate-600 transition-colors shadow-sm"
+                                      >
+                                        <PencilSquareIcon className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                              return rows;
+                            });
+                          })()
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gradient-to-b from-gray-100 to-gray-50 text-xs uppercase tracking-wider text-gray-600">
                       <tr>
-                        {['#', 'Tag Number', 'CS Tag', 'Instrument Type', 'Category', 'Service Description',
+                        <th className="px-2 py-3 text-center font-semibold w-8">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-indigo-600 cursor-pointer"
+                            checked={allVisibleSelected}
+                            ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
+                            onChange={toggleAllVisible}
+                            title={allVisibleSelected ? 'Deselect all' : 'Select all'}
+                          />
+                        </th>
+                        <th className="px-2 py-3 text-center font-semibold w-12">SL No.</th>
+                        {['Tag Number', 'CS Tag', 'Instrument Type', 'Category', 'Service Description',
                           'Line No.', 'Equipment No.', 'Loop No.', 'Fail Safe', 'Signal',
                           'Set Point', 'P&ID No.', 'Rev.', 'Source'].map(h => (
                           <th key={h} className="px-3 py-3 text-left whitespace-nowrap font-semibold">
                             {h}
                           </th>
                         ))}
+                        <th className="px-2 py-3 text-center whitespace-nowrap font-semibold w-16">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredInstruments.length === 0 ? (
                         <tr>
-                          <td colSpan={15} className="px-4 py-12 text-center">
+                          <td colSpan={17} className="px-4 py-12 text-center">
                             <div className="flex flex-col items-center gap-2 text-gray-400">
                               <svg className="h-12 w-12 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
                               <p className="text-sm font-medium">No instruments match the current filter.</p>
@@ -688,6 +1807,8 @@ const InstrumentIndex = () => {
                         </tr>
                       ) : (
                         filteredInstruments.map((inst, idx) => {
+                          const realIdx = indexOfInst(inst);
+                          const isSelected = selectedRows.has(realIdx);
                           const style = categoryStyle(inst.category);
                           // Source badge styling
                           const note = inst.notes || '';
@@ -704,14 +1825,24 @@ const InstrumentIndex = () => {
                             : { bg: '#F0FDF4', text: '#166534' }; // green  — PDF text
                           const hasWarnings = Array.isArray(inst.warnings) && inst.warnings.length > 0;
                           const isInferred  = inst.inferred === true;
-                          const rowBg = isInferred
+                          const rowBg = isSelected
+                            ? 'bg-indigo-50/60'
+                            : isInferred
                             ? 'bg-fuchsia-50/30'
                             : hasWarnings
                               ? 'bg-amber-50/40'
                               : '';
                           return (
                             <tr key={idx} className={`${rowBg} hover:bg-purple-50/40 transition-colors`}>
-                              <td className="px-3 py-2.5 text-gray-500 tabular-nums">{inst.index_no ?? idx + 1}</td>
+                              <td className="px-2 py-2.5 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5 accent-indigo-600 cursor-pointer"
+                                  checked={isSelected}
+                                  onChange={() => toggleRow(realIdx)}
+                                />
+                              </td>
+                              <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums font-medium">{idx + 1}</td>
                               <td className="px-3 py-2.5 font-bold whitespace-nowrap" style={{ color: style.text }}>
                                 <div className="flex items-center gap-1.5">
                                   <span>{inst.tag_number || '—'}</span>
@@ -773,6 +1904,17 @@ const InstrumentIndex = () => {
                                   </span>
                                 )}
                               </td>
+                              {/* Action column — Edit row button */}
+                              <td className="px-2 py-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRow({ idx: realIdx, draft: { ...inst } })}
+                                  title="Edit this row"
+                                  className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 text-slate-600 transition-colors shadow-sm"
+                                >
+                                  <PencilSquareIcon className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
                             </tr>
                           );
                         })
@@ -780,8 +1922,10 @@ const InstrumentIndex = () => {
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
-            )}
+              );
+            })()}
 
             {/* ── SUMMARY VIEW ───────────────────────────────────────── */}
             {activeView === 'summary' && (
@@ -1323,7 +2467,34 @@ const InstrumentIndex = () => {
         )}
 
       </div>
-    </div>
+
+      {/* ── Project Manager Modal ─────────────────────────────────────── */}
+      <ProjectManagerModal
+        open={projectManagerOpen}
+        onClose={() => setProjectManagerOpen(false)}
+        projects={projects}
+        activeId={activeId}
+        setActiveId={setActiveId}
+        upsertProject={upsertProject}
+        archiveProject={archiveProject}
+        restoreProject={restoreProject}
+        deleteProject={deleteProject}
+        initialView={pmInitialView}
+        initialCategory={pmInitialCategory}
+      />
+
+      {/* ── Edit Instrument Row Modal ─────────────────────────────────── */}
+      <EditInstrumentModal
+        open={!!editingRow}
+        draft={editingRow?.draft}
+        fields={
+          (getInstrumentTemplate(activeProject?.category)?.editableFields) || []
+        }
+        onChange={(next) => setEditingRow(prev => prev ? { ...prev, draft: next } : prev)}
+        onClose={() => setEditingRow(null)}
+        onSave={handleSaveEditedRow}
+      />
+    </InstBg>
   );
 };
 
