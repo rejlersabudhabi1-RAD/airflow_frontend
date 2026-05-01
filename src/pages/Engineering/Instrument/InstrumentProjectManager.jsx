@@ -678,11 +678,58 @@ const _ADNOC_GAS_TEMPLATE = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADNOC ONSHORE — fully isolated template & editable-fields registry
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded twin of the default template, scoped exclusively to the
+// `adnoc_onshore` category. Decoupling Onshore from `_DEFAULT_TEMPLATE`
+// guarantees:
+//   • Edits aimed at ADNOC Onshore (column tweaks, new editable fields,
+//     ISA-vocabulary changes) NEVER leak into ADNOC Gas or the generic
+//     fallback template.
+//   • Edits aimed at ADNOC Gas (the manual-Excel-style `_ADNOC_GAS_*`
+//     constants) NEVER affect ADNOC Onshore — those branches were
+//     already isolated by the `if category === 'adnoc_gas'` gate.
+//   • The generic `default` fallback stays a clean baseline for any
+//     future category (Saudi Aramco, Qatar Energy, etc.).
+//
+// To customise ADNOC Onshore, edit only the constants in this section.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _ADNOC_ONSHORE_FAILSAFE_OPTIONS = ['', 'FO', 'FC', 'FL', 'FAI'];
+
+const _ADNOC_ONSHORE_TEMPLATE = {
+  ..._DEFAULT_TEMPLATE,
+  id:         'adnoc_onshore',
+  label:      'ADNOC Onshore — Instrument Index',
+  sheetTitle: 'Instrument Index',
+  // Deep-clone columns/metaRows so accessor/header edits stay scoped to Onshore.
+  columns:    _DEFAULT_TEMPLATE.columns.map(col => ({ ...col })),
+  metaRows:   _DEFAULT_TEMPLATE.metaRows.map(row => row.map(cell => ({ ...cell }))),
+};
+
+const _ADNOC_ONSHORE_EDITABLE_FIELDS = [
+  { key: 'tag_number',          label: 'Tag Number',           type: 'text',     group: 'Identification' },
+  { key: 'control_system_tag',  label: 'Control System Tag',   type: 'text',     group: 'Identification' },
+  { key: 'instrument_type',     label: 'Instrument Type',      type: 'text',     group: 'Identification' },
+  { key: 'category',            label: 'Category',             type: 'text',     group: 'Identification' },
+  { key: 'service_description', label: 'Service Description',  type: 'textarea', group: 'Service' },
+  { key: 'line_number',         label: 'Line Number',          type: 'text',     group: 'Service' },
+  { key: 'equipment_number',    label: 'Equipment Number',     type: 'text',     group: 'Service' },
+  { key: 'loop_number',         label: 'Loop Number',          type: 'text',     group: 'Service' },
+  { key: 'fail_safe',           label: 'Fail-Safe',            type: 'select',   options: _ADNOC_ONSHORE_FAILSAFE_OPTIONS, group: 'I/O' },
+  { key: 'signal_type',         label: 'Signal Type',          type: 'text',     group: 'I/O' },
+  { key: 'set_point',           label: 'Set Point',            type: 'text',     group: 'I/O' },
+  { key: 'pid_no',              label: 'P&ID No.',             type: 'text',     group: 'Docs' },
+  { key: 'revision',            label: 'Revision',             type: 'text',     group: 'Docs' },
+  { key: 'notes',               label: 'Notes',                type: 'textarea', group: 'Notes' },
+];
+
 /** Public registry — exported so the host page can render the right template. */
 export const INSTRUMENT_TEMPLATES = {
-  default:     { ..._DEFAULT_TEMPLATE,   editableFields: _DEFAULT_EDITABLE_FIELDS  },
-  adnoc_gas:   { ..._ADNOC_GAS_TEMPLATE, editableFields: _ADNOC_GAS_EDITABLE_FIELDS },
-  // ADNOC Onshore / Offshore inherit the default for now — extend here later.
+  default:       { ..._DEFAULT_TEMPLATE,        editableFields: _DEFAULT_EDITABLE_FIELDS        },
+  adnoc_gas:     { ..._ADNOC_GAS_TEMPLATE,      editableFields: _ADNOC_GAS_EDITABLE_FIELDS      },
+  adnoc_onshore: { ..._ADNOC_ONSHORE_TEMPLATE,  editableFields: _ADNOC_ONSHORE_EDITABLE_FIELDS  },
 };
 
 /** Resolve the template for a given project category id (with safe fallback). */
