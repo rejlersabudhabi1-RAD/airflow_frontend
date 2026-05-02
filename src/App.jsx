@@ -127,8 +127,14 @@ import PredictiveInsights from './pages/Admin/PredictiveInsights'
 import AdvancedAnalytics from './pages/Admin/AdvancedAnalytics'
 // Debug Components
 import FeaturesDebug from './pages/FeaturesDebug'
+// AI Champion telemetry — fires per-route activity events to keep
+// /admin/ai-champion live. Soft-coded URL→application/feature mapping.
+import useAIChampionTracker from './hooks/useAIChampionTracker'
 
 function App() {
+  // Mount AI Champion route-tracker (no-op when unauthenticated)
+  useAIChampionTracker()
+
   const { isAuthenticated, user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
   const [modulesLoaded, setModulesLoaded] = useState(false)
