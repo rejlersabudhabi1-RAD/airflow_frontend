@@ -55,6 +55,7 @@ import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
 import WrenchIntegration from './pages/WrenchIntegration'
 import AIChampion from './pages/Admin/AIChampion'
+import ActivityReports from './pages/Admin/ActivityReports'
 // SOFT-CODED: Subscription feature disabled for in-house deployment
 // import SubscriptionManagement from './pages/SubscriptionManagement'
 // import SubscriptionPlans from './pages/SubscriptionPlans'
@@ -1068,6 +1069,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AdvancedAnalytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/activity-reports"
+          element={
+            <ProtectedRoute>
+              <ActivityReports />
             </ProtectedRoute>
           }
         />

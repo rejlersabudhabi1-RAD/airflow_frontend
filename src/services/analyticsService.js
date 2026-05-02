@@ -254,6 +254,48 @@ const analyticsService = {
     });
     return response.data;
   },
+
+  // ===== Activity Reports — Admin Dashboard =====
+  getActivitySummary: async (window = 'month') => {
+    const response = await apiClient.get('/rbac/activity-reports/summary/', {
+      params: { window }
+    });
+    return response.data;
+  },
+
+  getActivityByUser: async (window = 'month', limit = 50) => {
+    const response = await apiClient.get('/rbac/activity-reports/by-user/', {
+      params: { window, limit }
+    });
+    return response.data;
+  },
+
+  getActivityByFeature: async (window = 'month') => {
+    const response = await apiClient.get('/rbac/activity-reports/by-feature/', {
+      params: { window }
+    });
+    return response.data;
+  },
+
+  getActivityDaily: async (window = 'week') => {
+    const response = await apiClient.get('/rbac/activity-reports/daily/', {
+      params: { window }
+    });
+    return response.data;
+  },
+
+  getActivityTimeWindows: async () => {
+    const response = await apiClient.get('/rbac/activity-reports/time-windows/');
+    return response.data;
+  },
+
+  exportActivityReportCSV: async (window = 'month', format = 'user') => {
+    const response = await apiClient.get('/rbac/activity-reports/export/csv/', {
+      params: { window, format },
+      responseType: 'blob'
+    });
+    return response.data;
+  },
 };
 
 export default analyticsService;
