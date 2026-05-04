@@ -1377,13 +1377,13 @@ const ReviewGrid = ({
                         </button>
                       ) : (
                         <div
-                          onDoubleClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}
+                          onClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}
                           className={clsx(
                             'truncate',
                             editable && 'cursor-text hover:bg-emerald-50',
                             value === 'NA' && 'text-slate-400 italic',
                           )}
-                          title={value}
+                          title={editable ? `Click to edit — ${value}` : value}
                         >
                           {value || '—'}
                         </div>
