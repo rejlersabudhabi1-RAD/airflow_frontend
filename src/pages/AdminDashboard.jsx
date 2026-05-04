@@ -12,6 +12,7 @@ import SystemHealthTab from '../components/admin/SystemHealthTab';
 import AuditLogsTab from '../components/admin/AuditLogsTab';
 import AnalyticsCharts from '../components/admin/AnalyticsCharts';
 import RealTimeAlertDashboard from '../components/admin/RealTimeAlertDashboard';
+import LiveTabFrame from '../components/admin/LiveTabFrame';
 import { useRealTimeDetection } from '../hooks/useRealTimeDetection';
 
 // Soft-coded configuration for dashboard stats cards
@@ -236,6 +237,15 @@ const DASHBOARD_TABS = [
   { id: 'audit', label: 'Audit Logs', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' }
 ];
 
+// Soft-coded list of tab IDs to hide from the dashboard navigation.
+// The underlying tab content / route remains intact (core logic unchanged) —
+// only the nav entry is suppressed. Add an ID here to hide a tab; remove
+// to restore it. The dedicated `/admin/users` route remains accessible.
+const HIDDEN_DASHBOARD_TAB_IDS = new Set(['users']);
+const VISIBLE_DASHBOARD_TABS = DASHBOARD_TABS.filter(
+  (tab) => !HIDDEN_DASHBOARD_TAB_IDS.has(tab.id)
+);
+
 /**
  * Super Admin Dashboard - AI-Powered Analytics
  * Advanced admin features with machine learning insights
@@ -261,6 +271,7 @@ const AdminDashboard = () => {
   const [nextRefreshAt, setNextRefreshAt] = useState(null);
   const [, setTick] = useState(0); // forces re-render for live timers
   const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds default
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
 
   // Real-time ML Detection Hook
   const { 
@@ -282,10 +293,12 @@ const AdminDashboard = () => {
     dispatch(fetchUserStats());
     loadAIAnalytics();
     
-    // Dynamic refresh interval based on user preference
+    // Dynamic refresh interval based on user preference. Skip the timer
+    // when the user has paused auto-refresh from the live tab frame.
+    if (!autoRefreshEnabled) return undefined;
     const interval = setInterval(loadAIAnalytics, refreshInterval);
     return () => clearInterval(interval);
-  }, [dispatch, refreshInterval]);
+  }, [dispatch, refreshInterval, autoRefreshEnabled]);
 
   // Live "x seconds ago" / countdown ticker — updates every second
   useEffect(() => {
@@ -507,7 +520,7 @@ const AdminDashboard = () => {
         {/* Navigation Tabs */}
         <div className="bg-white rounded-xl shadow-lg mb-6">
           <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide">
-            {DASHBOARD_TABS.map((tab) => (
+            {VISIBLE_DASHBOARD_TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -802,19 +815,59 @@ const AdminDashboard = () => {
             )}
 
             {activeTab === 'activity' && (
-              <RealTimeActivityTab activities={realtimeActivity} onRefresh={loadAIAnalytics} />
+              <LiveTabFrame
+                tabId="activity"
+                context={{ analyticsData, realtimeActivity }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <RealTimeActivityTab activities={realtimeActivity} onRefresh={loadAIAnalytics} />
+              </LiveTabFrame>
             )}
 
             {activeTab === 'security' && (
-              <SecurityAlertsTab alerts={securityAlerts} onRefresh={loadAIAnalytics} />
+              <LiveTabFrame
+                tabId="security"
+                context={{ analyticsData, securityAlerts }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <SecurityAlertsTab alerts={securityAlerts} onRefresh={loadAIAnalytics} />
+              </LiveTabFrame>
             )}
 
             {activeTab === 'predictions' && (
-              <PredictionsTab predictions={predictions} onRefresh={loadAIAnalytics} />
+              <LiveTabFrame
+                tabId="predictions"
+                context={{ analyticsData, predictions }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <PredictionsTab predictions={predictions} onRefresh={loadAIAnalytics} />
+              </LiveTabFrame>
             )}
 
             {activeTab === 'health' && (
-              <SystemHealthTab healthData={systemHealth} />
+              <LiveTabFrame
+                tabId="health"
+                context={{ analyticsData, systemHealth }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <SystemHealthTab healthData={systemHealth} />
+              </LiveTabFrame>
             )}
 
             {activeTab === 'users' && (
@@ -830,6 +883,15 @@ const AdminDashboard = () => {
             )}
 
             {activeTab === 'analytics' && (
+              <LiveTabFrame
+                tabId="analytics"
+                context={{ analyticsData, featureUsage }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900">Advanced Analytics & Insights</h3>
@@ -1031,20 +1093,37 @@ const AdminDashboard = () => {
                   <AnalyticsCharts analyticsData={analyticsData} />
                 </div>
               </div>
+              </LiveTabFrame>
             )}
 
             {activeTab === 'ml-detection' && (
-              <div className="p-6">
-                <div className="mb-4">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">🤖 Real-time ML Detection & Alerts</h3>
-                  <p className="text-gray-600">Advanced machine learning powered anomaly detection and alert system</p>
+              <LiveTabFrame
+                tabId="ml-detection"
+                context={{ analyticsData, mlConnected, mlAlerts, mlMetrics }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <div className="p-6">
+                  <RealTimeAlertDashboard />
                 </div>
-                <RealTimeAlertDashboard />
-              </div>
+              </LiveTabFrame>
             )}
 
             {activeTab === 'audit' && (
-              <AuditLogsTab onRefresh={loadAIAnalytics} />
+              <LiveTabFrame
+                tabId="audit"
+                context={{ analyticsData }}
+                onRefresh={loadAIAnalytics}
+                lastUpdated={lastUpdated}
+                autoRefresh={autoRefreshEnabled}
+                onToggleAutoRefresh={() => setAutoRefreshEnabled((v) => !v)}
+                loading={loadingAnalytics}
+              >
+                <AuditLogsTab onRefresh={loadAIAnalytics} />
+              </LiveTabFrame>
             )}
           </div>
         </div>
