@@ -5,6 +5,7 @@ import { fetchFeatures } from '../store/featureSlice'
 import ContactSupport from '../components/support/ContactSupport'
 import Documentation from '../components/documentation/Documentation'
 import { API_BASE_URL } from '../config/api.config'
+import analyticsService from '../services/analyticsService'
 import {
   BellIcon, ArrowPathIcon, SparklesIcon, FolderOpenIcon,
   DocumentTextIcon, CheckCircleIcon, ExclamationTriangleIcon,
@@ -14,6 +15,7 @@ import {
   BoltIcon, EyeIcon, DocumentMagnifyingGlassIcon, ChartBarIcon,
   CalendarDaysIcon, ArrowDownTrayIcon, FunnelIcon, KeyIcon,
   UserCircleIcon, BuildingOffice2Icon, UsersIcon, SignalIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline'
 import { USER_DISPLAY_CONFIG } from '../config/userDisplay.config'
 
@@ -50,6 +52,24 @@ const AI_MODELS = [
   { name: 'OCR Pipeline',    sub: 'Tesseract Pro',  status: 'online',  color: '#22c55e' },
   { name: 'Risk Analyzer',   sub: 'RADAI-ML v2',    status: 'standby', color: '#f59e0b' },
 ]
+
+// ── AI Champion advertisement ticker (soft-coded) ────────────────────────────
+// Compact marketing strip rendered below Quick Launch. Rotates messages
+// (current champion, runner-up, cost-savings, call-to-action) every
+// AI_CHAMPION_TICKER.rotateMs. Click navigates to /admin/ai-champion.
+const AI_CHAMPION_TICKER = {
+  refreshMs: 60_000,    // poll backend every 60s
+  rotateMs:  6_000,     // rotate slide every 6s
+  route:     '/admin/ai-champion',
+  // Tier visuals shared with the AI Champion page
+  tierEmoji: { diamond: '💎', platinum: '🏆', gold: '🥇', silver: '🥈', bronze: '🥉', rookie: '🌱' },
+  // Static fallback slides used when no champion data is available yet
+  fallback: [
+    { tag: 'New',       icon: '🏆', text: 'AI Champion of the Month — earn badges by using RAD AI features.', cta: 'See leaderboard' },
+    { tag: 'Realtime',  icon: '⚡', text: 'Top RADAI users are recognised every week, month, and quarter.',     cta: 'View Hall of Fame' },
+    { tag: 'Compete',   icon: '🚀', text: 'Every AI request, P&ID and datasheet you process counts towards your score.', cta: 'Join the race' },
+  ],
+}
 
 // ── Trend line chart (SVG) ────────────────────────────────────────────────────
 const TrendLineChart = ({ data, color = '#f97316', fillColor = 'rgba(249,115,22,0.08)', h = 80, showDots = false }) => {
@@ -362,6 +382,10 @@ if (typeof document !== 'undefined' && !document.getElementById(_STYLE_ID)) {
       60%  { opacity: 1;   transform: scale(1.04); }
       100% { opacity: 1;   transform: scale(1);    }
     }
+    @keyframes radai-ticker-progress {
+      from { width: 0%;   }
+      to   { width: 100%; }
+    }
     .radai-fadein   { animation: radai-fadein  ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
     .radai-scalein  { animation: radai-scalein ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
     .radai-slidein  { animation: radai-slidein-right ${ANIM.fadeInMs}ms cubic-bezier(.22,.68,0,1.2) both; }
@@ -369,6 +393,132 @@ if (typeof document !== 'undefined' && !document.getElementById(_STYLE_ID)) {
     .radai-kpi:hover { transform: scale(${ANIM.kpiHoverScale}) translateY(-2px); box-shadow: 0 6px 24px -4px rgba(249,115,22,0.15); transition: transform 0.22s ease, box-shadow 0.22s ease; }
   `
   document.head.appendChild(s)
+}
+
+// ── AI Champion ticker (compact marketing strip) ─────────────────────────────
+const AIChampionTicker = () => {
+  const navigate = useNavigate()
+  const [champion, setChampion] = useState(null)
+  const [slideIdx, setSlideIdx] = useState(0)
+
+  // Build slide list from live data + fallback
+  const slides = useMemo(() => {
+    const out = []
+    const top = champion?.champion
+    const runner = champion?.podium?.[1]
+    if (top) {
+      const name = top.user?.name || top.user?.email || 'Top user'
+      const tierIcon = AI_CHAMPION_TICKER.tierEmoji[top.tier] || '🏆'
+      out.push({
+        tag: 'Live · Champion',
+        icon: tierIcon,
+        text: `${name} is leading this month with ${Number(top.champion_score || 0).toFixed(0)} pts`,
+        cta: 'See leaderboard',
+        accent: 'from-amber-400 to-orange-500',
+      })
+    }
+    if (runner) {
+      const rname = runner.user?.name || runner.user?.email || 'Runner-up'
+      out.push({
+        tag: 'Runner-up',
+        icon: '🥈',
+        text: `${rname} climbing fast — ${Number(runner.champion_score || 0).toFixed(0)} pts`,
+        cta: 'View podium',
+        accent: 'from-slate-400 to-slate-600',
+      })
+    }
+    out.push({
+      tag: 'Earn badges',
+      icon: '🚀',
+      text: 'Use RAD AI features to climb the realtime, weekly, monthly & quarterly Hall of Fame.',
+      cta: 'Join the race',
+      accent: 'from-fuchsia-500 to-purple-600',
+    })
+    if (out.length < 2) {
+      AI_CHAMPION_TICKER.fallback.forEach((s) => out.push({ ...s, accent: 'from-orange-500 to-pink-500' }))
+    }
+    return out
+  }, [champion])
+
+  // Poll backend
+  useEffect(() => {
+    let mounted = true
+    const fetchOnce = () =>
+      analyticsService.getCurrentChampion()
+        .then((d) => { if (mounted) setChampion(d) })
+        .catch(() => {})
+    fetchOnce()
+    const id = setInterval(fetchOnce, AI_CHAMPION_TICKER.refreshMs)
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
+
+  // Rotate slides
+  useEffect(() => {
+    if (slides.length <= 1) return
+    const id = setInterval(() => setSlideIdx((i) => (i + 1) % slides.length), AI_CHAMPION_TICKER.rotateMs)
+    return () => clearInterval(id)
+  }, [slides.length])
+
+  const slide = slides[slideIdx % slides.length] || slides[0]
+  if (!slide) return null
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(AI_CHAMPION_TICKER.route)}
+      className="group relative w-full overflow-hidden rounded-2xl border border-amber-200 shadow-sm hover:shadow-md transition-all text-left"
+      title="Open AI Champion dashboard"
+      style={{ background: 'linear-gradient(135deg,#fff7ed 0%,#fef3c7 45%,#fce7f3 100%)' }}
+    >
+      {/* Decorative orbs */}
+      <div aria-hidden="true" className={`absolute -top-6 -right-6 w-24 h-24 rounded-full opacity-30 bg-gradient-to-br ${slide.accent} blur-xl`} />
+      <div aria-hidden="true" className="absolute -bottom-6 -left-6 w-20 h-20 rounded-full opacity-20 bg-gradient-to-br from-amber-300 to-pink-300 blur-xl" />
+
+      <div className="relative flex items-center gap-3 px-4 py-2.5">
+        {/* Trophy badge */}
+        <div className={`flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br ${slide.accent} flex items-center justify-center shadow-sm`}>
+          <TrophyIcon className="w-5 h-5 text-white" />
+        </div>
+
+        {/* Body */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-white bg-gradient-to-r ${slide.accent}`}>
+              {slide.tag}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              AI Champion
+            </span>
+            <span className="ml-auto text-[9px] text-amber-700/70 hidden sm:inline">{slideIdx + 1}/{slides.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true" className="text-base leading-none">{slide.icon}</span>
+            <p className="text-[11.5px] font-semibold text-gray-800 leading-tight truncate">
+              {slide.text}
+            </p>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div className="flex-shrink-0 hidden sm:flex items-center gap-1 text-[11px] font-bold text-orange-700 group-hover:text-orange-900 transition">
+          {slide.cta}
+          <ChevronRightIcon className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+      </div>
+
+      {/* Progress bar (rotation timer) */}
+      {slides.length > 1 && (
+        <div className="relative h-0.5 bg-amber-100/60 overflow-hidden">
+          <div
+            key={slideIdx}
+            className={`absolute inset-y-0 left-0 bg-gradient-to-r ${slide.accent}`}
+            style={{ animation: `radai-ticker-progress ${AI_CHAMPION_TICKER.rotateMs}ms linear forwards` }}
+          />
+        </div>
+      )}
+    </button>
+  )
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -1180,6 +1330,9 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
+
+            {/* ── AI Champion ticker (compact marketing strip) ────────────── */}
+            <AIChampionTicker />
           </div>
 
           {/* ── Right sidebar ─────────────────────────────────────────────── */}
