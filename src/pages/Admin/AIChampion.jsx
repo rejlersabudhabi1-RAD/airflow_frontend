@@ -86,6 +86,35 @@ const HONORARY_HALL_OF_FAME = [
   },
 ];
 
+// Honorary emails are excluded from the gamified Hall of Fame — they already
+// sit in the permanent Founders & Architects panel above.
+const HONORARY_EMAILS = new Set(
+  HONORARY_HALL_OF_FAME.map((h) => (h.email || '').trim().toLowerCase())
+);
+
+// ---------------------------------------------------------------------------
+// Multi-period Hall of Fame — soft-coded recognition windows.
+//
+// Each entry drives one tab in the "Top RADAI Users · Hall of Fame" panel.
+// Adding a new window (e.g. yearly, sprint) is a single object append.
+//   - id        : stable key
+//   - label     : tab label
+//   - days      : window passed to /rbac/ai-champion/leaderboard
+//   - icon      : emoji rendered in the tab + section header
+//   - accent    : gradient classes used for the tab pill + ribbon
+//   - hint      : sub-title rendered under the tab when active
+//   - liveTag   : optional pulsing dot (used for realtime)
+// ---------------------------------------------------------------------------
+const HOF_PERIODS = [
+  { id: 'realtime', label: 'Realtime',  days: 1,  icon: '⚡', accent: 'from-emerald-400 to-teal-600',   hint: 'Last 24 hours · live engagement', liveTag: true  },
+  { id: 'week',     label: 'Weekly',    days: 7,  icon: '📅', accent: 'from-sky-400 to-blue-600',       hint: 'Rolling 7-day window',            liveTag: false },
+  { id: 'month',    label: 'Monthly',   days: 30, icon: '🏆', accent: 'from-amber-400 to-orange-600',   hint: 'Last 30 days · the headline race', liveTag: false },
+  { id: 'quarter',  label: 'Quarterly', days: 90, icon: '💎', accent: 'from-fuchsia-400 to-purple-600', hint: 'Last 90 days · sustained impact',  liveTag: false },
+];
+
+const HOF_TOP_N = 5;
+const HOF_RANK_BADGES = ['🥇', '🥈', '🥉', '🏅', '🏅'];
+
 // Cost-card colour ramp (USD/day)
 const COST_TONE = (cost) => {
   if (cost >= 100) return 'text-rose-600';
@@ -125,6 +154,12 @@ const AIChampion = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
+
+  // Multi-period Hall of Fame (Realtime / Weekly / Monthly / Quarterly)
+  const [hofPeriod, setHofPeriod] = useState('month');
+  const [hofData, setHofData] = useState({});       // { periodId: [rows] }
+  const [hofLoading, setHofLoading] = useState(false);
+  const [hofUpdatedAt, setHofUpdatedAt] = useState(null);
 
   const isAdmin = useMemo(() => {
     if (isUserAdmin && isUserAdmin(authUser)) return true;
@@ -168,6 +203,38 @@ const AIChampion = () => {
     const id = setInterval(() => load(true), REFRESH_INTERVAL_MS);
     return () => clearInterval(id);
   }, [isAdmin, load]);
+
+  // ------------------------------ Multi-period Hall of Fame ------------------------------
+  const loadHallOfFame = useCallback(async () => {
+    setHofLoading(true);
+    try {
+      const results = await Promise.all(
+        HOF_PERIODS.map((p) =>
+          analyticsService
+            .getChampionLeaderboard(p.days, LEADERBOARD_LIMIT)
+            .catch(() => null)
+        )
+      );
+      const next = {};
+      HOF_PERIODS.forEach((p, idx) => {
+        const rows = results[idx]?.results || [];
+        next[p.id] = rows
+          .filter((r) => !HONORARY_EMAILS.has((r.user?.email || '').trim().toLowerCase()))
+          .slice(0, HOF_TOP_N);
+      });
+      setHofData(next);
+      setHofUpdatedAt(new Date());
+    } finally {
+      setHofLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    loadHallOfFame();
+    const id = setInterval(loadHallOfFame, REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isAdmin, loadHallOfFame]);
 
   // ------------------------------ CSV export ------------------------------
   const handleExport = async () => {
@@ -598,6 +665,152 @@ const AIChampion = () => {
           </Panel>
         )}
 
+        {/* ------------------------------ Top RADAI Users · multi-period Hall of Fame ------------------------------ */}
+        <Panel
+          title="Top RADAI Users · Hall of Fame"
+          icon={<TrophyIcon className="w-5 h-5 text-amber-500" />}
+          right={
+            <span className="text-xs text-slate-500">
+              {hofLoading
+                ? 'Refreshing…'
+                : hofUpdatedAt
+                ? `Updated ${hofUpdatedAt.toLocaleTimeString()}`
+                : ''}
+            </span>
+          }
+        >
+          {/* Period tabs */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {HOF_PERIODS.map((p) => {
+              const active = hofPeriod === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setHofPeriod(p.id)}
+                  className={`relative px-3 py-1.5 rounded-full text-xs font-semibold border transition flex items-center gap-1.5 ${
+                    active
+                      ? `text-white border-transparent bg-gradient-to-r ${p.accent} shadow`
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                  }`}
+                  title={p.hint}
+                >
+                  <span aria-hidden="true">{p.icon}</span>
+                  {p.label}
+                  {p.liveTag && (
+                    <span
+                      className={`ml-1 inline-block w-1.5 h-1.5 rounded-full ${
+                        active ? 'bg-white animate-pulse' : 'bg-emerald-500 animate-pulse'
+                      }`}
+                    />
+                  )}
+                </button>
+              );
+            })}
+            <span className="text-[11px] text-slate-500 ml-1">
+              {HOF_PERIODS.find((p) => p.id === hofPeriod)?.hint}
+            </span>
+            <button
+              onClick={loadHallOfFame}
+              disabled={hofLoading}
+              className="ml-auto px-2.5 py-1 rounded-md text-xs font-medium bg-white border border-slate-200 hover:border-slate-400 flex items-center gap-1 disabled:opacity-50"
+              title="Refresh Hall of Fame"
+            >
+              <ArrowPathIcon className={`w-3.5 h-3.5 ${hofLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Period content */}
+          {(() => {
+            const period = HOF_PERIODS.find((p) => p.id === hofPeriod) || HOF_PERIODS[2];
+            const rows = hofData[period.id] || [];
+            if (hofLoading && rows.length === 0) {
+              return <Empty text="Loading top RADAI users…" />;
+            }
+            if (rows.length === 0) {
+              return (
+                <Empty
+                  text={`No qualifying users for the ${period.label.toLowerCase()} window yet — keep using RAD AI features to get on the board.`}
+                />
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {rows.map((r, idx) => {
+                  const ts = tierStyle(r.tier);
+                  const isFirst = idx === 0;
+                  return (
+                    <div
+                      key={`${period.id}-${r.user_id || r.user?.email || idx}`}
+                      className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm bg-white transition hover:shadow-md ${
+                        isFirst ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
+                      }`}
+                    >
+                      {/* Period accent ribbon */}
+                      <div
+                        aria-hidden="true"
+                        className={`absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-20 bg-gradient-to-br ${period.accent}`}
+                      />
+                      {/* Rank chip */}
+                      <div className="relative flex items-center justify-between">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white bg-gradient-to-r ${period.accent}`}
+                        >
+                          <span aria-hidden="true">{period.icon}</span>
+                          {period.label}
+                        </span>
+                        <span className="text-lg" aria-hidden="true">
+                          {HOF_RANK_BADGES[idx] || `#${idx + 1}`}
+                        </span>
+                      </div>
+
+                      {/* Identity */}
+                      <div className="relative mt-3 flex items-center gap-3">
+                        <div className={`p-0.5 rounded-full bg-gradient-to-br ${ts.ring}`}>
+                          <div className="w-12 h-12 rounded-full bg-white text-slate-700 text-sm font-bold flex items-center justify-center">
+                            {getInitials(r.user?.name, r.user?.email)}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-slate-900 truncate" title={r.user?.name || r.user?.email}>
+                            {r.user?.name || r.user?.email}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate" title={r.user?.email}>
+                            {r.user?.email}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tier + score */}
+                      <div className="relative mt-3 flex items-center justify-between">
+                        <span className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${ts.pill}`}>
+                          {ts.emoji} {r.tier_label || r.tier}
+                        </span>
+                        <span className="text-sm font-extrabold text-slate-800 tabular-nums">
+                          {Number(r.champion_score || 0).toFixed(1)}
+                          <span className="text-[10px] text-slate-400 font-medium ml-0.5">pts</span>
+                        </span>
+                      </div>
+
+                      {/* Mini stats */}
+                      <div className="relative mt-3 grid grid-cols-3 gap-1 text-center">
+                        <MiniStat label="Actions"  value={fmtNum(r.stats?.total_actions)} />
+                        <MiniStat label="AI Reqs"  value={fmtNum(r.stats?.total_ai_requests)} />
+                        <MiniStat label="Features" value={fmtNum(r.stats?.distinct_features_used)} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          <div className="mt-3 text-[11px] text-slate-500">
+            Pinned founders &amp; architects are shown above and excluded from these competitive rankings.
+            Auto-refreshes every {Math.round(REFRESH_INTERVAL_MS / 1000)}s.
+          </div>
+        </Panel>
+
         {/* ------------------------------ Hall of Fame ------------------------------ */}
         <Panel title="Hall of Fame" icon={<TrophyIcon className="w-5 h-5 text-amber-500" />}>
           {history.length === 0 && HONORARY_HALL_OF_FAME.length === 0 ? (
@@ -688,6 +901,13 @@ const KPICard = ({ icon, label, value, tone = 'text-slate-700' }) => (
       <span>{label}</span>
     </div>
     <div className={`mt-1 text-2xl font-bold tabular-nums ${tone}`}>{value}</div>
+  </div>
+);
+
+const MiniStat = ({ label, value }) => (
+  <div className="bg-slate-50 rounded-md py-1.5 px-1">
+    <div className="text-[9px] uppercase tracking-wider text-slate-500">{label}</div>
+    <div className="text-xs font-bold tabular-nums text-slate-800">{value}</div>
   </div>
 );
 
