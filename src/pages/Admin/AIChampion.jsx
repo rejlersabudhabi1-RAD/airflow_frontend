@@ -45,7 +45,46 @@ const TIER_STYLES = {
   silver:   { ring: 'from-gray-200 via-gray-300 to-gray-500',    pill: 'bg-gray-100 text-gray-700 border-gray-300',                                  emoji: '🥈' },
   bronze:   { ring: 'from-amber-300 via-amber-500 to-orange-700', pill: 'bg-amber-50 text-amber-700 border-amber-200',                               emoji: '🥉' },
   rookie:   { ring: 'from-emerald-200 via-emerald-300 to-teal-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200',                       emoji: '🌱' },
+  // Honorary tiers — for permanent contributors (founders, architects, lead devs).
+  founder:    { ring: 'from-fuchsia-400 via-purple-500 to-indigo-700', pill: 'bg-gradient-to-r from-fuchsia-100 to-purple-100 text-purple-700 border-purple-300', emoji: '👑' },
+  architect:  { ring: 'from-sky-400 via-blue-500 to-indigo-700',     pill: 'bg-gradient-to-r from-sky-100 to-blue-100 text-blue-700 border-blue-300',           emoji: '🏛️' },
 };
+
+// ---------------------------------------------------------------------------
+// Honorary Hall of Fame — soft-coded permanent entries.
+//
+// These users are pinned at the top of the Hall of Fame regardless of the
+// rolling monthly winner cycle. Designed for super-administrators, platform
+// architects and core developers whose contribution predates the gamified
+// scoring system.
+//
+// Add a new contributor by appending an object below — no other changes
+// required. Each entry supports:
+//   - email          : unique identifier (matched case-insensitively)
+//   - name           : display name
+//   - title          : short role label (rendered in the badge)
+//   - tier           : 'founder' | 'architect' | any TIER_STYLES key
+//   - since          : ISO date — formatted as the contribution start
+//   - achievements   : 1..N short bullets shown in the spotlight card
+//   - links          : optional [{ label, href }] (LinkedIn, GitHub, etc.)
+//   - avatar         : optional override avatar URL
+// ---------------------------------------------------------------------------
+const HONORARY_HALL_OF_FAME = [
+  {
+    email: 'tanzeem.agra@rejlers.ae',
+    name: 'Tanzeem Agra',
+    title: 'Super Administrator · Lead Developer',
+    tier: 'founder',
+    since: '2025-01-01',
+    achievements: [
+      'Founding Super-Administrator of the RAD AI platform',
+      'Core developer of PID Verification, PFD Quality, DesignIQ & Non-TEFF Metadata Extractor',
+      'Architected the soft-coded RBAC, AI Champion scoring & Wrench integration pipelines',
+      'Designed the gamified leaderboard and Hall of Fame system itself',
+    ],
+    tagline: 'Built the system you are looking at.',
+  },
+];
 
 // Cost-card colour ramp (USD/day)
 const COST_TONE = (cost) => {
@@ -463,12 +502,135 @@ const AIChampion = () => {
           )}
         </Panel>
 
+        {/* ------------------------------ Founders & Architects spotlight ------------------------------ */}
+        {HONORARY_HALL_OF_FAME.length > 0 && (
+          <Panel
+            title="Founders & Architects"
+            icon={<SparklesIcon className="w-5 h-5 text-fuchsia-500" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {HONORARY_HALL_OF_FAME.map((h) => {
+                const ts = tierStyle(h.tier);
+                const sinceLabel = h.since
+                  ? new Date(h.since).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+                  : null;
+                return (
+                  <div
+                    key={h.email}
+                    className="relative overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-white via-purple-50 to-fuchsia-50 p-5 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    {/* Decorative ribbon */}
+                    <div
+                      aria-hidden="true"
+                      className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 bg-gradient-to-br ${ts.ring}`}
+                    />
+                    <div className="relative flex items-start gap-4">
+                      {/* Avatar */}
+                      <div className={`flex-shrink-0 p-1 rounded-full bg-gradient-to-br ${ts.ring}`}>
+                        <div className="w-16 h-16 rounded-full bg-white text-purple-700 text-xl font-extrabold flex items-center justify-center shadow-inner">
+                          {h.avatar ? (
+                            <img src={h.avatar} alt={h.name} className="w-full h-full rounded-full object-cover" />
+                          ) : (
+                            getInitials(h.name, h.email)
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Identity + achievements */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-base font-bold text-slate-900 truncate">{h.name}</h4>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${ts.pill}`}>
+                            <span aria-hidden="true">{ts.emoji}</span>
+                            {h.tier?.charAt(0).toUpperCase() + h.tier?.slice(1)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 truncate">{h.title}</div>
+                        <a
+                          href={`mailto:${h.email}`}
+                          className="text-xs text-purple-700 hover:underline truncate block"
+                          title={h.email}
+                        >
+                          {h.email}
+                        </a>
+                        {sinceLabel && (
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            Contributing since <span className="font-semibold text-slate-700">{sinceLabel}</span>
+                          </div>
+                        )}
+                        {h.tagline && (
+                          <p className="mt-2 text-xs italic text-purple-700">"{h.tagline}"</p>
+                        )}
+                        {Array.isArray(h.achievements) && h.achievements.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {h.achievements.map((a, i) => (
+                              <li
+                                key={`${h.email}-ach-${i}`}
+                                className="flex items-start gap-1.5 text-xs text-slate-700"
+                              >
+                                <span aria-hidden="true" className="text-amber-500 leading-4">★</span>
+                                <span>{a}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {Array.isArray(h.links) && h.links.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {h.links.map((lnk) => (
+                              <a
+                                key={lnk.href}
+                                href={lnk.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-0.5 rounded-full bg-white border border-purple-200 text-[11px] text-purple-700 hover:bg-purple-100"
+                              >
+                                {lnk.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
+
         {/* ------------------------------ Hall of Fame ------------------------------ */}
         <Panel title="Hall of Fame" icon={<TrophyIcon className="w-5 h-5 text-amber-500" />}>
-          {history.length === 0 ? (
+          {history.length === 0 && HONORARY_HALL_OF_FAME.length === 0 ? (
             <Empty text="No prior champions yet — first month will be selected automatically on the 1st of next month." />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {/* Honorary entries — always pinned at the top */}
+              {HONORARY_HALL_OF_FAME.map((h) => {
+                const ts = tierStyle(h.tier);
+                return (
+                  <div
+                    key={`honorary-${h.email}`}
+                    className="relative bg-gradient-to-br from-purple-50 to-fuchsia-50 border-2 border-purple-200 rounded-xl p-3 text-center shadow-sm"
+                    title={`${h.name} — ${h.title}`}
+                  >
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 text-white text-[9px] font-bold uppercase tracking-wider shadow">
+                      Honorary
+                    </div>
+                    <div className="text-[11px] text-purple-700 font-semibold mb-1 mt-1">
+                      {ts.emoji} {h.tier?.toUpperCase()}
+                    </div>
+                    <div className={`mx-auto p-0.5 rounded-full bg-gradient-to-br ${ts.ring} w-12 h-12`}>
+                      <div className="w-full h-full rounded-full bg-white text-slate-700 text-xs font-bold flex items-center justify-center">
+                        {getInitials(h.name, h.email)}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-slate-800 truncate">{h.name}</div>
+                    <div className="text-[11px] text-purple-600 truncate" title={h.title}>{h.title}</div>
+                  </div>
+                );
+              })}
+
+              {/* Historical monthly winners */}
               {history.map((h) => {
                 const ts = tierStyle(h.tier);
                 return (
