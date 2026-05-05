@@ -253,8 +253,48 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
   const [showPassword, setShowPassword] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
+  // Auto-detect state for SVC URL probing
+  const [detecting, setDetecting] = useState(false)
+  const [detectResult, setDetectResult] = useState(null)  // { recommended, candidates }
+
   const handleChange = (field) => (e) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const handleAutoDetect = async () => {
+    if (!form.base_url) {
+      setAlert({ type: 'error', message: 'Enter the Wrench Server URL first, then click Auto-Detect.' })
+      return
+    }
+    setDetecting(true)
+    setDetectResult(null)
+    setAlert(null)
+    try {
+      const res = await wrenchService.discoverSvcUrl({
+        base_url: form.base_url,
+        svc_url: '',  // force probing of all candidates, ignore any saved svc_url
+      })
+      setDetectResult(res.data)
+      if (res.data.recommended) {
+        setForm((prev) => ({ ...prev, svc_url: res.data.recommended }))
+        setAlert({
+          type: 'success',
+          message: `Auto-detected: ${res.data.recommended}. Click Save to persist.`,
+        })
+      } else {
+        setAlert({
+          type: 'error',
+          message: 'No reachable DocumentSearch host found. See the candidate list below to confirm with your Wrench admin.',
+        })
+      }
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.response?.data?.detail || 'Auto-detect failed. Check server logs.',
+      })
+    } finally {
+      setDetecting(false)
+    }
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -347,13 +387,27 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
           <p className="text-xs text-gray-400 mt-1">Must use HTTPS. Used for login and document operations.</p>
         </div>
 
-        {/* SVC URL (optional) */}
+        {/* SVC URL (optional) — with Auto-Detect */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            <GlobeAltIcon className="w-4 h-4 inline mr-1 text-gray-400" />
-            Document Search Service URL
-            <span className="ml-1 text-xs text-gray-400 font-normal">(optional)</span>
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700">
+              <GlobeAltIcon className="w-4 h-4 inline mr-1 text-gray-400" />
+              Document Search Service URL
+              <span className="ml-1 text-xs text-gray-400 font-normal">(optional)</span>
+            </label>
+            <button
+              type="button"
+              onClick={handleAutoDetect}
+              disabled={detecting || !form.base_url}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white transition shadow-sm"
+              title="Probe common Wrench SVC URL patterns derived from the Server URL"
+            >
+              {detecting
+                ? <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                : <MagnifyingGlassIcon className="w-3.5 h-3.5" />}
+              {detecting ? 'Probing…' : 'Auto-Detect'}
+            </button>
+          </div>
           <input
             type="url"
             value={form.svc_url}
@@ -361,7 +415,50 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
             placeholder="https://svc.wrenchproject.com"
             className={inputClass}
           />
-          <p className="text-xs text-gray-400 mt-1">Leave blank if DocumentSearch runs on the same host as the WebAPI.</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Leave blank if DocumentSearch runs on the same host as the WebAPI. Use Auto-Detect to probe common patterns.
+          </p>
+
+          {/* Probe results — clickable candidates */}
+          {detectResult && (
+            <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden text-xs">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 font-medium text-gray-600">
+                Probed {detectResult.candidates.length} candidate{detectResult.candidates.length === 1 ? '' : 's'}
+                {detectResult.recommended && (
+                  <span className="ml-2 text-emerald-600">
+                    · Best match: <span className="font-mono">{detectResult.recommended}</span>
+                  </span>
+                )}
+              </div>
+              <ul className="divide-y divide-gray-100 max-h-44 overflow-y-auto">
+                {detectResult.candidates.map((c, i) => (
+                  <li
+                    key={`${c.url}-${i}`}
+                    className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
+                      c.reachable ? 'bg-emerald-50/40' : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          c.reachable ? 'bg-emerald-500' : 'bg-gray-300'
+                        }`}
+                      />
+                      <span className="font-mono text-[11px] truncate" title={c.url}>{c.url}</span>
+                      <span className="text-gray-400 text-[10px] shrink-0">{c.note}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, svc_url: c.url }))}
+                      className="px-2 py-0.5 text-[11px] rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium transition shrink-0"
+                    >
+                      Use
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Server ID + Login Name (row) */}
@@ -1331,6 +1428,11 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   // Download state: tracks which IDOC_IDs are currently downloading
   const [downloading, setDownloading] = useState({})
 
+  // Inline auto-detect / repair state for missing SVC URL
+  const [repairing, setRepairing] = useState(false)
+  const [repairResult, setRepairResult] = useState(null)  // { recommended, candidates }
+  const [repairSaving, setRepairSaving] = useState(false)
+
   // Derived: doc numbers shown in datalist — filtered by what user has typed
   const filteredDocNumbers = docNoInput.length >= 1
     ? choices.doc_numbers.filter((d) => d.toLowerCase().includes(docNoInput.toLowerCase())).slice(0, 100)
@@ -1409,6 +1511,61 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
     }
   }
 
+  // Detect "DocumentSearch endpoint not found" style errors so we can render
+  // an actionable repair panel right next to the alert.
+  const endpointMissing = Boolean(
+    alert?.type === 'error' &&
+    alert?.message &&
+    /DocumentSearch endpoint|SVC URL|Document Search Service URL/i.test(alert.message)
+  )
+
+  // Inline auto-detect — same probe used on the config form, but invoked from
+  // the search panel so the user doesn't have to navigate away.
+  const handleInlineAutoDetect = async () => {
+    setRepairing(true)
+    setRepairResult(null)
+    try {
+      const res = await wrenchService.discoverSvcUrl({})  // uses saved base_url
+      setRepairResult(res.data)
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.response?.data?.detail || 'Auto-detect failed. Check server logs.',
+      })
+    } finally {
+      setRepairing(false)
+    }
+  }
+
+  // Save the chosen SVC URL into the active config without leaving the page.
+  const handleAdoptSvcUrl = async (chosenUrl) => {
+    if (!chosenUrl) return
+    setRepairSaving(true)
+    try {
+      await wrenchService.saveConfig({ ...config, svc_url: chosenUrl })
+      setAlert({
+        type: 'success',
+        message: `Saved SVC URL: ${chosenUrl}. Re-running search…`,
+      })
+      setRepairResult(null)
+      // Trigger a fresh choice load + immediate search
+      setChoicesLoading(true)
+      try {
+        const res = await wrenchService.getDocumentChoices()
+        setChoices(res.data || { disciplines: [], doc_numbers: [], svc_url_required: false })
+      } catch { /* non-fatal */ }
+      finally { setChoicesLoading(false) }
+      handleSearch(1)
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: err.response?.data?.detail || 'Failed to save SVC URL. Check server logs.',
+      })
+    } finally {
+      setRepairSaving(false)
+    }
+  }
+
   const handleClear = () => {
     setDiscipline('')
     setDocNoInput('')
@@ -1469,6 +1626,84 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
 
         <div className="p-6 space-y-4">
           {alert && <Alert type={alert.type} message={alert.message} />}
+
+          {/* Inline repair panel — appears when search fails because the
+              DocumentSearch endpoint can't be reached. Lets the admin probe
+              candidate URLs and adopt one without leaving the search page. */}
+          {endpointMissing && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <InformationCircleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-semibold text-amber-900">Document Search service not reachable</p>
+                  <p className="mt-1 text-amber-800/90">
+                    Some Wrench installations host DocumentSearch on a dedicated SVC URL. Click
+                    Auto-Detect to probe common patterns derived from your Wrench Server URL —
+                    we&apos;ll save the working one and re-run your search automatically.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleInlineAutoDetect}
+                    disabled={repairing || repairSaving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white transition shadow-sm"
+                  >
+                    {repairing
+                      ? <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                      : <MagnifyingGlassIcon className="w-3.5 h-3.5" />}
+                    {repairing ? 'Probing…' : 'Auto-Detect SVC URL'}
+                  </button>
+                  {onGoToConfig && (
+                    <button
+                      type="button"
+                      onClick={onGoToConfig}
+                      className="px-3 py-1.5 text-xs font-medium rounded-md bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 transition"
+                    >
+                      Open Configuration
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {repairResult && (
+                <div className="border border-amber-200 rounded-md overflow-hidden text-xs bg-white">
+                  <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 font-medium text-amber-900">
+                    Probed {repairResult.candidates.length} candidate{repairResult.candidates.length === 1 ? '' : 's'}
+                    {repairResult.recommended
+                      ? <span className="ml-2 text-emerald-700">· Best match: <span className="font-mono">{repairResult.recommended}</span></span>
+                      : <span className="ml-2 text-red-600">· No reachable host found — confirm the SVC URL with your Wrench admin</span>}
+                  </div>
+                  <ul className="divide-y divide-gray-100 max-h-44 overflow-y-auto">
+                    {repairResult.candidates.map((c, i) => (
+                      <li
+                        key={`${c.url}-${i}`}
+                        className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
+                          c.reachable ? 'bg-emerald-50/40' : 'bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${c.reachable ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                          <span className="font-mono text-[11px] truncate" title={c.url}>{c.url}</span>
+                          <span className="text-gray-400 text-[10px] shrink-0">{c.note}</span>
+                        </div>
+                        {c.reachable && (
+                          <button
+                            type="button"
+                            onClick={() => handleAdoptSvcUrl(c.url)}
+                            disabled={repairSaving}
+                            className="px-2 py-0.5 text-[11px] rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium transition shrink-0"
+                          >
+                            {repairSaving ? 'Saving…' : 'Use this'}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
 

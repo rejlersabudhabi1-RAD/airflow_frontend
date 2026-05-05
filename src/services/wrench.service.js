@@ -24,6 +24,14 @@ const wrenchService = {
   /** Test connectivity – performs a real Wrench login to validate credentials */
   verifyConnection: () => apiService.post(`${BASE}/config/verify/`),
 
+  /**
+   * Auto-detect the Wrench DocumentSearch SVC URL by probing common patterns.
+   * @param {object} overrides – optional { base_url, svc_url } to probe before saving.
+   * Returns { recommended: string|null, candidates: [{url, reachable, status_code, note}] }
+   */
+  discoverSvcUrl: (overrides = {}) =>
+    apiService.post(`${BASE}/config/discover-svc-url/`, overrides),
+
   /** Delete the active config (super admin only) */
   deleteConfig: (id) => apiService.delete(`${BASE}/config/${id}/`),
 
