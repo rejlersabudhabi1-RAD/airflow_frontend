@@ -119,9 +119,37 @@ const STATUS_STYLE = {
 // ② PURE HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 const fmt      = n => (n  ?? 0).toLocaleString();
-const fmtCurr  = n => n  != null
-  ? `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-  : '—';
+
+// Soft-coded currency formatter. Defaults match the UAE deployment but the
+// API response can override `currency` / `currency_locale` per request so
+// the same component works in any region without a code change.
+const SALES_CURRENCY_DEFAULTS = { code: 'AED', locale: 'en-AE' };
+let SALES_CURRENCY = { ...SALES_CURRENCY_DEFAULTS };
+const setSalesCurrency = (code, locale) => {
+  if (code)   SALES_CURRENCY.code   = code;
+  if (locale) SALES_CURRENCY.locale = locale;
+};
+// Smart compact currency: "AED 4.2M", "AED 850K", "AED 12,500".
+// Falls back to long form for values < 10k so small numbers stay precise.
+const fmtCurr = n => {
+  if (n == null) return '—';
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '—';
+  const { code, locale } = SALES_CURRENCY;
+  try {
+    if (Math.abs(num) >= 10_000) {
+      return new Intl.NumberFormat(locale, {
+        style: 'currency', currency: code,
+        notation: 'compact', maximumFractionDigits: 1,
+      }).format(num);
+    }
+    return new Intl.NumberFormat(locale, {
+      style: 'currency', currency: code, maximumFractionDigits: 0,
+    }).format(num);
+  } catch {
+    return `${code} ${num.toLocaleString()}`;
+  }
+};
 const pct      = n => `${(n ?? 0).toFixed(1)}%`;
 const discColor = lbl => CONFIG.disciplineColors[lbl] ?? '#64748b';
 const safeArr  = v => (Array.isArray(v) ? v : v?.results ?? v?.data ?? []);
@@ -1734,7 +1762,11 @@ export default function InternalSalesDashboard() {
         salesService.getUpcomingActivities(7),
       ]);
 
-      if (summary.status  === 'fulfilled') setPipeline(summary.value);
+      if (summary.status  === 'fulfilled') {
+        // Adopt API-provided currency (soft-coded; defaults to AED).
+        setSalesCurrency(summary.value?.currency, summary.value?.currency_locale);
+        setPipeline(summary.value);
+      }
       if (topC.status     === 'fulfilled') setClients(prev => ({ ...prev, top:    safeArr(topC.value)    }));
       if (atRisk.status   === 'fulfilled') setClients(prev => ({ ...prev, atRisk: safeArr(atRisk.value)  }));
       if (insights.status === 'fulfilled') setAiInsights(safeArr(insights.value?.insights ?? insights.value));
