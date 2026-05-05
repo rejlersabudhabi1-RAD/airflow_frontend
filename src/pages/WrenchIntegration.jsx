@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { isUserAdmin } from '../utils/rbac.utils'
 import wrenchService from '../services/wrench.service'
@@ -1400,10 +1400,128 @@ const _FALLBACK_DISCIPLINES = [
   'STRUCTURAL', 'TELECOM', 'GENERAL',
 ]
 
+// ── Smart Search soft-coded constants ────────────────────────────────────────
+// localStorage key for recent successful queries (per-browser, no PII)
+const _RECENT_SEARCH_KEY   = 'wrench.docSearch.recents'
+const _RECENT_SEARCH_LIMIT = 8
+// Number of discipline quick-pick pills shown next to the smart bar
+const _DISCIPLINE_PILL_COUNT = 6
+// Quick range chips — the label is shown; resolver returns { from, to } as ISO
+const _QUICK_RANGES = [
+  { key: 'today',     label: 'Today' },
+  { key: 'week',      label: 'Last 7 Days' },
+  { key: 'month',     label: 'This Month' },
+  { key: 'last30',    label: 'Last 30 Days' },
+  { key: 'quarter',   label: 'This Quarter' },
+  { key: 'year',      label: 'This Year' },
+]
+// Token grammar for the smart bar — order matters (longest prefix first)
+//   disc:<code>          → discipline
+//   discipline:<code>    → discipline
+//   from:YYYY-MM-DD      → date_from (ISO, naturally parseable by <input type=date>)
+//   to:YYYY-MM-DD        → date_to
+//   after:YYYY-MM-DD     → alias of from:
+//   before:YYYY-MM-DD    → alias of to:
+//   last:30d / last:6w / last:3m / last:1y → relative date_from = today - N
+//   #year                → this:year shortcut (e.g. #2024 → year 2024-01-01..2024-12-31)
+const _SMART_TOKEN_PATTERNS = [
+  { kind: 'discipline', re: /^(?:disc|discipline):([\w-]+)$/i },
+  { kind: 'from',       re: /^(?:from|after):(\d{4}-\d{2}-\d{2})$/i },
+  { kind: 'to',         re: /^(?:to|before|until):(\d{4}-\d{2}-\d{2})$/i },
+  { kind: 'last',       re: /^last:(\d+)([dwmy])$/i },
+  { kind: 'year',       re: /^#?(\d{4})$/ },
+]
+
 // Convert a native date-input value ('YYYY-MM-DD') to Wrench format ('YYYY/MM/DD HH:MM')
 const _toWrenchDate = (isoDate, endOfDay = false) => {
   if (!isoDate) return ''
   return isoDate.replace(/-/g, '/') + (endOfDay ? ' 23:59' : ' 00:00')
+}
+
+// ── Pure date helpers (ISO 'YYYY-MM-DD') for quick-range resolver ───────────
+const _pad2 = (n) => String(n).padStart(2, '0')
+const _isoOf = (d) => `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`
+const _isoToday = () => _isoOf(new Date())
+const _isoAddDays = (iso, n) => {
+  const d = new Date(iso); d.setDate(d.getDate() + n); return _isoOf(d)
+}
+const _isoStartOfMonth = () => {
+  const d = new Date(); return _isoOf(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+const _isoStartOfQuarter = () => {
+  const d = new Date(); const q = Math.floor(d.getMonth() / 3) * 3
+  return _isoOf(new Date(d.getFullYear(), q, 1))
+}
+const _isoStartOfYear = () => {
+  const d = new Date(); return _isoOf(new Date(d.getFullYear(), 0, 1))
+}
+
+const _resolveQuickRange = (key) => {
+  const today = _isoToday()
+  switch (key) {
+    case 'today':   return { from: today,                   to: today }
+    case 'week':    return { from: _isoAddDays(today, -6),  to: today }
+    case 'last30':  return { from: _isoAddDays(today, -29), to: today }
+    case 'month':   return { from: _isoStartOfMonth(),      to: today }
+    case 'quarter': return { from: _isoStartOfQuarter(),    to: today }
+    case 'year':    return { from: _isoStartOfYear(),       to: today }
+    default:        return { from: '', to: '' }
+  }
+}
+
+/**
+ * Parse a free-form smart-search string into structured filters.
+ * Pure / no side effects → safe to call on every keystroke.
+ *
+ * Examples:
+ *   "P16093 disc:ELEC last:30d"   → discipline=ELEC, doc_no=P16093, date_from=today-30d
+ *   "from:2024-01-01 to:2024-06-30 pump"
+ *   "#2024 INST"                  → discipline=INST, year 2024
+ *   "VESSEL"                      → discipline=VESSEL (if known) else doc_no=VESSEL
+ *
+ * @param {string} input
+ * @param {string[]} knownDisciplines  (case-insensitive matching list)
+ * @returns {{discipline:string, doc_no:string, date_from:string, date_to:string}} ISO dates
+ */
+const parseSmartQuery = (input, knownDisciplines = []) => {
+  const out = { discipline: '', doc_no: '', date_from: '', date_to: '' }
+  if (!input) return out
+  const upperKnown = knownDisciplines.map((d) => String(d).toUpperCase())
+  const freeWords  = []
+
+  for (const tok of input.trim().split(/\s+/)) {
+    let matched = false
+    for (const pat of _SMART_TOKEN_PATTERNS) {
+      const m = tok.match(pat.re)
+      if (!m) continue
+      matched = true
+      if (pat.kind === 'discipline') out.discipline = m[1].toUpperCase()
+      else if (pat.kind === 'from')  out.date_from  = m[1]
+      else if (pat.kind === 'to')    out.date_to    = m[1]
+      else if (pat.kind === 'last') {
+        const n = parseInt(m[1], 10)
+        const unit = m[2].toLowerCase()
+        const mult = unit === 'd' ? 1 : unit === 'w' ? 7 : unit === 'm' ? 30 : 365
+        out.date_from = _isoAddDays(_isoToday(), -n * mult)
+        out.date_to   = _isoToday()
+      }
+      else if (pat.kind === 'year') {
+        const y = m[1]
+        out.date_from = `${y}-01-01`
+        out.date_to   = `${y}-12-31`
+      }
+      break
+    }
+    if (matched) continue
+    // Bare token → discipline if it matches a known one, otherwise part of doc_no
+    if (upperKnown.includes(tok.toUpperCase()) && !out.discipline) {
+      out.discipline = tok.toUpperCase()
+    } else {
+      freeWords.push(tok)
+    }
+  }
+  out.doc_no = freeWords.join(' ').trim()
+  return out
 }
 
 const DocumentSearchSection = ({ config, onGoToConfig }) => {
@@ -1432,6 +1550,44 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   const [repairing, setRepairing] = useState(false)
   const [repairResult, setRepairResult] = useState(null)  // { recommended, candidates }
   const [repairSaving, setRepairSaving] = useState(false)
+
+  // ── Smart Search state ─────────────────────────────────────────────────
+  const [smartQuery, setSmartQuery]     = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [activeQuickRange, setActiveQuickRange] = useState('')   // chip key currently applied
+  const [recents, setRecents] = useState([])
+  const smartInputRef = useRef(null)
+
+  // Load recent searches from localStorage on mount (per-browser, no PII).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(_RECENT_SEARCH_KEY)
+      if (raw) setRecents(JSON.parse(raw).slice(0, _RECENT_SEARCH_LIMIT))
+    } catch { /* corrupt JSON — ignore */ }
+  }, [])
+
+  // Global "/" keyboard shortcut → focus the smart bar (skip when typing in another field)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      e.preventDefault()
+      smartInputRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const persistRecent = (query) => {
+    const trimmed = (query || '').trim()
+    if (!trimmed) return
+    setRecents((prev) => {
+      const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, _RECENT_SEARCH_LIMIT)
+      try { localStorage.setItem(_RECENT_SEARCH_KEY, JSON.stringify(next)) } catch { /* quota — ignore */ }
+      return next
+    })
+  }
 
   // Derived: doc numbers shown in datalist — filtered by what user has typed
   const filteredDocNumbers = docNoInput.length >= 1
@@ -1487,17 +1643,22 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   }, [])
 
   // ── Search handler ───────────────────────────────────────────────────────
-  const handleSearch = async (targetPage = 1) => {
+  // `overrides` lets the smart bar bypass React state lag and submit parsed
+  // filters directly. When omitted, current advanced-form state is used.
+  const handleSearch = async (targetPage = 1, overrides = null) => {
+    const filters = overrides ?? {
+      discipline: discipline || undefined,
+      doc_no:     docNoInput || undefined,
+      date_from:  _toWrenchDate(dateFrom, false) || undefined,
+      date_to:    _toWrenchDate(dateTo,   true)  || undefined,
+    }
     setSearching(true)
     setAlert(null)
     try {
       const res = await wrenchService.searchDocuments({
-        discipline: discipline || undefined,
-        doc_no:     docNoInput || undefined,
-        date_from:  _toWrenchDate(dateFrom, false) || undefined,
-        date_to:    _toWrenchDate(dateTo,   true)  || undefined,
-        page:       targetPage,
-        page_size:  pageSize,
+        ...filters,
+        page:      targetPage,
+        page_size: pageSize,
       })
       setResults(res.data)
       setPage(targetPage)
@@ -1509,6 +1670,50 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
     } finally {
       setSearching(false)
     }
+  }
+
+  // ── Smart Search runner — parse → mirror state → submit ──────────────────
+  const runSmartSearch = (rawQuery = smartQuery) => {
+    const parsed = parseSmartQuery(rawQuery, effectiveDisciplines)
+    // Mirror to the advanced fields so the user sees what was inferred.
+    setDiscipline(parsed.discipline)
+    setDocNoInput(parsed.doc_no)
+    setDateFrom(parsed.date_from)
+    setDateTo(parsed.date_to)
+    setActiveQuickRange('')
+    persistRecent(rawQuery)
+    handleSearch(1, {
+      discipline: parsed.discipline || undefined,
+      doc_no:     parsed.doc_no     || undefined,
+      date_from:  _toWrenchDate(parsed.date_from, false) || undefined,
+      date_to:    _toWrenchDate(parsed.date_to,   true)  || undefined,
+    })
+  }
+
+  const applyQuickRange = (key) => {
+    const { from, to } = _resolveQuickRange(key)
+    setDateFrom(from); setDateTo(to); setActiveQuickRange(key)
+    handleSearch(1, {
+      discipline: discipline || undefined,
+      doc_no:     (smartQuery && parseSmartQuery(smartQuery, effectiveDisciplines).doc_no) || docNoInput || undefined,
+      date_from:  _toWrenchDate(from, false) || undefined,
+      date_to:    _toWrenchDate(to,   true)  || undefined,
+    })
+  }
+
+  const applyDisciplinePill = (code) => {
+    setDiscipline(code)
+    handleSearch(1, {
+      discipline: code,
+      doc_no:     (smartQuery && parseSmartQuery(smartQuery, effectiveDisciplines).doc_no) || docNoInput || undefined,
+      date_from:  _toWrenchDate(dateFrom, false) || undefined,
+      date_to:    _toWrenchDate(dateTo,   true)  || undefined,
+    })
+  }
+
+  const applyRecent = (query) => {
+    setSmartQuery(query)
+    runSmartSearch(query)
   }
 
   // Detect "DocumentSearch endpoint not found" style errors so we can render
@@ -1567,10 +1772,12 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   }
 
   const handleClear = () => {
+    setSmartQuery('')
     setDiscipline('')
     setDocNoInput('')
     setDateFrom('')
     setDateTo('')
+    setActiveQuickRange('')
     setResults(null)
     setAlert(null)
     setPage(1)
@@ -1705,99 +1912,277 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-
-            {/* ── Discipline dropdown ──────────────────────────────────── */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Discipline
-                <span className="ml-1 text-gray-400 font-normal">
-                  {choices.disciplines.length > 0
-                    ? `(${choices.disciplines.length} from Wrench)`
-                    : `(${_FALLBACK_DISCIPLINES.length} standard)`}
-                </span>
-              </label>
-              <div className="relative">
-                <select
-                  value={discipline}
-                  onChange={(e) => setDiscipline(e.target.value)}
-                  className={selectClass}
+          {/* ═══════════════════════════════════════════════════════════════
+               SMART SEARCH BAR — single input, natural-language tokens
+              ═══════════════════════════════════════════════════════════════ */}
+          <div className="space-y-3">
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 pointer-events-none" />
+              <input
+                ref={smartInputRef}
+                type="text"
+                value={smartQuery}
+                onChange={(e) => setSmartQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); runSmartSearch() }
+                  else if (e.key === 'Escape') { setSmartQuery('') }
+                }}
+                placeholder='Try: "P16093 disc:ELEC last:30d"  ·  "#2024 PUMP"  ·  "from:2024-01-01 to:2024-06-30"'
+                className="w-full pl-12 pr-32 py-3.5 text-sm bg-white border-2 border-blue-200 rounded-2xl shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition placeholder:text-gray-400"
+                autoFocus
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {smartQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSmartQuery('')}
+                    title="Clear (Esc)"
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition"
+                  >
+                    <span className="text-base leading-none">×</span>
+                  </button>
+                )}
+                <span
+                  className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-gray-400 bg-gray-100 border border-gray-200 rounded"
+                  title="Press / anywhere to focus this search"
+                >/</span>
+                <button
+                  type="button"
+                  onClick={() => runSmartSearch()}
+                  disabled={searching}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-400/25 transition"
                 >
-                  <option value="">— All Disciplines —</option>
-                  {effectiveDisciplines.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                  {/* Allow free-typed value even if not in list */}
-                  {discipline && !effectiveDisciplines.includes(discipline) && (
-                    <option value={discipline}>{discipline} (custom)</option>
-                  )}
-                </select>
-                <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  {searching
+                    ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    : <MagnifyingGlassIcon className="w-4 h-4" />}
+                  {searching ? 'Searching…' : 'Search'}
+                </button>
               </div>
             </div>
 
-            {/* ── Document No. combobox (datalist) ────────────────────── */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Document No.
-                {choices.doc_numbers.length > 0 && (
-                  <span className="ml-1 text-gray-400 font-normal">({choices.doc_numbers.length} available)</span>
-                )}
-              </label>
-              <input
-                list="wrench-doc-numbers"
-                type="text"
-                value={docNoInput}
-                onChange={(e) => setDocNoInput(e.target.value)}
-                placeholder={
-                  choices.doc_numbers.length > 0
-                    ? 'Type or select a Doc No.'
-                    : needsSvcUrl
-                      ? 'Type a Doc No. (live list available after SVC URL is set)'
-                      : 'e.g. P16093-30-76-08'
-                }
-                className={inputClass}
-              />
-              <datalist id="wrench-doc-numbers">
-                {filteredDocNumbers.map((d) => (
-                  <option key={d} value={d} />
-                ))}
-              </datalist>
-            </div>
+            {/* Live preview of what the smart bar will send */}
+            {smartQuery.trim() && (() => {
+              const p = parseSmartQuery(smartQuery, effectiveDisciplines)
+              const chips = []
+              if (p.discipline) chips.push({ k: 'Discipline', v: p.discipline, color: 'bg-purple-100 text-purple-700 border-purple-200' })
+              if (p.doc_no)     chips.push({ k: 'Doc No',     v: p.doc_no,     color: 'bg-blue-100 text-blue-700 border-blue-200' })
+              if (p.date_from)  chips.push({ k: 'From',       v: p.date_from,  color: 'bg-emerald-100 text-emerald-700 border-emerald-200' })
+              if (p.date_to)    chips.push({ k: 'To',         v: p.date_to,    color: 'bg-emerald-100 text-emerald-700 border-emerald-200' })
+              if (chips.length === 0) return null
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-gray-400">Will search →</span>
+                  {chips.map((c) => (
+                    <span key={c.k} className={`px-2 py-0.5 rounded-full border font-medium ${c.color}`}>
+                      <span className="opacity-70">{c.k}:</span> {c.v}
+                    </span>
+                  ))}
+                </div>
+              )
+            })()}
 
-            {/* ── Approved From (date picker) ──────────────────────────── */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Approved From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo || undefined}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className={inputClass}
-              />
-              {dateFrom && (
-                <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateFrom, false)}</p>
+            {/* Quick range chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-gray-500">Quick range:</span>
+              {_QUICK_RANGES.map((r) => (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => applyQuickRange(r.key)}
+                  disabled={searching}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition disabled:opacity-50 ${
+                    activeQuickRange === r.key
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-700'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+              {(activeQuickRange || dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); setActiveQuickRange('') }}
+                  className="px-2 py-1 text-xs rounded-full text-gray-500 hover:text-gray-700 underline transition"
+                >
+                  Clear date
+                </button>
               )}
             </div>
 
-            {/* ── Approved To (date picker) ─────────────────────────────── */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Approved To</label>
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom || undefined}
-                onChange={(e) => setDateTo(e.target.value)}
-                className={inputClass}
-              />
-              {dateTo && (
-                <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateTo, true)}</p>
+            {/* Discipline pills (top N most useful) */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-gray-500">Discipline:</span>
+              {effectiveDisciplines.slice(0, _DISCIPLINE_PILL_COUNT).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => applyDisciplinePill(d)}
+                  disabled={searching}
+                  className={`px-2.5 py-1 text-xs rounded-full border transition disabled:opacity-50 ${
+                    discipline === d
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-purple-400 hover:text-purple-700'
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+              {effectiveDisciplines.length > _DISCIPLINE_PILL_COUNT && (
+                <span className="text-xs text-gray-400">+{effectiveDisciplines.length - _DISCIPLINE_PILL_COUNT} more in Advanced</span>
+              )}
+              {discipline && !effectiveDisciplines.slice(0, _DISCIPLINE_PILL_COUNT).includes(discipline) && (
+                <button
+                  type="button"
+                  onClick={() => setDiscipline('')}
+                  className="px-2.5 py-1 text-xs rounded-full bg-purple-600 text-white border border-purple-600 shadow-sm"
+                  title="Click to clear"
+                >
+                  {discipline} ×
+                </button>
+              )}
+            </div>
+
+            {/* Recent searches */}
+            {recents.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-gray-500">Recent:</span>
+                {recents.map((q, i) => (
+                  <button
+                    key={`${q}-${i}`}
+                    type="button"
+                    onClick={() => applyRecent(q)}
+                    disabled={searching}
+                    className="px-2.5 py-1 text-xs rounded-full bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition disabled:opacity-50 max-w-[200px] truncate"
+                    title={q}
+                  >
+                    {q}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecents([])
+                    try { localStorage.removeItem(_RECENT_SEARCH_KEY) } catch { /* ignore */ }
+                  }}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline transition"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            {/* Advanced (collapsible) — keeps the original precise controls */}
+            <div className="border-t border-gray-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-blue-700 transition"
+              >
+                <ChevronDownIcon className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                Advanced filters
+                {(discipline || docNoInput || dateFrom || dateTo) && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-blue-100 text-blue-700">
+                    {[discipline, docNoInput, dateFrom, dateTo].filter(Boolean).length} active
+                  </span>
+                )}
+              </button>
+
+              {showAdvanced && (
+                <div className="mt-3 grid grid-cols-2 gap-4 animate-fade-in">
+                  {/* Discipline (full list) */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Discipline
+                      <span className="ml-1 text-gray-400 font-normal">
+                        {choices.disciplines.length > 0
+                          ? `(${choices.disciplines.length} from Wrench)`
+                          : `(${_FALLBACK_DISCIPLINES.length} standard)`}
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={discipline}
+                        onChange={(e) => setDiscipline(e.target.value)}
+                        className={selectClass}
+                      >
+                        <option value="">— All Disciplines —</option>
+                        {effectiveDisciplines.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                        {discipline && !effectiveDisciplines.includes(discipline) && (
+                          <option value={discipline}>{discipline} (custom)</option>
+                        )}
+                      </select>
+                      <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                  </div>
+
+                  {/* Document No. */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Document No.
+                      {choices.doc_numbers.length > 0 && (
+                        <span className="ml-1 text-gray-400 font-normal">({choices.doc_numbers.length} available)</span>
+                      )}
+                    </label>
+                    <input
+                      list="wrench-doc-numbers"
+                      type="text"
+                      value={docNoInput}
+                      onChange={(e) => setDocNoInput(e.target.value)}
+                      placeholder={
+                        choices.doc_numbers.length > 0
+                          ? 'Type or select a Doc No.'
+                          : needsSvcUrl
+                            ? 'Type a Doc No. (live list available after SVC URL is set)'
+                            : 'e.g. P16093-30-76-08'
+                      }
+                      className={inputClass}
+                    />
+                    <datalist id="wrench-doc-numbers">
+                      {filteredDocNumbers.map((d) => (
+                        <option key={d} value={d} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* Approved From */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Approved From</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={(e) => { setDateFrom(e.target.value); setActiveQuickRange('') }}
+                      className={inputClass}
+                    />
+                    {dateFrom && (
+                      <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateFrom, false)}</p>
+                    )}
+                  </div>
+
+                  {/* Approved To */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Approved To</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={(e) => { setDateTo(e.target.value); setActiveQuickRange('') }}
+                      className={inputClass}
+                    />
+                    {dateTo && (
+                      <p className="mt-0.5 text-xs text-gray-400 font-mono">→ {_toWrenchDate(dateTo, true)}</p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Controls row */}
-          <div className="flex items-center justify-between pt-1">
+          {/* Bottom controls row */}
+          <div className="flex items-center justify-between pt-1 border-t border-gray-100">
             <div className="flex items-center gap-3">
               <label className="text-xs font-medium text-gray-600">Rows per page:</label>
               <select
@@ -1807,27 +2192,19 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
               >
                 {DOC_PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
-              {(discipline || docNoInput || dateFrom || dateTo) && (
+              {(smartQuery || discipline || docNoInput || dateFrom || dateTo) && (
                 <button
                   type="button"
                   onClick={handleClear}
                   className="text-xs text-gray-500 hover:text-gray-700 underline transition"
                 >
-                  Clear filters
+                  Clear all
                 </button>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => handleSearch(1)}
-              disabled={searching}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-400/25 transition-all duration-200"
-            >
-              {searching
-                ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                : <MagnifyingGlassIcon className="w-4 h-4" />}
-              {searching ? 'Searching…' : 'Search Documents'}
-            </button>
+            <p className="text-xs text-gray-400 hidden md:block">
+              Tip: press <kbd className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-100 border border-gray-200 rounded">/</kbd> anywhere to jump to search
+            </p>
           </div>
         </div>
       </div>
