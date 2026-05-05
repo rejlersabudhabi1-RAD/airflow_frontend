@@ -261,6 +261,176 @@ const TRANSFORMER_PAGES = [
   { id: 'notes',    label: 'General Notes',short: 'Notes',    page: '11/11', kind: 'notes',     icon: '📝' },
 ];
 
+// ─── ADNOC DG Set document — soft-coded sub-page content ─────────────────
+// Mirrors backend/apps/electrical_datasheet/dg_set_datasheet_generator.py.
+const DG_DOC_HEADER = {
+  company_name:        'Abu Dhabi Polymers Company Ltd. (Borouge)',
+  location:            'RUWAIS - U.A.E.',
+  project_title:       'EPC FOR BOROUGE EU3 H2 EXTRACTION UNIT PROJECT AGREEMENT NO. 4700002115',
+  document_title:      'TECHNICAL DATA SHEET FOR EMERGENCY DIESEL GENERATOR',
+  company_doc_label:   'COMPANY DOCUMENT NUMBER',
+  company_doc_default: 'DS-13-EE-403-70010',
+  contractor_label:    'CONTRACTOR DOCUMENT NUMBER',
+  contractor_default:  'PA-31011-DS-13-EE-403-70010',
+  rejlers_label:       'REJLERS DOCUMENT NUMBER',
+  rejlers_default:     '5900863-EL-DAT-0003',
+};
+
+const DG_REVISION_HISTORY = [
+  { rev: 'N', date: '11.Mar.2025', section: '-', description: 'ISSUED FOR COMPANY REVIEW' },
+  { rev: 'L', date: '14.May.2025', section: '-', description: 'APPROVED FOR ENGINEERING'  },
+  { rev: 'P', date: '18.Jul.2025', section: '-', description: 'APPROVED FOR PURCHASE'     },
+];
+
+const DG_REVISION_FOOTER = [
+  'This page records the revision status of this documents.',
+  'All previous issues are hereby superseded and are to be destroyed.',
+  'Revisions after first issues are denoted as follows:',
+  'Document changes shall be made in track changes with a vertical line in the right-hand margin against the revision text in Blue Font.',
+];
+
+const DG_HOLDS = [
+  { rev: '1', description: 'NIL', section: '-' },
+];
+
+const DG_INDEX = [
+  { sr: '1', description: 'COVER SHEET',                  sheet: '1'    },
+  { sr: '2', description: 'REVISION HISTORY',             sheet: '2'    },
+  { sr: '3', description: 'HOLD',                         sheet: '3'    },
+  { sr: '4', description: 'TABLE OF CONTENTS',            sheet: '4'    },
+  { sr: '5', description: 'DIESEL GENERATOR DATA SHEET',  sheet: '5-23' },
+];
+
+const DG_ABBREVIATIONS = [
+  ['***', 'VENDOR TO SPECIFY'],
+  ['CT',  'CURRENT TRANSFORMER'],
+  ['kA',  'KILO AMPERE'],
+  ['kV',  'KILO VOLT'],
+  ['kVA', 'KILO VOLT AMPERE'],
+  ['NA',  'NOT APPLICABLE'],
+  ['VT',  'VOLTAGE TRANSFORMER'],
+  ['W',   'WATT'],
+];
+
+const DG_NOTES = []; // Template has no separate Notes sheet — kept empty (Notes tab hidden).
+
+const DG_PAGES = [
+  { id: 'cover',    label: 'Cover Sheet',     short: 'Cover',    page: '01/23', kind: 'cover',     icon: '📄' },
+  { id: 'revision', label: 'Revision',        short: 'Revision', page: '02/23', kind: 'revision',  icon: '🔁' },
+  { id: 'hold',     label: 'Hold',            short: 'Hold',     page: '03/23', kind: 'hold',      icon: '⏸️' },
+  { id: 'index',    label: 'Index',           short: 'Index',    page: '04/23', kind: 'index',     icon: '📑' },
+  { id: 'data',     label: 'DG Set Datasheet',short: 'DG Set',   page: '05/23', kind: 'datasheet', icon: '⚡', subtitle: 'Emergency Diesel Generator Set' },
+];
+
+// ─── ADNOC 11kV Switchgear document — soft-coded sub-page content ────────
+// Mirrors Documents/Electrical/Datasheet/11KV_SwitchGear/DS-13-574-ES-00001.xlsm.
+const MV_SWGR_DOC_HEADER = {
+  company_name:        'Abu Dhabi Polymers Company Ltd. (Borouge)',
+  location:            'RUWAIS - U.A.E.',
+  project_title:       'EPC FOR BOROUGE EU3 H2 EXTRACTION UNIT PROJECT AGREEMENT NO. 4700002115',
+  document_title:      'TECHNICAL DATA SHEET FOR 11kV SWITCHGEAR',
+  company_doc_label:   'COMPANY DOCUMENT NUMBER',
+  company_doc_default: 'DS-13-574-ES-00001',
+  contractor_label:    'CONTRACTOR DOCUMENT NUMBER',
+  contractor_default:  'PA-31011-DS-13-574-ES-00001',
+  rejlers_label:       'REJLERS DOCUMENT NUMBER',
+  rejlers_default:     '5900863-EL-DAT-0004',
+};
+
+const MV_SWGR_REVISION_HISTORY = [
+  { rev: 'L', date: '24.Jan.2025', section: '-', description: 'ISSUED FOR COMPANY REVIEW' },
+  { rev: 'N', date: '22.Mar.2025', section: '-', description: 'APPROVED FOR ENGINEERING'  },
+  { rev: 'P', date: '25.Jun.2025', section: '-', description: 'APPROVED FOR PURCHASE'     },
+];
+
+const MV_SWGR_REVISION_FOOTER = [
+  'This page records the revision status of this documents.',
+  'All previous issues are hereby superseded and are to be destroyed.',
+  'Revisions after first issues are denoted as follows:',
+  'Document changes shall be made in track changes with a vertical line in the right-hand margin against the revision text in Blue Font.',
+];
+
+const MV_SWGR_HOLDS = [
+  { rev: '1', description: 'NIL', section: '-' },
+];
+
+const MV_SWGR_INDEX = [
+  { sr: '1', description: 'COVER SHEET',                   sheet: '1'   },
+  { sr: '2', description: 'REVISION HISTORY',              sheet: '2'   },
+  { sr: '3', description: 'HOLD SHEET',                    sheet: '3'   },
+  { sr: '4', description: 'TABLE OF CONTENTS',             sheet: '4'   },
+  { sr: '5', description: '11kV SWITCHGEAR DATA SHEET',    sheet: '5-7' },
+];
+
+const MV_SWGR_ABBREVIATIONS = [
+  ['***', 'VENDOR TO SPECIFY'],
+  ['CT',  'CURRENT TRANSFORMER'],
+  ['kA',  'KILO AMPERE'],
+  ['kV',  'KILO VOLT'],
+  ['kVA', 'KILO VOLT AMPERE'],
+  ['NER', 'NEUTRAL EARTHING RESISTOR'],
+  ['NA',  'NOT APPLICABLE'],
+  ['VT',  'VOLTAGE TRANSFORMER'],
+  ['W',   'WATT'],
+];
+
+const MV_SWGR_NOTES = []; // Template has no separate Notes sheet — kept empty.
+
+const MV_SWGR_PAGES = [
+  { id: 'cover',    label: 'Cover Sheet',         short: 'Cover',     page: '1/7', kind: 'cover',     icon: '📄' },
+  { id: 'revision', label: 'Revision',            short: 'Revision',  page: '2/7', kind: 'revision',  icon: '🔁' },
+  { id: 'hold',     label: 'Hold',                short: 'Hold',      page: '3/7', kind: 'hold',      icon: '⏸️' },
+  { id: 'index',    label: 'Index',               short: 'Index',     page: '4/7', kind: 'index',     icon: '📑' },
+  { id: 'data',     label: '11kV Switchgear Datasheet', short: '11kV SWGR', page: '5/7', kind: 'datasheet', icon: '⚡', subtitle: '11kV Medium Voltage Switchgear' },
+];
+
+// Soft-coded per-equipment document schema. Add a new equipment by adding
+// an entry here — the document viewer auto-renders Cover/Revision/Hold/
+// Index/Notes/Datasheet tabs from the schema. The renderer is generic.
+const EQUIPMENT_DOC_SCHEMAS = {
+  transformer: {
+    docHeader:        TRANSFORMER_DOC_HEADER,
+    revisionHistory:  TRANSFORMER_REVISION_HISTORY,
+    revisionFooter:   TRANSFORMER_REVISION_FOOTER,
+    holds:            TRANSFORMER_HOLDS,
+    index:            TRANSFORMER_INDEX,
+    abbreviations:    TRANSFORMER_ABBREVIATIONS,
+    notes:            TRANSFORMER_NOTES,
+    pages:            TRANSFORMER_PAGES,
+    coverTitleFallback: 'TECHNICAL DATASHEET FOR TRANSFORMER (POWER AND DISTRIBUTION)',
+    coverSubtitleFor: (variant) => variant === 'distribution'
+      ? '1250 kVA · 11/0.433 kV Distribution Transformer'
+      : '25 MVA · 33/11.5 kV Power Transformer',
+    bannerTitle:      'TRANSFORMER',
+  },
+  dg_set: {
+    docHeader:        DG_DOC_HEADER,
+    revisionHistory:  DG_REVISION_HISTORY,
+    revisionFooter:   DG_REVISION_FOOTER,
+    holds:            DG_HOLDS,
+    index:            DG_INDEX,
+    abbreviations:    DG_ABBREVIATIONS,
+    notes:            DG_NOTES,
+    pages:            DG_PAGES,
+    coverTitleFallback: 'TECHNICAL DATASHEET FOR EMERGENCY DIESEL GENERATOR',
+    coverSubtitleFor: () => 'Emergency Diesel Generator Set',
+    bannerTitle:      'EMERGENCY DIESEL GENERATOR',
+  },
+  mv_switchgear: {
+    docHeader:        MV_SWGR_DOC_HEADER,
+    revisionHistory:  MV_SWGR_REVISION_HISTORY,
+    revisionFooter:   MV_SWGR_REVISION_FOOTER,
+    holds:            MV_SWGR_HOLDS,
+    index:            MV_SWGR_INDEX,
+    abbreviations:    MV_SWGR_ABBREVIATIONS,
+    notes:            MV_SWGR_NOTES,
+    pages:            MV_SWGR_PAGES,
+    coverTitleFallback: 'TECHNICAL DATASHEET FOR 11KV SWITCHGEAR',
+    coverSubtitleFor: () => '11kV Medium Voltage Switchgear',
+    bannerTitle:      '11kV SWITCHGEAR',
+  },
+};
+
 // ── Smart Datasheet workflow constants (soft-coded) ─────────────────────
 const WORKFLOW_MODES = [
   { id: 'generate', label: 'Generate New', icon: SparklesIcon },
@@ -619,12 +789,16 @@ const SmartElectricalDatasheetPage = () => {
     }
   };
 
-  // When new results land for a transformer, switch to the matching variant tab
+  // When new results land, switch to the matching variant tab if applicable
   useEffect(() => {
-    if (results?.equipment_type === 'transformer') {
+    const schema = results?.equipment_type ? EQUIPMENT_DOC_SCHEMAS[results.equipment_type] : null;
+    if (!schema) return;
+    if (results.equipment_type === 'transformer') {
       const variant = results.variant || 'power';
-      const matchTab = TRANSFORMER_PAGES.find(p => p.kind === 'datasheet' && p.variant === variant);
+      const matchTab = schema.pages.find(p => p.kind === 'datasheet' && p.variant === variant);
       setActivePage(matchTab?.id || 'cover');
+    } else {
+      setActivePage('cover');
     }
   }, [results]);
 
@@ -1760,88 +1934,32 @@ const SmartElectricalDatasheetPage = () => {
             )}
 
 
-            {/* ── MV Switchgear Datasheet Table Preview ── */}
-            {results.equipment_type === 'mv_switchgear' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
-              <div className="mb-6">
-                <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4 rounded-t-lg flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <TableCellsIcon className="w-6 h-6 text-white" />
-                    <h3 className="text-xl font-bold text-white">11KV Switchgear Datasheet Preview</h3>
-                  </div>
-                  <button onClick={handleDownloadSwitchgearExcel} className="flex items-center gap-2 bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-purple-50 transition-colors">
-                    <ArrowDownTrayIcon className="w-5 h-5" />
-                    Download Excel
-                  </button>
-                </div>
-                <div className="border-2 border-gray-200 rounded-b-lg overflow-hidden">
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="w-full">
-                      <thead className="bg-blue-600 text-white sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-16">SR NO</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-2/5">DESCRIPTION</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">UNIT</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-2/5">REQUIRED DATA</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">Rev</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {results.datasheet_rows.map((row, index) => {
-                          const isSectionHeader = !row.sr_no && row.description && !row.required_data && !row.vendor_data;
-                          
-                          return (
-                            <tr
-                              key={index}
-                              className={`
-                                ${isSectionHeader ? 'bg-blue-50 font-bold' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                                hover:bg-blue-100 transition-colors border-b border-gray-200
-                              `}
-                            >
-                              <td className="px-4 py-3 text-sm text-gray-900">{row.sr_no}</td>
-                              <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
-                              <td className="px-4 py-3 text-sm text-center text-gray-500">{row.unit || ''}</td>
-                              <EditableCell
-                                rowIdx={index}
-                                columnKey="required_data"
-                                initialValue={edits[`${index}:required_data`] !== undefined ? edits[`${index}:required_data`] : row.required_data}
-                                status={cellStatus[`${index}:required_data`]}
-                                disabled={isSectionHeader}
-                                onChange={handleCellEdit}
-                                className="px-4 py-3 text-sm text-gray-700"
-                              />
-                              <EditableCell
-                                rowIdx={index}
-                                columnKey="rev"
-                                initialValue={edits[`${index}:rev`] !== undefined ? edits[`${index}:rev`] : (row.rev || row.remarks || '')}
-                                status={cellStatus[`${index}:rev`]}
-                                disabled={isSectionHeader}
-                                onChange={handleCellEdit}
-                                className="px-4 py-3 text-sm text-center text-gray-600"
-                                align="center"
-                                placeholderClass="text-gray-300"
-                              />
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* ── Transformer Datasheet — Multi-Page ADNOC Document Viewer ── */}
-            {results.equipment_type === 'transformer' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
+            {/* ── ADNOC Multi-Page Document Viewer (transformer + DG set + 11kV switchgear) ── */}
+            {results.datasheet_rows && results.datasheet_rows.length > 0 && EQUIPMENT_DOC_SCHEMAS[results.equipment_type] && (() => {
+              const schema      = EQUIPMENT_DOC_SCHEMAS[results.equipment_type];
+              // Soft-coded per-equipment toolbar/download theme. Add a new equipment_type here.
+              const TOOLBAR_THEMES = {
+                transformer:   { grad: 'bg-gradient-to-r from-blue-700 via-cyan-600 to-amber-500',     text: 'text-blue-700',    handler: handleDownloadTransformerExcel, title: 'Power / Distribution Transformer Datasheet' },
+                dg_set:        { grad: 'bg-gradient-to-r from-emerald-700 via-green-600 to-lime-500', text: 'text-emerald-700', handler: handleDownloadDGExcel,          title: 'Emergency Diesel Generator Set Datasheet' },
+                mv_switchgear: { grad: 'bg-gradient-to-r from-purple-700 via-fuchsia-600 to-pink-500', text: 'text-purple-700', handler: handleDownloadSwitchgearExcel,  title: '11kV Switchgear Datasheet' },
+              };
+              const theme           = TOOLBAR_THEMES[results.equipment_type] || TOOLBAR_THEMES.transformer;
+              const toolbarGrad     = theme.grad;
+              const toolbarText     = theme.text;
+              const downloadHandler = theme.handler;
+              const datasheetTitle  = theme.title;
+              return (
               <div className="mb-6">
                 {/* Toolbar */}
-                <div className="bg-gradient-to-r from-blue-700 via-cyan-600 to-amber-500 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div className={`${toolbarGrad} px-6 py-4 rounded-t-2xl flex items-center justify-between`}>
                   <div className="flex items-center gap-3">
                     <TableCellsIcon className="w-6 h-6 text-white" />
                     <div>
-                      <h3 className="text-xl font-bold text-white">Power / Distribution Transformer Datasheet</h3>
-                      <p className="text-[11px] text-white/80 font-mono">{TRANSFORMER_DOC_HEADER.company_doc_default} · Rev {results?.revision || 'P'}</p>
+                      <h3 className="text-xl font-bold text-white">{datasheetTitle}</h3>
+                      <p className="text-[11px] text-white/80 font-mono">{schema.docHeader.company_doc_default} · Rev {results?.revision || 'P'}</p>
                     </div>
                   </div>
-                  <button onClick={handleDownloadTransformerExcel} className="flex items-center gap-2 bg-white text-blue-700 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-md">
+                  <button onClick={downloadHandler} className={`flex items-center gap-2 bg-white ${toolbarText} px-4 py-2 rounded-lg font-semibold hover:bg-slate-50 transition-colors shadow-md`}>
                     <ArrowDownTrayIcon className="w-5 h-5" />
                     Download Excel
                   </button>
@@ -1849,7 +1967,7 @@ const SmartElectricalDatasheetPage = () => {
 
                 {/* Page tab strip — like Excel sheet tabs */}
                 <div className="bg-slate-100 border-x border-slate-200 px-2 pt-2 flex flex-wrap gap-1 overflow-x-auto">
-                  {TRANSFORMER_PAGES.map((p) => {
+                  {schema.pages.map((p) => {
                     const isActive = activePage === p.id;
                     const isDisabledVariant = p.kind === 'datasheet' && p.variant && results.variant && p.variant !== results.variant;
                     return (
@@ -1859,14 +1977,14 @@ const SmartElectricalDatasheetPage = () => {
                         onClick={() => setActivePage(p.id)}
                         className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-xs font-semibold transition-all whitespace-nowrap
                           ${isActive
-                            ? 'bg-white text-blue-700 border border-slate-200 border-b-white shadow-sm -mb-px'
+                            ? `bg-white ${toolbarText} border border-slate-200 border-b-white shadow-sm -mb-px`
                             : 'bg-slate-50 text-slate-600 border border-transparent hover:text-blue-700 hover:bg-white/60'}
                           ${isDisabledVariant ? 'opacity-60' : ''}`}
                       >
                         <span className="text-sm">{p.icon}</span>
                         <span>{p.short}</span>
                         <span className="text-[9px] font-mono text-slate-400">{p.page}</span>
-                        {isActive && <span className="absolute -bottom-px left-0 right-0 h-0.5 bg-gradient-to-r from-blue-600 via-cyan-500 to-amber-400" />}
+                        {isActive && <span className={`absolute -bottom-px left-0 right-0 h-0.5 ${toolbarGrad}`} />}
                       </button>
                     );
                   })}
@@ -1875,7 +1993,7 @@ const SmartElectricalDatasheetPage = () => {
                 {/* Page canvas */}
                 <div className="border-x border-b border-slate-200 rounded-b-2xl bg-white overflow-hidden">
                   {(() => {
-                    const page = TRANSFORMER_PAGES.find(p => p.id === activePage) || TRANSFORMER_PAGES[0];
+                    const page = schema.pages.find(p => p.id === activePage) || schema.pages[0];
 
                     // Soft-coded ADNOC header block — appears on every sub-page.
                     // Every text field is inline-editable; values share the
@@ -1902,24 +2020,24 @@ const SmartElectricalDatasheetPage = () => {
                     const DocHeader = (
                       <div className="grid grid-cols-6 border border-slate-300 text-[11px]" style={{ fontFamily: 'Calibri, Arial, sans-serif' }}>
                         <div className="col-span-3 row-span-2 border border-slate-300 p-3 flex items-center justify-center text-center font-bold">
-                          <HField field="company_name" fallback={TRANSFORMER_DOC_HEADER.company_name} />
+                          <HField field="company_name" fallback={schema.docHeader.company_name} />
                         </div>
                         <div className="col-span-2 border border-slate-300 p-2 text-center font-bold bg-slate-50">
-                          <HField field="company_doc_label" fallback={TRANSFORMER_DOC_HEADER.company_doc_label} />
+                          <HField field="company_doc_label" fallback={schema.docHeader.company_doc_label} />
                         </div>
                         <div className="border border-slate-300 p-2 text-center font-bold bg-slate-50">Rev</div>
                         <div className="col-span-2 border border-slate-300 p-2 text-center font-mono">
-                          <HField field="company_doc_default" fallback={TRANSFORMER_DOC_HEADER.company_doc_default} />
+                          <HField field="company_doc_default" fallback={schema.docHeader.company_doc_default} />
                         </div>
                         <div className="border border-slate-300 p-2 text-center font-bold">
                           <EditableInline as="div" valueKey={revKey} initialValue={aux(revKey, results?.revision || 'P')} status={auxStatus[revKey]} onChange={handleAuxEdit} className="w-full" />
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center whitespace-pre-wrap">
                           <b>LOCATION:</b><br />
-                          <HField field="location" fallback={TRANSFORMER_DOC_HEADER.location} />
+                          <HField field="location" fallback={schema.docHeader.location} />
                         </div>
                         <div className="col-span-2 border border-slate-300 p-2 text-center text-[10px]">
-                          <HField field="project_title" fallback={TRANSFORMER_DOC_HEADER.project_title} />
+                          <HField field="project_title" fallback={schema.docHeader.project_title} />
                         </div>
                         <div className="border border-slate-300 p-2 text-center">
                           <div className="font-bold text-[10px]">Sheet</div>
@@ -1927,22 +2045,22 @@ const SmartElectricalDatasheetPage = () => {
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center font-bold">
                           <span className="mr-1">DOCUMENT TITLE:</span>
-                          <HField field="document_title" fallback={TRANSFORMER_DOC_HEADER.document_title} className="inline" />
+                          <HField field="document_title" fallback={schema.docHeader.document_title} className="inline" />
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center font-bold bg-slate-50">
-                          <HField field="contractor_label" fallback={TRANSFORMER_DOC_HEADER.contractor_label} />
+                          <HField field="contractor_label" fallback={schema.docHeader.contractor_label} />
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2"></div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center font-mono">
-                          <HField field="contractor_default" fallback={TRANSFORMER_DOC_HEADER.contractor_default} />
+                          <HField field="contractor_default" fallback={schema.docHeader.contractor_default} />
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2"></div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center font-bold bg-slate-50">
-                          <HField field="rejlers_label" fallback={TRANSFORMER_DOC_HEADER.rejlers_label} />
+                          <HField field="rejlers_label" fallback={schema.docHeader.rejlers_label} />
                         </div>
                         <div className="col-span-3 border border-slate-300 p-2"></div>
                         <div className="col-span-3 border border-slate-300 p-2 text-center font-mono">
-                          <HField field="rejlers_default" fallback={TRANSFORMER_DOC_HEADER.rejlers_default} />
+                          <HField field="rejlers_default" fallback={schema.docHeader.rejlers_default} />
                         </div>
                       </div>
                     );
@@ -1966,7 +2084,7 @@ const SmartElectricalDatasheetPage = () => {
                               <EditableInline
                                 as="div"
                                 valueKey={coverTitleKey}
-                                initialValue={aux(coverTitleKey, 'TECHNICAL DATASHEET FOR TRANSFORMER (POWER AND DISTRIBUTION)')}
+                                initialValue={aux(coverTitleKey, schema.coverTitleFallback)}
                                 status={auxStatus[coverTitleKey]}
                                 onChange={handleAuxEdit}
                                 className="min-w-[60%]"
@@ -1975,9 +2093,7 @@ const SmartElectricalDatasheetPage = () => {
                             <div className="mt-6 inline-block px-6 py-2 bg-white/15 border border-white/40 rounded-md text-sm font-mono">
                               <EditableInline
                                 valueKey={coverSubtitleKey}
-                                initialValue={aux(coverSubtitleKey, page.subtitle || (results.variant === 'distribution'
-                                  ? '1250 kVA · 11/0.433 kV Distribution Transformer'
-                                  : '25 MVA · 33/11.5 kV Power Transformer'))}
+                                initialValue={aux(coverSubtitleKey, page.subtitle || schema.coverSubtitleFor(results.variant))}
                                 status={auxStatus[coverSubtitleKey]}
                                 onChange={handleAuxEdit}
                               />
@@ -2019,7 +2135,7 @@ const SmartElectricalDatasheetPage = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {TRANSFORMER_REVISION_HISTORY.map((r, i) => {
+                              {schema.revisionHistory.map((r, i) => {
                                 const ek = (col) => auxKey('revision', i, col);
                                 return (
                                 <tr key={i} className="hover:bg-blue-50">
@@ -2070,7 +2186,7 @@ const SmartElectricalDatasheetPage = () => {
                           <div className="mt-4 p-3 border border-slate-200 rounded bg-slate-50 text-xs text-slate-700">
                             <div className="font-bold mb-1">NOTES:</div>
                             <ul className="list-disc pl-5 space-y-0.5">
-                              {TRANSFORMER_REVISION_FOOTER.map((n, i) => {
+                              {schema.revisionFooter.map((n, i) => {
                                 const k = auxKey('revision_note', i);
                                 return (
                                   <li key={i}>
@@ -2104,7 +2220,7 @@ const SmartElectricalDatasheetPage = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {TRANSFORMER_HOLDS.map((h, i) => {
+                              {schema.holds.map((h, i) => {
                                 const ek = (col) => auxKey('hold', i, col);
                                 return (
                                 <tr key={i} className="hover:bg-blue-50">
@@ -2134,7 +2250,7 @@ const SmartElectricalDatasheetPage = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {TRANSFORMER_INDEX.map((r, i) => {
+                              {schema.index.map((r, i) => {
                                 const ek = (col) => auxKey('index', i, col);
                                 return (
                                 <tr key={i} className="hover:bg-blue-50">
@@ -2150,7 +2266,7 @@ const SmartElectricalDatasheetPage = () => {
                             <div className="bg-[#1F4E79] text-white text-center font-bold py-2 border border-slate-300">ABBREVIATIONS</div>
                             <table className="w-full text-xs border border-slate-300 border-t-0">
                               <tbody>
-                                {TRANSFORMER_ABBREVIATIONS.map(([abbr, meaning], i) => {
+                                {schema.abbreviations.map(([abbr, meaning], i) => {
                                   const ek = (col) => auxKey('abbr', i, col);
                                   return (
                                   <tr key={i} className="hover:bg-blue-50">
@@ -2179,7 +2295,7 @@ const SmartElectricalDatasheetPage = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {TRANSFORMER_NOTES.map(([label, text], i) => {
+                              {schema.notes.map(([label, text], i) => {
                                 const ek = (col) => auxKey('notes', i, col);
                                 const isSub = /^[a-z]$/.test(label);
                                 return (
@@ -2268,73 +2384,8 @@ const SmartElectricalDatasheetPage = () => {
                   })()}
                 </div>
               </div>
-            )}
-
-            {/* DG Set Datasheet Table Preview */}
-            {results.equipment_type === 'dg_set' && results.datasheet_rows && results.datasheet_rows.length > 0 && (
-              <div className="mb-6">
-                <div className="bg-gradient-to-r from-green-700 to-emerald-700 px-6 py-4 rounded-t-lg flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <TableCellsIcon className="w-6 h-6 text-white" />
-                    <h3 className="text-xl font-bold text-white">Emergency Diesel Generator Set Datasheet Preview</h3>
-                  </div>
-                  <button onClick={handleDownloadDGExcel} className="flex items-center gap-2 bg-white text-green-700 px-4 py-2 rounded-lg font-semibold hover:bg-green-50 transition-colors">
-                    <ArrowDownTrayIcon className="w-5 h-5" />
-                    Download Excel
-                  </button>
-                </div>
-                <div className="border-2 border-gray-200 rounded-b-lg overflow-hidden">
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="w-full">
-                      <thead className="bg-green-700 text-white sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-16">SI NO.</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-2/5">DESCRIPTION</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">UNIT</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold w-2/5">SPECIFIED DESIGN DATA</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold w-16">Rev</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {results.datasheet_rows.map((row, index) => {
-                          const isSectionHeader = !row.sr_no && row.description && !row.required_data && !row.vendor_data;
-                          return (
-                            <tr
-                              key={index}
-                              className={`${isSectionHeader ? 'bg-green-50 font-bold' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-green-100 transition-colors border-b border-gray-200`}
-                            >
-                              <td className="px-4 py-3 text-sm text-gray-900">{row.sr_no}</td>
-                              <td className="px-4 py-3 text-sm text-gray-900">{row.description}</td>
-                              <td className="px-4 py-3 text-sm text-center text-gray-500">{row.unit || ''}</td>
-                              <EditableCell
-                                rowIdx={index}
-                                columnKey="required_data"
-                                initialValue={edits[`${index}:required_data`] !== undefined ? edits[`${index}:required_data`] : row.required_data}
-                                status={cellStatus[`${index}:required_data`]}
-                                disabled={isSectionHeader}
-                                onChange={handleCellEdit}
-                                className="px-4 py-3 text-sm text-gray-700"
-                              />
-                              <EditableCell
-                                rowIdx={index}
-                                columnKey="rev"
-                                initialValue={edits[`${index}:rev`] !== undefined ? edits[`${index}:rev`] : row.rev}
-                                status={cellStatus[`${index}:rev`]}
-                                disabled={isSectionHeader}
-                                onChange={handleCellEdit}
-                                className="px-4 py-3 text-sm text-center text-gray-600"
-                                align="center"
-                                placeholderClass="text-gray-300"
-                              />
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Download Button */}
             <div className="flex flex-col sm:flex-row gap-3">
