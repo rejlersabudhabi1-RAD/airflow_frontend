@@ -412,11 +412,16 @@ const ConfigPanel = ({ config, onSaved, onVerify }) => {
             type="url"
             value={form.svc_url}
             onChange={handleChange('svc_url')}
-            placeholder="https://svc.wrenchproject.com"
+            placeholder="https://rejlers.wrenchsp.com/WrenchService_Rejlers_Live/SVC"
             className={inputClass}
           />
           <p className="text-xs text-gray-400 mt-1">
             Leave blank if DocumentSearch runs on the same host as the WebAPI. Use Auto-Detect to probe common patterns.
+            <br />
+            <span className="text-gray-500">
+              Tip: pasting the full AtomSVC metadata URL (e.g. <code className="font-mono">…/SVC/AtomSVC.svc/</code>)
+              is fine — the system trims it automatically.
+            </span>
           </p>
 
           {/* Probe results — clickable candidates */}
