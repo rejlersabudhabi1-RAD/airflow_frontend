@@ -21,6 +21,10 @@ import {
  */
 
 // ─── Soft-coded tool configuration ───────────────────────────────────────────
+const HIDDEN_DATASHEET_TOOL_IDS = new Set([
+  'datasheet_analytics',
+]);
+
 const datasheetTools = [
   {
     id: 'legacy_pdf_digitizer',
@@ -171,6 +175,9 @@ const datasheetTools = [
 
 const DigitizationDatasheetPage = () => {
   const navigate = useNavigate();
+  const visibleDatasheetTools = datasheetTools.filter(
+    (tool) => !HIDDEN_DATASHEET_TOOL_IDS.has(tool.id)
+  );
 
   const handleNavigate = (tool) => {
     if (!tool.disabled) {
@@ -222,7 +229,7 @@ const DigitizationDatasheetPage = () => {
       {/* ── Tool Cards Grid ───────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {datasheetTools.map((tool) => {
+          {visibleDatasheetTools.map((tool) => {
             const IconComponent = tool.icon;
             const isDisabled = tool.disabled ?? true;
             const isAI = tool.badge === 'AI';

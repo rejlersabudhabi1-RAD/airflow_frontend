@@ -28,6 +28,9 @@ const PID_NAMING_CONFIG = {
   longDescription: 'Advanced P&ID quality analysis with AI-powered error detection, standards compliance checking, and automated recommendations'
 }
 
+// SOFT-CODED: Toggle visibility of Digitization > Datasheets in frontend navigation
+const ENABLE_DIGITIZATION_DATASHEET_FEATURE = false
+
 /**
  * Engineering Disciplines Configuration
  * Each discipline can have multiple sub-features
@@ -297,16 +300,18 @@ export const ENGINEERING_DISCIPLINES = {
         moduleCode: 'spec_customization',
         badge: 'AI'
       },
-      {
-        id: 'digitizationDatasheet',
-        name: 'Datasheets',
-        fullName: 'Digitization Datasheets',
-        icon: DocumentTextIcon,
-        path: '/engineering/digitization/datasheet',
-        description: 'Digital transformation datasheets and documentation',
-        moduleCode: 'digitization_datasheet',
-        badge: 'New'
-      },
+      ...(ENABLE_DIGITIZATION_DATASHEET_FEATURE
+        ? [{
+          id: 'digitizationDatasheet',
+          name: 'Datasheets',
+          fullName: 'Digitization Datasheets',
+          icon: DocumentTextIcon,
+          path: '/engineering/digitization/datasheet',
+          description: 'Digital transformation datasheets and documentation',
+          moduleCode: 'digitization_datasheet',
+          badge: 'New'
+        }]
+        : []),
       {
         id: 'nonTeffMetadata',
         name: 'SPF-NON-TEF',

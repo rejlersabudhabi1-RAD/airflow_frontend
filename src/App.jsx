@@ -132,6 +132,9 @@ import FeaturesDebug from './pages/FeaturesDebug'
 // /admin/ai-champion live. Soft-coded URL→application/feature mapping.
 import useAIChampionTracker from './hooks/useAIChampionTracker'
 
+// SOFT-CODED: Toggle Digitization Datasheet route visibility
+const ENABLE_DIGITIZATION_DATASHEET_ROUTE = false
+
 function App() {
   // Mount AI Champion route-tracker (no-op when unauthenticated)
   useAIChampionTracker()
@@ -944,14 +947,16 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="engineering/digitization/datasheet"
-          element={
-            <ProtectedRoute>
-              <DigitizationDatasheetPage />
-            </ProtectedRoute>
-          }
-        />
+        {ENABLE_DIGITIZATION_DATASHEET_ROUTE && (
+          <Route
+            path="engineering/digitization/datasheet"
+            element={
+              <ProtectedRoute>
+                <DigitizationDatasheetPage />
+              </ProtectedRoute>
+            }
+          />
+        )}
         <Route
           path="engineering/digitization/non-teff-metadata"
           element={

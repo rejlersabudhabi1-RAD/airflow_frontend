@@ -659,7 +659,10 @@ const SmartElectricalDatasheetPage = () => {
     setHistoryLoading(true);
     electricalDatasheetService
       .listGenerated()
-      .then(d => setHistoryItems(d.results || []))
+      .then((d) => {
+        const items = d?.items || d?.data?.items || d?.results || [];
+        setHistoryItems(Array.isArray(items) ? items : []);
+      })
       .catch(() => setHistoryItems([]))
       .finally(() => setHistoryLoading(false));
   }, [workflowMode]);
@@ -667,15 +670,20 @@ const SmartElectricalDatasheetPage = () => {
   // Open a saved datasheet from history into the existing viewer
   const openFromHistory = async (item) => {
     try {
-      const ds = await electricalDatasheetService.getGenerated(item.id);
-      setSelectedEquipmentType(ds.equipment_type);
+      const payload = await electricalDatasheetService.getGenerated(item.id);
+      const ds = payload?.data || payload;
+      if (!ds?.id) {
+        throw new Error('Invalid datasheet payload');
+      }
+
+      setSelectedEquipmentType(ds.equipment_type || '');
       setResults({
         success: true,
         equipment_type: ds.equipment_type,
-        datasheet_rows: ds.rows,
-        summary: ds.summary,
-        extraction_metadata: ds.metadata,
-        variant: ds.variant,
+        datasheet_rows: ds.rows || [],
+        summary: ds.summary || {},
+        extraction_metadata: ds.metadata || {},
+        variant: ds.variant || 'default',
         datasheet_id: ds.id,
         excel_url: ds.excel_url,
       });

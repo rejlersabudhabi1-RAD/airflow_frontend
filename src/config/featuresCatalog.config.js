@@ -21,6 +21,9 @@ const PID_NAMING_CONFIG = {
   detailedDescription: 'Advanced P&ID quality analysis with AI-powered error detection, standards compliance checking (ADNOC DEP, API, ISA-5.1), symbol recognition, and automated quality recommendations.'
 }
 
+// SOFT-CODED: Toggle visibility of Digitization > Datasheets in feature catalog surfaces
+const ENABLE_DIGITIZATION_DATASHEET_FEATURE = false
+
 /**
  * Feature Status Types
  */
@@ -195,27 +198,29 @@ export const FEATURES_CATALOG = {
           avgRating: 4.6
         }
       },
-      {
-        id: 'eng-digitization-datasheet',
-        name: 'Datasheets',
-        shortName: 'Datasheets',
-        description: 'Digital transformation datasheets and documentation',
-        path: '/engineering/digitization/datasheet',
-        moduleCode: 'digitization_datasheet',
-        status: FEATURE_STATUS.NEW,
-        badges: [FEATURE_BADGES.NEW],
-        capabilities: [
-          'Digital documentation management',
-          'Automated datasheet generation',
-          'Template library',
-          'Standards compliance'
-        ],
-        usageStats: {
-          monthlyUses: 0,
-          totalUses: 0,
-          avgRating: 0
-        }
-      }
+      ...(ENABLE_DIGITIZATION_DATASHEET_FEATURE
+        ? [{
+          id: 'eng-digitization-datasheet',
+          name: 'Datasheets',
+          shortName: 'Datasheets',
+          description: 'Digital transformation datasheets and documentation',
+          path: '/engineering/digitization/datasheet',
+          moduleCode: 'digitization_datasheet',
+          status: FEATURE_STATUS.NEW,
+          badges: [FEATURE_BADGES.NEW],
+          capabilities: [
+            'Digital documentation management',
+            'Automated datasheet generation',
+            'Template library',
+            'Standards compliance'
+          ],
+          usageStats: {
+            monthlyUses: 0,
+            totalUses: 0,
+            avgRating: 0
+          }
+        }]
+        : [])
     ]
   },
 
