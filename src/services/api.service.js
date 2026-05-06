@@ -8,6 +8,104 @@ import { toast } from 'react-toastify'
  * Handles authentication, errors, and request/response transformations
  */
 
+// =============================================================================
+// SOFT-CODED AUTH RESILIENCE CONFIG
+// Tunable behavior for token refresh, queueing, and silent endpoints.
+// Adjust these constants instead of editing core logic below.
+// =============================================================================
+const AUTH_RESILIENCE_CONFIG = {
+  // Endpoint URL substrings that should NOT trigger toast/redirect on 401.
+  // These are background/polling endpoints — failing silently keeps the UI clean.
+  SILENT_AUTH_ENDPOINTS: [
+    '/notifications/unread_count',
+    '/notifications/stats',
+    '/notifications/categories',
+    '/usage_tracking/',
+    '/activity/heartbeat',
+  ],
+  // Endpoints that should NEVER attempt a refresh (refresh endpoint itself, login, etc.)
+  REFRESH_BLACKLIST: [
+    '/auth/refresh',
+    '/auth/login',
+    '/auth/logout',
+  ],
+  // Maximum number of queued requests waiting on a single in-flight refresh.
+  // Prevents memory blow-up if something goes very wrong.
+  MAX_REFRESH_QUEUE: 50,
+  // After this many consecutive refresh failures, force logout immediately.
+  REFRESH_FAILURE_THRESHOLD: 1,
+}
+
+// =============================================================================
+// REFRESH-TOKEN MUTEX (concurrency-safe single-flight refresh)
+// Fixes: parallel 401s racing each other, refresh-token rotation invalidating
+// all but the first call, "Token is invalid or expired" cascades.
+// =============================================================================
+let _refreshPromise = null              // Single in-flight refresh promise
+let _refreshFailureCount = 0            // Track consecutive refresh failures
+
+const _isSilentAuthEndpoint = (url = '') =>
+  AUTH_RESILIENCE_CONFIG.SILENT_AUTH_ENDPOINTS.some((s) => url.includes(s))
+
+const _isRefreshBlacklisted = (url = '') =>
+  AUTH_RESILIENCE_CONFIG.REFRESH_BLACKLIST.some((s) => url.includes(s))
+
+const _clearAuthAndRedirect = (showToast = true) => {
+  localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+  localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+  localStorage.removeItem(STORAGE_KEYS.USER_DATA)
+  if (!window.location.pathname.includes('/login')) {
+    if (showToast) toast.error('Session expired. Please login again.')
+    setTimeout(() => { window.location.href = '/login' }, 1000)
+  }
+}
+
+/**
+ * Returns a single shared promise that resolves with the new access token.
+ * All concurrent 401 retries await the same promise — the refresh endpoint
+ * is hit exactly once per expiry event.
+ */
+const _refreshAccessToken = () => {
+  if (_refreshPromise) {
+    console.log('[API] ♻️  Refresh already in-flight, awaiting shared promise')
+    return _refreshPromise
+  }
+
+  const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+  if (!refreshToken) {
+    return Promise.reject(new Error('No refresh token available'))
+  }
+
+  console.log('[API] 🔄 Starting single-flight token refresh...')
+  _refreshPromise = axios
+    .post(
+      `${API_BASE_URL}/auth/refresh/`,
+      { refresh: refreshToken },
+      { timeout: API_TIMEOUT_REFRESH }
+    )
+    .then((response) => {
+      const { access, refresh } = response.data
+      if (!access) throw new Error('No access token received from refresh endpoint')
+      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access)
+      // Persist rotated refresh token if backend returns one (DRF SimpleJWT rotation)
+      if (refresh) localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refresh)
+      _refreshFailureCount = 0
+      console.log('[API] ✅ Token refresh successful (shared)')
+      return access
+    })
+    .catch((err) => {
+      _refreshFailureCount += 1
+      console.error('[API] ❌ Token refresh failed:', err.message)
+      throw err
+    })
+    .finally(() => {
+      // Always release the lock so the next expiry event can refresh again
+      _refreshPromise = null
+    })
+
+  return _refreshPromise
+}
+
 // CORS Health Check Function
 const testCorsConnection = async (baseURL = API_BASE_URL) => {
   console.log('[CORS_TEST] 🩺 Testing CORS connection to:', baseURL);
@@ -178,69 +276,65 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Handle token refresh
+    // Handle token refresh (single-flight, concurrency-safe)
     if (error.response?.status === 401 && !originalRequest._retry) {
+      const reqUrl = originalRequest?.url || ''
+
+      // Never try to refresh on auth endpoints themselves — that's a real auth failure
+      if (_isRefreshBlacklisted(reqUrl)) {
+        console.warn('[API] 401 on auth endpoint, not retrying:', reqUrl)
+        _clearAuthAndRedirect(true)
+        return Promise.reject(error)
+      }
+
+      // No refresh token => immediate logout
+      const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+      if (!refreshToken) {
+        console.warn('[API] No refresh token available, redirecting to login')
+        _clearAuthAndRedirect(!_isSilentAuthEndpoint(reqUrl))
+        return Promise.reject(error)
+      }
+
+      // If too many consecutive refresh failures already, fail fast
+      if (_refreshFailureCount >= AUTH_RESILIENCE_CONFIG.REFRESH_FAILURE_THRESHOLD && !_refreshPromise) {
+        console.warn('[API] Refresh failure threshold reached, forcing logout')
+        _clearAuthAndRedirect(!_isSilentAuthEndpoint(reqUrl))
+        return Promise.reject(error)
+      }
+
       originalRequest._retry = true
 
       try {
-        const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
-        
-        if (!refreshToken) {
-          console.warn('[API] No refresh token available, redirecting to login');
-          // No refresh token, redirect to login
-          localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-          localStorage.removeItem(STORAGE_KEYS.USER_DATA)
-          
-          // Avoid redirect loop - only redirect if not already on login page
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login'
-          }
-          return Promise.reject(error)
-        }
-        
-        console.log('[API] 🔄 Attempting to refresh access token...');
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
-          refresh: refreshToken,
-        }, {
-          timeout: API_TIMEOUT_REFRESH, // SOFT-CODED: from environments.json (default 90s for Railway cold-start)
-        })
+        // All concurrent 401s share the same refresh promise (mutex pattern).
+        // This prevents refresh-token rotation from invalidating parallel calls.
+        const newAccess = await _refreshAccessToken()
 
-        const { access } = response.data
-        
-        if (!access) {
-          throw new Error('No access token received from refresh endpoint');
-        }
-        
-        console.log('[API] ✅ Token refresh successful');
-        localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access)
-
-        // Update the failed request's authorization header
-        originalRequest.headers.Authorization = `Bearer ${access}`
-        
-        // Retry the original request
+        // Update header on the original request and retry
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${newAccess}`
         return apiClient(originalRequest)
       } catch (refreshError) {
-        console.error('[API] ❌ Token refresh failed:', refreshError.message);
-        
-        // Refresh failed, logout user
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
-        localStorage.removeItem(STORAGE_KEYS.USER_DATA)
-        
-        // Avoid redirect loop - only redirect if not already on login page
-        if (!window.location.pathname.includes('/login')) {
-          toast.error('Session expired. Please login again.');
-          setTimeout(() => {
-            window.location.href = '/login'
-          }, 1000);
+        // Silent endpoints (background polling) shouldn't show a toast
+        const silent = _isSilentAuthEndpoint(reqUrl)
+        if (silent) {
+          console.warn('[API] Silent 401 on background endpoint, suppressing toast:', reqUrl)
+          // Don't redirect on silent endpoints — let an active user-initiated request trigger logout
+          localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
+          return Promise.reject(refreshError)
         }
-        
+        _clearAuthAndRedirect(true)
         return Promise.reject(refreshError)
       }
     }
 
     // Enhanced error messages for different error types
     if (error.response?.status !== 401 || originalRequest._retry) {
+      // Suppress toasts for background/polling endpoints — they should fail silently
+      const silent = _isSilentAuthEndpoint(originalRequest?.url || '')
+      if (silent) {
+        return Promise.reject(error)
+      }
+
       let errorMessage = 'An error occurred';
       
       if (!error.response) {

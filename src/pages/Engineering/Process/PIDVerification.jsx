@@ -325,6 +325,35 @@ const HIDDEN_CATEGORIES = new Set(['notes', 'connectivity']);
 // to suppress them globally without touching any rule logic.
 const HIDDEN_SEVERITIES = new Set(['info']);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded ACCURACY FILTERS (frontend safety-net mirroring backend filters).
+// Even after the backend `_apply_accuracy_filters` has run, occasional OCR
+// fragments slip through — especially on legacy drawings.  These two knobs let
+// the UI suppress them without any rule-engine redeploy.
+//   HIDDEN_RULE_IDS         : rule_ids to hide globally (table, overlay, exports)
+//   EVIDENCE_NOISE_PATTERNS : RegExp[] — finding.evidence fullmatching ANY drops
+// Add new rule_ids/patterns here as new noise classes are observed.
+// ─────────────────────────────────────────────────────────────────────────────
+const HIDDEN_RULE_IDS = new Set([
+  // e.g. 'TAG-003',   // un-comment to mute non-standard tag-format spam
+  // e.g. 'LSZ-007',   // un-comment to mute single-direction duplicate spam
+]);
+const EVIDENCE_NOISE_PATTERNS = [
+  /^[A-Z]\.?$/i,                                // single letter / 'N.'
+  /^[\s\-_./:;,()[\]]+$/,                       // punctuation soup
+  /^\d+(?:\.\d+)?\s*(?:mm|cm|m)?$/i,            // bare numeric ± unit
+  /^\d{4,8}(?:-[A-Z0-9]{1,8})+$/i,              // OCR-split seq+suffix e.g. 013842-X-N
+];
+// Single-source finding-noise predicate used by every visibility filter below.
+// Returns TRUE when the finding should be SUPPRESSED.
+const isFindingNoisy = (f) => {
+  if (!f) return true;
+  if (HIDDEN_RULE_IDS.has(f.rule_id)) return true;
+  const ev = String(f.evidence || '').trim();
+  if (ev && EVIDENCE_NOISE_PATTERNS.some((re) => re.test(ev))) return true;
+  return false;
+};
+
 // Soft-coded: when false, the native browser tooltip (recommendation text) that
 // appears on hover over every overlay marker on the drawing is suppressed.
 // Set to true to re-enable tooltips. Core overlay logic is NOT affected.
@@ -1465,6 +1494,15 @@ const PIDVerification = () => {
   // Cleanup legend poll on unmount
   useEffect(() => () => { if (legendPollRef.current) clearInterval(legendPollRef.current); }, []);
 
+  // ── Unmount cleanup — kill status polling timers when leaving the page ────
+  // Prevents zombie pollers from accumulating across navigations (each one
+  // hits /status/ every 3 s, multiplying load and producing the "page is
+  // taking forever" symptom on revisit).
+  useEffect(() => () => {
+    if (pollRef.current)  { clearInterval(pollRef.current);  pollRef.current  = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
@@ -1719,27 +1757,66 @@ const PIDVerification = () => {
   };
 
   const startPolling = (docId) => {
+    // ── Soft-coded poll watchdog (prevents the page from hanging indefinitely) ──
+    // Tune these constants to change behaviour without touching core logic below.
+    //   POLL_INTERVAL_MS         : delay between status checks (ms)
+    //   POLL_MAX_DURATION_MS     : hard ceiling — give up after this much time (ms)
+    //   POLL_MAX_CONSECUTIVE_ERR : abort after N consecutive failed polls (network/auth)
+    //   POLL_REQUEST_TIMEOUT_MS  : per-request timeout for /status/ calls (ms)
+    const POLL_INTERVAL_MS         = 3000;
+    const POLL_MAX_DURATION_MS     = 15 * 60 * 1000;  // 15 minutes — far less than 1 hour
+    const POLL_MAX_CONSECUTIVE_ERR = 5;
+    const POLL_REQUEST_TIMEOUT_MS  = 15000;
+
     setPolling(true);
     setElapsedSec(0);
+    let consecutiveErrors = 0;
+    const pollStartTs = Date.now();
+
+    const stopAll = () => {
+      if (pollRef.current)  { clearInterval(pollRef.current);  pollRef.current  = null; }
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      setPolling(false);
+    };
+
     // Start the elapsed-time ticker (1 s resolution, purely cosmetic)
     timerRef.current = setInterval(() => {
       setElapsedSec(s => s + 1);
     }, 1000);
     pollRef.current = setInterval(async () => {
+      // Hard ceiling — bail out so the UI never appears to hang for hours
+      if (Date.now() - pollStartTs > POLL_MAX_DURATION_MS) {
+        stopAll();
+        setError(`Processing is taking longer than ${Math.floor(POLL_MAX_DURATION_MS / 60000)} minutes. The job may still be running on the server — check the History panel later.`);
+        return;
+      }
       try {
-        const res = await axios.get(`${API_PREFIX}/status/${docId}/`, { headers: authHeader(), timeout: 15000 });
+        const res = await axios.get(`${API_PREFIX}/status/${docId}/`, { headers: authHeader(), timeout: POLL_REQUEST_TIMEOUT_MS });
+        consecutiveErrors = 0;  // reset error streak on any successful response
         const s = res.data.status;
         setDocStatus(s);
         if (s === 'completed') {
-          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
+          stopAll();
           await fetchResults(docId);
           if (selectedProject) fetchHistory(selectedProject.project_id);
         } else if (s === 'failed') {
-          clearInterval(pollRef.current); clearInterval(timerRef.current); setPolling(false);
+          stopAll();
           setError(res.data.error_message || 'Processing failed.');
         }
-      } catch (_) {}
-    }, 3000);
+      } catch (err) {
+        consecutiveErrors += 1;
+        // Surface auth failures immediately — no point polling with an expired token
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          stopAll();
+          setError('Your session expired during processing. Please log in again and check History.');
+          return;
+        }
+        if (consecutiveErrors >= POLL_MAX_CONSECUTIVE_ERR) {
+          stopAll();
+          setError('Lost connection to the server while checking status. Please refresh and check History.');
+        }
+      }
+    }, POLL_INTERVAL_MS);
   };
 
   const fetchResults = async (docId) => {
@@ -2239,6 +2316,7 @@ const PIDVerification = () => {
 
   const overlayNodes = buildOverlayNodes(
     (activeDrawingData?.issues || []).filter(f =>
+      !isFindingNoisy(f) &&
       !HIDDEN_CATEGORIES.has(f.category) &&
       !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
     )
@@ -3829,6 +3907,7 @@ const PIDVerification = () => {
                                 // for legitimate repeated labels (same pipe run) or OCR multi-
                                 // pass near-duplicates that never triggered an actual finding.
                                 const _allIssuesHL = (activeDrawingData?.issues || []).filter(f =>
+                                  !isFindingNoisy(f) &&
                                   !HIDDEN_CATEGORIES.has(f.category) &&
                                   !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
                                 );
@@ -3932,6 +4011,7 @@ const PIDVerification = () => {
                                 // section differs, or where no finding was raised, are excluded so
                                 // that legitimate repeated labels and OCR near-dupes don't produce dots.
                                 const _allIssuesOcc = (activeDrawingData?.issues || []).filter(f =>
+                                  !isFindingNoisy(f) &&
                                   !HIDDEN_CATEGORIES.has(f.category) &&
                                   !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
                                 );
@@ -4259,6 +4339,7 @@ const PIDVerification = () => {
                     {/* ── Filter bar ── */}
                     {(() => {
                       const visibleIssues = activeDrawingData.issues.filter(f =>
+                        !isFindingNoisy(f) &&
                         !HIDDEN_CATEGORIES.has(f.category) &&
                         !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
                         // Only include findings whose evidence key maps to a confirmed
@@ -6250,6 +6331,7 @@ const PIDVerification = () => {
 
               const valveFindingsByTag = {};
               for (const f of (activeDrawingData?.issues || [])) {
+                if (isFindingNoisy(f)) continue;
                 if (HIDDEN_CATEGORIES.has(f.category)) continue;
                 const TAG_RE_LOCAL = /\b([A-Z]{1,4}[-_]?\d{2,6}[A-Z]?)\b/g;
                 const text = (f.evidence || f.issue_observed || '').toUpperCase();
@@ -9724,6 +9806,7 @@ const PIDVerification = () => {
 
                     // ── Build findings map: lineText (normalised) → findings array ──────────
                     const _pipIssues = (activeDrawingData?.issues || []).filter(f =>
+                      !isFindingNoisy(f) &&
                       !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
                     );
                     const _lineFindMap = {};
@@ -11551,7 +11634,7 @@ const PIDVerification = () => {
               // 1. Master serial index: every finding across all drawings (INFO excluded)
               const masterIndex = allDrawings.flatMap((d, di) =>
                 (d.issues ?? [])
-                  .filter(f => !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()))
+                  .filter(f => !isFindingNoisy(f) && !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()))
                   .map((f, fi) => ({
                   globalIdx: allDrawings.slice(0, di).reduce((s,x) => s + (x.issues?.length ?? 0), 0) + fi + 1,
                   sl_no:     f.sl_no,
@@ -11953,6 +12036,7 @@ const PIDVerification = () => {
 
                   // ── VLV rule findings (from AI analysis) ────────────────────────
                   const vlvRuleIssues = (activeDrawingData?.issues || []).filter(f =>
+                    !isFindingNoisy(f) &&
                     !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase()) &&
                     (VLV_CHECKS.some(c => c.autoRules.includes(f.rule_id)) ||
                      (f.category || '').toLowerCase() === 'valve')
@@ -12672,6 +12756,7 @@ const PIDVerification = () => {
               // ── All-drawings aggregated findings ───────────────────────
               const allIssues = allDrawings.flatMap(d =>
                 (d.issues ?? []).filter(f =>
+                  !isFindingNoisy(f) &&
                   !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
                 )
               );
@@ -12709,6 +12794,7 @@ const PIDVerification = () => {
               // Per-drawing summary
               const drawingSummary = allDrawings.map(d => {
                 const issues = (d.issues ?? []).filter(f =>
+                  !isFindingNoisy(f) &&
                   !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
                 );
                 const sevs   = issues.map(f => (f.severity || 'minor').toLowerCase());
@@ -13748,6 +13834,73 @@ const PIDVerification = () => {
                     ),
                     isObj: true,
                     asEntries: true,
+                  },
+                  // ── Soft-coded NEW sections (legend coverage extension) ─────────
+                  // These mirror the backend schema additions in legend_extractor.py.
+                  // Each section is purely additive — present only when AI returns data.
+                  {
+                    key:   'equipment_class_codes',
+                    title: 'Equipment Class Codes',
+                    icon:  '⛁',
+                    empty: 'No equipment class codes found',
+                    render: (obj) => (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {Object.entries(obj).map(([k, v], i) => (
+                          <div key={i} className="flex items-start gap-1.5 bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-indigo-700 text-xs w-10 flex-shrink-0">{k}</span>
+                            <span className="text-xs text-slate-500 leading-tight flex-1 min-w-0 truncate" title={v}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                    isObj: true,
+                    asEntries: true,
+                  },
+                  {
+                    key:   'drawing_references',
+                    title: 'Drawing & Code References',
+                    icon:  '※',
+                    empty: 'No drawing or code references found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((r, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-teal-700 w-32 flex-shrink-0 truncate" title={r.ref}>{r.ref || '—'}</span>
+                            <span className="flex-1 text-slate-500 min-w-0">{r.description || ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'tie_in_symbols',
+                    title: 'Tie-in / Off-page Connectors',
+                    icon:  '⇄',
+                    empty: 'No tie-in or off-page symbols found',
+                    render: (items) => (
+                      <div className="flex flex-col gap-1.5">
+                        {items.map((t, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs bg-slate-50 rounded px-2 py-1.5 border border-slate-100">
+                            <span className="font-mono font-bold text-fuchsia-700 w-16 flex-shrink-0 truncate">{t.symbol || '—'}</span>
+                            <span className="flex-1 text-slate-500 min-w-0">{t.description || ''}</span>
+                            {t.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-50 text-fuchsia-600 flex-shrink-0 capitalize">{String(t.type).replace(/_/g,' ')}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  },
+                  {
+                    key:   'general_notes',
+                    title: 'General Notes',
+                    icon:  '✎',
+                    empty: 'No general notes found',
+                    render: (items) => (
+                      <ol className="list-decimal list-inside flex flex-col gap-1 text-xs text-slate-600">
+                        {items.map((n, i) => (
+                          <li key={i} className="leading-snug">{n}</li>
+                        ))}
+                      </ol>
+                    ),
                   },
                 ];
 
