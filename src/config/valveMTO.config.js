@@ -73,6 +73,8 @@ export const VALVE_COLUMNS = [
     aliases: ['size 2 (nb)', 'size 2', 'reduced size'] },
   { key: 'bore',        label: 'BORE',                   width:  8, type: 'select', options: BORE_OPTIONS,
     aliases: ['bore', 'fb/rb'] },
+  { key: 'line_number', label: 'LINE NUMBER',            width: 24, type: 'text',
+    aliases: ['line number', 'line no', 'line no.', 'line', 'line #', 'pipeline number', 'pipeline no', 'line tag', 'line id'] },
   { key: 'valve_tag',   label: 'VALVE TAG',              width: 14, type: 'text',
     aliases: ['valve tag', 'tag', 'tag no', 'tag number'] },
   { key: 'description', label: 'DESCRIPTION',            width: 38, type: 'text',
@@ -81,8 +83,8 @@ export const VALVE_COLUMNS = [
     aliases: ['total to be order ed (island)', 'island', 'island qty', 'total island', 'total to be ordered'] },
   { key: 'qty_field',   label: 'Total to be ordered (FIELD)',   width: 18, type: 'number',
     aliases: ['total to be order ed (field)', 'field', 'field qty', 'total field'] },
-  { key: 'unit',        label: 'UNIT',                   width:  8, type: 'select', options: UNIT_OPTIONS,
-    aliases: ['unit', 'uom'] },
+  { key: 'unit',        label: 'UNIT',                   width:  8, type: 'number',
+    aliases: ['unit', 'uom', 'qty', 'quantity'] },
   { key: 'remarks',     label: 'REMARKS',                width: 24, type: 'text',
     aliases: ['remarks', 'remark', 'comments', 'notes'] },
 ];
@@ -128,8 +130,7 @@ export const STANDARD_NOTES = [
 export const DEFAULT_FILENAME = 'Valve_MTO.xlsx';
 export const DEFAULT_ROW = () => {
   const row = { id: `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
-  for (const c of VALVE_COLUMNS) row[c.key] = '';
-  row.unit = 'EACH';
+  for (const c of VALVE_COLUMNS) row[c.key] = c.type === 'number' ? 0 : '';
   return row;
 };
 

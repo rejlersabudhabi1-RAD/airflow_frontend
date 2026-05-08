@@ -30,20 +30,20 @@ const SHEET_DEFS = [
   {
     name: 'ISLAND',
     filter: (rows) => rows.filter((r) => normArea(r.area) === 'island'),
-    columns: [...COMMON_COLS, 'size_2', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
+    columns: [...COMMON_COLS, 'size_2', 'line_number', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
     headerTitle: 'VALVE MTO — ISLAND',
   },
   {
     name: 'FIELD',
     filter: (rows) => rows.filter((r) => normArea(r.area) === 'field'),
-    columns: [...COMMON_COLS, 'size_2', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
+    columns: [...COMMON_COLS, 'size_2', 'line_number', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
     headerTitle: 'VALVE MTO — FIELD',
   },
   {
     name: 'COMBINED MTO',
     filter: (rows) => rows,
     // The standard COMBINED sheet uses BORE in place of SIZE 2.
-    columns: [...COMMON_COLS, 'bore', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
+    columns: [...COMMON_COLS, 'bore', 'line_number', 'valve_tag', 'description', 'qty_island', 'qty_field', 'unit', 'remarks'],
     headerTitle: 'VALVE MTO — COMBINED',
   },
 ];

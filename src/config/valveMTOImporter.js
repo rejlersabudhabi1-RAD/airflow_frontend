@@ -14,6 +14,7 @@
  */
 import * as XLSX from 'xlsx';
 import { VALVE_COLUMNS, AREA_OPTIONS, DEFAULT_ROW } from './valveMTO.config';
+import { deriveRemarksFromRow } from './valveMTORemarks';
 
 // ─── Soft-coded constants ────────────────────────────────────────────────
 const HEADER_SCAN_DEPTH    = 12;   // rows scanned at top of each sheet
@@ -92,7 +93,7 @@ const extractProjectMeta = (rows) => {
 const coerce = (key, raw) => {
   if (raw === undefined || raw === null) return '';
   const s = String(raw).trim();
-  if (key === 'sl_no' || key === 'qty_island' || key === 'qty_field') {
+  if (key === 'sl_no' || key === 'qty_island' || key === 'qty_field' || key === 'unit') {
     if (s === '') return 0;
     const n = Number(s.replace(/[, ]+/g, ''));
     return Number.isFinite(n) ? n : 0;
@@ -155,6 +156,9 @@ export const importValveMTOFile = async (file) => {
       if (!row.valve_tag && !row.description && !row.type) continue;
       if (filled < 3) continue;
       if (!row.area && sheetArea) row.area = sheetArea;
+      // Soft-coded Remark derivation from tag / description / remarks.
+      const derived = deriveRemarksFromRow(row);
+      if (derived) row.remarks = derived;
       collected.push(row);
     }
   }

@@ -30,6 +30,7 @@ import {
   STORAGE_KEY, REFRESH_EVENT, PROJECT_FIELDS, VALVE_COLUMNS, VALVE_TABS,
   DEFAULT_ROW, AREA_OPTIONS,
 } from '../../../config/valveMTO.config';
+import { deriveRemarksFromRow } from '../../../config/valveMTORemarks';
 import importValveMTOFile from '../../../config/valveMTOImporter';
 import exportValveMTOWorkbook from '../../../config/valveMTOExporter';
 import {
@@ -251,6 +252,7 @@ const ValveMTOPage = () => {
       let parsed = [];
       let projectMeta = {};
       let engineLabel = 'spreadsheet';
+      let pdfSnapshot = null;
 
       if (isPdf) {
         // ── 1) Start the async extraction job ─────────────────────────────────────────────────────
@@ -330,7 +332,12 @@ const ValveMTOPage = () => {
 
           // Stream partial rows so the user sees something while waiting.
           if (Array.isArray(snapshot?.rows) && snapshot.rows.length) {
-            const liveRows = snapshot.rows.map((r) => ({ ...DEFAULT_ROW(), ...r }));
+            const liveRows = snapshot.rows.map((r) => {
+              const merged = { ...DEFAULT_ROW(), ...r };
+              const derived = deriveRemarksFromRow(merged);
+              if (derived) merged.remarks = derived;
+              return merged;
+            });
             setPartialRows(liveRows);
             setState((s) => ({
               project: { ...s.project, ...(snapshot.project_meta || {}) },
@@ -344,9 +351,15 @@ const ValveMTOPage = () => {
           }
         }
 
-        parsed      = (lastSnapshot?.rows || []).map((r) => ({ ...DEFAULT_ROW(), ...r }));
+        parsed      = (lastSnapshot?.rows || []).map((r) => {
+          const merged = { ...DEFAULT_ROW(), ...r };
+          const derived = deriveRemarksFromRow(merged);
+          if (derived) merged.remarks = derived;
+          return merged;
+        });
         projectMeta = lastSnapshot?.project_meta || {};
         engineLabel = lastSnapshot?.engine || 'vision';
+        pdfSnapshot = lastSnapshot;
       } else {
         // Client-side spreadsheet importer.
         const result = await importValveMTOFile(file);
@@ -355,7 +368,17 @@ const ValveMTOPage = () => {
       }
 
       if (!parsed.length) {
-        setImportMsg({ type: 'warn', text: 'No valve rows could be detected in this file.' });
+        // Surface backend warnings (e.g. OpenAI quota / API errors) when the
+        // PDF extractor returns zero rows, so the user knows WHY nothing
+        // came back instead of guessing the file is bad.
+        const backendWarnings = pdfSnapshot?.warnings || [];
+        const hint = backendWarnings.length
+          ? ` Backend reported: ${backendWarnings[0]}`
+          : '';
+        setImportMsg({
+          type: 'warn',
+          text: `No valve rows could be detected in this file.${hint}`,
+        });
       } else {
         const finalRows = parsed.map((r, i) => ({ ...r, sl_no: i + 1 }));
         const finalProject = { ...project, ...projectMeta };
