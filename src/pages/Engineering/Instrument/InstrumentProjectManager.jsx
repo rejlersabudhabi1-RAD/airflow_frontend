@@ -44,27 +44,23 @@ import {
  *   • the soft-coded badge styling
  */
 export const INSTRUMENT_PROJECT_CATEGORIES = [
+  // ─────────────────────────────────────────────────────────────────────
+  // Presentation-only swap (2026-05-08): the historical extraction /
+  // template logic keyed by id='adnoc_onshore' (and tag_format
+  // 'ADNOC ONSHORE') is actually the correct behaviour for ADNOC GAS
+  // projects, and vice versa. Rather than refactoring every downstream
+  // branch, we keep the ids and `defaults.tag_format` stable (so every
+  // existing rule, template, validator and saved DB row keeps working
+  // unchanged) and swap ONLY the human-facing label / short /
+  // description / icon / badge palette between the two entries.
+  // Net effect: clicking "ADNOC Gas" in the UI now invokes the logic
+  // originally written for Onshore, and clicking "ADNOC Onshore"
+  // invokes the logic originally written for Gas — which is what the
+  // engineering team wants.
+  // ─────────────────────────────────────────────────────────────────────
   {
-    id: 'adnoc_onshore',
-    label: 'ADNOC Onshore',
-    short: 'Onshore',
-    description: 'Onshore oil & gas facilities — wellheads, GOSPs, manifold areas.',
-    accent: 'from-amber-500 via-orange-500 to-red-500',
-    badgeBg: 'bg-amber-100',
-    badgeText: 'text-amber-800',
-    badgeBorder: 'border-amber-300',
-    icon: '🏜️',
-    // Default specifications applicable to projects in this category — used
-    // downstream (e.g. instrument index extraction) for ISA / engineering rules.
-    defaults: {
-      isa_standard: 'ISA 5.1',
-      tag_format: 'ADNOC ONSHORE',
-      typical_units: 'metric',
-    },
-  },
-  {
-    id: 'adnoc_gas',
-    label: 'ADNOC Gas',
+    id: 'adnoc_onshore',          // ← internal id stays — drives all downstream logic
+    label: 'ADNOC Gas',            // ← presentation swapped
     short: 'Gas',
     description: 'Gas processing, sweetening, dehydration & export facilities.',
     accent: 'from-emerald-500 via-teal-500 to-cyan-500',
@@ -72,6 +68,28 @@ export const INSTRUMENT_PROJECT_CATEGORIES = [
     badgeText: 'text-emerald-800',
     badgeBorder: 'border-emerald-300',
     icon: '🔥',
+    // Default specifications applicable to projects in this category — used
+    // downstream (e.g. instrument index extraction) for ISA / engineering rules.
+    // tag_format kept as 'ADNOC ONSHORE' because the backend extraction code
+    // branches on this value; that branch is the logic we want for ADNOC Gas.
+    defaults: {
+      isa_standard: 'ISA 5.1',
+      tag_format: 'ADNOC ONSHORE',
+      typical_units: 'metric',
+    },
+  },
+  {
+    id: 'adnoc_gas',              // ← internal id stays — drives all downstream logic
+    label: 'ADNOC Onshore',        // ← presentation swapped
+    short: 'Onshore',
+    description: 'Onshore oil & gas facilities — wellheads, GOSPs, manifold areas.',
+    accent: 'from-amber-500 via-orange-500 to-red-500',
+    badgeBg: 'bg-amber-100',
+    badgeText: 'text-amber-800',
+    badgeBorder: 'border-amber-300',
+    icon: '🏜️',
+    // tag_format kept as 'ADNOC GAS' — backend logic for that tag_format is
+    // the one we now want surfaced for ADNOC Onshore projects.
     defaults: {
       isa_standard: 'ISA 5.1',
       tag_format: 'ADNOC GAS',
@@ -110,8 +128,8 @@ export const PROJECT_EDITABLE_FIELDS = [
   { key: 'code',         label: 'Project Code',     type: 'text',
     placeholder: 'e.g. P16093', phase: 'edit' },
   { key: 'unit',         label: 'Unit / Area Code', type: 'text',
-    placeholder: "e.g. '562' (ADNOC Gas Habshan-5 Unit 562)",
-    helpText: 'Numeric area / unit code that prefixes every instrument tag (e.g. 562-FT-1502). Required for ADNOC Gas projects.',
+    placeholder: "e.g. '562' (ADNOC Onshore Habshan-5 Unit 562)",
+    helpText: 'Numeric area / unit code that prefixes every instrument tag (e.g. 562-FT-1502). Required for ADNOC Onshore projects.',
     phase: 'both' },
   { key: 'client',       label: 'Client / Owner',   type: 'text',
     placeholder: 'e.g. ADNOC Onshore Operations', phase: 'edit' },
@@ -380,6 +398,23 @@ const _adnocNormalizeLoopNo = (tagNumber, currentLoop) => {
   return `${unit}-${ctrlIsa}-${seq}`;
 };
 
+// ── Soft-coded pure "Line No." column (ADNOC Gas only) ───────────────────
+// The existing Gas "Line No (Note-7)" column follows the manual
+// convention of substituting the equipment tag for vessel-mounted
+// instruments, which hides the real pipeline line ID. This extra
+// column always shows the raw `inst.line_number` field. Edit the
+// constants below to retune presentation without touching column
+// rendering or extraction logic.
+const _GAS_PURE_LINE_NO_LABEL = 'LINE NO';
+const _GAS_PURE_LINE_NO_WIDTH = 26;
+const _GAS_PURE_LINE_NO_EMPTY = new Set(['', '-', '—', 'N/A', 'NA', 'NONE', 'NULL']);
+
+const _gasPurelyLineNumber = (i) => {
+  const raw = (i && i.line_number != null) ? String(i.line_number).trim() : '';
+  if (_GAS_PURE_LINE_NO_EMPTY.has(raw.toUpperCase())) return '-';
+  return raw.toUpperCase();
+};
+
 // Default template (ADNOC Onshore / Offshore / fallback) — mirrors the legacy
 // 15-column results view that has shipped to date.
 const _DEFAULT_TEMPLATE = {
@@ -534,12 +569,13 @@ const _ADNOC_GAS_TEMPLATE = {
      { label: 'Job No.',          key: 'project.code',              span: 1 },
      { label: 'Title',            key: 'result.drawing_title',      span: 4 }],
   ],
-  // Top merged-header strip — totals MUST equal columns.length (25)
+  // Top merged-header strip — totals MUST equal columns.length (26)
   groupHeader: [
     { label: '',                              span: 4  }, // Tag/Loop/Service/Type
     { label: `Calibration Range${NOTE_4}`,    span: 3  }, // Min / Max / Unit
     { label: `Alarm${NOTE_7I}`,               span: 4  }, // L / LL / H / HH
-    { label: '',                              span: 14 }, // remaining cols
+    // Trailing block widened by 1 to host the pure "Line No." column.
+    { label: '',                              span: 15 }, // remaining cols
   ],
   columns: [
     { key: 'tag_number',     header: `Tag Number${NOTE_7}`, width: 18, mono: true,
@@ -608,6 +644,9 @@ const _ADNOC_GAS_TEMPLATE = {
       accessor: i => _empty(i.system ?? (i.signal_type ? 'DCS' : null)) },
     { key: 'pid_no',         header: 'PID',                     width: 24, mono: true,
       accessor: i => _get(i, 'pid_no') },
+    // Pure line number (no equipment fallback) — ADNOC Gas only.
+    { key: 'pure_line_no',   header: _GAS_PURE_LINE_NO_LABEL,   width: _GAS_PURE_LINE_NO_WIDTH,
+      mono: true, align: 'center', accessor: _gasPurelyLineNumber },
     { key: 'line_number',    header: `Line No${NOTE_7}`,        width: 26, mono: true,
       // Manual convention: vessel-mounted instruments (LG/LT/PT/TG on a drum,
       // exchanger, etc.) put the EQUIPMENT TAG in this column.
@@ -788,9 +827,10 @@ const _ADNOC_ONSHORE_TEMPLATE = {
      { label: 'Revision',       key: 'result.revision',       span: 1 },
      { label: 'Project Code',   key: 'project.code',          span: 2 }],
   ],
-  // Top merged-header strip — totals MUST equal columns.length (17).
+  // Top merged-header strip — totals MUST equal columns.length (18).
   groupHeader: [
-    { label: '',                              span: 10 }, // Tag…Device Status
+    // Leading block widened by 1 to host the new "LINE NO" column.
+    { label: '',                              span: 11 }, // Tag…Device Status (+ LINE NO)
     { label: 'Inst range (Refer Gen Note 5)', span: 3  }, // Min/Max/Unit
     { label: 'Calibration range',             span: 3  }, // Min/Max/Unit
     { label: '',                              span: 1  }, // Remarks
@@ -817,6 +857,9 @@ const _ADNOC_ONSHORE_TEMPLATE = {
       accessor: i => _get(i, 'location') },
     { key: 'equipment_or_line',  header: 'Equipment / Line No.', width: 26, mono: true,
       accessor: _onshoreEqOrLine },
+    // Pure line-number column — reuses the Gas-style accessor (no equipment fallback).
+    { key: 'pure_line_no',       header: _GAS_PURE_LINE_NO_LABEL, width: _GAS_PURE_LINE_NO_WIDTH,
+      mono: true, align: 'center', accessor: _gasPurelyLineNumber },
     { key: 'pid_no',             header: 'P&ID No.',        width: 24, mono: true,
       accessor: i => _get(i, 'pid_no') },
     { key: 'io_type',            header: 'I/O Type',        width:  8, align: 'center',
