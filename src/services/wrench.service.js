@@ -139,6 +139,17 @@ const wrenchService = {
       timeout: API_TIMEOUT_WRENCH,
     }),
 
+  /**
+   * Deduplicated Wrench project list for dropdowns (cached on the backend).
+   * Pass `{ refresh: true }` to bypass the server-side cache.
+   * Returns { total, cached, projects: [{ order_no, order_description, label }] }
+   */
+  listWrenchProjects: ({ refresh = false } = {}) =>
+    apiService.get(`${BASE}/sync/projects/`, {
+      params:  refresh ? { refresh: 1 } : {},
+      timeout: API_TIMEOUT_WRENCH,
+    }),
+
   // ── S3 Export ─────────────────────────────────────────────────────────────
   /** List S3 export jobs (last 50) */
   getS3Jobs: () => apiService.get(`${BASE}/s3-sync/`),

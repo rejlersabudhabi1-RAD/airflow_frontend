@@ -1076,6 +1076,13 @@ const PIDVerification = () => {
   const [aiAssistError,     setAiAssistError]     = useState('')
   const [aiAssistResult,    setAiAssistResult]    = useState(null)   // { order_no, recommendations[], note }
   const [aiAssistFetchingDoc, setAiAssistFetchingDoc] = useState(null)  // DOC_NO currently being downloaded
+  // Wrench project (transmittal) dropdown — soft-coded, lazy-loaded
+  const _WRENCH_PROJECTS_MIN_FOR_SEARCH = 10        // show inline search box when list grows
+  const [wrenchProjects,        setWrenchProjects]        = useState([])     // [{order_no, order_description, label}]
+  const [wrenchProjectsLoading, setWrenchProjectsLoading] = useState(false)
+  const [wrenchProjectsError,   setWrenchProjectsError]   = useState('')
+  const [wrenchProjectsLoaded,  setWrenchProjectsLoaded]  = useState(false)
+  const [wrenchProjectFilter,   setWrenchProjectFilter]   = useState('')
 
   // Piping panel — per-check manual override states
   const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
@@ -1736,13 +1743,42 @@ const PIDVerification = () => {
   // ── Upload / verification API ─────────────────────────────────────────────
   const handleFileChange = (e) => { setFile(e.target.files[0] || null); setError(''); };
 
+  // ── Wrench project dropdown loader (lazy + cached on backend) ─────────────
+  const loadWrenchProjects = useCallback(async ({ force = false } = {}) => {
+    if (wrenchProjectsLoading) return
+    if (wrenchProjectsLoaded && !force) return
+    setWrenchProjectsLoading(true)
+    setWrenchProjectsError('')
+    try {
+      const res = await axios.get(`${API_BASE_URL}/wrench/sync/projects/`, {
+        params:  force ? { refresh: 1 } : {},
+        headers: authHeader(),
+        timeout: 90000,
+      })
+      setWrenchProjects(Array.isArray(res.data?.projects) ? res.data.projects : [])
+      setWrenchProjectsLoaded(true)
+    } catch (err) {
+      setWrenchProjectsError(err?.response?.data?.detail || err?.message || 'Failed to load Wrench projects.')
+    } finally {
+      setWrenchProjectsLoading(false)
+    }
+  }, [wrenchProjectsLoading, wrenchProjectsLoaded])
+
+  // Trigger first load when the AI Assist panel is opened.
+  useEffect(() => {
+    if (aiAssistEnabled && !wrenchProjectsLoaded && !wrenchProjectsLoading) {
+      loadWrenchProjects()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiAssistEnabled])
+
   // ── AI Document Assist (Wrench) — fetch ranked P&ID candidates ────────────
   const runAiAssist = useCallback(async () => {
     if (!aiAssistEnabled) return
     const orderNo     = (aiAssistOrderNo || '').trim()
     const projectName = (selectedProject?.project_name || '').trim()
     if (!orderNo && !projectName) {
-      setAiAssistError('Provide a Wrench ORDER_NO or select a project.')
+      setAiAssistError('Select a Project Number or open a RAD AI project first.')
       return
     }
     setAiAssistLoading(true)
@@ -3026,14 +3062,54 @@ const PIDVerification = () => {
                 <div className="px-4 py-4 border-t border-slate-100 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Wrench ORDER_NO</label>
-                      <input
-                        type="text"
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Project Number</label>
+                        <button
+                          type="button"
+                          onClick={() => loadWrenchProjects({ force: true })}
+                          disabled={wrenchProjectsLoading}
+                          className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                          title="Refresh project list from Wrench"
+                        >
+                          {wrenchProjectsLoading ? 'Loading…' : 'Refresh'}
+                        </button>
+                      </div>
+                      {wrenchProjects.length >= _WRENCH_PROJECTS_MIN_FOR_SEARCH && (
+                        <input
+                          type="text"
+                          value={wrenchProjectFilter}
+                          onChange={(e) => setWrenchProjectFilter(e.target.value)}
+                          placeholder="Search…"
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                        />
+                      )}
+                      <select
                         value={aiAssistOrderNo}
                         onChange={(e) => setAiAssistOrderNo(e.target.value)}
-                        placeholder="auto-resolved from project name"
-                        className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      />
+                        disabled={wrenchProjectsLoading}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white disabled:bg-slate-50"
+                      >
+                        <option value="">
+                          {wrenchProjectsLoading
+                            ? 'Loading Wrench projects…'
+                            : (wrenchProjects.length
+                                ? '— auto-resolve from project name —'
+                                : (wrenchProjectsError ? '(failed to load — using project name)' : '(no projects loaded yet)'))}
+                        </option>
+                        {wrenchProjects
+                          .filter(p => !wrenchProjectFilter
+                            || (p.label || '').toLowerCase().includes(wrenchProjectFilter.toLowerCase()))
+                          .map((p) => (
+                            <option key={p.order_no} value={p.order_no}>
+                              {p.label}
+                            </option>
+                          ))}
+                      </select>
+                      {wrenchProjectsError && (
+                        <p className="text-[10px] text-red-500 mt-1 truncate" title={wrenchProjectsError}>
+                          {wrenchProjectsError}
+                        </p>
+                      )}
                     </div>
                     <div className="sm:col-span-2">
                       <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Drawing hint (optional)</label>
