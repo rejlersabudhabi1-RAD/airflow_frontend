@@ -112,6 +112,17 @@ const wrenchService = {
       timeout: API_TIMEOUT_WRENCH,
     }),
 
+  /**
+   * Run a soft-coded diagnostic for the "empty documents" state of a project.
+   * Returns a structured verdict explaining whether the project genuinely has
+   * no documents in Wrench, or the empty result is a config/endpoint issue.
+   */
+  verifyTransmittalDocuments: (orderNo) =>
+    apiService.get(`${BASE}/sync/trans-documents/verify/`, {
+      params:  { order_no: orderNo },
+      timeout: API_TIMEOUT_WRENCH,
+    }),
+
   // ── S3 Export ─────────────────────────────────────────────────────────────
   /** List S3 export jobs (last 50) */
   getS3Jobs: () => apiService.get(`${BASE}/s3-sync/`),

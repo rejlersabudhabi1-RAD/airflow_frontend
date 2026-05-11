@@ -1945,6 +1945,8 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   // Per-project doc cache: { [orderNo]: { loading, docs, error } }
   const [projectDocsCache,  setProjectDocsCache]  = useState({})
   const [downloading,       setDownloading]       = useState({})
+  // Per-project diagnostic verification: { [orderNo]: { loading, report, error } }
+  const [verifyState,       setVerifyState]       = useState({})
 
   // ─── Aggregate transmittals → unique projects ─────────────────────────────
   const projects = useMemo(() => {
@@ -2041,6 +2043,30 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   useEffect(() => {
     if (browsePath.length >= 1) ensureProjectDocs(browsePath[0])
   }, [browsePath, ensureProjectDocs])
+
+  // ─── Diagnostic verification (soft-coded) ─────────────────────────────────
+  // Runs the backend `trans-documents/verify` endpoint to explain why a
+  // project's document list is empty (no docs vs. config / endpoint issue).
+  const runVerification = useCallback(async (orderNo) => {
+    if (!orderNo) return
+    setVerifyState((prev) => ({
+      ...prev,
+      [orderNo]: { loading: true, report: null, error: null },
+    }))
+    try {
+      const res = await wrenchService.verifyTransmittalDocuments(orderNo)
+      setVerifyState((prev) => ({
+        ...prev,
+        [orderNo]: { loading: false, report: res.data, error: null },
+      }))
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.message || 'Verification failed.'
+      setVerifyState((prev) => ({
+        ...prev,
+        [orderNo]: { loading: false, report: null, error: msg },
+      }))
+    }
+  }, [])
 
   // ─── Resolve folder tree for current project ──────────────────────────────
   const currentProjectTree = useMemo(() => {
@@ -2257,11 +2283,102 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
         }
         if (!cache?.docs) return null
         if (cache.docs.length === 0) {
+          const vState  = verifyState[orderNo] || {}
+          const vReport = vState.report
+          const verdict = vReport?.conclusion?.verdict
+          // Soft-coded verdict → fully-static class mapping (Tailwind JIT-safe)
+          const _VERDICT_STYLES = {
+            no_documents_for_project:     { title: 'Confirmed: no documents linked to this project',
+                                            box: 'bg-amber-50 border-amber-200',   text: 'text-amber-800',   sub: 'text-amber-700' },
+            documents_exist_unexpectedly: { title: 'Documents exist — refresh required',
+                                            box: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-800', sub: 'text-emerald-700' },
+            svc_url_missing:              { title: 'DocumentSearch SVC URL is missing',
+                                            box: 'bg-rose-50 border-rose-200',     text: 'text-rose-800',    sub: 'text-rose-700' },
+            doc_search_unreachable:       { title: 'DocumentSearch endpoint is unreachable',
+                                            box: 'bg-rose-50 border-rose-200',     text: 'text-rose-800',    sub: 'text-rose-700' },
+            wrench_instance_empty:        { title: 'Wrench instance has no indexed documents',
+                                            box: 'bg-slate-50 border-slate-200',   text: 'text-slate-800',   sub: 'text-slate-700' },
+            config_error:                 { title: 'Wrench configuration error',
+                                            box: 'bg-rose-50 border-rose-200',     text: 'text-rose-800',    sub: 'text-rose-700' },
+            unknown:                      { title: 'Inconclusive — see details',
+                                            box: 'bg-slate-50 border-slate-200',   text: 'text-slate-800',   sub: 'text-slate-700' },
+          }
+          const vStyle = _VERDICT_STYLES[verdict] || _VERDICT_STYLES.unknown
           return (
             <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
               <p className="text-sm text-gray-500">{_PROJECT_DOC_EMPTY_MSG} {orderNo}.</p>
               {cache.note && (
                 <p className="mt-2 text-xs text-gray-400 max-w-xl mx-auto">{cache.note}</p>
+              )}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => runVerification(orderNo)}
+                  disabled={vState.loading}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-60 text-sm"
+                >
+                  {vState.loading ? (
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  {vState.loading ? 'Verifying…' : (vReport ? 'Re-run verification' : 'Verify & validate configuration')}
+                </button>
+              </div>
+
+              {vState.error && (
+                <div className="mt-4 max-w-2xl mx-auto">
+                  <Alert type="error" message={vState.error} />
+                </div>
+              )}
+
+              {vReport && (
+                <div className={`mt-5 max-w-3xl mx-auto text-left rounded-lg border ${vStyle.box} p-4`}>
+                  <p className={`text-sm font-semibold ${vStyle.text}`}>{vStyle.title}</p>
+                  {vReport.conclusion?.reasons?.length > 0 && (
+                    <ul className={`mt-2 text-xs ${vStyle.sub} list-disc list-inside space-y-1`}>
+                      {vReport.conclusion.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  )}
+                  {vReport.conclusion?.recommendations?.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-gray-700">Recommendations</p>
+                      <ul className="mt-1 text-xs text-gray-600 list-disc list-inside space-y-1">
+                        {vReport.conclusion.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  <details className="mt-3">
+                    <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                      Show diagnostic evidence
+                    </summary>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-600">
+                      <div className="bg-white border border-gray-200 rounded p-2">
+                        <p className="font-semibold text-gray-700">Configuration</p>
+                        <p>base_url: {vReport.config?.has_base_url ? '✓ set' : '✗ missing'}</p>
+                        <p>svc_url: {vReport.config?.has_svc_url ? '✓ set' : '✗ missing'}</p>
+                        <p>token: {vReport.token?.acquired ? '✓ acquired' : `✗ ${vReport.token?.error || 'failed'}`}</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded p-2">
+                        <p className="font-semibold text-gray-700">DocumentSearch</p>
+                        <p>broad: {vReport.doc_search?.broad?.ok
+                          ? `✓ total=${vReport.doc_search.broad.total}`
+                          : `✗ ${vReport.doc_search?.broad?.error?.slice(0, 80) || 'failed'}`}</p>
+                        <p>by ORDER_NO: {vReport.doc_search?.by_order_no?.ok
+                          ? `✓ total=${vReport.doc_search.by_order_no.total}`
+                          : `✗ ${vReport.doc_search?.by_order_no?.error?.slice(0, 80) || 'failed'}`}</p>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded p-2 sm:col-span-2">
+                        <p className="font-semibold text-gray-700">REST per-transmittal probes</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {(vReport.rest_probes || []).map((p, i) => (
+                            <li key={i} className="font-mono text-[11px]">
+                              {p.ok ? '✓' : '✗'} {p.path} → {p.http_status ?? 'no response'}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
               )}
             </div>
           )
