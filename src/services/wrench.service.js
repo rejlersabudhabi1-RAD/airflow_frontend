@@ -166,6 +166,29 @@ const wrenchService = {
   /** Stop a running real-time S3 export job */
   stopS3Job: (id) => apiService.post(`${BASE}/s3-sync/${id}/stop/`),
 
+  // ── Project Document Mirror (Wrench → S3, actual file bytes) ──────────────
+  /**
+   * Start a Wrench → S3 mirror that copies actual document bytes of a project.
+   * @param {object} payload – { order_no: string, mode?: 'batch'|'realtime', s3_prefix?: string }
+   */
+  startProjectExport: (payload) =>
+    apiService.post(`${BASE}/s3-sync/project-export/`, payload),
+
+  // ── Library Mirror Watcher (continuous, change-driven sync) ───────────────
+  /**
+   * Start a continuous Wrench → S3 library mirror for a project.
+   * Mirrors the Wrench library hierarchy and re-syncs added/changed docs every tick.
+   * @param {object} payload – { order_no: string, s3_prefix?: string }
+   */
+  startLibraryWatcher: (payload) =>
+    apiService.post(`${BASE}/s3-sync/library-watch/start/`, payload),
+
+  /** List recent library watchers, optionally filtered by order_no */
+  getLibraryWatchers: (orderNo) =>
+    apiService.get(`${BASE}/s3-sync/library-watch/status/`, {
+      params: orderNo ? { order_no: orderNo } : undefined,
+    }),
+
   // ── Token Injection ───────────────────────────────────────────────────────
   /**
    * Save a pre-shared Wrench session token directly — bypasses username/password login.

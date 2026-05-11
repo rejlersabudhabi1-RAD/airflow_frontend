@@ -2646,6 +2646,11 @@ const DEFAULT_S3_PREFIX    = 'wrench/'
 const S3_BUCKET_DISPLAY    = 'wrench-radai'  // cosmetic label only
 const S3_POLL_INTERVAL_MS  = 5000            // auto-refresh when a job is in_progress
 
+// Library Mirror Watcher — soft-coded labels / defaults
+const _LIB_WATCHER_TITLE      = 'Library Mirror Watcher'
+const _LIB_WATCHER_SUBTITLE   = 'Realtime Wrench ↔ S3 — same folder hierarchy as Wrench'
+const _LIB_WATCHER_HELP       = 'Continuously detects added / changed documents in Wrench and syncs them to S3 under library/{order_no}/{discipline}/{doc_type}/{doc_no}/rev_{revision}/'
+
 const S3SyncPanel = ({ configured, onGoToConfig }) => {
   const [jobs, setJobs]                   = useState([])
   const [loadingJobs, setLoadingJobs]     = useState(false)
@@ -2655,6 +2660,12 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
   const [entityType, setEntityType]       = useState('transmittals')
   const [s3Prefix, setS3Prefix]           = useState(DEFAULT_S3_PREFIX)
   const [showAdvanced, setShowAdvanced]   = useState(false)
+
+  // Library Mirror Watcher state — additive
+  const [libOrderNo,   setLibOrderNo]   = useState('')
+  const [libStarting,  setLibStarting]  = useState(false)
+  const [libAlert,     setLibAlert]     = useState(null)
+  const [libWatchers,  setLibWatchers]  = useState([])
 
   const loadJobs = useCallback(async () => {
     try {
@@ -2708,6 +2719,52 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
   const activeRealtimeJob = jobs.find(
     (j) => j.mode === 'realtime' && (j.status === 'in_progress' || j.status === 'pending'),
   )
+
+  // Library Mirror Watcher handlers — additive
+  const loadLibWatchers = useCallback(async () => {
+    try {
+      const res = await wrenchService.getLibraryWatchers()
+      setLibWatchers(res.data || [])
+    } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => {
+    if (!configured) return
+    loadLibWatchers()
+    const t = setInterval(loadLibWatchers, S3_POLL_INTERVAL_MS)
+    return () => clearInterval(t)
+  }, [configured, loadLibWatchers])
+
+  const handleStartLibWatcher = async () => {
+    setLibAlert(null)
+    const orderNo = libOrderNo.trim()
+    if (!orderNo) {
+      setLibAlert({ type: 'error', message: 'Project ORDER_NO is required.' })
+      return
+    }
+    setLibStarting(true)
+    try {
+      await wrenchService.startLibraryWatcher({ order_no: orderNo, s3_prefix: s3Prefix })
+      setLibAlert({ type: 'success',
+        message: `Library mirror started for project ${orderNo}. S3 will stay in sync with Wrench changes.` })
+      await loadLibWatchers()
+    } catch (err) {
+      setLibAlert({ type: 'error',
+        message: err.response?.data?.detail || 'Failed to start the library watcher.' })
+    } finally {
+      setLibStarting(false)
+    }
+  }
+
+  const handleStopLibWatcher = async (jobId) => {
+    try {
+      await wrenchService.stopS3Job(jobId)
+      await loadLibWatchers()
+    } catch (err) {
+      setLibAlert({ type: 'error',
+        message: err.response?.data?.detail || 'Failed to stop the watcher.' })
+    }
+  }
 
   if (!configured) {
     return (
@@ -2854,6 +2911,101 @@ const S3SyncPanel = ({ configured, onGoToConfig }) => {
               : <CloudArrowUpIcon className="w-4 h-4" />}
             {starting ? 'Starting…' : `Start ${mode === 'batch' ? 'Batch Export' : 'Real-time Export'}`}
           </button>
+        </div>
+      </div>
+
+      {/* ── Library Mirror Watcher (continuous Wrench → S3 sync) ─────────────── */}
+      <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200/80 overflow-hidden">
+        <div className="px-6 py-5 bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+                <ArrowPathIcon className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">{_LIB_WATCHER_TITLE}</h3>
+                <p className="text-xs text-emerald-100/80">{_LIB_WATCHER_SUBTITLE}</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-white/20 text-white border border-white/30 backdrop-blur-sm">
+              library/{'{order_no}'}/…
+            </span>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {libAlert && <Alert type={libAlert.type} message={libAlert.message} />}
+          <p className="text-xs text-gray-500">{_LIB_WATCHER_HELP}</p>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Project ORDER_NO <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={libOrderNo}
+                onChange={(e) => setLibOrderNo(e.target.value)}
+                placeholder="e.g. 5900620"
+                className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none transition"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleStartLibWatcher}
+              disabled={libStarting || !libOrderNo.trim()}
+              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-md shadow-emerald-400/25 transition-all"
+            >
+              {libStarting
+                ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                : <ArrowPathIcon className="w-4 h-4" />}
+              {libStarting ? 'Starting…' : 'Start Library Sync'}
+            </button>
+          </div>
+
+          {libWatchers.length > 0 && (
+            <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    {['Job', 'Order No', 'Status', 'Uploaded', 'Last Tick', ''].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {libWatchers.map((w) => {
+                    const lw = w.job_details?.library_watcher || {}
+                    return (
+                      <tr key={w.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-gray-500">#{w.id}</td>
+                        <td className="px-3 py-2 font-mono">{lw.order_no || w.job_details?.order_no || '—'}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${S3_STATUS_STYLES[w.status] || ''}`}>
+                            {w.status === 'in_progress' && <ArrowPathIcon className="w-3 h-3 mr-1 animate-spin" />}
+                            {w.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-mono">{lw.uploaded_total ?? w.records_exported ?? 0}</td>
+                        <td className="px-3 py-2 text-gray-500">{lw.last_tick || '—'}</td>
+                        <td className="px-3 py-2">
+                          {(w.status === 'in_progress' || w.status === 'pending') && (
+                            <button
+                              type="button"
+                              onClick={() => handleStopLibWatcher(w.id)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition"
+                            >
+                              <StopCircleIcon className="w-3 h-3" /> Stop
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
