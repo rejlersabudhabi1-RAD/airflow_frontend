@@ -1924,7 +1924,8 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   // ─── Soft-coded constants (no magic numbers) ──────────────────────────────
   const _PROJECT_FETCH_PAGE_SIZE = 500     // Wrench listTransmittals page size
   const _PROJECT_FETCH_MAX_PAGES = 20      // safety cap when paginating
-  const _PROJECT_DOC_FETCH_SIZE  = 500     // documents per project drill-down
+  const _PROJECT_DOC_FETCH_SIZE  = 100     // documents per project drill-down (smaller = faster perceived response)
+  const _PROJECT_DOC_EMPTY_MSG   = 'No documents are linked to project'
   const _SORT_LOCALE_OPTS        = { numeric: true, sensitivity: 'base' }
 
   // NOTE: We intentionally do NOT gate this view on config.svc_url.
@@ -2022,9 +2023,10 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
       const transId = (sample && _pickFirst(sample, _TRANS_ID_KEYS)) || ''
       const res = await wrenchService.getTransmittalDocuments(orderNo, transId, 1, _PROJECT_DOC_FETCH_SIZE)
       const docs = res.data?.documents || []
+      const note = res.data?.note || null
       setProjectDocsCache((prev) => ({
         ...prev,
-        [orderNo]: { loading: false, docs, error: null },
+        [orderNo]: { loading: false, docs, error: null, note },
       }))
     } catch (err) {
       const msg = err?.response?.data?.detail || err?.message || 'Failed to load documents for this project.'
@@ -2257,7 +2259,10 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
         if (cache.docs.length === 0) {
           return (
             <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-              <p className="text-sm text-gray-500">No documents are linked to project {orderNo}.</p>
+              <p className="text-sm text-gray-500">{_PROJECT_DOC_EMPTY_MSG} {orderNo}.</p>
+              {cache.note && (
+                <p className="mt-2 text-xs text-gray-400 max-w-xl mx-auto">{cache.note}</p>
+              )}
             </div>
           )
         }
