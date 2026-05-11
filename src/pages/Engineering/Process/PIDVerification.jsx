@@ -1078,11 +1078,16 @@ const PIDVerification = () => {
   const [aiAssistFetchingDoc, setAiAssistFetchingDoc] = useState(null)  // DOC_NO currently being downloaded
   // Wrench project (transmittal) dropdown — soft-coded, lazy-loaded
   const _WRENCH_PROJECTS_MIN_FOR_SEARCH = 10        // show inline search box when list grows
+  const _WRENCH_PROJECTS_LS_KEY         = 'radai.wrench.projects.v1'   // localStorage cache
+  const _WRENCH_PROJECTS_LS_TTL_MS      = 24 * 60 * 60 * 1000          // 24 h hard expiry
+  const _WRENCH_PROJECTS_FRESH_MS       = 30 * 60 * 1000               // 30 min before background revalidate
   const [wrenchProjects,        setWrenchProjects]        = useState([])     // [{order_no, order_description, label}]
-  const [wrenchProjectsLoading, setWrenchProjectsLoading] = useState(false)
+  const [wrenchProjectsLoading, setWrenchProjectsLoading] = useState(false)  // foreground spinner
+  const [wrenchProjectsSyncing, setWrenchProjectsSyncing] = useState(false)  // background revalidate
   const [wrenchProjectsError,   setWrenchProjectsError]   = useState('')
   const [wrenchProjectsLoaded,  setWrenchProjectsLoaded]  = useState(false)
   const [wrenchProjectFilter,   setWrenchProjectFilter]   = useState('')
+  const [wrenchProjectsFetchedAt, setWrenchProjectsFetchedAt] = useState(0)  // epoch ms of last fetch
 
   // Piping panel — per-check manual override states
   const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
@@ -1743,26 +1748,83 @@ const PIDVerification = () => {
   // ── Upload / verification API ─────────────────────────────────────────────
   const handleFileChange = (e) => { setFile(e.target.files[0] || null); setError(''); };
 
-  // ── Wrench project dropdown loader (lazy + cached on backend) ─────────────
+  // ── Wrench project dropdown loader (stale-while-revalidate + localStorage) ─
+  // 1. On first call we instantly hydrate from localStorage (if any) — no spinner.
+  // 2. We then ALWAYS reach out to the backend in the background; backend has
+  //    its own Redis cache + stale-while-revalidate flag, so this is cheap.
+  // 3. `force=true` (Refresh button) bypasses both caches and forces a true
+  //    Wrench round-trip, then persists the result.
+  const _writeWrenchProjectsToLS = useCallback((payload) => {
+    try {
+      localStorage.setItem(_WRENCH_PROJECTS_LS_KEY, JSON.stringify({
+        ts:       Date.now(),
+        projects: payload?.projects || [],
+        // backend-provided counters (purely informational on the UI)
+        total:              payload?.total || 0,
+        transmittal_count:  payload?.transmittal_count || 0,
+        fetched_at_server:  payload?.fetched_at || null,
+      }))
+    } catch { /* localStorage may be full or disabled — silently ignore */ }
+  }, [])
+
+  const _readWrenchProjectsFromLS = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(_WRENCH_PROJECTS_LS_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (!parsed?.ts || !Array.isArray(parsed?.projects)) return null
+      if (Date.now() - parsed.ts > _WRENCH_PROJECTS_LS_TTL_MS) return null  // hard-expired
+      return parsed
+    } catch { return null }
+  }, [])
+
   const loadWrenchProjects = useCallback(async ({ force = false } = {}) => {
-    if (wrenchProjectsLoading) return
-    if (wrenchProjectsLoaded && !force) return
-    setWrenchProjectsLoading(true)
+    // ── Step A: instant hydrate from localStorage (only when not forcing) ──
+    let hadLocalSnapshot = false
+    if (!force && !wrenchProjectsLoaded) {
+      const snap = _readWrenchProjectsFromLS()
+      if (snap && snap.projects.length) {
+        setWrenchProjects(snap.projects)
+        setWrenchProjectsFetchedAt(snap.ts)
+        setWrenchProjectsLoaded(true)
+        hadLocalSnapshot = true
+        // If the snapshot is still "fresh" enough, skip the background call entirely.
+        if (Date.now() - snap.ts < _WRENCH_PROJECTS_FRESH_MS) return
+      }
+    }
+
+    // ── Step B: prevent double-fire ─────────────────────────────────────
+    if (wrenchProjectsLoading || wrenchProjectsSyncing) return
+
+    // Foreground spinner only when we have nothing to show yet.
+    if (hadLocalSnapshot || wrenchProjectsLoaded) setWrenchProjectsSyncing(true)
+    else                                          setWrenchProjectsLoading(true)
     setWrenchProjectsError('')
+
     try {
       const res = await axios.get(`${API_BASE_URL}/wrench/sync/projects/`, {
         params:  force ? { refresh: 1 } : {},
         headers: authHeader(),
-        timeout: 90000,
+        timeout: 120000,
       })
-      setWrenchProjects(Array.isArray(res.data?.projects) ? res.data.projects : [])
+      const data = res.data || {}
+      const projects = Array.isArray(data.projects) ? data.projects : []
+      setWrenchProjects(projects)
       setWrenchProjectsLoaded(true)
+      setWrenchProjectsFetchedAt(Date.now())
+      _writeWrenchProjectsToLS(data)
     } catch (err) {
-      setWrenchProjectsError(err?.response?.data?.detail || err?.message || 'Failed to load Wrench projects.')
+      // If we already have a local snapshot we keep it visible — just surface a soft hint.
+      const detail = err?.response?.data?.detail || err?.message || 'Failed to load Wrench projects.'
+      setWrenchProjectsError(detail)
     } finally {
       setWrenchProjectsLoading(false)
+      setWrenchProjectsSyncing(false)
     }
-  }, [wrenchProjectsLoading, wrenchProjectsLoaded])
+  }, [
+    wrenchProjectsLoading, wrenchProjectsSyncing, wrenchProjectsLoaded,
+    _readWrenchProjectsFromLS, _writeWrenchProjectsToLS,
+  ])
 
   // Trigger first load when the AI Assist panel is opened.
   useEffect(() => {
@@ -3064,51 +3126,82 @@ const PIDVerification = () => {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Project Number</label>
-                        <button
-                          type="button"
-                          onClick={() => loadWrenchProjects({ force: true })}
-                          disabled={wrenchProjectsLoading}
-                          className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
-                          title="Refresh project list from Wrench"
-                        >
-                          {wrenchProjectsLoading ? 'Loading…' : 'Refresh'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {wrenchProjectsSyncing && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-indigo-500">
+                              <Loader className="w-3 h-3 animate-spin" />syncing…
+                            </span>
+                          )}
+                          {wrenchProjectsFetchedAt > 0 && !wrenchProjectsLoading && (
+                            <span
+                              className="text-[10px] text-slate-400"
+                              title={new Date(wrenchProjectsFetchedAt).toLocaleString()}
+                            >
+                              {(() => {
+                                const m = Math.max(0, Math.round((Date.now() - wrenchProjectsFetchedAt) / 60000))
+                                if (m < 1)   return 'just now'
+                                if (m < 60)  return `${m}m ago`
+                                const h = Math.round(m / 60)
+                                if (h < 24)  return `${h}h ago`
+                                return `${Math.round(h / 24)}d ago`
+                              })()}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => loadWrenchProjects({ force: true })}
+                            disabled={wrenchProjectsLoading || wrenchProjectsSyncing}
+                            className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                            title="Force refresh from Wrench (bypass cache)"
+                          >
+                            {wrenchProjectsLoading ? 'Loading…' : 'Refresh'}
+                          </button>
+                        </div>
                       </div>
-                      {wrenchProjects.length >= _WRENCH_PROJECTS_MIN_FOR_SEARCH && (
-                        <input
-                          type="text"
-                          value={wrenchProjectFilter}
-                          onChange={(e) => setWrenchProjectFilter(e.target.value)}
-                          placeholder="Search…"
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                        />
-                      )}
-                      <select
-                        value={aiAssistOrderNo}
-                        onChange={(e) => setAiAssistOrderNo(e.target.value)}
-                        disabled={wrenchProjectsLoading}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white disabled:bg-slate-50"
-                      >
-                        <option value="">
-                          {wrenchProjectsLoading
-                            ? 'Loading Wrench projects…'
-                            : (wrenchProjects.length
-                                ? '— auto-resolve from project name —'
-                                : (wrenchProjectsError ? '(failed to load — using project name)' : '(no projects loaded yet)'))}
-                        </option>
-                        {wrenchProjects
-                          .filter(p => !wrenchProjectFilter
-                            || (p.label || '').toLowerCase().includes(wrenchProjectFilter.toLowerCase()))
-                          .map((p) => (
-                            <option key={p.order_no} value={p.order_no}>
-                              {p.label}
+
+                      {/* Skeleton while we have nothing cached locally */}
+                      {wrenchProjectsLoading && wrenchProjects.length === 0 ? (
+                        <div className="space-y-1.5 animate-pulse">
+                          <div className="h-7 bg-slate-100 rounded-lg" />
+                          <div className="h-3 bg-slate-100 rounded w-2/3" />
+                        </div>
+                      ) : (
+                        <>
+                          {wrenchProjects.length >= _WRENCH_PROJECTS_MIN_FOR_SEARCH && (
+                            <input
+                              type="text"
+                              value={wrenchProjectFilter}
+                              onChange={(e) => setWrenchProjectFilter(e.target.value)}
+                              placeholder="Search project number or description…"
+                              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                            />
+                          )}
+                          <select
+                            value={aiAssistOrderNo}
+                            onChange={(e) => setAiAssistOrderNo(e.target.value)}
+                            disabled={wrenchProjectsLoading}
+                            className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white disabled:bg-slate-50"
+                          >
+                            <option value="">
+                              {wrenchProjects.length
+                                ? `— auto-resolve from project name (${wrenchProjects.length} available) —`
+                                : (wrenchProjectsError ? '(failed to load — using project name)' : '(no projects loaded yet)')}
                             </option>
-                          ))}
-                      </select>
-                      {wrenchProjectsError && (
-                        <p className="text-[10px] text-red-500 mt-1 truncate" title={wrenchProjectsError}>
-                          {wrenchProjectsError}
-                        </p>
+                            {wrenchProjects
+                              .filter(p => !wrenchProjectFilter
+                                || (p.label || '').toLowerCase().includes(wrenchProjectFilter.toLowerCase()))
+                              .map((p) => (
+                                <option key={p.order_no} value={p.order_no}>
+                                  {p.label}
+                                </option>
+                              ))}
+                          </select>
+                          {wrenchProjectsError && wrenchProjects.length === 0 && (
+                            <p className="text-[10px] text-red-500 mt-1 truncate" title={wrenchProjectsError}>
+                              {wrenchProjectsError}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="sm:col-span-2">
