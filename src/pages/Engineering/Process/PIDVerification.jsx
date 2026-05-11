@@ -1063,6 +1063,20 @@ const PIDVerification = () => {
   const [wrenchSearched,    setWrenchSearched]    = useState(false);
   const [wrenchQueryUsed,   setWrenchQueryUsed]   = useState(null);
   const [wrenchExpandedDoc, setWrenchExpandedDoc] = useState(null); // DOC_NO of expanded card
+
+  // ── AI Document Assist (Wrench) — optional upload-time helper ─────────────
+  // Soft-coded panel that calls /wrench/sync/pid-recommendations/ to rank
+  // candidate P&ID PDFs from the linked Wrench project. Disabled by default.
+  const _AI_ASSIST_DEFAULT_TOP = 5
+  const _AI_ASSIST_MIN_HIGHLIGHT_SCORE = 80   // top-tier visual threshold
+  const [aiAssistEnabled,   setAiAssistEnabled]   = useState(false)
+  const [aiAssistOrderNo,   setAiAssistOrderNo]   = useState('')
+  const [aiAssistHint,      setAiAssistHint]      = useState('')
+  const [aiAssistLoading,   setAiAssistLoading]   = useState(false)
+  const [aiAssistError,     setAiAssistError]     = useState('')
+  const [aiAssistResult,    setAiAssistResult]    = useState(null)   // { order_no, recommendations[], note }
+  const [aiAssistFetchingDoc, setAiAssistFetchingDoc] = useState(null)  // DOC_NO currently being downloaded
+
   // Piping panel — per-check manual override states
   const [pipCheckStates, setPipCheckStates]   = useState({});   // { [checkId]: 'pass'|'fail'|'na' }
   const [pipActiveView,  setPipActiveView]    = useState('checklist'); // 'checklist'|'summary'|'drawing'
@@ -1722,11 +1736,82 @@ const PIDVerification = () => {
   // ── Upload / verification API ─────────────────────────────────────────────
   const handleFileChange = (e) => { setFile(e.target.files[0] || null); setError(''); };
 
+  // ── AI Document Assist (Wrench) — fetch ranked P&ID candidates ────────────
+  const runAiAssist = useCallback(async () => {
+    if (!aiAssistEnabled) return
+    const orderNo     = (aiAssistOrderNo || '').trim()
+    const projectName = (selectedProject?.project_name || '').trim()
+    if (!orderNo && !projectName) {
+      setAiAssistError('Provide a Wrench ORDER_NO or select a project.')
+      return
+    }
+    setAiAssistLoading(true)
+    setAiAssistError('')
+    setAiAssistResult(null)
+    try {
+      const res = await axios.get(`${API_BASE_URL}/wrench/sync/pid-recommendations/`, {
+        params: {
+          ...(orderNo     ? { order_no:     orderNo }     : {}),
+          ...(projectName ? { project_name: projectName } : {}),
+          ...(aiAssistHint ? { drawing_hint: aiAssistHint } : {}),
+          top: _AI_ASSIST_DEFAULT_TOP,
+        },
+        headers: authHeader(),
+        timeout: 60000,
+      })
+      setAiAssistResult(res.data)
+      if (!orderNo && res.data?.order_no) setAiAssistOrderNo(res.data.order_no)
+    } catch (err) {
+      setAiAssistError(err?.response?.data?.detail || err?.message || 'AI assist failed.')
+    } finally {
+      setAiAssistLoading(false)
+    }
+  }, [aiAssistEnabled, aiAssistOrderNo, aiAssistHint, selectedProject])
+
+  // Fetch a recommended document via the existing Wrench download proxy and
+  // load it as the P&ID file (so the user can click "Run P&ID Verification").
+  const useRecommendedDoc = useCallback(async (rec) => {
+    if (!rec?.download_url) return
+    setAiAssistFetchingDoc(rec.doc_no)
+    setAiAssistError('')
+    try {
+      const downloadPath = rec.download_url.startsWith('http')
+        ? rec.download_url
+        : `${API_BASE_URL.replace(/\/api\/v1$/, '')}${rec.download_url}`
+      const res = await axios.get(downloadPath, {
+        headers: authHeader(),
+        responseType: 'blob',
+        timeout: 120000,
+      })
+      // Handle JSON redirect response (Wrench returns { download_url })
+      const ctype = res.headers?.['content-type'] || ''
+      if (ctype.includes('application/json')) {
+        const txt  = await res.data.text()
+        const json = JSON.parse(txt)
+        if (json?.download_url) {
+          window.open(json.download_url, '_blank', 'noopener,noreferrer')
+          flash('info', `Opening Wrench document ${rec.doc_no} in a new tab — please save and upload it manually.`)
+          return
+        }
+        throw new Error(json?.detail || 'Wrench did not return file bytes.')
+      }
+      // Build a File from the blob and feed it into the upload state
+      const fileName = `${rec.doc_no || 'wrench-document'}.${rec.file_ext || 'pdf'}`
+      const fileObj  = new File([res.data], fileName, { type: res.data.type || 'application/pdf' })
+      setFile(fileObj)
+      setError('')
+      flash('success', `Loaded "${fileName}" from Wrench — ready to verify.`)
+    } catch (err) {
+      setAiAssistError(err?.response?.data?.detail || err?.message || 'Failed to download document from Wrench.')
+    } finally {
+      setAiAssistFetchingDoc(null)
+    }
+  }, [])
+
   const handleDrop = useCallback((e) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f) { setFile(f); setError(''); }
-  }, []);
+    if (f) { setFile(f); setError(''); }  }, []);
 
   const handleUpload = async () => {
     if (!file) { setError('Please select a P&ID file first.'); return; }
@@ -2898,6 +2983,163 @@ const PIDVerification = () => {
               )}
             </div>
             {/* ── End Legend Sheets card ─────────────────────────────────── */}
+
+            {/* ── Optional: AI Document Assist (Wrench) ─────────────────── */}
+            <div className="mt-5 rounded-2xl overflow-hidden border border-slate-200 bg-white">
+              <div
+                className="px-4 py-3 flex items-center gap-3 cursor-pointer select-none"
+                style={{ background: aiAssistEnabled
+                  ? 'linear-gradient(135deg,#eef2ff,#f0f9ff)'
+                  : 'linear-gradient(135deg,#fafbff,#f7f8ff)' }}
+                onClick={() => setAiAssistEnabled(v => !v)}
+              >
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background:'linear-gradient(135deg,#6366f1,#a855f7)' }}>
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-slate-800 leading-tight">
+                    AI Document Assist <span className="text-xs font-normal text-slate-400">(Wrench · optional)</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Let RAD AI pick & recommend the right P&amp;ID PDF for this project from Wrench DMS
+                  </p>
+                </div>
+                <label
+                  className="inline-flex items-center cursor-pointer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={aiAssistEnabled}
+                    onChange={() => setAiAssistEnabled(v => !v)}
+                  />
+                  <div className="w-10 h-5 bg-slate-200 rounded-full peer-checked:bg-indigo-500 transition-colors relative">
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${aiAssistEnabled ? 'translate-x-5' : ''}`} />
+                  </div>
+                </label>
+                {aiAssistEnabled ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </div>
+
+              {aiAssistEnabled && (
+                <div className="px-4 py-4 border-t border-slate-100 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Wrench ORDER_NO</label>
+                      <input
+                        type="text"
+                        value={aiAssistOrderNo}
+                        onChange={(e) => setAiAssistOrderNo(e.target.value)}
+                        placeholder="auto-resolved from project name"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Drawing hint (optional)</label>
+                      <input
+                        type="text"
+                        value={aiAssistHint}
+                        onChange={(e) => setAiAssistHint(e.target.value)}
+                        placeholder="e.g. unit 100, separator, gas compression"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={runAiAssist}
+                      disabled={aiAssistLoading}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                      style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)' }}
+                    >
+                      {aiAssistLoading
+                        ? <><Loader className="w-4 h-4 animate-spin" />Asking AI…</>
+                        : <><Brain className="w-4 h-4" />Recommend documents</>}
+                    </button>
+                    {aiAssistResult?.order_no && (
+                      <span className="text-xs text-slate-500">
+                        Matched <span className="font-semibold text-slate-700">{aiAssistResult.order_no}</span>
+                        {aiAssistResult.matched_via && aiAssistResult.matched_via !== 'explicit' && (
+                          <span className="ml-1 text-slate-400">· {aiAssistResult.matched_via}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+
+                  {aiAssistError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-600">{aiAssistError}</p>
+                    </div>
+                  )}
+
+                  {aiAssistResult && !aiAssistResult.recommendations?.length && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                      {aiAssistResult.note || 'No P&ID-like documents were found in Wrench for this project.'}
+                    </div>
+                  )}
+
+                  {aiAssistResult?.recommendations?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                        Top {aiAssistResult.recommendations.length} of {aiAssistResult.total_scanned} document(s)
+                      </p>
+                      {aiAssistResult.recommendations.map((rec, idx) => {
+                        const isTop = rec.score >= _AI_ASSIST_MIN_HIGHLIGHT_SCORE
+                        const isFetching = aiAssistFetchingDoc === rec.doc_no
+                        return (
+                          <div key={`${rec.doc_no}-${idx}`}
+                            className={`flex items-start gap-3 p-3 rounded-lg border ${
+                              isTop ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-white'
+                            }`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                              isTop ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {rec.score}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-800 truncate">{rec.doc_no || '(no DOC_NO)'}</p>
+                              {rec.doc_description && (
+                                <p className="text-xs text-slate-500 truncate mt-0.5">{rec.doc_description}</p>
+                              )}
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                {rec.discipline && (
+                                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">{rec.discipline}</span>
+                                )}
+                                {rec.revision && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200">Rev {rec.revision}</span>
+                                )}
+                                {rec.file_ext && (
+                                  <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-100 uppercase">{rec.file_ext}</span>
+                                )}
+                                {rec.reasons?.slice(0, 2).map((r, i) => (
+                                  <span key={i} className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-500 border border-slate-200">{r}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => useRecommendedDoc(rec)}
+                              disabled={isFetching || !rec.download_url}
+                              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                            >
+                              {isFetching
+                                ? <><Loader className="w-3.5 h-3.5 animate-spin" />Loading…</>
+                                : <><Download className="w-3.5 h-3.5" />Use this</>}
+                            </button>
+                          </div>
+                        )
+                      })}
+                      <p className="text-[10px] text-slate-400 italic">
+                        Scores are computed by soft-coded heuristics (pattern + discipline + file-type). Tune in backend if needed.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* ── End AI Document Assist ─────────────────────────────────── */}
 
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">

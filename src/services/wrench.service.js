@@ -123,6 +123,22 @@ const wrenchService = {
       timeout: API_TIMEOUT_WRENCH,
     }),
 
+  /**
+   * AI-assisted P&ID document recommendation for a project.
+   * Backend uses soft-coded pattern scoring (no LLM call).
+   * Either orderNo or projectName must be provided.
+   */
+  getPIDRecommendations: ({ orderNo = '', projectName = '', drawingHint = '', top = 5 } = {}) =>
+    apiService.get(`${BASE}/sync/pid-recommendations/`, {
+      params: {
+        ...(orderNo     ? { order_no:     orderNo }     : {}),
+        ...(projectName ? { project_name: projectName } : {}),
+        ...(drawingHint ? { drawing_hint: drawingHint } : {}),
+        top,
+      },
+      timeout: API_TIMEOUT_WRENCH,
+    }),
+
   // ── S3 Export ─────────────────────────────────────────────────────────────
   /** List S3 export jobs (last 50) */
   getS3Jobs: () => apiService.get(`${BASE}/s3-sync/`),
