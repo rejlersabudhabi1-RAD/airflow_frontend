@@ -5,8 +5,16 @@
  * Session tokens are managed server-side (rolling token pattern).
  */
 import apiService from './api.service'
+import { API_TIMEOUT_WRENCH } from '../config/api.config'
 
 const BASE = '/wrench'
+
+// ── Soft-coded per-endpoint axios overrides ──────────────────────────────────
+// Wrench upstream endpoints frequently take >2 min on cold cache or on tenants
+// with thousands of transmittals (the REST API ignores pagination params and
+// returns the full set every call). Use an extended timeout for these requests
+// only — other backend routes keep the default ~120 s.
+const _WRENCH_LONG_OPTS = { timeout: API_TIMEOUT_WRENCH }
 
 const wrenchService = {
   // ── Config ───────────────────────────────────────────────────────────────
@@ -63,7 +71,8 @@ const wrenchService = {
    * }
    * Returns { total, documents: [{DOC_NO, DOC_DESCRIPTION, ORDER_NO, ...}] }
    */
-  searchDocuments: (filters = {}) => apiService.post(`${BASE}/sync/search-documents/`, filters),
+  searchDocuments: (filters = {}) =>
+    apiService.post(`${BASE}/sync/search-documents/`, filters, _WRENCH_LONG_OPTS),
 
   /**
    * Fetch unique discipline codes and document numbers from a sample search.
@@ -78,7 +87,10 @@ const wrenchService = {
    * @param {number} pageSize
    */
   listTransmittals: (page = 1, pageSize = 100) =>
-    apiService.get(`${BASE}/sync/list-transmittals/`, { params: { page, page_size: pageSize } }),
+    apiService.get(`${BASE}/sync/list-transmittals/`, {
+      params:  { page, page_size: pageSize },
+      timeout: API_TIMEOUT_WRENCH,
+    }),
 
   /**
    * Fetch documents linked to a transmittal via its ORDER_NO (and optionally TRANS_ID).
@@ -97,6 +109,7 @@ const wrenchService = {
         page,
         page_size: pageSize,
       },
+      timeout: API_TIMEOUT_WRENCH,
     }),
 
   // ── S3 Export ─────────────────────────────────────────────────────────────

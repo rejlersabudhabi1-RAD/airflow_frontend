@@ -1878,6 +1878,48 @@ const parseSmartQuery = (input, knownDisciplines = []) => {
   return out
 }
 
+// ─── Module-level cache for the slow `listTransmittals` call ─────────────────
+// Wrench's GetTransmittalList returns the full set every time and may take several
+// minutes. We share the in-flight Promise across mounts/StrictMode double-effects
+// AND cache the resolved result for `_PROJECT_LIST_CACHE_TTL_MS` so re-opening the
+// Document Search tab is instant. Soft-coded TTL (override at build time if needed).
+const _PROJECT_LIST_CACHE_TTL_MS = 5 * 60 * 1000  // 5 minutes
+let   _projectListCache    = null   // { data: [...], fetchedAt: <ms epoch> }
+let   _projectListInFlight = null   // Promise<list>
+
+const _fetchProjectListShared = (pageSize, maxPages) => {
+  // Serve from cache when still fresh
+  if (_projectListCache && (Date.now() - _projectListCache.fetchedAt) < _PROJECT_LIST_CACHE_TTL_MS) {
+    return Promise.resolve(_projectListCache.data)
+  }
+  // De-duplicate concurrent callers
+  if (_projectListInFlight) return _projectListInFlight
+
+  _projectListInFlight = (async () => {
+    const first = await wrenchService.listTransmittals(1, pageSize)
+    const list  = first.data?.transmittals || []
+    const total = Number(first.data?.total ?? list.length)
+    let all = list
+    if (total > list.length) {
+      const pages = Math.min(maxPages, Math.ceil(total / pageSize))
+      for (let p = 2; p <= pages; p++) {
+        try {
+          const r = await wrenchService.listTransmittals(p, pageSize)
+          const part = r.data?.transmittals || []
+          if (part.length === 0) break
+          all = all.concat(part)
+        } catch { break }
+      }
+    }
+    _projectListCache = { data: all, fetchedAt: Date.now() }
+    return all
+  })().finally(() => { _projectListInFlight = null })
+
+  return _projectListInFlight
+}
+
+const _invalidateProjectListCache = () => { _projectListCache = null }
+
 const DocumentSearchSection = ({ config, onGoToConfig }) => {
   // ─── Soft-coded constants (no magic numbers) ──────────────────────────────
   const _PROJECT_FETCH_PAGE_SIZE = 500     // Wrench listTransmittals page size
@@ -1885,7 +1927,12 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   const _PROJECT_DOC_FETCH_SIZE  = 500     // documents per project drill-down
   const _SORT_LOCALE_OPTS        = { numeric: true, sensitivity: 'base' }
 
-  const hasSvcUrl = Boolean(config?.svc_url)
+  // NOTE: We intentionally do NOT gate this view on config.svc_url.
+  // The project-first flow uses REST endpoints (list-transmittals,
+  // Document/Get, Document/Download) that only need a session token.
+  // The legacy SVC URL is only used by the OData search fallback.
+  void config; void onGoToConfig;
+
 
   // ─── State ────────────────────────────────────────────────────────────────
   const [projectsRaw,       setProjectsRaw]       = useState([])    // raw transmittals
@@ -1932,34 +1979,25 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
   }, [projects, filterText])
 
   // ─── Load all projects (transmittals) ─────────────────────────────────────
-  const loadProjects = useCallback(async () => {
+  // Uses the module-level shared fetcher so StrictMode double-effects, tab
+  // re-mounts, and concurrent components all share ONE in-flight request and a
+  // short-lived result cache (see _fetchProjectListShared above).
+  const loadProjects = useCallback(async (opts = {}) => {
     setLoadingProjects(true)
     setAlert(null)
+    if (opts.force) _invalidateProjectListCache()
     try {
-      const first = await wrenchService.listTransmittals(1, _PROJECT_FETCH_PAGE_SIZE)
-      const list  = first.data?.transmittals || []
-      const total = Number(first.data?.total ?? list.length)
-      let all = list
-      if (total > list.length) {
-        const pages = Math.min(_PROJECT_FETCH_MAX_PAGES, Math.ceil(total / _PROJECT_FETCH_PAGE_SIZE))
-        for (let p = 2; p <= pages; p++) {
-          try {
-            const r = await wrenchService.listTransmittals(p, _PROJECT_FETCH_PAGE_SIZE)
-            const part = r.data?.transmittals || []
-            if (part.length === 0) break
-            all = all.concat(part)
-          } catch { break }
-        }
-      }
+      const all = await _fetchProjectListShared(_PROJECT_FETCH_PAGE_SIZE, _PROJECT_FETCH_MAX_PAGES)
       setProjectsRaw(all)
       if (all.length === 0) {
         setAlert({ type: 'info', message: 'Wrench returned 0 transmittals. Verify the connection in Configuration.' })
       }
     } catch (err) {
-      setAlert({
-        type:    'error',
-        message: err?.response?.data?.detail || err?.message || 'Failed to load projects from Wrench.',
-      })
+      const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '')
+      const message = isTimeout
+        ? 'Wrench is taking longer than expected to return the project list. The request is still in flight on the server — wait a moment and click Reload, or verify the Wrench connection in Configuration.'
+        : (err?.response?.data?.detail || err?.message || 'Failed to load projects from Wrench.')
+      setAlert({ type: isTimeout ? 'warning' : 'error', message })
     } finally {
       setLoadingProjects(false)
     }
@@ -2085,7 +2123,7 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
             </div>
             <button
               type="button"
-              onClick={loadProjects}
+              onClick={() => loadProjects({ force: true })}
               disabled={loadingProjects}
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-white/10 backdrop-blur border border-white/20 rounded-lg text-white hover:bg-white/20 disabled:opacity-50 transition"
             >
@@ -2096,19 +2134,15 @@ const DocumentSearchSection = ({ config, onGoToConfig }) => {
         </div>
       </div>
 
-      {/* SVC URL warning (informational only — projects come from REST list-transmittals, not SVC URL) */}
-      {!hasSvcUrl && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
-          <InformationCircleIcon className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>
-            <span className="font-semibold">SVC URL is not configured.</span> Browsing projects still works,
-            but document file downloads may require an SVC URL.{' '}
-            <button type="button" onClick={onGoToConfig} className="underline font-medium hover:text-amber-900">
-              Open Configuration
-            </button>
-          </span>
-        </div>
-      )}
+      {/*
+        Note: project browsing & document downloads in this view both use Wrench REST
+        endpoints (list-transmittals + Document/Get + Document/Download) that require
+        only the session token. The legacy SVC URL is only used by the OData/AtomSVC
+        search fallback — irrelevant here — so we intentionally do NOT surface any
+        "SVC URL is not configured" warning. If a specific download fails because the
+        document is only reachable via OData, the per-row download handler will
+        surface the actual error via the alert area below.
+      */}
 
       {alert && <Alert type={alert.type} message={alert.message} />}
 

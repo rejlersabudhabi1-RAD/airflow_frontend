@@ -51,6 +51,13 @@ export const API_TIMEOUT_UPLOAD = timeoutUpload // From centralized config (defa
 export const API_TIMEOUT_REFRESH = timeoutRefresh // From centralized config (default 90s, token refresh cold-start)
 export const API_TIMEOUT_AI_GENERATION = 300000 // 5 minutes for AI P&ID generation (OpenAI API calls)
 export const API_TIMEOUT_PFD_VERIFY = timeoutPfdVerify // SOFT-CODED from environments.json (default 600s — PFD AI multi-pass takes 5-8 min)
+// SOFT-CODED: Wrench SmartProject `GetTransmittalList` returns the FULL dataset every
+// call (its REST API ignores ROW_COUNT/PAGE_NUMBER), so on tenants with thousands of
+// transmittals a single fetch can legitimately take several minutes. Override via
+// `VITE_API_TIMEOUT_WRENCH` env var when needed.
+export const API_TIMEOUT_WRENCH = Number(
+  import.meta.env?.VITE_API_TIMEOUT_WRENCH ?? 600000
+) // default 10 min
 
 export const HTTP_STATUS = {
   OK: 200,
