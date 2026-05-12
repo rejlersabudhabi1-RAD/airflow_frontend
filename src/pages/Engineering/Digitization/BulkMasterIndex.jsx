@@ -31,20 +31,42 @@ const POLL_INTERVAL_MS = 2500;
 const MAX_CELL_WIDTH_PX = 320;
 const PAGE_SIZE = 100;
 
-// Columns whose value is a comma-joined list — rendered as a vertical
-// chip stack (one value per line) instead of a single truncated line.
-// Soft-coded so future multi-value columns can opt in by adding their
-// `key`. `separator` matches what the backend emits.
+// Columns whose value is a comma-joined list — rendered as a chip
+// grid instead of a single truncated line. Soft-coded:
+//   • `columnKeys`     opt-in column allow-list
+//   • `columnsPerRow`  per-column override of how many chips fit per row
+//                      (CSS grid — chips share equal-width tracks so the
+//                      cell height stays compact for short numeric values
+//                      like Unit while still wrapping cleanly for long
+//                      alpha-num Tag tokens).
+//   • `maxVisible`     per-column overflow threshold; remainder collapses
+//                      into a "+N more" pill (tooltip lists the rest).
+//   • `cellWidthPx`    per-column max cell width.
 const MULTI_VALUE_DISPLAY = {
   enabled: true,
-  columnKeys: ['tag', 'unit'],
+  columnKeys: ['tag', 'unit', 'contractor_ref'],
   separator: /\s*,\s*/,
-  maxVisible: 12,            // collapse beyond this with a "+N more" pill
-  cellWidthPx: 360,          // a touch wider than MAX_CELL_WIDTH_PX
+  // Defaults applied when a column-specific override is absent.
+  defaults: {
+    columnsPerRow: 1,          // 1 = flex-wrap (legacy behaviour)
+    maxVisible:    12,
+    cellWidthPx:   360,
+  },
+  // Per-column tuning. Unit values are short (≤5 digits) so 5 per row
+  // collapses the column height dramatically without truncating any
+  // value. Tag values are long & variable-width so we let them flex.
+  // Contractor Doc References are mid-length codes (e.g.
+  // "5610Y-STC-01-1381-026") — 2 per row keeps cells compact without
+  // wrapping any individual reference.
+  perColumn: {
+    unit:           { columnsPerRow: 5, maxVisible: 25, cellWidthPx: 220 },
+    tag:            { columnsPerRow: 1, maxVisible: 12, cellWidthPx: 360 },
+    contractor_ref: { columnsPerRow: 2, maxVisible: 12, cellWidthPx: 380 },
+  },
   chipClass:
-    'inline-block px-1.5 py-0.5 mr-1 mb-1 rounded bg-emerald-50 ' +
-    'text-emerald-800 border border-emerald-200 text-[11px] font-medium ' +
-    'leading-tight whitespace-nowrap',
+    'inline-flex items-center justify-center px-1.5 py-0.5 rounded ' +
+    'bg-emerald-50 text-emerald-800 border border-emerald-200 ' +
+    'text-[11px] font-medium leading-tight whitespace-nowrap',
 };
 
 // ─── Upload tuning (soft-coded) ──────────────────────────────────────────
@@ -1370,7 +1392,9 @@ const ReviewGrid = ({
                   return (
                     <td key={col.key}
                         className="px-3 py-1.5 border-b border-slate-100 align-top"
-                        style={{ maxWidth: isMultiCell ? MULTI_VALUE_DISPLAY.cellWidthPx : MAX_CELL_WIDTH_PX }}>
+                        style={{ maxWidth: isMultiCell
+                          ? ((MULTI_VALUE_DISPLAY.perColumn[col.key] || MULTI_VALUE_DISPLAY.defaults).cellWidthPx)
+                          : MAX_CELL_WIDTH_PX }}>
                       {isEditing ? (
                         <input
                           autoFocus
@@ -1405,14 +1429,32 @@ const ReviewGrid = ({
                         </button>
                       ) : isMultiCell ? (
                         (() => {
+                          const cfg = {
+                            ...MULTI_VALUE_DISPLAY.defaults,
+                            ...(MULTI_VALUE_DISPLAY.perColumn[col.key] || {}),
+                          };
                           const parts = value.split(MULTI_VALUE_DISPLAY.separator)
                             .map((p) => p.trim()).filter(Boolean);
-                          const visible = parts.slice(0, MULTI_VALUE_DISPLAY.maxVisible);
+                          const visible = parts.slice(0, cfg.maxVisible);
                           const overflow = parts.length - visible.length;
+                          // columnsPerRow > 1 → CSS grid with equal-width
+                          // tracks (compact heights for short tokens like
+                          // unit codes). Otherwise → flex-wrap so long
+                          // variable-width tokens like tags pack naturally.
+                          const useGrid = cfg.columnsPerRow > 1;
+                          const containerStyle = useGrid
+                            ? { display: 'grid',
+                                gridTemplateColumns: `repeat(${cfg.columnsPerRow}, minmax(0, 1fr))`,
+                                gap: '4px' }
+                            : undefined;
+                          const containerClass = useGrid
+                            ? clsx(editable && 'cursor-text hover:bg-emerald-50/40 rounded')
+                            : clsx('flex flex-wrap gap-1', editable && 'cursor-text hover:bg-emerald-50/40 rounded');
                           return (
                             <div
                               onClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}
-                              className={clsx('flex flex-wrap', editable && 'cursor-text hover:bg-emerald-50/40 rounded')}
+                              className={containerClass}
+                              style={containerStyle}
                               title={editable ? `Click to edit — ${value}` : value}
                             >
                               {visible.map((p, i) => (
@@ -1420,8 +1462,8 @@ const ReviewGrid = ({
                               ))}
                               {overflow > 0 && (
                                 <span
-                                  className="inline-block px-1.5 py-0.5 mr-1 mb-1 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium leading-tight"
-                                  title={parts.slice(MULTI_VALUE_DISPLAY.maxVisible).join(', ')}
+                                  className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium leading-tight whitespace-nowrap"
+                                  title={parts.slice(cfg.maxVisible).join(', ')}
                                 >+{overflow} more</span>
                               )}
                             </div>
