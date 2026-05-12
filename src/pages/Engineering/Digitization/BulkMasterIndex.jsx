@@ -31,6 +31,22 @@ const POLL_INTERVAL_MS = 2500;
 const MAX_CELL_WIDTH_PX = 320;
 const PAGE_SIZE = 100;
 
+// Columns whose value is a comma-joined list — rendered as a vertical
+// chip stack (one value per line) instead of a single truncated line.
+// Soft-coded so future multi-value columns can opt in by adding their
+// `key`. `separator` matches what the backend emits.
+const MULTI_VALUE_DISPLAY = {
+  enabled: true,
+  columnKeys: ['tag', 'unit'],
+  separator: /\s*,\s*/,
+  maxVisible: 12,            // collapse beyond this with a "+N more" pill
+  cellWidthPx: 360,          // a touch wider than MAX_CELL_WIDTH_PX
+  chipClass:
+    'inline-block px-1.5 py-0.5 mr-1 mb-1 rounded bg-emerald-50 ' +
+    'text-emerald-800 border border-emerald-200 text-[11px] font-medium ' +
+    'leading-tight whitespace-nowrap',
+};
+
 // ─── Upload tuning (soft-coded) ──────────────────────────────────────────
 // Big folders would blow past axios' default 120s global timeout, so we:
 //   1. Split the upload into chunks (count-based OR size-based, whichever hits first)
@@ -1339,10 +1355,22 @@ const ReviewGrid = ({
                     && value
                     && value !== 'NA'
                     && !!onSelectItem;
+                  // Soft-coded multi-value columns (Tag, Unit, …): render
+                  // as a vertical chip stack so every value is visible
+                  // instead of getting truncated. Inline-edit still works
+                  // on click — when editing we fall back to a flat input
+                  // so the user can change the entire comma-list.
+                  const isMultiCell = MULTI_VALUE_DISPLAY.enabled
+                    && MULTI_VALUE_DISPLAY.columnKeys.includes(col.key)
+                    && !isEditing
+                    && value
+                    && value !== 'NA'
+                    && typeof value === 'string'
+                    && MULTI_VALUE_DISPLAY.separator.test(value);
                   return (
                     <td key={col.key}
-                        className="px-3 py-1.5 border-b border-slate-100"
-                        style={{ maxWidth: MAX_CELL_WIDTH_PX }}>
+                        className="px-3 py-1.5 border-b border-slate-100 align-top"
+                        style={{ maxWidth: isMultiCell ? MULTI_VALUE_DISPLAY.cellWidthPx : MAX_CELL_WIDTH_PX }}>
                       {isEditing ? (
                         <input
                           autoFocus
@@ -1375,6 +1403,30 @@ const ReviewGrid = ({
                         >
                           {value}
                         </button>
+                      ) : isMultiCell ? (
+                        (() => {
+                          const parts = value.split(MULTI_VALUE_DISPLAY.separator)
+                            .map((p) => p.trim()).filter(Boolean);
+                          const visible = parts.slice(0, MULTI_VALUE_DISPLAY.maxVisible);
+                          const overflow = parts.length - visible.length;
+                          return (
+                            <div
+                              onClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}
+                              className={clsx('flex flex-wrap', editable && 'cursor-text hover:bg-emerald-50/40 rounded')}
+                              title={editable ? `Click to edit — ${value}` : value}
+                            >
+                              {visible.map((p, i) => (
+                                <span key={`${p}-${i}`} className={MULTI_VALUE_DISPLAY.chipClass}>{p}</span>
+                              ))}
+                              {overflow > 0 && (
+                                <span
+                                  className="inline-block px-1.5 py-0.5 mr-1 mb-1 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium leading-tight"
+                                  title={parts.slice(MULTI_VALUE_DISPLAY.maxVisible).join(', ')}
+                                >+{overflow} more</span>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
                         <div
                           onClick={() => editable && setEditingCell({ itemId: it.item_id, colKey: col.key })}

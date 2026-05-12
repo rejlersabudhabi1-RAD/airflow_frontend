@@ -26,11 +26,13 @@ import {
   ChevronUpIcon,
   DocumentTextIcon,
   EyeIcon,
+  FolderIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import BulkMasterIndex from './BulkMasterIndex';
 import DocumentSearchCanvasView from './DocumentSearchCanvas';
+import NonTeffSmartFeatures from './NonTeffSmartFeatures';
 
 // ---------------------------------------------------------------------------
 // Soft-coded column definitions — mirrors config/non_teff_fields.json
@@ -38,6 +40,8 @@ import DocumentSearchCanvasView from './DocumentSearchCanvas';
 const COLUMNS = [
   { key: 'document_no',          label: 'Document No.',          width: 16 },
   { key: 'document_title',       label: 'Document Title',        width: 28 },
+  { key: 'document_type',        label: 'Document Type',         width: 18 },
+  { key: 'document_subtype',     label: 'Document Sub-Type',     width: 26 },
   { key: 'revision',             label: 'Rev.',                  width:  6 },
   { key: 'discipline',           label: 'Discipline',            width: 14 },
   { key: 'instrument_tag_no',    label: 'Instrument Tag No.',    width: 18 },
@@ -54,6 +58,8 @@ const COLUMNS = [
 const FIELD_INFO = [
   { key: 'document_no',          label: 'Document No.',          desc: 'Drawing / document reference number', color: '#059669' },
   { key: 'document_title',       label: 'Document Title',        desc: 'Full title of the source document',   color: '#0891b2' },
+  { key: 'document_type',        label: 'Document Type',         desc: 'Top-level taxonomy class (Civil, Equipment, Piping, …)', color: '#0e7490' },
+  { key: 'document_subtype',     label: 'Document Sub-Type',     desc: 'Controlled sub-class (Civil Calculations, Equipment Miscellaneous, Vessel Design Calculations, …)', color: '#0369a1' },
   { key: 'revision',             label: 'Revision',              desc: 'Current revision identifier (A, B, 01…)', color: '#7c3aed' },
   { key: 'discipline',           label: 'Discipline',            desc: 'Engineering discipline (Process, Instrument, …)', color: '#b45309' },
   { key: 'instrument_tag_no',    label: 'Instrument Tag No.',    desc: 'All instrument tag numbers found',    color: '#0f766e' },
@@ -708,6 +714,554 @@ const HistoryPanel = ({ onOpen }) => {
 };
 
 // ---------------------------------------------------------------------------
+// Project context banner — soft-coded, additive. Lets the user pick / clear
+// the active Non-TEFF project. The selection is persisted in localStorage and
+// attached as `project_id` to upload requests so the backend can group jobs.
+// ---------------------------------------------------------------------------
+const PROJECT_BANNER_CFG = {
+  api: {
+    list: '/non-teff/projects/',
+  },
+  routes: {
+    projects: '/engineering/digitization/non-teff-metadata/projects',
+  },
+  storageKey: 'nonTeffActiveProject',
+  maxRecent: 50,
+  // When true, the extractor is gated behind a project selection: users must
+  // pick or create a project before they can upload files. Flip to false to
+  // restore the legacy "extract without project" behaviour.
+  requireProjectFirst: true,
+};
+
+const ProjectContextBanner = ({ project, onChange, onClear, onManage }) => {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const persist = (p) => {
+    try {
+      if (p) localStorage.setItem(PROJECT_BANNER_CFG.storageKey, JSON.stringify(p));
+      else   localStorage.removeItem(PROJECT_BANNER_CFG.storageKey);
+    } catch (_) { /* ignore */ }
+  };
+
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get(PROJECT_BANNER_CFG.api.list, {
+        params: query ? { q: query } : {},
+      });
+      setList((res.data?.items || []).slice(0, PROJECT_BANNER_CFG.maxRecent));
+    } catch (_) {
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [query]);
+
+  useEffect(() => {
+    if (open) loadList();
+  }, [open, loadList]);
+
+  const handlePick = (p) => {
+    const trimmed = { project_id: p.project_id, name: p.name, plant: p.plant };
+    onChange?.(trimmed);
+    persist(trimmed);
+    setOpen(false);
+  };
+
+  return (
+    <div style={{
+      position: 'relative', zIndex: 3,
+      maxWidth: 1480, margin: '14px auto 0', padding: '0 24px',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        background: project
+          ? 'linear-gradient(90deg, rgba(5,150,105,0.10), rgba(8,145,178,0.06))'
+          : 'rgba(255,255,255,0.85)',
+        backdropFilter: 'blur(8px)',
+        border: `1px solid ${project ? 'rgba(5,150,105,0.35)' : 'rgba(5,150,105,0.18)'}`,
+        borderRadius: 12, padding: '10px 14px',
+        boxShadow: '0 2px 8px rgba(5,150,105,0.06)',
+      }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: 'rgba(5,150,105,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <FolderIcon width={16} style={{ color: '#059669' }} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {project ? (
+            <>
+              <div style={{ fontSize: 11, color: '#65a30d', fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                Active project
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {project.name}
+                {project.plant && <span style={{ marginLeft: 8, fontWeight: 500, color: '#4b5563', fontSize: 12 }}>
+                  · {project.plant}
+                </span>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                No project selected
+              </div>
+              <div style={{ fontSize: 12, color: '#475569' }}>
+                Extractions will not be grouped. Pick a project to organise this work.
+              </div>
+            </>
+          )}
+        </div>
+
+        <button
+          onClick={() => setOpen((o) => !o)}
+          style={{
+            background: '#059669', color: '#fff', border: 'none',
+            padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <FolderIcon width={14} /> {project ? 'Switch' : 'Select project'}
+        </button>
+        {project && (
+          <button
+            onClick={() => { onClear?.(); persist(null); }}
+            title="Clear active project"
+            style={{
+              background: 'transparent', border: '1px solid rgba(5,150,105,0.3)',
+              color: '#065f46', padding: '7px 10px', borderRadius: 8,
+              fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            <XMarkIcon width={14} />
+          </button>
+        )}
+        <button
+          onClick={onManage}
+          style={{
+            background: 'transparent', border: '1px solid rgba(5,150,105,0.3)',
+            color: '#065f46', padding: '7px 12px', borderRadius: 8,
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Manage…
+        </button>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 24, right: 24,
+          background: '#fff', borderRadius: 12,
+          border: '1px solid rgba(5,150,105,0.25)',
+          boxShadow: '0 12px 32px rgba(15,23,42,0.18)',
+          padding: 12, zIndex: 10, maxHeight: 360, overflow: 'auto',
+        }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search projects by name, code, plant…"
+              style={{
+                flex: 1, padding: '8px 12px', borderRadius: 8,
+                border: '1px solid rgba(5,150,105,0.25)', fontSize: 13, outline: 'none',
+              }}
+            />
+            <button
+              onClick={onManage}
+              style={{
+                background: '#059669', color: '#fff', border: 'none',
+                padding: '8px 14px', borderRadius: 8, fontSize: 12,
+                fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              + New
+            </button>
+          </div>
+          {loading ? (
+            <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+              Loading projects…
+            </div>
+          ) : list.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+              No projects found. Click <strong>+ New</strong> to create one.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 4 }}>
+              {list.map((p) => (
+                <button
+                  key={p.project_id}
+                  onClick={() => handlePick(p)}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8,
+                    border: project?.project_id === p.project_id
+                      ? '1px solid #059669' : '1px solid transparent',
+                    background: project?.project_id === p.project_id
+                      ? 'rgba(5,150,105,0.08)' : 'transparent',
+                    cursor: 'pointer', display: 'flex',
+                    justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#065f46',
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      {[p.code, p.plant, p.discipline].filter(Boolean).join(' · ') || 'No metadata'}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 11, color: '#0891b2', fontWeight: 600,
+                    background: 'rgba(8,145,178,0.08)', padding: '3px 7px', borderRadius: 4,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {(p.job_count || 0) + (p.batch_count || 0)} extractions
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+// ---------------------------------------------------------------------------
+// Project gate — shown before the extractor when no active project is set.
+// Lets the user pick an existing project inline OR create a new one quickly.
+// All copy/colors are driven by GATE_CFG; flip PROJECT_BANNER_CFG.requireProjectFirst
+// to disable gating entirely (legacy behaviour).
+// ---------------------------------------------------------------------------
+const GATE_CFG = {
+  title: 'Select a project to start',
+  subtitle: 'Every Non-TEFF extraction belongs to a project so your work stays organised, traceable and role-scoped.',
+  bullets: [
+    'Group single-file jobs and bulk Master-Index batches together',
+    'Filter, audit and re-run extractions per engineering project',
+    'Admins see all projects · regular users see only their own',
+  ],
+  cta: {
+    pickExisting: 'Open existing project',
+    createNew:    'Create new project',
+    manage:       'Manage all projects',
+  },
+  theme: {
+    accent:       '#059669',
+    accentSoft:   'rgba(5,150,105,0.08)',
+    accentBorder: 'rgba(5,150,105,0.25)',
+    secondary:    '#0891b2',
+  },
+};
+
+const ProjectGate = ({ onPicked, onManage }) => {
+  const T = GATE_CFG.theme;
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [query, setQuery]       = useState('');
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName]   = useState('');
+  const [newDesc, setNewDesc]   = useState('');
+  const [busy, setBusy]         = useState(false);
+  const [error, setError]       = useState('');
+
+  const persist = (p) => {
+    try {
+      localStorage.setItem(PROJECT_BANNER_CFG.storageKey, JSON.stringify(p));
+    } catch (_) { /* ignore */ }
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get(PROJECT_BANNER_CFG.api.list, {
+        params: query ? { q: query } : {},
+      });
+      setProjects(res.data?.items || []);
+      setError('');
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not load projects.');
+    } finally {
+      setLoading(false);
+    }
+  }, [query]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handlePick = (p) => {
+    const trimmed = { project_id: p.project_id, name: p.name, plant: p.plant };
+    persist(trimmed);
+    onPicked?.(trimmed);
+  };
+
+  const handleCreate = async (e) => {
+    e?.preventDefault?.();
+    if (!newName.trim()) return;
+    setBusy(true);
+    try {
+      const res = await apiClient.post(PROJECT_BANNER_CFG.api.list, {
+        name: newName.trim(),
+        description: newDesc.trim(),
+        status: 'active',
+      });
+      const p = res.data;
+      handlePick(p);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not create the project.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filtered = projects.filter((p) =>
+    !query ||
+    p.name?.toLowerCase().includes(query.toLowerCase()) ||
+    p.code?.toLowerCase().includes(query.toLowerCase()) ||
+    p.plant?.toLowerCase().includes(query.toLowerCase())
+  );
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#f8fafc',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '40px 20px', fontFamily: "'Inter', sans-serif",
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 980, display: 'grid',
+        gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 0,
+        background: '#fff', borderRadius: 16, overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(15,23,42,0.10)',
+        border: `1px solid ${T.accentBorder}`,
+      }}>
+
+        {/* ── Left: hero / value ── */}
+        <div style={{
+          padding: '36px 32px',
+          background: `linear-gradient(135deg, ${T.accentSoft}, rgba(8,145,178,0.05))`,
+          borderRight: `1px solid ${T.accentBorder}`,
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 14,
+            background: `linear-gradient(135deg, ${T.accent}, ${T.secondary})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 8px 20px rgba(5,150,105,0.25)', marginBottom: 18,
+          }}>
+            <FolderIcon width={28} style={{ color: '#fff' }} />
+          </div>
+          <div style={{ fontSize: 11, color: T.accent, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+            Non-TEFF Metadata Generator
+          </div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a', lineHeight: 1.25 }}>
+            {GATE_CFG.title}
+          </h1>
+          <p style={{ margin: '12px 0 22px', fontSize: 14, color: '#475569', lineHeight: 1.55 }}>
+            {GATE_CFG.subtitle}
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 10 }}>
+            {GATE_CFG.bullets.map((b, i) => (
+              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: '#334155' }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: 999,
+                  background: T.accentSoft, color: T.accent,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, marginTop: 1,
+                }}>✓</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* ── Right: action panel ── */}
+        <div style={{ padding: '32px 32px', display: 'flex', flexDirection: 'column' }}>
+          {!creating ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                  {GATE_CFG.cta.pickExisting}
+                </h2>
+                <button onClick={onManage} style={{
+                  background: 'transparent', border: 'none', color: T.accent,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>{GATE_CFG.cta.manage} →</button>
+              </div>
+
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, code, plant…"
+                style={{
+                  padding: '10px 14px', borderRadius: 10,
+                  border: `1px solid ${T.accentBorder}`, fontSize: 13,
+                  outline: 'none', marginBottom: 12,
+                }}
+              />
+
+              <div style={{
+                flex: 1, minHeight: 180, maxHeight: 280, overflow: 'auto',
+                border: `1px solid ${T.accentBorder}`, borderRadius: 10,
+                background: '#fafafa',
+              }}>
+                {loading ? (
+                  <div style={{ padding: 30, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                    Loading projects…
+                  </div>
+                ) : error ? (
+                  <div style={{ padding: 20, color: '#b91c1c', fontSize: 13 }}>{error}</div>
+                ) : filtered.length === 0 ? (
+                  <div style={{ padding: 30, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                    {query
+                      ? 'No projects match your search.'
+                      : 'No projects yet. Create your first one below.'}
+                  </div>
+                ) : (
+                  filtered.map((p) => (
+                    <button
+                      key={p.project_id}
+                      onClick={() => handlePick(p)}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '11px 14px',
+                        background: 'transparent', border: 'none',
+                        borderBottom: `1px solid ${T.accentBorder}`,
+                        cursor: 'pointer', display: 'flex',
+                        justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = T.accentSoft}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a',
+                                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                          {[p.code, p.plant, p.discipline].filter(Boolean).join(' · ') || 'No metadata'}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 11, color: T.secondary, fontWeight: 600,
+                        background: 'rgba(8,145,178,0.10)', padding: '3px 8px', borderRadius: 999,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {(p.job_count || 0) + (p.batch_count || 0)} extractions
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <button
+                onClick={() => { setCreating(true); setError(''); }}
+                style={{
+                  marginTop: 16,
+                  background: `linear-gradient(135deg, ${T.accent}, ${T.secondary})`,
+                  color: '#fff', border: 'none',
+                  padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8,
+                  boxShadow: '0 6px 18px rgba(5,150,105,0.30)',
+                }}
+              >
+                + {GATE_CFG.cta.createNew}
+              </button>
+            </>
+          ) : (
+            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                  {GATE_CFG.cta.createNew}
+                </h2>
+                <button type="button" onClick={() => setCreating(false)} style={{
+                  background: 'transparent', border: 'none', color: '#64748b',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>← Back</button>
+              </div>
+
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#0f172a',
+                              textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Project Name *
+              </label>
+              <input
+                type="text"
+                value={newName}
+                autoFocus
+                required
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g., ADNOC Trunkline Project"
+                style={{
+                  padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${T.accentBorder}`, fontSize: 14,
+                  outline: 'none', marginBottom: 14,
+                }}
+              />
+
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#0f172a',
+                              textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                Description <span style={{ color: '#64748b', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
+              </label>
+              <textarea
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                rows={4}
+                placeholder="Brief project description…"
+                style={{
+                  padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${T.accentBorder}`, fontSize: 13,
+                  resize: 'vertical', fontFamily: 'inherit', outline: 'none',
+                  marginBottom: 14,
+                }}
+              />
+
+              {error && (
+                <div style={{ background: '#fee2e2', color: '#991b1b',
+                              padding: 10, borderRadius: 8, fontSize: 12, marginBottom: 12 }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ flex: 1 }} />
+
+              <p style={{ margin: '0 0 10px', fontSize: 11, color: '#94a3b8' }}>
+                You can add code, client, plant, discipline and status later from <strong>{GATE_CFG.cta.manage}</strong>.
+              </p>
+
+              <button
+                type="submit"
+                disabled={busy || !newName.trim()}
+                style={{
+                  background: !busy && newName.trim()
+                    ? `linear-gradient(135deg, ${T.accent}, ${T.secondary})`
+                    : '#cbd5e1',
+                  color: '#fff', border: 'none',
+                  padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  cursor: !busy && newName.trim() ? 'pointer' : 'not-allowed',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  boxShadow: !busy && newName.trim() ? '0 6px 18px rgba(5,150,105,0.30)' : 'none',
+                }}
+              >
+                {busy ? 'Creating…' : 'Create & Continue →'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 const NonTeffMetadataPage = () => {
@@ -726,6 +1280,24 @@ const NonTeffMetadataPage = () => {
   const [isDragging,    setIsDragging]    = useState(false);
   const [jobId,         setJobId]         = useState(null);
   const [tipIndex,      setTipIndex]      = useState(0);
+
+  // Smart Features panel (additive — does not affect core extraction)
+  const [smartOpen,     setSmartOpen]     = useState(false);
+  const [smartFilterIdx, setSmartFilterIdx] = useState(null); // null = inactive
+  const [smartFilterLabel, setSmartFilterLabel] = useState('');
+
+  // Active project (additive — organisational only, never blocks extraction).
+  // Persisted in localStorage so navigating between pages preserves context.
+  const [activeProject, setActiveProject] = useState(() => {
+    try {
+      const raw = localStorage.getItem('nonTeffActiveProject');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) { return null; }
+  });
+  const clearActiveProject = () => {
+    setActiveProject(null);
+    try { localStorage.removeItem('nonTeffActiveProject'); } catch (_) {}
+  };
 
   const fileRef      = useRef(null);
   const pollTimerRef = useRef(null);
@@ -848,6 +1420,10 @@ const NonTeffMetadataPage = () => {
       setStatusMessage('Uploading file…');
       const formData = new FormData();
       formData.append('file', uploadBlob, file.name);
+      // Attach the active project (if any) so the backend links the job to it.
+      if (activeProject?.project_id) {
+        formData.append('project_id', activeProject.project_id);
+      }
       const res = await apiClient.post(`${API_PREFIX}/upload/`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: UPLOAD_TIMEOUT_MS,
@@ -901,7 +1477,14 @@ const NonTeffMetadataPage = () => {
   // Derived table data
   const items = results?.items || [];
 
-  const filteredItems = items.filter(row =>
+  // Optional AI-NL-query filter (set by the Smart Features panel). When
+  // smartFilterIdx is a Set, restrict items to that index set BEFORE the
+  // free-text filter so users get the combined narrow view.
+  const itemsForView = (smartFilterIdx instanceof Set)
+    ? items.filter((_, i) => smartFilterIdx.has(i))
+    : items;
+
+  const filteredItems = itemsForView.filter(row =>
     !filterText || COLUMNS.some(c => String(row[c.key] || '').toLowerCase().includes(filterText.toLowerCase()))
   );
 
@@ -1083,6 +1666,19 @@ const NonTeffMetadataPage = () => {
   useEffect(() => { if (mode !== 'bulk') setHistoryBatchId(null); }, [mode]);
   useEffect(() => { if (mode !== 'bulk') setCanvasTarget(null); }, [mode]);
 
+  // ── Project gate ──────────────────────────────────────────────────────────
+  // If gating is enabled and no project is active, force the user to pick or
+  // create one before they can use ANY workflow (single / bulk / history).
+  // Soft-coded via PROJECT_BANNER_CFG.requireProjectFirst.
+  if (PROJECT_BANNER_CFG.requireProjectFirst && !activeProject) {
+    return (
+      <ProjectGate
+        onPicked={(p) => setActiveProject(p)}
+        onManage={() => navigate(PROJECT_BANNER_CFG.routes.projects)}
+      />
+    );
+  }
+
   if (mode === 'history') {
     return (
       <div style={{ minHeight: '100vh', background: NT_T.bg, fontFamily: "'Inter', sans-serif", position: 'relative', overflow: 'hidden' }}>
@@ -1146,6 +1742,14 @@ const NonTeffMetadataPage = () => {
     <div style={{ minHeight: '100vh', background: NT_T.bg, fontFamily: "'Inter', sans-serif", position: 'relative', overflow: 'hidden' }}>
       <style>{NT_KEYFRAMES}</style>
       <TabBar />
+
+      {/* Project context banner — additive, organisational only */}
+      <ProjectContextBanner
+        project={activeProject}
+        onChange={setActiveProject}
+        onClear={clearActiveProject}
+        onManage={() => navigate('/engineering/digitization/non-teff-metadata/projects')}
+      />
 
       {/* Animated background blobs */}
       {NT_T.blobs.map((b, i) => (
@@ -1532,6 +2136,44 @@ const NonTeffMetadataPage = () => {
                 <ArrowDownTrayIcon style={{ width: 16, height: 16 }} />
                 Export Excel
               </button>
+
+              {/* ─── AI Insights button (opens Smart Features slide-over panel) ─── */}
+              <button
+                onClick={() => setSmartOpen(true)}
+                title="Open the AI Insights panel — confidence heatmap, repair suggestions, consistency check, NL query and more"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '9px 18px', borderRadius: '10px',
+                  background: 'linear-gradient(90deg, #059669, #0891b2)',
+                  border: '1px solid transparent', color: '#fff',
+                  fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(5,150,105,0.25)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <SparklesIcon style={{ width: 16, height: 16 }} />
+                AI Insights
+              </button>
+
+              {smartFilterIdx instanceof Set && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 10px', borderRadius: 10,
+                  background: 'rgba(124,58,237,0.1)', color: '#581c87',
+                  border: '1px solid rgba(124,58,237,0.3)',
+                  fontSize: '0.74rem', fontWeight: 600,
+                }}>
+                  <span>✨ AI filter: {smartFilterLabel.slice(0, 40)}{smartFilterLabel.length > 40 ? '…' : ''}</span>
+                  <button
+                    onClick={() => { setSmartFilterIdx(null); setSmartFilterLabel(''); }}
+                    style={{
+                      background: 'transparent', border: 'none', color: '#7c3aed',
+                      cursor: 'pointer', fontSize: '0.85rem', padding: 0, lineHeight: 1,
+                    }}
+                    title="Clear AI filter"
+                  >✕</button>
+                </span>
+              )}
             </div>
 
             {/* Table */}
@@ -1641,6 +2283,20 @@ const NonTeffMetadataPage = () => {
         {/* ── Document Search Canvas (replaces "Discover more RAD AI modules") ── */}
         <DocumentSearchCanvas results={results} file={file} navigate={navigate} />
       </div>
+
+      {/* ── AI Insights slide-over (additive — never mutates `items`) ── */}
+      <NonTeffSmartFeatures
+        open={smartOpen}
+        onClose={() => setSmartOpen(false)}
+        items={items}
+        columns={COLUMNS}
+        excerpt={results?.text_excerpt || ''}
+        onApplyFilter={(idxs, label) => {
+          setSmartFilterIdx(new Set(idxs));
+          setSmartFilterLabel(label || 'AI query');
+          setSmartOpen(false);
+        }}
+      />
     </div>
   );
 };
@@ -1767,16 +2423,18 @@ const IdleInfoPanel = () => {
 const DSC_CONFIG = {
   // Which extracted-row fields participate in the full-text search.
   searchableKeys: [
-    'document_no', 'document_title', 'revision', 'discipline',
+    'document_no', 'document_title', 'document_type', 'document_subtype',
+    'revision', 'discipline',
     'instrument_tag_no', 'line_number', 'equipment_no',
     'mechanical_component', 'status', 'date', 'originator', 'remarks',
   ],
   // Visual fields shown on each result card (key → label).
   resultCardFields: [
-    { key: 'document_no',    label: 'Doc No.'   },
-    { key: 'revision',       label: 'Rev'       },
-    { key: 'discipline',     label: 'Discipline'},
-    { key: 'status',         label: 'Status'    },
+    { key: 'document_no',       label: 'Doc No.'   },
+    { key: 'document_subtype',  label: 'Sub-Type'  },
+    { key: 'revision',          label: 'Rev'       },
+    { key: 'discipline',        label: 'Discipline'},
+    { key: 'status',            label: 'Status'    },
   ],
   // Highest-impact field for the result heading.
   titleKey: 'document_title',

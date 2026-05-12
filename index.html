@@ -1,6 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- Google tag (gtag.js) — RADAI production property G-D19W29T292.
+         Placed as the very first thing inside <head> per Google's install
+         instructions. The IIFE below:
+           • Soft-codes the measurement ID (window.__RADAI_GA_ID__ wins,
+             else the data-ga-id attribute on <html>, else the default).
+           • Guards against double-injection so SPA navigation / HMR can
+             never load gtag.js twice ("Don't add more than one Google
+             tag to each page").
+           • Skips loading on localhost / 127.0.0.1 so dev traffic does
+             not pollute Analytics. Flip RADAI_GA_LOAD_ON_LOCAL=true on
+             window to override for QA.
+    -->
+    <script>
+      (function () {
+        var DEFAULT_ID = 'G-D19W29T292';
+        var id = (window.__RADAI_GA_ID__)
+              || (document.documentElement.getAttribute('data-ga-id'))
+              || DEFAULT_ID;
+        if (!id) return;
+        if (window.__RADAI_GA_LOADED__) return;
+        var host = (location && location.hostname) || '';
+        var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+        if (isLocal && !window.RADAI_GA_LOAD_ON_LOCAL) return;
+        window.__RADAI_GA_LOADED__ = true;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { window.dataLayer.push(arguments); };
+        window.gtag('js', new Date());
+        window.gtag('config', id);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
