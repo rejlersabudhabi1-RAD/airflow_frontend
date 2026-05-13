@@ -110,6 +110,9 @@ import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartEl
 // Instrument Datasheet Components
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
+import IOListPage from './pages/Engineering/Instrument/IOListPage'
+import CableBlockDiagramPage from './pages/Engineering/Instrument/CableBlockDiagramPage'
+import CableSchedulePage from './pages/Engineering/Instrument/CableSchedulePage'
 // Mechanical Datasheet Components
 import MechanicalDatasheetPage from './pages/Engineering/Mechanical/MechanicalDatasheetPage'
 // Civil Datasheet Components
@@ -915,6 +918,30 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="instrument_datasheet">
               <InstrumentDatasheetPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/instrument/datasheet/io-list"
+          element={
+            <ModuleProtectedRoute moduleCode="instrument_datasheet">
+              <IOListPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/instrument/datasheet/cable-block-diagram"
+          element={
+            <ModuleProtectedRoute moduleCode="instrument_datasheet">
+              <CableBlockDiagramPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/instrument/datasheet/cable-schedule"
+          element={
+            <ModuleProtectedRoute moduleCode="instrument_datasheet">
+              <CableSchedulePage />
             </ModuleProtectedRoute>
           }
         />

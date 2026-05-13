@@ -7,7 +7,10 @@ import {
   CircleStackIcon,
   ChartBarIcon,
   DocumentTextIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  TableCellsIcon,
+  RectangleStackIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline';
 
 /**
@@ -20,6 +23,60 @@ const InstrumentDatasheetPage = () => {
 
   // Soft-coded data sheet types configuration for Instrumentation Engineering
   const dataSheetTypes = [
+    {
+      id: 'io_list',
+      name: 'IO List',
+      description: 'Generate a canonical IO list from your instrument register, or run a deterministic quality check on an existing list.',
+      icon: TableCellsIcon,
+      color: 'purple',
+      gradient: 'from-purple-600 to-indigo-600',
+      path: '/engineering/instrument/datasheet/io-list',
+      badge: 'Generator + QC',
+      disabled: false,
+      features: [
+        'Excel / CSV ingestion',
+        'Alias-tolerant headers',
+        'Duplicate tag detection',
+        'Signal type enum check',
+        'Download as XLSX'
+      ]
+    },
+    {
+      id: 'cable_block_diagram',
+      name: 'Cable Block Diagram',
+      description: 'Aggregate IO points into cable bundles per panel and signal type for the cable block diagram, or QC an existing bundle list.',
+      icon: RectangleStackIcon,
+      color: 'purple',
+      gradient: 'from-indigo-600 to-blue-600',
+      path: '/engineering/instrument/datasheet/cable-block-diagram',
+      badge: 'Generator + QC',
+      disabled: false,
+      features: [
+        'Per-panel bundling',
+        'Signal-type grouping',
+        'Auto cable type mapping',
+        'Source/destination check',
+        'Block diagram export'
+      ]
+    },
+    {
+      id: 'cable_schedule',
+      name: 'Cable Schedule',
+      description: 'Synthesise a per-cable schedule from the IO list, or validate an existing schedule for duplicates and integrity issues.',
+      icon: BoltIcon,
+      color: 'purple',
+      gradient: 'from-violet-600 to-fuchsia-600',
+      path: '/engineering/instrument/datasheet/cable-schedule',
+      badge: 'Generator + QC',
+      disabled: false,
+      features: [
+        'One row per IO point',
+        'Auto cable tag prefixing',
+        'Length / cores validation',
+        'Duplicate cable detection',
+        'Excel download'
+      ]
+    },
     {
       id: 'control_valve',
       name: 'Control Valve Sizing',
