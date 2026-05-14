@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/api.config';
 import CrossRecommendationPanel from '../../../components/recommendations/CrossRecommendationPanel';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 import {
   Upload as UploadIcon, FileText, CheckCircle, AlertTriangle,
   Loader, X, Download, Activity, Shield, GitBranch, Cpu, Clock,
@@ -14,6 +15,21 @@ import {
 const PFD_OVERLAY_MARKER_ANIM_PING_SCALE  = 2.5;   // ripple ring final scale
 const PFD_OVERLAY_MARKER_ANIM_ENABLED      = true;  // toggle all marker animation
 const PFD_OVERLAY_MARKER_ANIM_DURATION_MS  = 2200;  // ping cycle ms
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the panel used on PID Verification / PMS / Instrument Index / CLL.
+// Set `enabled: false` to hide the panel without touching JSX.
+const PFDQ_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right PFD drawing for this project from Wrench DMS',
+  defaultHint:     'pfd process flow diagram',
+  hintPlaceholder: 'e.g. pfd, process flow, unit 100',
+  topN:            5,
+  // PFD Quality Checker accepts the same file types as its file input.
+  acceptedExts:    ['pdf','png','jpg','jpeg','tiff','tif'],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Animation keyframes — PFD Quality Checker signature animations
@@ -1661,6 +1677,24 @@ const PFDQualityChecker = () => {
         {!results && (
           <div className="rounded-2xl p-5 sm:p-6 mb-5" style={{ ...T.panel, animation:'fadeUp 0.5s ease-out 0.2s both' }}>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">PFD Drawing (PDF) *</label>
+
+            {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────── */}
+            {PFDQ_AI_ASSIST_CONFIG.enabled && (
+              <div className="mb-4">
+                <WrenchAiDocAssist
+                  title={PFDQ_AI_ASSIST_CONFIG.title}
+                  subtitleTag={PFDQ_AI_ASSIST_CONFIG.subtitleTag}
+                  subtitle={PFDQ_AI_ASSIST_CONFIG.subtitle}
+                  defaultHint={PFDQ_AI_ASSIST_CONFIG.defaultHint}
+                  hintPlaceholder={PFDQ_AI_ASSIST_CONFIG.hintPlaceholder}
+                  topN={PFDQ_AI_ASSIST_CONFIG.topN}
+                  acceptedExts={PFDQ_AI_ASSIST_CONFIG.acceptedExts}
+                  projectName={selectedProject?.project_name || ''}
+                  onFileSelected={(f) => { setFile(f); setError(''); }}
+                  onError={(msg) => setError(msg)}
+                />
+              </div>
+            )}
 
             {/* ── Drop zone with circuit-trace border animation ── */}
             <div className="relative"
