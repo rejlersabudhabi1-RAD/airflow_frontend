@@ -10,6 +10,13 @@ import {
   ArrowPathIcon,
   FunnelIcon,
 } from '@heroicons/react/24/outline';
+import PaperSpecExtractor from './components/PaperSpecExtractor';
+
+// ─── Soft-coded feature flags ─────────────────────────────────────
+// Flip these flags to enable / disable inline panels on the hub page.
+const HUB_FEATURE_FLAGS = {
+  SHOW_PAPER_SPEC_EXTRACTOR: true,
+};
 
 /**
  * Spec Customization Page — Digitization discipline
@@ -305,6 +312,12 @@ const SpecCustomizationPage = () => {
           })}
         </div>
       </div>
+      {/* ── Paper Spec Extractor (live AI panel) ───────────────── */}
+      {HUB_FEATURE_FLAGS.SHOW_PAPER_SPEC_EXTRACTOR && (
+        <div className="max-w-7xl mx-auto mt-10">
+          <PaperSpecExtractor />
+        </div>
+      )}
     </div>
   );
 };
