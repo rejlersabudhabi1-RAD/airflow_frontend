@@ -37,6 +37,8 @@ import {
   ShieldCheckIcon,
   TagIcon,
   XMarkIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from '@heroicons/react/24/outline';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import { STORAGE_KEYS } from '../../../config/app.config';
@@ -98,6 +100,15 @@ const KEYFRAMES_INST = `
   @keyframes instNodeGlow { 0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,0);transform:scale(1)} 50%{box-shadow:0 0 18px 4px rgba(99,102,241,0.30);transform:scale(1.03)} }
   @keyframes instCountUp { from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes instPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes instFsIn  { from{opacity:0;transform:scale(0.985)} to{opacity:1;transform:scale(1)} }
+  /* Fullscreen overlay: lifts the whole page above app chrome (header/sidebar). */
+  .inst-fullscreen-wrap {
+    position: fixed; inset: 0; z-index: 9990;
+    overflow-y: auto;
+    animation: instFsIn 0.22s ease both;
+  }
+  /* Hide global body scroll while in fullscreen so only the overlay scrolls. */
+  body.inst-fullscreen-lock { overflow: hidden !important; }
 `;
 
 // Soft-coded hero capability badges (instrument flavor)
@@ -143,8 +154,11 @@ const INST_HOW_IT_WORKS = [
 const INST_RING_TICKS = Array.from({ length: 12 }, (_, i) => i * 30);
 
 // ─── Full-page animated background (PFD-format DarkBg, instrument palette) ───
-const InstBg = ({ children }) => (
-  <div className="min-h-screen relative overflow-hidden" style={{ background: T_INST.bg }}>
+const InstBg = ({ children, fullscreen = false }) => (
+  <div
+    className={`min-h-screen relative overflow-hidden${fullscreen ? ' inst-fullscreen-wrap' : ''}`}
+    style={{ background: T_INST.bg }}
+  >
     <style>{KEYFRAMES_INST}</style>
     <div className="absolute inset-0 pointer-events-none"
       style={{ backgroundImage: T_INST.gridDot, backgroundSize: '44px 44px' }} />
@@ -365,6 +379,23 @@ const AI_DOC_ASSIST_CONFIG = {
   topN:            5,
   // Instrument Index extraction accepts ONLY PDF P&IDs.
   acceptedExts:    ['pdf'],
+};
+
+// ─── Fullscreen layout (soft-coded) ──────────────────────────────────────────
+// Edit max-widths / paddings here without touching JSX.  Mirrors LineList
+// pattern (LAYOUT_CONFIG) so behaviour is consistent across the engineering
+// pages.  `enabled: false` hides the toggle button entirely.
+const INST_LAYOUT_CONFIG = {
+  enabled:             true,
+  normalMaxWidth:      '96rem',   // tailwind max-w-screen-2xl ≈ 1536 px
+  normalPaddingX:      '1.5rem',
+  normalPaddingY:      '2rem',
+  fullscreenMaxWidth:  '100%',
+  fullscreenPaddingX:  '1.5rem',
+  fullscreenPaddingY:  '1.25rem',
+  bodyLockClass:       'inst-fullscreen-lock',  // see KEYFRAMES_INST
+  /* localStorage key so the choice persists across reloads */
+  persistKey:          'instIndex.isFullscreen.v1',
 };
 
 // Soft-coded category colours (must stay in sync with service CATEGORY_COLOURS)
@@ -652,6 +683,25 @@ const InstrumentIndex = () => {
   const [activeView, setActiveView]         = useState('table'); // 'table' | 'summary' | 'layout'
   // Row selection (Set of zero-based instrument indices in result.instruments)
   const [selectedRows, setSelectedRows]     = useState(() => new Set());
+
+  // Fullscreen mode (soft-coded — see INST_LAYOUT_CONFIG)
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(INST_LAYOUT_CONFIG.persistKey) || 'false'); }
+    catch (_) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(INST_LAYOUT_CONFIG.persistKey, JSON.stringify(isFullscreen)); }
+    catch (_) {}
+    if (typeof document === 'undefined') return undefined;
+    if (isFullscreen) document.body.classList.add(INST_LAYOUT_CONFIG.bodyLockClass);
+    else              document.body.classList.remove(INST_LAYOUT_CONFIG.bodyLockClass);
+    const onKey = (e) => { if (e.key === 'Escape' && isFullscreen) setIsFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.classList.remove(INST_LAYOUT_CONFIG.bodyLockClass);
+    };
+  }, [isFullscreen]);
   // Reset selection whenever a fresh extraction lands
   useEffect(() => { setSelectedRows(new Set()); }, [result?.total]);
   // Layout view state
@@ -1322,8 +1372,15 @@ const InstrumentIndex = () => {
   // VIEW 2 — Project workspace (active project selected)
   // ═══════════════════════════════════════════════════════════════════════
   return (
-    <InstBg>
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <InstBg fullscreen={isFullscreen}>
+      <div
+        className="mx-auto px-4 sm:px-6 lg:px-8"
+        style={{
+          maxWidth: isFullscreen ? INST_LAYOUT_CONFIG.fullscreenMaxWidth : INST_LAYOUT_CONFIG.normalMaxWidth,
+          paddingTop:    isFullscreen ? INST_LAYOUT_CONFIG.fullscreenPaddingY : INST_LAYOUT_CONFIG.normalPaddingY,
+          paddingBottom: isFullscreen ? INST_LAYOUT_CONFIG.fullscreenPaddingY : INST_LAYOUT_CONFIG.normalPaddingY,
+        }}
+      >
 
         {/* ── Slim project header / breadcrumb ── */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3" style={{ animation: 'instFadeUp 0.4s ease-out both' }}>
@@ -1345,6 +1402,19 @@ const InstrumentIndex = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {INST_LAYOUT_CONFIG.enabled && (
+              <button
+                onClick={() => setIsFullscreen(fs => !fs)}
+                title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
+                aria-pressed={isFullscreen}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors"
+              >
+                {isFullscreen
+                  ? <><ArrowsPointingInIcon className="h-3.5 w-3.5" /> Exit Fullscreen</>
+                  : <><ArrowsPointingOutIcon className="h-3.5 w-3.5" /> Fullscreen</>
+                }
+              </button>
+            )}
             <button
               onClick={() => openManager({ view: 'list' })}
               className="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors">
