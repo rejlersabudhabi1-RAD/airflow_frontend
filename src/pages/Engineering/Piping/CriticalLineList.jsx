@@ -42,6 +42,8 @@ import { apiClientLongTimeout } from '../../../services/api.service';
 
 import * as XLSX from 'xlsx';
 
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
+
 
 
 // Simplified for Critical Line List only (single-purpose page)
@@ -97,6 +99,28 @@ const CLL_CHIPS = [
   { icon: '🤖', label: 'AI-assisted extraction' },
   { icon: '📐', label: 'Format-aware regex' },
 ];
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the panel used on /engineering/process/pid-verification,
+// /engineering/piping/pms, /engineering/instrument/index.
+// Each "slot" maps to one of the 5 enrichment-document upload cards below,
+// so the user can target the dropdown at the right slot before clicking
+// "Use this".  Set `enabled: false` to hide without touching JSX.
+const CLL_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI find the right reference document (P&ID, HMB, PMS, NACE, Stress) for this project from Wrench DMS',
+  hintPlaceholder: 'e.g. piping classes, line list, NACE',
+  topN:            6,
+  slots: [
+    { id: 'pid',    label: '1 · P&ID Drawing',     defaultHint: 'p&id pipeline line list',         acceptedExts: ['pdf']               },
+    { id: 'hmb',    label: '2 · HMB / PFD',         defaultHint: 'heat material balance pfd',       acceptedExts: ['pdf','xlsx','xls'] },
+    { id: 'pms',    label: '3 · PMS',               defaultHint: 'piping material specification',   acceptedExts: ['pdf','xlsx','xls'] },
+    { id: 'nace',   label: '4 · NACE',              defaultHint: 'nace mr0175 corrosion',           acceptedExts: ['pdf','xlsx','xls'] },
+    { id: 'stress', label: '5 · Stress Criticality',defaultHint: 'stress critical line list',       acceptedExts: ['pdf','xlsx','xls'] },
+  ],
+};
 
 // Format selector definitions — central source of truth for labels & accents.
 // `autoDetect: true` marks a format that internally delegates to every other
@@ -280,6 +304,9 @@ const CriticalLineList = () => {
   const [stressCriticalityDocument, setStressCriticalityDocument] = useState(null);
 
   const [selectedFormat, setSelectedFormat] = useState(null);
+
+  // AI Document Assist — which of the 5 doc slots receives the next Wrench file.
+  const [aiAssistSlot, setAiAssistSlot] = useState(CLL_AI_ASSIST_CONFIG.slots[0].id);
 
   const hmbRef = useRef(null);
 
@@ -2342,6 +2369,106 @@ const CriticalLineList = () => {
               })()}
 
             </div>
+
+
+
+            {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────────── */}
+
+            {CLL_AI_ASSIST_CONFIG.enabled && (() => {
+
+              const slot     = CLL_AI_ASSIST_CONFIG.slots.find(s => s.id === aiAssistSlot)
+
+                            || CLL_AI_ASSIST_CONFIG.slots[0];
+
+              const SLOT_SETTERS = {
+
+                pid:    (f) => setPidDocument(f),
+
+                hmb:    (f) => setHmbDocument(f),
+
+                pms:    (f) => setPmsDocument(f),
+
+                nace:   (f) => setNaceDocument(f),
+
+                stress: (f) => setStressCriticalityDocument(f),
+
+              };
+
+              return (
+
+                <div className="mb-4">
+
+                  <WrenchAiDocAssist
+
+                    title={CLL_AI_ASSIST_CONFIG.title}
+
+                    subtitleTag={CLL_AI_ASSIST_CONFIG.subtitleTag}
+
+                    subtitle={CLL_AI_ASSIST_CONFIG.subtitle}
+
+                    defaultHint={slot.defaultHint}
+
+                    hintPlaceholder={CLL_AI_ASSIST_CONFIG.hintPlaceholder}
+
+                    topN={CLL_AI_ASSIST_CONFIG.topN}
+
+                    acceptedExts={slot.acceptedExts}
+
+                    /* CLL has no global project context — leave empty so the user picks the Wrench project explicitly. */
+
+                    projectName=""
+
+                    /* Remount when the target slot changes so the panel resets its hint/results. */
+
+                    key={`cll-aiassist-${slot.id}`}
+
+                    onFileSelected={(file) => {
+
+                      const setter = SLOT_SETTERS[slot.id];
+
+                      if (!setter) return;
+
+                      setter(file);
+
+                    }}
+
+                  />
+
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+
+                    <span className="font-semibold uppercase tracking-wide text-slate-500">Load into slot:</span>
+
+                    <select
+
+                      value={aiAssistSlot}
+
+                      onChange={(e) => setAiAssistSlot(e.target.value)}
+
+                      className="border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+
+                    >
+
+                      {CLL_AI_ASSIST_CONFIG.slots.map(s => (
+
+                        <option key={s.id} value={s.id}>{s.label}</option>
+
+                      ))}
+
+                    </select>
+
+                    <span className="text-slate-400 italic">
+
+                      {slot.acceptedExts.map(x => `.${x}`).join(' / ')} accepted
+
+                    </span>
+
+                  </div>
+
+                </div>
+
+              );
+
+            })()}
 
 
 
