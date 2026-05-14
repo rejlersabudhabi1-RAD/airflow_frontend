@@ -52,6 +52,7 @@ import {
   PROJECT_FORM_LIMITS,
   getInstrumentTemplate,
 } from './InstrumentProjectManager';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PFD-FORMAT REDESIGN — theme, animations & landing-page primitives
@@ -318,6 +319,21 @@ function InstConfirmModal({ open, title, message, onCancel, onConfirm, danger })
 const API_BASE = getApiBaseUrl();
 // Upload timeout — multi-page P&IDs can take a few minutes
 const UPLOAD_TIMEOUT_MS = 600_000;  // 10 min
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ──────────────────
+// Mirrors the panel used on /engineering/process/pid-verification and
+// /engineering/piping/pms.  Set `enabled: false` to hide without touching JSX.
+const AI_DOC_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right P&ID PDF for this project from Wrench DMS',
+  defaultHint:     'instrument index p&id',
+  hintPlaceholder: 'e.g. instrumentation, unit 100, control room',
+  topN:            5,
+  // Instrument Index extraction accepts ONLY PDF P&IDs.
+  acceptedExts:    ['pdf'],
+};
 
 // Soft-coded category colours (must stay in sync with service CATEGORY_COLOURS)
 const CATEGORY_COLOURS = {
@@ -1290,6 +1306,37 @@ const InstrumentIndex = () => {
             <span className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">1</span>
             Upload P&amp;ID Drawing (PDF)
           </h2>
+
+          {/* ── AI Document Assist (Wrench) — soft-coded, optional ─── */}
+          {AI_DOC_ASSIST_CONFIG.enabled && (
+            <div className="mb-4">
+              <WrenchAiDocAssist
+                title={AI_DOC_ASSIST_CONFIG.title}
+                subtitleTag={AI_DOC_ASSIST_CONFIG.subtitleTag}
+                subtitle={AI_DOC_ASSIST_CONFIG.subtitle}
+                defaultHint={AI_DOC_ASSIST_CONFIG.defaultHint}
+                hintPlaceholder={AI_DOC_ASSIST_CONFIG.hintPlaceholder}
+                topN={AI_DOC_ASSIST_CONFIG.topN}
+                acceptedExts={AI_DOC_ASSIST_CONFIG.acceptedExts}
+                projectName={activeProject?.name || ''}
+                onFileSelected={(file, rec) => {
+                  // Reuse the existing PDF acceptance path — no core logic change.
+                  if (!file.name.toLowerCase().endsWith('.pdf')) {
+                    setError('AI Document Assist returned a non-PDF file. Only PDF P&IDs are accepted.');
+                    return;
+                  }
+                  setPidFile(file);
+                  setResult(null);
+                  setError(null);
+                  // Pre-fill drawing number from the Wrench DOC_NO when available.
+                  const docNo = (rec?.doc_no || '').trim();
+                  if (docNo) setDrawingNumber(docNo);
+                  else if (!drawingNumber) setDrawingNumber(file.name.replace(/\.pdf$/i, ''));
+                }}
+                onError={(msg) => setError(msg)}
+              />
+            </div>
+          )}
 
           {/* Drop zone */}
           <div
