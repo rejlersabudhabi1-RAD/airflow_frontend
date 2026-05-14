@@ -33,6 +33,7 @@ import { DocumentTextIcon, CloudArrowUpIcon, CheckCircleIcon, ArrowsPointingOutI
 import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 import envConfig from '../../../config/environment.config';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import { STORAGE_KEYS } from '../../../config/app.config';
 
@@ -227,6 +228,21 @@ const LL_PROC_TIPS = [
   '✨ Complex drawings (like this one) may take longer — quality stays high.',
 ];
 const LL_PROC_TIP_ROTATE_MS = 5000;
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the pattern used on PID Verification / PMS / Instrument Index /
+// CLL / PFD Quality Checker.  Flip `enabled: false` to hide without
+// touching JSX.  Line List only consumes PDFs.
+const LL_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right P&ID PDF for this Line List from Wrench DMS',
+  defaultHint:     'line list p&id',
+  hintPlaceholder: 'e.g. line list, p&id, unit 100',
+  topN:            5,
+  acceptedExts:    ['pdf'],
+};
 
 // ---------------------------------------------------------------------------
 // Soft-coded layout config — change widths/padding here without touching JSX.
@@ -820,6 +836,28 @@ const LineList = () => {
               }}>1</div>
               <h2 className="text-sm font-semibold text-slate-700 tracking-wide">Upload P&amp;ID Document</h2>
             </div>
+
+            {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────── */}
+            {LL_AI_ASSIST_CONFIG.enabled && (
+              <div className="mb-5">
+                <WrenchAiDocAssist
+                  title={LL_AI_ASSIST_CONFIG.title}
+                  subtitleTag={LL_AI_ASSIST_CONFIG.subtitleTag}
+                  subtitle={LL_AI_ASSIST_CONFIG.subtitle}
+                  defaultHint={LL_AI_ASSIST_CONFIG.defaultHint}
+                  hintPlaceholder={LL_AI_ASSIST_CONFIG.hintPlaceholder}
+                  topN={LL_AI_ASSIST_CONFIG.topN}
+                  acceptedExts={LL_AI_ASSIST_CONFIG.acceptedExts}
+                  projectName=""
+                  onFileSelected={(f) => {
+                    setPidDocument(f);
+                    setError(null);
+                    setExtractedData(null);
+                  }}
+                  onError={(msg) => setError(msg)}
+                />
+              </div>
+            )}
 
             {/* Drop zone */}
             <div
