@@ -431,6 +431,7 @@ const NT_TAB_LAYOUT = {
 const HISTORY_CONFIG = {
   endpoints: {
     list:   '/non-teff/history/',
+    diag:   '/non-teff/history/diagnostics/',
     load:   (id) => `/non-teff/history/${id}/`,
     update: (id) => `/non-teff/history/${id}/update/`,
     remove: (id) => `/non-teff/history/${id}/delete/`,
@@ -527,6 +528,9 @@ const HistoryPanel = ({ onOpen }) => {
   const [busyAct,  setBusyAct]  = React.useState(null);   // 'open' | 'modify' | 'download' | 'delete'
   const [editId,   setEditId]   = React.useState(null);   // row currently being renamed
   const [editName, setEditName] = React.useState('');
+  // S3 archival diagnostics — soft-coded badge in the header. Falls back to
+  // hidden if the diagnostics endpoint is unavailable (older backend).
+  const [s3Diag,   setS3Diag]   = React.useState(null);
 
   const fetchHistory = React.useCallback(async () => {
     setLoading(true); setError(null);
@@ -545,6 +549,16 @@ const HistoryPanel = ({ onOpen }) => {
   }, []);
 
   React.useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  // One-shot S3 archival probe. Silently ignored on failure so the History
+  // tab still works against older backends without the /diagnostics route.
+  React.useEffect(() => {
+    let cancelled = false;
+    apiClient.get(HISTORY_CONFIG.endpoints.diag, { timeout: 8000 })
+      .then(res => { if (!cancelled) setS3Diag(res.data || null); })
+      .catch(() => { /* feature optional */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Soft-coded action dispatcher — switch on action.id
   const runAction = async (action, item) => {
@@ -714,6 +728,27 @@ const HistoryPanel = ({ onOpen }) => {
               ? 'Showing extractions from all users (admin view).'
               : 'Your past extractions — Open, Modify, Download or Delete each entry below.'}
             {role && <span style={{ marginLeft: 8, padding: '2px 8px', background: '#ede9fe', color: '#6d28d9', borderRadius: 999, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>Role: {role}</span>}
+            {/* S3 archival status — soft-coded, hidden when diag unavailable */}
+            {s3Diag && (() => {
+              const ok = s3Diag.enabled && s3Diag.connected && s3Diag.reachable;
+              const palette = ok
+                ? { bg: '#ecfdf5', fg: '#047857', label: 'S3 Archive Active', icon: '☁' }
+                : (s3Diag.enabled
+                    ? { bg: '#fef3c7', fg: '#b45309', label: 'S3 Unreachable',   icon: '⚠' }
+                    : { bg: '#f1f5f9', fg: '#64748b', label: 'S3 Disabled',     icon: '○' });
+              const tip = ok
+                ? `Bucket: ${s3Diag.bucket || '—'} · Region: ${s3Diag.region || '—'} · Prefix: ${s3Diag.root_prefix || '—'}`
+                : (s3Diag.error || 'Archival not active — DB-only history.');
+              return (
+                <span title={tip} style={{
+                  marginLeft: 8, padding: '2px 8px', background: palette.bg, color: palette.fg,
+                  borderRadius: 999, fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: 0.4, cursor: 'help',
+                }}>
+                  {palette.icon} {palette.label}
+                </span>
+              );
+            })()}
           </p>
         </div>
         <button
