@@ -30,6 +30,7 @@ import {
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
 import { getApiBaseUrl } from '../../../config/environment.config';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 import BulkMasterIndex from './BulkMasterIndex';
 import DocumentSearchCanvasView from './DocumentSearchCanvas';
 import NonTeffSmartFeatures from './NonTeffSmartFeatures';
@@ -90,6 +91,23 @@ const SUPPORTED_FORMATS = [
 ];
 
 const ACCEPT_STRING = '.pdf,.xlsx,.xls,.docx,.doc,.dwg,.dxf';
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the panel on PID Verification / PMS / Instrument Index / CLL /
+// PFD Quality Checker / Line List / Equipment List.
+// Non-TEFF is multi-format: PDF / Excel / Word / AutoCAD.  Flip
+// `enabled: false` to hide the panel without touching JSX.
+const NT_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right engineering document (PDF / Excel / Word / DWG) for this project from Wrench DMS',
+  defaultHint:     'engineering document metadata',
+  hintPlaceholder: 'e.g. datasheet, specification, drawing list',
+  topN:            6,
+  // Mirror ACCEPT_STRING so the panel's file-type filter matches the page's <input accept=...>
+  acceptedExts:    ['pdf','xlsx','xls','docx','doc','dwg','dxf'],
+};
 
 // apiClient already has baseURL=API_BASE_URL ('/api/v1'), so use a relative
 // prefix — prepending getApiBaseUrl() here duplicates '/api/v1/api/v1/...'.
@@ -1997,6 +2015,24 @@ const NonTeffMetadataPage = () => {
             ))}
           </div>
         </div>
+
+        {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────── */}
+        {NT_AI_ASSIST_CONFIG.enabled && (
+          <div className="nt-section" style={{ animationDelay: '0.08s', marginBottom: '16px' }}>
+            <WrenchAiDocAssist
+              title={NT_AI_ASSIST_CONFIG.title}
+              subtitleTag={NT_AI_ASSIST_CONFIG.subtitleTag}
+              subtitle={NT_AI_ASSIST_CONFIG.subtitle}
+              defaultHint={NT_AI_ASSIST_CONFIG.defaultHint}
+              hintPlaceholder={NT_AI_ASSIST_CONFIG.hintPlaceholder}
+              topN={NT_AI_ASSIST_CONFIG.topN}
+              acceptedExts={NT_AI_ASSIST_CONFIG.acceptedExts}
+              projectName={activeProject?.name || ''}
+              onFileSelected={(f) => { setFile(f); setError(null); setResults(null); }}
+              onError={(msg) => setError(msg)}
+            />
+          </div>
+        )}
 
         {/* ── Upload + Action row ── */}
         <div className="nt-section" style={{ animationDelay: '0.1s', display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'start', marginBottom: '24px' }}>
