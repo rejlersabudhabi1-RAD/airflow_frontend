@@ -320,6 +320,38 @@ const API_BASE = getApiBaseUrl();
 // Upload timeout — multi-page P&IDs can take a few minutes
 const UPLOAD_TIMEOUT_MS = 600_000;  // 10 min
 
+// ─── Network resilience (soft-coded) ─────────────────────────────────────────
+// Railway's edge proxy / shared infra occasionally drops long-running HTTPS
+// connections (surfaces as `ERR_CONNECTION_RESET` / `TypeError: Failed to fetch`).
+// Gunicorn itself is configured for a 20-min worker timeout, so the request
+// is almost always still progressing server-side.  We add a small soft retry
+// that ONLY fires on transient network errors (never on HTTP 4xx/5xx) so a
+// single proxy blip doesn't force the user to re-upload a 50-page P&ID.
+const NETWORK_RETRY_CONFIG = {
+  maxRetries:     2,        // total attempts = 1 + maxRetries
+  backoffBaseMs:  4000,     // 4 s, then 8 s, then 16 s …
+  backoffFactor:  2,
+  // Substrings (case-insensitive) that mark a transient network error.
+  transientMarkers: [
+    'failed to fetch',
+    'network error',
+    'load failed',
+    'connection reset',
+    'econnreset',
+    'err_connection',
+    'err_network',
+  ],
+};
+const isTransientNetworkError = (err) => {
+  if (!err) return false;
+  if (err.name === 'AbortError') return false;            // user aborted / timeout
+  const msg = (err.message || '').toLowerCase();
+  return NETWORK_RETRY_CONFIG.transientMarkers.some(m => msg.includes(m));
+};
+const CONN_RESET_HELP_MSG =
+  'Connection was reset by the upstream proxy. This usually clears on its own — ' +
+  'we retried automatically. If it keeps failing, try splitting the PDF into smaller files (≤ 10 pages).';
+
 // ─── AI Document Assist (Wrench) — soft-coded panel config ──────────────────
 // Mirrors the panel used on /engineering/process/pid-verification and
 // /engineering/piping/pms.  Set `enabled: false` to hide without touching JSX.
@@ -815,14 +847,37 @@ const InstrumentIndex = () => {
     const ctrl   = new AbortController();
     const abort  = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
 
+    // Soft-coded fetch-with-retry — only retries transient network errors
+    // (ERR_CONNECTION_RESET / "Failed to fetch"); never retries on HTTP errors.
+    const doFetch = () => fetch(url, {
+      method:  'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body:    formData,
+      signal:  ctrl.signal,
+    });
+
     try {
       setStatusMessage('AI scanning P&ID for all instrument tags…');
-      const resp = await fetch(url, {
-        method:  'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body:    formData,
-        signal:  ctrl.signal,
-      });
+
+      let resp;
+      let attempt = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        try {
+          resp = await doFetch();
+          break; // success (HTTP-level errors are handled below)
+        } catch (netErr) {
+          if (attempt < NETWORK_RETRY_CONFIG.maxRetries && isTransientNetworkError(netErr)) {
+            attempt += 1;
+            const delay = NETWORK_RETRY_CONFIG.backoffBaseMs *
+                          Math.pow(NETWORK_RETRY_CONFIG.backoffFactor, attempt - 1);
+            setStatusMessage(`Network blip detected — auto-retrying (${attempt}/${NETWORK_RETRY_CONFIG.maxRetries}) in ${Math.round(delay/1000)} s…`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw netErr;
+        }
+      }
       clearTimeout(abort);
 
       if (!resp.ok) {
@@ -837,10 +892,14 @@ const InstrumentIndex = () => {
       setResult(data);
     } catch (err) {
       clearTimeout(abort);
-      const msg =
-        err.name === 'AbortError'
-          ? `Upload timed out after ${Math.round(UPLOAD_TIMEOUT_MS / 60000)} min. Try splitting the PDF into single-sheet files.`
-          : err.message || 'Extraction failed — please try again.';
+      let msg;
+      if (err.name === 'AbortError') {
+        msg = `Upload timed out after ${Math.round(UPLOAD_TIMEOUT_MS / 60000)} min. Try splitting the PDF into single-sheet files.`;
+      } else if (isTransientNetworkError(err)) {
+        msg = CONN_RESET_HELP_MSG;
+      } else {
+        msg = err.message || 'Extraction failed — please try again.';
+      }
       setError(msg);
     } finally {
       setIsProcessing(false);
