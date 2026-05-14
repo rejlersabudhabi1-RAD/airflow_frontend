@@ -24,7 +24,7 @@ import {
   Search, AlertCircle, RefreshCw, X, Sparkles, History as HistoryIcon,
   RotateCcw, Pencil, Database, Layers, MapPin, FolderKanban, ChevronDown,
   Check, AlertTriangle, Activity, TrendingUp, Target, Zap, Award,
-  Lightbulb, ChevronRight, Info, Clock,
+  Lightbulb, ChevronRight, Info, Clock, Maximize2, Minimize2,
 } from 'lucide-react';
 import {
   STORAGE_KEY, REFRESH_EVENT, PROJECT_FIELDS, VALVE_COLUMNS, VALVE_TABS,
@@ -78,6 +78,20 @@ const LOCAL_HEADER_Z      = 'z-30';
 const LOCAL_HEADER_CLASS  = LOCAL_HEADER_STICKY
   ? `sticky ${LOCAL_HEADER_TOP} ${LOCAL_HEADER_Z}`
   : '';
+
+// ─── Fullscreen layout (soft-coded) ────────────────────────────
+// Mirrors the LineList / Instrument Index pattern.  All knobs in one place;
+// flip `enabled: false` to hide the toggle without touching JSX.
+const PMS_FULLSCREEN_CONFIG = {
+  enabled:             true,
+  normalMaxWidth:      '1700px',       // default ValveMTO container width
+  fullscreenMaxWidth:  '100%',
+  fullscreenPaddingX:  '1.25rem',
+  bodyLockClass:       'pms-fullscreen-lock',
+  wrapClass:           'pms-fullscreen-wrap',
+  persistKey:          'pms.valveMTO.isFullscreen.v1',
+  zIndex:              9990,
+};
 
 // ─── AI Document Assist (Wrench) — soft-coded panel config ──────────────
 // Mirrors the panel on /engineering/process/pid-verification.  All knobs are
@@ -175,6 +189,25 @@ const ValveMTOPage = () => {
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   // Project dialog: { mode: 'create' | 'rename' | 'delete', target?: project }
   const [projectDialog, setProjectDialog] = useState(null);
+
+  // Fullscreen mode (soft-coded — see PMS_FULLSCREEN_CONFIG)
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(PMS_FULLSCREEN_CONFIG.persistKey) || 'false'); }
+    catch (_) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PMS_FULLSCREEN_CONFIG.persistKey, JSON.stringify(isFullscreen)); }
+    catch (_) {}
+    if (typeof document === 'undefined') return undefined;
+    if (isFullscreen) document.body.classList.add(PMS_FULLSCREEN_CONFIG.bodyLockClass);
+    else              document.body.classList.remove(PMS_FULLSCREEN_CONFIG.bodyLockClass);
+    const onKey = (e) => { if (e.key === 'Escape' && isFullscreen) setIsFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.classList.remove(PMS_FULLSCREEN_CONFIG.bodyLockClass);
+    };
+  }, [isFullscreen]);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayFilename, setOverlayFilename] = useState('');
   const [overlayStartedAt, setOverlayStartedAt] = useState(null);
@@ -624,7 +657,18 @@ const ValveMTOPage = () => {
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-amber-50 to-orange-50 ${PAGE_TOP_OFFSET}`}>
+    <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-amber-50 to-orange-50 ${PAGE_TOP_OFFSET}${isFullscreen ? ` ${PMS_FULLSCREEN_CONFIG.wrapClass}` : ''}`}>
+      {/* Soft-coded fullscreen styles — lifts the page above app chrome */}
+      <style>{`
+        .${PMS_FULLSCREEN_CONFIG.wrapClass} {
+          position: fixed; inset: 0; z-index: ${PMS_FULLSCREEN_CONFIG.zIndex};
+          overflow-y: auto;
+          animation: pmsFsIn 0.2s ease both;
+        }
+        body.${PMS_FULLSCREEN_CONFIG.bodyLockClass} { overflow: hidden !important; }
+        @keyframes pmsFsIn { from{opacity:0;transform:scale(0.985)} to{opacity:1;transform:scale(1)} }
+      `}</style>
+
       {/* Datalists for soft-coded option lists */}
       {VALVE_COLUMNS.filter((c) => c.options).map((c) => (
         <datalist key={c.key} id={`vmto-${c.key}`}>
@@ -634,7 +678,10 @@ const ValveMTOPage = () => {
 
       {/* ── Header (offset-only by default; sticky via LOCAL_HEADER_STICKY) ── */}
       <div className={`bg-white border-b border-slate-200 shadow-sm ${LOCAL_HEADER_CLASS}`}>
-        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div
+          className="mx-auto px-4 sm:px-6 lg:px-8 py-4"
+          style={{ maxWidth: isFullscreen ? PMS_FULLSCREEN_CONFIG.fullscreenMaxWidth : PMS_FULLSCREEN_CONFIG.normalMaxWidth }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -702,6 +749,19 @@ const ValveMTOPage = () => {
                   </span>
                 )}
               </button>
+              {PMS_FULLSCREEN_CONFIG.enabled && (
+                <button
+                  onClick={() => setIsFullscreen((v) => !v)}
+                  title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
+                  aria-pressed={isFullscreen}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-sm transition-colors"
+                >
+                  {isFullscreen
+                    ? <><Minimize2 className="w-4 h-4" /> Exit</>
+                    : <><Maximize2 className="w-4 h-4" /> Fullscreen</>
+                  }
+                </button>
+              )}
               <button
                 onClick={onExport}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-lg shadow-sm transition-colors"
@@ -715,7 +775,10 @@ const ValveMTOPage = () => {
         </div>
 
         {/* ── Tab Bar ─────────────────────────────────────────────── */}
-        <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div
+          className="mx-auto px-4 sm:px-6 lg:px-8"
+          style={{ maxWidth: isFullscreen ? PMS_FULLSCREEN_CONFIG.fullscreenMaxWidth : PMS_FULLSCREEN_CONFIG.normalMaxWidth }}
+        >
           <div className="flex gap-1 overflow-x-auto -mb-px">
             {VALVE_TABS.map((tab) => {
               const Icon = tab.icon;
@@ -740,7 +803,10 @@ const ValveMTOPage = () => {
       </div>
 
       {/* ── Content ────────────────────────────────────────────────── */}
-      <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div
+        className="mx-auto px-4 sm:px-6 lg:px-8 py-6"
+        style={{ maxWidth: isFullscreen ? PMS_FULLSCREEN_CONFIG.fullscreenMaxWidth : PMS_FULLSCREEN_CONFIG.normalMaxWidth }}
+      >
         {importMsg && (
           <div
             className={`mb-4 flex items-start gap-3 p-3 rounded-lg border text-sm ${
