@@ -126,6 +126,7 @@ import NonTeffProjectsPage from './pages/Engineering/Digitization/NonTeffProject
 import CriticalStressLineList from './pages/Engineering/Piping/CriticalStressLineList'
 import PipingDataSheet from './pages/Engineering/Piping/PipingDataSheet'
 import ValveMTO from './pages/Engineering/Piping/ValveMTO'
+import PipingHub from './pages/Engineering/Piping/PipingHub'
 // Report Generator Components
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
@@ -775,6 +776,15 @@ function App() {
           }
         />
           {/* Piping Routes */}
+          {/* Piping Hub - Landing page for /engineering/piping (fixes 404) */}
+          <Route
+            path="engineering/piping"
+            element={
+              <ProtectedRoute>
+                <PipingHub />
+              </ProtectedRoute>
+            }
+          />
           {/* Valve MTO (Material Take-Off) */}
           <Route
             path="engineering/piping/pms"
