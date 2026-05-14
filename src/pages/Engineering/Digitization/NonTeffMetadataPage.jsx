@@ -259,6 +259,42 @@ const NT_KEYFRAMES = `
     transform: translateY(-2px);
     box-shadow: 0 6px 14px -6px rgba(5,150,105,0.18);
   }
+
+  /* ─── Tab bar — responsive smart-alignment ───────────────────────────
+     Soft-coded breakpoints prevent the "Single File / Bulk Master Index /
+     History" pill from being clipped on narrow viewports and stop the
+     hero <h1> from overlapping the tab strip. Behaviour by breakpoint:
+       ≥ 880px → full pill, icon + label + hint sub-line shown
+       640-879 → pill wraps; hint hidden; label kept full
+       < 640px → tabs stack vertically; pill becomes full-width column
+  */
+  .nt-tab-pill {
+    display: inline-flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+  .nt-tab-btn {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .nt-tab-btn-label-hint { display: inline; }
+  @media (max-width: 879px) {
+    .nt-tab-btn-label-hint { display: none !important; }
+  }
+  @media (max-width: 639px) {
+    .nt-tab-pill {
+      display: flex !important;
+      flex-direction: column;
+      align-items: stretch !important;
+      width: 100%;
+      border-radius: 18px !important;
+    }
+    .nt-tab-btn {
+      width: 100%;
+      justify-content: flex-start !important;
+      border-radius: 14px !important;
+    }
+  }
 `;
 
 // Visual theme constants
@@ -363,6 +399,30 @@ const NT_TABS = [
     iconKind: 'pipe',
   },
 ];
+
+// ---------------------------------------------------------------------------
+// NT_TAB_LAYOUT — soft-coded layout knobs for the tab bar. Tweak here to
+// change spacing, max-width, hero clearance, etc. without hunting through
+// JSX. Linked to the CSS rules in NT_KEYFRAMES (.nt-tab-pill / .nt-tab-btn).
+// ---------------------------------------------------------------------------
+const NT_TAB_LAYOUT = {
+  // Outer wrapper
+  wrapperMaxWidth:   1600,
+  wrapperPadding:    '20px 24px 0 24px',
+  // Pill container
+  pillPadding:       5,
+  pillGap:           4,
+  pillRadius:        999,
+  // Individual tab buttons
+  btnPadding:        '10px 20px 10px 14px',
+  btnMinHeight:      46,
+  btnFontSize:       13,
+  btnGap:            10,
+  iconBoxSize:       30,
+  // Vertical breathing room BELOW the tab bar so the hero <h1> never
+  // overlaps the pill when tabs wrap onto a second row at < 880px wide.
+  bottomClearance:   16,
+};
 
 // ---------------------------------------------------------------------------
 // HISTORY_CONFIG — every knob for the History tab in one place
@@ -1510,24 +1570,25 @@ const NonTeffMetadataPage = () => {
     return (
       <div style={{
         position: 'relative', zIndex: 3,
-        maxWidth: 1600, margin: '0 auto',
-        padding: '20px 24px 0 24px',
+        maxWidth: NT_TAB_LAYOUT.wrapperMaxWidth, margin: '0 auto',
+        padding: NT_TAB_LAYOUT.wrapperPadding,
+        paddingBottom: NT_TAB_LAYOUT.bottomClearance,
       }}>
         <style>{NT_KEYFRAMES}</style>
 
-        {/* Pill container — single rounded capsule with animated pipeline underlay */}
-        <div style={{
+        {/* Pill container — single rounded capsule with animated pipeline underlay.
+            Uses .nt-tab-pill so responsive rules in NT_KEYFRAMES can wrap / stack
+            the tabs without ever clipping them (no overflow:hidden). */}
+        <div className="nt-tab-pill" style={{
           position: 'relative',
-          display: 'inline-flex',
           alignItems: 'stretch',
-          gap: 4,
-          padding: 5,
+          gap: NT_TAB_LAYOUT.pillGap,
+          padding: NT_TAB_LAYOUT.pillPadding,
           background: 'rgba(255,255,255,0.75)',
           backdropFilter: 'blur(10px)',
           border: '1px solid rgba(5,150,105,0.18)',
-          borderRadius: 999,
+          borderRadius: NT_TAB_LAYOUT.pillRadius,
           boxShadow: '0 10px 30px -12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.6)',
-          overflow: 'hidden',
         }}>
           {/* Animated pipeline stripe — drifts horizontally behind the pill */}
           <div className="nt-tab-pipeline" style={{
@@ -1541,15 +1602,15 @@ const NonTeffMetadataPage = () => {
               <button
                 key={t.id}
                 onClick={() => setMode(t.id)}
-                className={active ? 'nt-tab-active' : 'nt-tab-inactive'}
+                className={`nt-tab-btn ${active ? 'nt-tab-active' : 'nt-tab-inactive'}`}
                 style={{
                   position: 'relative',
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 20px 10px 14px',
-                  minHeight: 46,
+                  display: 'flex', alignItems: 'center', gap: NT_TAB_LAYOUT.btnGap,
+                  padding: NT_TAB_LAYOUT.btnPadding,
+                  minHeight: NT_TAB_LAYOUT.btnMinHeight,
                   border: 'none',
                   borderRadius: 999,
-                  fontSize: 13,
+                  fontSize: NT_TAB_LAYOUT.btnFontSize,
                   fontWeight: 600,
                   letterSpacing: 0.1,
                   cursor: 'pointer',
@@ -1563,7 +1624,8 @@ const NonTeffMetadataPage = () => {
                 {/* Icon pod — circular well-head */}
                 <span style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: 30, height: 30, borderRadius: '50%',
+                  width: NT_TAB_LAYOUT.iconBoxSize, height: NT_TAB_LAYOUT.iconBoxSize,
+                  borderRadius: '50%',
                   background: active ? 'rgba(255,255,255,0.22)' : 'rgba(5,150,105,0.08)',
                   border: active ? '1px solid rgba(255,255,255,0.4)' : '1px solid rgba(5,150,105,0.18)',
                   flexShrink: 0,
@@ -1571,12 +1633,14 @@ const NonTeffMetadataPage = () => {
                   <NtTabIcon kind={t.iconKind} active={active} accent={active ? '#ffffff' : t.accent} />
                 </span>
 
-                {/* Label + hint stacked */}
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2 }}>
-                  <span>{t.label}</span>
-                  <span style={{
+                {/* Label + hint stacked. The hint sub-line hides automatically at
+                    narrow viewports via the .nt-tab-btn-label-hint media rule. */}
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2, minWidth: 0 }}>
+                  <span style={{ whiteSpace: 'nowrap' }}>{t.label}</span>
+                  <span className="nt-tab-btn-label-hint" style={{
                     fontSize: 10, fontWeight: 500, letterSpacing: 0.2,
                     color: active ? 'rgba(255,255,255,0.85)' : '#94a3b8',
+                    whiteSpace: 'nowrap',
                   }}>
                     {t.hint}
                   </span>
@@ -1590,6 +1654,7 @@ const NonTeffMetadataPage = () => {
                     marginLeft: 2,
                     animation: 'ntPulse 1.6s ease-in-out infinite',
                     boxShadow: '0 0 8px rgba(255,255,255,0.8)',
+                    flexShrink: 0,
                   }} />
                 )}
               </button>
