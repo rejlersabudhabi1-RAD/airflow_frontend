@@ -57,6 +57,27 @@ const PAGE_SUBTITLE    = 'Valve Material Take-Off · Soft-coded template alignme
 const AUTOSAVE_DEBOUNCE = 500;
 const ACCEPTED_TYPES   = '.pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+// ─── Soft-coded layout offsets ───────────────────────────────────────────
+// The global app header (<Layout> + <Header>) is fixed at top-0 with z-40.
+// Its rendered height (logo 36px + p-2 wrapper 16px + nav py-4 32px ≈ 84px)
+// is slightly taller than Layout's `pt-16` (64px) spacer, which caused the
+// Back/Title row of this page to be clipped behind the blue bar.  Adjusting
+// only here keeps the fix local — no global Layout change needed.
+//   • PAGE_TOP_OFFSET     — extra top padding for the page root so the
+//                           page-local header clears the global app bar.
+//   • LOCAL_HEADER_STICKY — when false (default), header scrolls with the
+//                           page so it never overlays the stat cards / tabs
+//                           below. Flip to true for a pinned variant.
+//   • LOCAL_HEADER_TOP    — sticky pin offset (only used if STICKY = true).
+//   • LOCAL_HEADER_Z      — kept strictly below the global header (z-40).
+const PAGE_TOP_OFFSET     = 'pt-4 sm:pt-5';
+const LOCAL_HEADER_STICKY = false;
+const LOCAL_HEADER_TOP    = 'top-16';
+const LOCAL_HEADER_Z      = 'z-30';
+const LOCAL_HEADER_CLASS  = LOCAL_HEADER_STICKY
+  ? `sticky ${LOCAL_HEADER_TOP} ${LOCAL_HEADER_Z}`
+  : '';
+
 // Backend endpoint config for PDF extraction (vision-assisted, async).
 // All timeouts are SOFT-CODED — adjust here, no other code changes needed.
 const PDF_EXTRACTION_CONFIG = {
@@ -580,7 +601,7 @@ const ValveMTOPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50 to-orange-50">
+    <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-amber-50 to-orange-50 ${PAGE_TOP_OFFSET}`}>
       {/* Datalists for soft-coded option lists */}
       {VALVE_COLUMNS.filter((c) => c.options).map((c) => (
         <datalist key={c.key} id={`vmto-${c.key}`}>
@@ -588,8 +609,8 @@ const ValveMTOPage = () => {
         </datalist>
       ))}
 
-      {/* ── Header ────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200 shadow-sm">
+      {/* ── Header (offset-only by default; sticky via LOCAL_HEADER_STICKY) ── */}
+      <div className={`bg-white border-b border-slate-200 shadow-sm ${LOCAL_HEADER_CLASS}`}>
         <div className="max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
