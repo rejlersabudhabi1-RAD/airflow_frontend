@@ -48,6 +48,7 @@ import {
   computeRecommendations,
 } from '../../../config/valveMTOPerformance';
 import ProcessingOverlay from './ValveMTOProcessingOverlay';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 import apiClient from '../../../services/api.service';
 
 // ─── Soft-coded page constants ───────────────────────────────────────────
@@ -77,6 +78,21 @@ const LOCAL_HEADER_Z      = 'z-30';
 const LOCAL_HEADER_CLASS  = LOCAL_HEADER_STICKY
   ? `sticky ${LOCAL_HEADER_TOP} ${LOCAL_HEADER_Z}`
   : '';
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ──────────────
+// Mirrors the panel on /engineering/process/pid-verification.  All knobs are
+// optional — set `enabled: false` to remove the panel without touching JSX.
+const AI_DOC_ASSIST_CONFIG = {
+  enabled:      true,
+  title:        'AI Document Assist',
+  subtitleTag:  '(Wrench · optional)',
+  subtitle:     'Let RAD AI pick & recommend the right Valve MTO document for this project from Wrench DMS',
+  defaultHint:  'valve mto material take off',
+  hintPlaceholder: 'e.g. valve mto, gate valve, material take off',
+  topN:         5,
+  // Restrict to the file types the Valve MTO importer can actually parse.
+  acceptedExts: ['pdf', 'xls', 'xlsx', 'csv'],
+};
 
 // Backend endpoint config for PDF extraction (vision-assisted, async).
 // All timeouts are SOFT-CODED — adjust here, no other code changes needed.
@@ -253,6 +269,13 @@ const ValveMTOPage = () => {
 
   // ─── Import / Export ───────────────────────────────────────────────────
   const onPickFile = () => fileRef.current?.click();
+
+  // Shim used by the AI Document Assist panel to hand a File from Wrench
+  // straight into the existing import flow — no core logic changes.
+  const runImportForFile = (file) => {
+    if (!file) return;
+    onFileChange({ target: { files: [file], value: '' } });
+  };
 
   const onFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -731,6 +754,24 @@ const ValveMTOPage = () => {
             <button onClick={() => setImportMsg(null)} className="text-xs opacity-70 hover:opacity-100">
               <X className="w-4 h-4" />
             </button>
+          </div>
+        )}
+
+        {/* ── AI Document Assist (Wrench) — soft-coded, optional ────── */}
+        {AI_DOC_ASSIST_CONFIG.enabled && (
+          <div className="mb-4">
+            <WrenchAiDocAssist
+              title={AI_DOC_ASSIST_CONFIG.title}
+              subtitleTag={AI_DOC_ASSIST_CONFIG.subtitleTag}
+              subtitle={AI_DOC_ASSIST_CONFIG.subtitle}
+              defaultHint={AI_DOC_ASSIST_CONFIG.defaultHint}
+              hintPlaceholder={AI_DOC_ASSIST_CONFIG.hintPlaceholder}
+              topN={AI_DOC_ASSIST_CONFIG.topN}
+              acceptedExts={AI_DOC_ASSIST_CONFIG.acceptedExts}
+              projectName={activeProject?.name || ''}
+              onFileSelected={(file) => runImportForFile(file)}
+              onError={(msg) => setImportMsg({ type: 'err', text: msg })}
+            />
           </div>
         )}
 
