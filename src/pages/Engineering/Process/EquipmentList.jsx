@@ -20,6 +20,7 @@ import apiClient from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import { STORAGE_KEYS } from '../../../config/app.config';
+import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 
 // ---------------------------------------------------------------------------
 // Soft-coded column definitions — add/remove columns here only.
@@ -76,6 +77,21 @@ const LAYOUT_CONFIG = {
 };
 
 const API_BASE = getApiBaseUrl();
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the panel on PID Verification / PMS / Instrument Index / CLL /
+// PFD Quality Checker / Line List.  Equipment List accepts MULTIPLE PDFs,
+// so each Wrench pick is APPENDED (deduped by name) to the existing list.
+const EL_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right P&ID PDFs for this Equipment List from Wrench DMS',
+  defaultHint:     'equipment list p&id',
+  hintPlaceholder: 'e.g. equipment list, p&id, unit 100',
+  topN:            6,
+  acceptedExts:    ['pdf'],
+};
 
 // ---------------------------------------------------------------------------
 // Soft-coded line / nozzle connection rendering config
@@ -1039,6 +1055,33 @@ const EquipmentList = () => {
                 background: '#f8fafc', border: '1px solid #e2e8f0',
               }}>PDF only</span>
             </div>
+
+            {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────── */}
+            {EL_AI_ASSIST_CONFIG.enabled && (
+              <div className="mb-5">
+                <WrenchAiDocAssist
+                  title={EL_AI_ASSIST_CONFIG.title}
+                  subtitleTag={EL_AI_ASSIST_CONFIG.subtitleTag}
+                  subtitle={EL_AI_ASSIST_CONFIG.subtitle}
+                  defaultHint={EL_AI_ASSIST_CONFIG.defaultHint}
+                  hintPlaceholder={EL_AI_ASSIST_CONFIG.hintPlaceholder}
+                  topN={EL_AI_ASSIST_CONFIG.topN}
+                  acceptedExts={EL_AI_ASSIST_CONFIG.acceptedExts}
+                  projectName=""
+                  onFileSelected={(f) => {
+                    // Append (dedupe by name+size) to support multi-PDF workflow
+                    setFiles(prev => {
+                      const key = `${f.name}|${f.size}`;
+                      const has = prev.some(p => `${p.name}|${p.size}` === key);
+                      return has ? prev : [...prev, f];
+                    });
+                    setError(null);
+                    setResults(null);
+                  }}
+                  onError={(msg) => setError(msg)}
+                />
+              </div>
+            )}
 
             <div
               className="eq-upload-zone relative rounded-xl cursor-pointer overflow-hidden"
