@@ -7,6 +7,26 @@
  * without touching any UI component.
  */
 import apiClient from './api.service';
+import { API_TIMEOUT_UPLOAD } from '../config/api.config';
+
+// ─── Soft-coded upload tuning ───────────────────────────────────────────────
+// Override at runtime via Vite env vars without code change:
+//   VITE_SPEC_UPLOAD_TIMEOUT_MS  → axios timeout for the upload request (ms)
+//   VITE_SPEC_MAX_FILE_MB        → maximum accepted file size (MB)
+// Falls back to the centralized API_TIMEOUT_UPLOAD (environments.json) for the
+// timeout, and to 1024 MB (1 GB) for the size cap.
+const _envNum = (raw, fallback) => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const SPEC_UPLOAD_TIMEOUT_MS = _envNum(
+  import.meta.env?.VITE_SPEC_UPLOAD_TIMEOUT_MS,
+  API_TIMEOUT_UPLOAD,
+);
+const SPEC_MAX_FILE_MB = _envNum(
+  import.meta.env?.VITE_SPEC_MAX_FILE_MB,
+  1024,
+);
 
 export const SPEC_API_CONFIG = {
   prefix:           '/spec-customization',
@@ -41,7 +61,13 @@ export const SPEC_API_CONFIG = {
     'docx', 'doc', 'xlsx', 'xlsm', 'xls',
     'txt', 'csv', 'log',
   ],
-  maxFileSizeMB:    200,
+  // Soft-coded — large engineering PDFs/scans can reach ~1 GB.
+  // Override via VITE_SPEC_MAX_FILE_MB env var without redeploy.
+  maxFileSizeMB:    SPEC_MAX_FILE_MB,
+
+  // Soft-coded axios timeout for the upload POST. Defaults to the centralized
+  // API_TIMEOUT_UPLOAD (frontend/src/config/environments.json → timeout_upload).
+  uploadTimeoutMs:  SPEC_UPLOAD_TIMEOUT_MS,
 
   // Soft-coded UI metadata for each format group (icon + label).
   formatGroups: {
@@ -72,6 +98,12 @@ const specCustomizationAPI = {
     const { data } = await apiClient.post(path(SPEC_API_CONFIG.uploadPath), fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress,
+      // Override the default 120s API timeout — large files (up to ~1 GB)
+      // legitimately need many minutes on slow uplinks. Soft-coded above.
+      timeout: SPEC_API_CONFIG.uploadTimeoutMs,
+      // Lift axios body size cap so multipart payloads aren't truncated.
+      maxContentLength: Infinity,
+      maxBodyLength:    Infinity,
     });
     return data;
   },
