@@ -290,6 +290,55 @@ const UPLOAD_UX_CONFIG = {
   speedSmoothing: 0.25,
 };
 
+// ─── Soft-coded AI-processing experience (post-upload) ──────────────────────
+// Drives the ProcessingConsole shown while the Celery job is running. Tips
+// rotate one-per-tipRotateMs; `phases` map progress thresholds to copy &
+// icons. Pure data — add/edit a tip without touching rendering logic.
+const PROCESSING_UX_CONFIG = {
+  tipRotateMs: 4500,
+  tips: [
+    { icon: MagnifyingGlassIcon, tone: 'from-indigo-500 to-purple-500',
+      title:    'Smart page scan',
+      text:     'Indexing every page, skipping blanks and TOCs so the AI budget targets real spec content.' },
+    { icon: SparklesIcon,        tone: 'from-pink-500 to-rose-500',
+      title:    'Gemini × OpenAI waterfall',
+      text:     'Gemini handles the bulk; OpenAI is reserved for hard pages — fast AND accurate.' },
+    { icon: BeakerIcon,          tone: 'from-emerald-500 to-teal-500',
+      title:    'Material recognition',
+      text:     'A106-B, F316L, Duplex — your spec\'s metallurgy is being parsed grade-by-grade.' },
+    { icon: TableCellsIcon,      tone: 'from-amber-500 to-orange-500',
+      title:    'Component tables',
+      text:     'Pipe, flanges, fittings, valves, gaskets — every row is being matched to its size band.' },
+    { icon: ShieldCheckIcon,     tone: 'from-sky-500 to-cyan-500',
+      title:    'Confidence scoring',
+      text:     'Each extracted class gets a per-field confidence score so you know what to double-check.' },
+    { icon: CircleStackIcon,     tone: 'from-fuchsia-500 to-purple-500',
+      title:    'SmartPlant ready',
+      text:     'On completion you\'ll get the 25-sheet SPEC and 23-sheet CAT workbooks — drop-in for SP3D.' },
+    { icon: RectangleStackIcon,  tone: 'from-violet-500 to-indigo-500',
+      title:    'Cross-class dedup',
+      text:     'Identical component rows are de-duplicated across classes so your catalog stays clean.' },
+    { icon: DocumentTextIcon,    tone: 'from-rose-500 to-pink-500',
+      title:    'Footnote-aware',
+      text:     'Asterisks, notes and overrides aren\'t lost — the AI reads them and applies them per row.' },
+  ],
+  // Phase label keyed by progress percent (inclusive lower bound).
+  phases: [
+    { pct: 0,   label: 'Queued — waiting for an AI worker',     icon: ArrowPathIcon },
+    { pct: 1,   label: 'Splitting document into chunks',         icon: RectangleStackIcon },
+    { pct: 15,  label: 'Extracting Piping Classes',              icon: SparklesIcon },
+    { pct: 45,  label: 'Parsing component tables',               icon: TableCellsIcon },
+    { pct: 75,  label: 'Scoring confidence & finalising',        icon: ShieldCheckIcon },
+    { pct: 95,  label: 'Almost done — packaging results',        icon: CheckCircleIcon },
+  ],
+  // Soft-coded "live insights" — these pop in as numbers grow.
+  insightThresholds: {
+    classesUnlocked:    1,    // show "First class extracted!" at ≥1
+    classesMomentum:    5,    // show "5+ classes — gathering steam"
+    classesPower:       15,   // show "15+ — major spec detected"
+  },
+};
+
 // Map status → tailwind/heroicon
 const STATUS_META = {
   queued:     { color: 'bg-slate-100 text-slate-700 border-slate-300',     label: 'Queued' },
@@ -448,6 +497,114 @@ const UploadConsole = ({ file, progress, speedBps, etaSec, route, tipIndex }) =>
   );
 };
 
+// ─── Animated AI-processing console ─────────────────────────────────────────
+// Renders while the Celery job is running. All copy / colors / thresholds
+// come from `PROCESSING_UX_CONFIG`. Pure presentational; no API calls.
+const ProcessingConsole = ({ job, partialCount, tipIndex }) => {
+  const pct = job?.progress_percent ?? 0;
+
+  // Latest phase whose threshold ≤ current progress.
+  const phase = PROCESSING_UX_CONFIG.phases
+    .slice()
+    .reverse()
+    .find((p) => pct >= p.pct) || PROCESSING_UX_CONFIG.phases[0];
+  const PhaseIcon = phase.icon;
+
+  const tip = PROCESSING_UX_CONFIG.tips[tipIndex % PROCESSING_UX_CONFIG.tips.length];
+  const TipIcon = tip.icon;
+
+  // Live-insight chips (pop in based on partial-result counters).
+  const insights = [];
+  const T = PROCESSING_UX_CONFIG.insightThresholds;
+  if (partialCount >= T.classesPower) {
+    insights.push({ icon: SparklesIcon, tone: 'bg-violet-100 text-violet-700 border-violet-200',
+      text: `${partialCount} classes detected — major spec` });
+  } else if (partialCount >= T.classesMomentum) {
+    insights.push({ icon: ArrowPathIcon, tone: 'bg-sky-100 text-sky-700 border-sky-200',
+      text: `${partialCount} classes — gathering steam` });
+  } else if (partialCount >= T.classesUnlocked) {
+    insights.push({ icon: CheckCircleIcon, tone: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      text: `First class extracted` });
+  }
+  if (job?.pages_processed > 0) {
+    insights.push({ icon: DocumentTextIcon, tone: 'bg-pink-100 text-pink-700 border-pink-200',
+      text: `${job.pages_processed} pages analysed` });
+  }
+  if (job?.chunks_done > 0 && job?.chunks_total > 0) {
+    insights.push({ icon: RectangleStackIcon, tone: 'bg-amber-100 text-amber-700 border-amber-200',
+      text: `Chunk ${job.chunks_done}/${job.chunks_total}` });
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-fuchsia-100 dark:border-fuchsia-900/40 bg-gradient-to-br from-pink-50/60 via-white to-fuchsia-50/40 dark:from-fuchsia-900/10 dark:via-slate-900/40 dark:to-pink-900/10 p-4 space-y-3 animate-[fadeInUp_400ms_ease-out]">
+      {/* Phase header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-fuchsia-500" />
+          </span>
+          <PhaseIcon className="w-4 h-4 text-fuchsia-600 animate-spin-slow" style={{ animation: 'spin 6s linear infinite' }} />
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+            {phase.label}
+          </span>
+        </div>
+        <div className="inline-flex items-center gap-2 text-[11px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-100/70 dark:bg-fuchsia-900/30 px-2.5 py-1 rounded-full">
+          <SparklesIcon className="w-3.5 h-3.5 animate-pulse" />
+          RAD AI · live
+        </div>
+      </div>
+
+      {/* Live-insight chips */}
+      {insights.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {insights.map((ins, i) => {
+            const I = ins.icon;
+            return (
+              <span
+                key={i}
+                className={`inline-flex items-center gap-1 text-[11px] font-semibold border rounded-full px-2 py-0.5 ${ins.tone} animate-[fadeInUp_400ms_ease-out]`}
+              >
+                <I className="w-3 h-3" />
+                {ins.text}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Rotating AI insight card */}
+      <div
+        key={tipIndex}
+        className={`relative overflow-hidden rounded-lg p-3 text-white shadow-md bg-gradient-to-br ${tip.tone} animate-[fadeInUp_500ms_ease-out]`}
+      >
+        <div className="absolute -right-8 -top-8 w-28 h-28 bg-white/10 rounded-full blur-2xl" />
+        <div className="absolute -left-6 -bottom-6 w-20 h-20 bg-white/10 rounded-full blur-xl" />
+        <div className="relative flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-white/20 ring-1 ring-white/20">
+            <TipIcon className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wider font-bold text-white/80">
+              {tip.title}
+            </div>
+            <div className="text-sm font-medium leading-snug mt-0.5">
+              {tip.text}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const PaperSpecExtractor = () => {
   const [file, setFile]                     = useState(null);
   const [uploading, setUploading]           = useState(false);
@@ -458,6 +615,7 @@ const PaperSpecExtractor = () => {
   const [uploadEtaSec, setUploadEtaSec]     = useState(null);
   const [uploadRoute, setUploadRoute]       = useState(null);    // 'presigned' | 'legacy' | null
   const [tipIndex, setTipIndex]             = useState(0);
+  const [procTipIndex, setProcTipIndex]     = useState(0);
   const uploadStartRef                      = useRef(0);
   const lastTickRef                         = useRef({ t: 0, loaded: 0 });
   const [job, setJob]                       = useState(null);
@@ -529,6 +687,16 @@ const PaperSpecExtractor = () => {
     }, UPLOAD_UX_CONFIG.tipRotateMs);
     return () => clearInterval(id);
   }, [uploading]);
+
+  // Rotate AI-processing tips while a job is running (post-upload).
+  useEffect(() => {
+    const running = job && !['completed', 'failed', 'cancelled'].includes(job.status);
+    if (!running) return undefined;
+    const id = setInterval(() => {
+      setProcTipIndex((i) => (i + 1) % PROCESSING_UX_CONFIG.tips.length);
+    }, PROCESSING_UX_CONFIG.tipRotateMs);
+    return () => clearInterval(id);
+  }, [job]);
 
   // Build the effective accept list — prefer server config if present.
   const acceptedExts = useMemo(() => {
@@ -985,6 +1153,15 @@ const PaperSpecExtractor = () => {
                 <div>Classes: {partialCount}</div>
               </div>
             </div>
+
+            {/* Animated AI-processing insights (hidden when job is finished). */}
+            {job && !isTerminal && (
+              <ProcessingConsole
+                job={job}
+                partialCount={partialCount}
+                tipIndex={procTipIndex}
+              />
+            )}
 
             {job.error_message && (
               <div className="mt-3 p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700">
