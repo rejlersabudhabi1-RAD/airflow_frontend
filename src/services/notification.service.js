@@ -7,6 +7,13 @@ import apiClient from './api.service'
 
 const NOTIFICATION_BASE_URL = '/notifications'
 
+// ─── Soft-coded knobs ───────────────────────────────────────────────────────
+// Polls run in the background — they must fail fast so that a busy worker
+// (e.g. handling a large upload) does not block the UI for 120 s.
+// Override at runtime via window.__NOTIFICATION_POLL_TIMEOUT_MS = 5000 if needed.
+const NOTIFICATION_POLL_TIMEOUT_MS =
+  (typeof window !== 'undefined' && window.__NOTIFICATION_POLL_TIMEOUT_MS) || 10000
+
 export const notificationService = {
   /**
    * Get all notifications for current user
@@ -30,12 +37,15 @@ export const notificationService = {
   getUnreadCount: async () => {
     try {
       console.log('[Notification Service] Fetching unread count...')
-      const response = await apiClient.get(`${NOTIFICATION_BASE_URL}/unread_count/`)
+      const response = await apiClient.get(`${NOTIFICATION_BASE_URL}/unread_count/`, {
+        timeout: NOTIFICATION_POLL_TIMEOUT_MS,
+      })
       console.log('[Notification Service] Response:', response.data)
       return response.data.unread_count || 0
     } catch (error) {
-      console.error('[Notification Service] Error fetching unread count:', error)
-      console.error('[Notification Service] Error details:', error.response?.data)
+      // Silent failure for background poll — UI keeps the last known count.
+      // Toast suppression is handled in api.service.js via SILENT_TIMEOUT_ENDPOINTS.
+      console.warn('[Notification Service] Unread count poll failed (silent):', error.message)
       if (error.response?.status === 401) {
         console.error('[Notification Service] ⚠️ Unauthorized - User may need to login')
       }

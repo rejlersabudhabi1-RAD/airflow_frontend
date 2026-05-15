@@ -23,6 +23,18 @@ const AUTH_RESILIENCE_CONFIG = {
     '/usage_tracking/',
     '/activity/heartbeat',
   ],
+  // Endpoint URL substrings that should NOT trigger toast on timeout / network errors.
+  // Polling endpoints especially must fail silently — otherwise a single slow worker
+  // (e.g. busy with an upload) spams the UI with "Cannot connect to server" toasts.
+  // Add any background poller here to keep the foreground UX clean.
+  SILENT_TIMEOUT_ENDPOINTS: [
+    '/notifications/unread_count',
+    '/notifications/stats',
+    '/notifications/categories',
+    '/usage_tracking/',
+    '/activity/heartbeat',
+    '/spec-customization/paper-spec/',  // job-status polling
+  ],
   // Endpoints that should NEVER attempt a refresh (refresh endpoint itself, login, etc.)
   REFRESH_BLACKLIST: [
     '/auth/refresh',
@@ -46,6 +58,9 @@ let _refreshFailureCount = 0            // Track consecutive refresh failures
 
 const _isSilentAuthEndpoint = (url = '') =>
   AUTH_RESILIENCE_CONFIG.SILENT_AUTH_ENDPOINTS.some((s) => url.includes(s))
+
+const _isSilentTimeoutEndpoint = (url = '') =>
+  AUTH_RESILIENCE_CONFIG.SILENT_TIMEOUT_ENDPOINTS.some((s) => url.includes(s))
 
 const _isRefreshBlacklisted = (url = '') =>
   AUTH_RESILIENCE_CONFIG.REFRESH_BLACKLIST.some((s) => url.includes(s))
@@ -231,13 +246,21 @@ apiClient.interceptors.response.use(
       timeoutError.isTimeout = true;
       timeoutError.originalError = error;
       
-      toast.error(`Server not responding after ${Math.floor((error.config?.timeout || 60000) / 1000)} seconds. Please check if the backend is running.`);
+      // Soft-coded: silent endpoints (background polls) must NOT spam the UI
+      // with toasts when a single worker is briefly busy. Caller still gets
+      // the rejection and can fall back to cached data.
+      if (!_isSilentTimeoutEndpoint(error.config?.url || '')) {
+        toast.error(`Server not responding after ${Math.floor((error.config?.timeout || 60000) / 1000)} seconds. Please check if the backend is running.`);
+      } else {
+        console.warn('[API] 🤫 Silent timeout for polling endpoint:', error.config?.url);
+      }
       return Promise.reject(timeoutError);
     }
 
     // Handle network/connection errors (cannot reach server)
     if (!error.response) {
       console.error('[API] 🌐 NETWORK ERROR - No response received from server');
+      const _silent = _isSilentTimeoutEndpoint(error.config?.url || '');
       
       // Check if it's a CORS issue
       if (error.message.includes('CORS') || error.code === 'ERR_NETWORK') {
@@ -247,7 +270,7 @@ apiClient.interceptors.response.use(
         networkError.isNetworkError = true;
         networkError.originalError = error;
         
-        toast.error('Cannot reach server. Please verify the backend is running at ' + API_BASE_URL);
+        if (!_silent) toast.error('Cannot reach server. Please verify the backend is running at ' + API_BASE_URL);
         return Promise.reject(networkError);
       }
       
@@ -256,7 +279,7 @@ apiClient.interceptors.response.use(
       networkError.isNetworkError = true;
       networkError.originalError = error;
       
-      toast.error('Network error - please check your internet connection.');
+      if (!_silent) toast.error('Network error - please check your internet connection.');
       return Promise.reject(networkError);
     }
 
