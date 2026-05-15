@@ -221,26 +221,34 @@ apiClient.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config
+    const _silent = _isSilentTimeoutEndpoint(error.config?.url || '')
     
-    // Enhanced error logging for debugging
-    console.group('[API Error] ❌ Detailed Error Information');
-    console.error('Error Message:', error.message);
-    console.error('Error Code:', error.code);
-    console.error('Response Status:', error.response?.status);
-    console.error('Response Data:', error.response?.data);
-    console.error('Response Data (JSON):', JSON.stringify(error.response?.data, null, 2));
-    console.error('Request URL:', error.config?.url);
-    console.error('Request Method:', error.config?.method);
-    console.error('Request Data:', error.config?.data);
-    console.error('Request Timeout:', error.config?.timeout);
-    console.error('Full Error Object:', error);
-    console.groupEnd();
+    // Enhanced error logging for debugging — but stay quiet for background
+    // pollers so DevTools doesn't drown in red on a slow worker.
+    if (_silent) {
+      console.warn('[API] Silent endpoint error:', error.config?.url, '→', error.message)
+    } else {
+      console.group('[API Error] ❌ Detailed Error Information');
+      console.error('Error Message:', error.message);
+      console.error('Error Code:', error.code);
+      console.error('Response Status:', error.response?.status);
+      console.error('Response Data:', error.response?.data);
+      console.error('Response Data (JSON):', JSON.stringify(error.response?.data, null, 2));
+      console.error('Request URL:', error.config?.url);
+      console.error('Request Method:', error.config?.method);
+      console.error('Request Data:', error.config?.data);
+      console.error('Request Timeout:', error.config?.timeout);
+      console.error('Full Error Object:', error);
+      console.groupEnd();
+    }
 
     // Detect and handle timeout errors specifically
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-      console.error('[API] ⏱️ TIMEOUT ERROR DETECTED');
-      console.error('[API] Request timed out after', error.config?.timeout, 'ms');
-      console.error('[API] Target:', error.config?.url);
+      if (!_silent) {
+        console.error('[API] ⏱️ TIMEOUT ERROR DETECTED');
+        console.error('[API] Request timed out after', error.config?.timeout, 'ms');
+        console.error('[API] Target:', error.config?.url);
+      }
       
       const timeoutError = new Error('Request timeout - server is not responding');
       timeoutError.isTimeout = true;
@@ -249,10 +257,8 @@ apiClient.interceptors.response.use(
       // Soft-coded: silent endpoints (background polls) must NOT spam the UI
       // with toasts when a single worker is briefly busy. Caller still gets
       // the rejection and can fall back to cached data.
-      if (!_isSilentTimeoutEndpoint(error.config?.url || '')) {
+      if (!_silent) {
         toast.error(`Server not responding after ${Math.floor((error.config?.timeout || 60000) / 1000)} seconds. Please check if the backend is running.`);
-      } else {
-        console.warn('[API] 🤫 Silent timeout for polling endpoint:', error.config?.url);
       }
       return Promise.reject(timeoutError);
     }

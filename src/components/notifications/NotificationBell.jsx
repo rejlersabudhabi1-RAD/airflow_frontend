@@ -11,6 +11,17 @@ import NotificationDropdown from './NotificationDropdown'
  * Shows dropdown with recent notifications on click
  */
 
+// ─── Soft-coded polling config ──────────────────────────────────────────────
+// Easy knobs — change these to retune polling without touching logic.
+const POLL_CONFIG = {
+  intervalMs:        120000,  // 2 min normal
+  backoffMs:         600000,  // 10 min after repeated failures
+  failureThreshold:  2,       // failures before backing off
+  // When the app sets window.__RADAI_HEAVY_OP = true (uploads, exports, etc.)
+  // we skip the poll for that tick — keeps the worker free for the real work.
+  heavyOpFlag:       '__RADAI_HEAVY_OP',
+}
+
 const NotificationBell = () => {
   const { isAuthenticated } = useSelector((state) => state.auth)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -34,7 +45,7 @@ const NotificationBell = () => {
     fetchUnreadCount()
     
     // Start polling with 2-minute interval (reduced load by 50%)
-    pollingIntervalRef.current = setInterval(fetchUnreadCount, 120000)
+    pollingIntervalRef.current = setInterval(fetchUnreadCount, POLL_CONFIG.intervalMs)
     
     return () => {
       if (pollingIntervalRef.current) {
@@ -72,6 +83,12 @@ const NotificationBell = () => {
   }, [showDropdown])
 
   const fetchUnreadCount = async () => {
+    // Soft-coded: skip the poll if a heavy operation is in flight (large upload,
+    // bulk export, etc.). Prevents queueing requests behind a busy worker.
+    if (typeof window !== 'undefined' && window[POLL_CONFIG.heavyOpFlag]) {
+      console.log('[NotificationBell] ⏸️ Heavy op active, skipping unread-count poll')
+      return
+    }
     try {
       const count = await notificationService.getUnreadCount()
       console.log('[NotificationBell] ✅ Unread count fetched:', count)
@@ -81,7 +98,8 @@ const NotificationBell = () => {
       errorCountRef.current = 0
       
     } catch (error) {
-      console.error('[NotificationBell] ❌ Failed to fetch unread count:', error)
+      // Silent log — error.service already handles toast suppression.
+      console.warn('[NotificationBell] Poll failed (silent):', error.message)
       
       // Increment error counter
       errorCountRef.current += 1
@@ -98,22 +116,18 @@ const NotificationBell = () => {
       }
       
       // Handle timeout errors with exponential backoff
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        console.warn(`[NotificationBell] ⏱️ Timeout error (attempt ${errorCountRef.current})`)
-        
-        // Stop aggressive polling after 3 consecutive failures
-        if (errorCountRef.current >= 3) {
-          console.warn('[NotificationBell] 🛑 Too many consecutive errors, slowing down polling')
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout') || error.isTimeout) {
+        // Back off after configured threshold of consecutive failures
+        if (errorCountRef.current >= POLL_CONFIG.failureThreshold) {
+          console.warn('[NotificationBell] 🛑 Backing off polling to', POLL_CONFIG.backoffMs, 'ms')
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current)
           }
-          // Retry with longer interval (5 minutes)
-          pollingIntervalRef.current = setInterval(fetchUnreadCount, 300000)
+          pollingIntervalRef.current = setInterval(fetchUnreadCount, POLL_CONFIG.backoffMs)
         }
       }
       
-      // Fallback to 0 on error (don't show stale count)
-      setUnreadCount(0)
+      // Keep last known count on failure (do NOT reset to 0)
     }
   }
 

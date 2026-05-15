@@ -755,6 +755,9 @@ const PaperSpecExtractor = () => {
   const handleUpload = useCallback(async () => {
     if (!file) return;
     setUploading(true);
+    // Soft-coded global busy flag — pollers (NotificationBell, etc.) skip
+    // their ticks while this is true so the backend worker stays free.
+    if (typeof window !== 'undefined') window.__RADAI_HEAVY_OP = true;
     setUploadError('');
     setUploadProgress(0);
     setUploadSpeedBps(0);
@@ -805,6 +808,7 @@ const PaperSpecExtractor = () => {
       setUploadError(e?.response?.data?.error || e?.message || 'Upload failed');
     } finally {
       setUploading(false);
+      if (typeof window !== 'undefined') window.__RADAI_HEAVY_OP = false;
     }
   }, [file]);
 
