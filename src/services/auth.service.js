@@ -7,6 +7,83 @@ import { getApiTimeouts } from '../config/environment.config'
 // SOFT-CODED: Auth timeout from centralized config (90s to handle Railway cold-start DB reconnect)
 const { timeoutAuth: AUTH_TIMEOUT_MS } = getApiTimeouts()
 
+// =============================================================================
+// SOFT-CODED LOGIN RESILIENCE CONFIG
+// -----------------------------------------------------------------------------
+// Railway free/shared tiers cold-start the Django container + DB pool on the
+// first request after idle. Symptom: /health/ and /auth/login/ both ECONNABORTED.
+// This config controls warmup + retry behavior. Tune values here without
+// changing any of the underlying request/response logic.
+//
+// Override at runtime (e.g. from DevTools) via:
+//   window.__LOGIN_RESILIENCE_OVERRIDE = { LOGIN_MAX_ATTEMPTS: 3, ... }
+// =============================================================================
+const _runtimeOverride =
+  (typeof window !== 'undefined' && window.__LOGIN_RESILIENCE_OVERRIDE) || {}
+
+const LOGIN_RESILIENCE_CONFIG = {
+  // Warmup ping — wakes Railway container & opens DB pool before the real POST.
+  // Hardcoded 15 s was too short for true cold-start; bumped to 45 s and we
+  // retry a couple of times since the first hit usually triggers boot.
+  WARMUP_TIMEOUT_MS: 45000,
+  WARMUP_MAX_ATTEMPTS: 3,
+  WARMUP_RETRY_DELAY_MS: 1500,
+
+  // Login POST — total attempts including the first try.
+  // After a successful warmup the server is hot, so a retry almost always
+  // succeeds quickly even if the first POST timed out mid-cold-start.
+  LOGIN_MAX_ATTEMPTS: 2,
+  LOGIN_RETRY_DELAY_MS: 2000,
+  // Per-attempt login timeout — overridable independently of the global
+  // AUTH_TIMEOUT_MS so we can be more aggressive on retries.
+  LOGIN_ATTEMPT_TIMEOUT_MS: AUTH_TIMEOUT_MS,
+
+  // Errors we consider transient (cold-start / network) and therefore
+  // safe to retry. Auth failures (401) and validation errors are NOT retried.
+  isTransient(err) {
+    if (!err) return false
+    if (err.isTimeout || err.isNetworkError) return true
+    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') return true
+    const msg = (err.message || '').toLowerCase()
+    if (msg.includes('timeout') || msg.includes('network')) return true
+    const sc = err.response?.status
+    // Gateway / overloaded backend — retry. NEVER retry 4xx auth errors.
+    if (sc === 502 || sc === 503 || sc === 504 || sc === 408 || sc === 429) return true
+    return false
+  },
+
+  ..._runtimeOverride,
+}
+
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Wake the backend with retries. Non-fatal — login is still attempted even
+ * if every warmup attempt fails (the POST itself can succeed once the
+ * container finishes booting partway through our wait).
+ */
+async function _warmupBackend() {
+  const { WARMUP_MAX_ATTEMPTS, WARMUP_TIMEOUT_MS, WARMUP_RETRY_DELAY_MS } =
+    LOGIN_RESILIENCE_CONFIG
+  for (let attempt = 1; attempt <= WARMUP_MAX_ATTEMPTS; attempt++) {
+    const t0 = Date.now()
+    try {
+      await apiClient.get(API_ENDPOINTS.HEALTH, { timeout: WARMUP_TIMEOUT_MS })
+      console.log(
+        `[AuthService] ✅ Backend warmed up (attempt ${attempt}/${WARMUP_MAX_ATTEMPTS}) in ${Date.now() - t0} ms`
+      )
+      return true
+    } catch (err) {
+      console.warn(
+        `[AuthService] ⚠️ Warmup attempt ${attempt}/${WARMUP_MAX_ATTEMPTS} failed in ${Date.now() - t0} ms:`,
+        err.message
+      )
+      if (attempt < WARMUP_MAX_ATTEMPTS) await _sleep(WARMUP_RETRY_DELAY_MS)
+    }
+  }
+  return false
+}
+
 /**
  * Authentication Service
  * Smart authentication operations
@@ -25,25 +102,52 @@ export const authService = {
     try {
       const loginStartTime = Date.now()
 
-      // Warmup ping: wake the Railway backend before the login POST.
-      // Railway Postgres connection pool can take 10-60s to reconnect after idle,
-      // causing the first login to time out. A cheap GET /health/ forces the
-      // backend to open its DB connection so the subsequent POST is fast.
+      // Warmup ping(s): wake the Railway backend before the login POST.
+      // Soft-coded retries + extended timeout — Railway cold-start can take
+      // 30-90 s and a single 15 s ping wasn't enough. Failures are non-fatal.
       console.log('[AuthService] 🌡️ Warming up backend connection...')
-      try {
-        await apiClient.get(API_ENDPOINTS.HEALTH, { timeout: 15000 })
-        console.log('[AuthService] ✅ Backend warmed up in', Date.now() - loginStartTime, 'ms')
-      } catch (warmupErr) {
-        // Non-fatal — backend may still respond to POST even if health check fails
-        console.warn('[AuthService] ⚠️ Warmup ping failed (non-fatal):', warmupErr.message)
-      }
-      
+      await _warmupBackend()
+
       console.log('[AuthService] 📡 Sending login request to backend...')
-      
-      const response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials, {
-        timeout: AUTH_TIMEOUT_MS, // SOFT-CODED from environments.json (default 90s for Railway cold-start)
-      })
-      
+
+      // Retry the login POST on transient errors (timeout / 5xx / network).
+      // By the time we retry, the warmup attempts above have usually finished
+      // booting the container, so the second attempt is fast. We NEVER retry
+      // on 401 / validation errors — those are real auth failures.
+      const { LOGIN_MAX_ATTEMPTS, LOGIN_RETRY_DELAY_MS, LOGIN_ATTEMPT_TIMEOUT_MS } =
+        LOGIN_RESILIENCE_CONFIG
+      let response
+      let lastErr
+      for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt++) {
+        const tAttempt = Date.now()
+        try {
+          response = await apiClient.post(API_ENDPOINTS.LOGIN, credentials, {
+            timeout: LOGIN_ATTEMPT_TIMEOUT_MS,
+          })
+          console.log(
+            `[AuthService] ✅ Login attempt ${attempt}/${LOGIN_MAX_ATTEMPTS} succeeded in ${Date.now() - tAttempt} ms`
+          )
+          lastErr = null
+          break
+        } catch (err) {
+          lastErr = err
+          const transient = LOGIN_RESILIENCE_CONFIG.isTransient(err)
+          console.warn(
+            `[AuthService] ⚠️ Login attempt ${attempt}/${LOGIN_MAX_ATTEMPTS} failed in ${Date.now() - tAttempt} ms (transient=${transient}):`,
+            err.message
+          )
+          if (!transient || attempt >= LOGIN_MAX_ATTEMPTS) {
+            throw err
+          }
+          // Quick best-effort warmup between attempts — the container may
+          // have finished booting since the last warmup round.
+          await _sleep(LOGIN_RETRY_DELAY_MS)
+        }
+      }
+      if (!response) {
+        throw lastErr || new Error('Login failed after retries')
+      }
+
       const loginEndTime = Date.now()
       console.log('[AuthService] ✅ Login request completed in', loginEndTime - loginStartTime, 'ms')
       

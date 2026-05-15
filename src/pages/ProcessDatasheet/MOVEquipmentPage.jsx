@@ -180,11 +180,33 @@ const MOVEquipmentPage = () => {
     { upToSeconds: 900, intervalMs: 8000 },   // 6–15 min : every 8 s
   ];
   const POLL_MAX_TOTAL_MS = 15 * 60 * 1000;  // 15 minutes absolute max
+  // Per-request timeout for the *status* poll. The endpoint is a tiny cache
+  // read on the backend, so 25 s is more than enough — failing fast here lets
+  // us simply retry on the next interval instead of hogging axios for 120 s
+  // when a gunicorn worker is briefly tied up by the extraction thread.
+  const POLL_REQUEST_TIMEOUT_MS = 25000;
+  // Number of consecutive transient poll failures (timeout / network / 5xx)
+  // we tolerate before surfacing an error. The background job keeps running
+  // on the server regardless of our poll failing — we just retry the cheap
+  // status read until either it succeeds or we cross the absolute max.
+  const POLL_MAX_CONSECUTIVE_ERRORS = 8;
+  // Transient errors that should NOT abort the polling loop.
+  const isTransientPollError = (err) => {
+    if (!err) return false;
+    if (err.isTimeout || err.isNetworkError) return true;
+    if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') return true;
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('timeout') || msg.includes('network')) return true;
+    const sc = err.response?.status;
+    if (sc === 502 || sc === 503 || sc === 504 || sc === 408 || sc === 429) return true;
+    return false;
+  };
   // ────────────────────────────────────────────────────────────────────────────
 
   // Poll job status
   const pollJobStatus = async (jobId) => {
     const startTime = Date.now();
+    let consecutiveErrors = 0;
 
     const getInterval = () => {
       const elapsedSec = (Date.now() - startTime) / 1000;
@@ -196,8 +218,14 @@ const MOVEquipmentPage = () => {
 
     const poll = async () => {
       try {
-        const statusResponse = await apiClient.get(`/process-datasheet/mov-job-status/${jobId}/`);
+        const statusResponse = await apiClient.get(
+          `/process-datasheet/mov-job-status/${jobId}/`,
+          { timeout: POLL_REQUEST_TIMEOUT_MS }
+        );
         const { status, progress, stage, result, error: jobError } = statusResponse.data;
+
+        // Success — reset the transient-error counter
+        consecutiveErrors = 0;
 
         setUploadProgress(progress || 0);
         setAnalysisStage(stage || 'Processing...');
@@ -218,7 +246,9 @@ const MOVEquipmentPage = () => {
           setUploading(false);
         } else if (status === 'failed') {
           throw new Error(jobError || 'Processing failed');
-        } else if (status === 'processing') {
+        } else if (status === 'processing' || status === 'not_found') {
+          // 'not_found' can occur for a brief window right after job start
+          // before the worker writes its first cache key — treat as in-flight.
           const elapsed = Date.now() - startTime;
           if (elapsed < POLL_MAX_TOTAL_MS) {
             const elapsedMin = Math.floor(elapsed / 60000);
@@ -231,6 +261,31 @@ const MOVEquipmentPage = () => {
         }
 
       } catch (err) {
+        // Transient network / timeout / 5xx — keep polling, the background
+        // job is still running server-side. Only abort after N consecutive
+        // failures, or once we exceed the absolute polling budget.
+        if (isTransientPollError(err)) {
+          consecutiveErrors += 1;
+          const elapsed = Date.now() - startTime;
+          console.warn(
+            `[MOV Poll] Transient error (${consecutiveErrors}/${POLL_MAX_CONSECUTIVE_ERRORS}) — retrying:`,
+            err.message
+          );
+          if (
+            consecutiveErrors < POLL_MAX_CONSECUTIVE_ERRORS &&
+            elapsed < POLL_MAX_TOTAL_MS
+          ) {
+            const elapsedMin = Math.floor(elapsed / 60000);
+            const elapsedSec = Math.floor((elapsed % 60000) / 1000);
+            setAnalysisStage(
+              `Processing... (${elapsedMin}m ${elapsedSec}s) — reconnecting`
+            );
+            setTimeout(poll, getInterval());
+            return;
+          }
+          // Exhausted retries — fall through to error handling
+        }
+
         console.error('Job status polling error:', err);
         setError(err.message || 'Failed to retrieve results');
         setUploadResult({ success: false });
