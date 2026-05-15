@@ -34,6 +34,7 @@ const AUTH_RESILIENCE_CONFIG = {
     '/usage_tracking/',
     '/activity/heartbeat',
     '/spec-customization/paper-spec/',  // job-status polling
+    '/health/',                          // warmup ping — caller treats failure as non-fatal
   ],
   // Endpoints that should NEVER attempt a refresh (refresh endpoint itself, login, etc.)
   REFRESH_BLACKLIST: [
