@@ -18,8 +18,208 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   SparklesIcon,
+  DocumentTextIcon,
+  PhotoIcon,
+  TableCellsIcon,
+  MagnifyingGlassIcon,
+  RectangleStackIcon,
+  BeakerIcon,
+  ShieldCheckIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline';
 import specCustomizationAPI, { SPEC_API_CONFIG } from '../../../../services/specCustomizationAPI';
+import WorkbookCanvas from './WorkbookCanvas';
+
+// ─── Soft-coded helpers (file format detection) ──────────────────────────────
+// Per-group icon (kept local because heroicons are JSX components and cannot
+// live inside the plain-data API config module).
+const GROUP_ICONS = {
+  pdf:    DocumentTextIcon,
+  image:  PhotoIcon,
+  office: TableCellsIcon,
+  text:   DocumentTextIcon,
+};
+
+/** Detect file format from filename, using the soft-coded API config maps. */
+const detectFormat = (filename) => {
+  const ext = (filename || '').split('.').pop()?.toLowerCase() || '';
+  const group = SPEC_API_CONFIG.extToGroup?.[ext] || null;
+  const meta  = group ? SPEC_API_CONFIG.formatGroups?.[group] : null;
+  return { ext, group, meta };
+};
+
+// ─── Soft-coded class-summary panel (stats + filters) ────────────────────────
+// Each stat card declares its metric, label, icon, gradient and value-formatter.
+// Adding a new metric = adding one row here; the renderer is generic.
+const CLASS_SUMMARY_CONFIG = {
+  // ── Headline AI insight banner ─────────────────────────────────────
+  aiBanner: {
+    eyebrow:    'RAD AI · Spec Intelligence',
+    title:      'AI extracted your Piping Material Specification',
+    // Returns an array of inline tokens for the headline insight sentence.
+    insight: (a) => ([
+      { text: 'Analysed ' },
+      { text: a.totalClasses.toLocaleString(),     tone: 'pink'    },
+      { text: ' Piping Classes containing ' },
+      { text: a.totalComponents.toLocaleString(),  tone: 'violet'  },
+      { text: ' component rows across ' },
+      { text: a.uniqueMaterials.toLocaleString(),  tone: 'sky'     },
+      { text: ' unique materials and ' },
+      { text: a.uniqueRatings.toLocaleString(),    tone: 'amber'   },
+      { text: ' pressure ratings — overall confidence ' },
+      { text: a.avgConfidence == null ? '—' : `${Math.round(a.avgConfidence * 100)}%`, tone: 'emerald' },
+      { text: '.' },
+    ]),
+  },
+  // Inline-token highlight tones used by the banner sentence above.
+  highlightTones: {
+    pink:    'text-pink-200 font-bold',
+    violet:  'text-violet-200 font-bold',
+    sky:     'text-sky-200 font-bold',
+    amber:   'text-amber-200 font-bold',
+    emerald: 'text-emerald-200 font-bold',
+  },
+  // ── KPI cards ──────────────────────────────────────────────────────
+  stats: [
+    {
+      key: 'classes',
+      label: 'Piping Classes',
+      sublabel: 'distinct specs',
+      icon: RectangleStackIcon,
+      tone: 'from-pink-500 via-rose-500 to-fuchsia-600',
+      ring: 'ring-pink-300/40',
+      glow: 'shadow-pink-500/30',
+      compute: (a) => a.totalClasses,
+      format: (v) => v.toLocaleString(),
+      barPct: () => 100,
+    },
+    {
+      key: 'components',
+      label: 'Component Rows',
+      sublabel: 'individual items',
+      icon: TableCellsIcon,
+      tone: 'from-violet-500 via-purple-600 to-indigo-600',
+      ring: 'ring-violet-300/40',
+      glow: 'shadow-violet-500/30',
+      compute: (a) => a.totalComponents,
+      format: (v) => v.toLocaleString(),
+      barPct: (a) => a.totalClasses ? Math.min(100, (a.totalComponents / (a.totalClasses * 30)) * 100) : 0,
+    },
+    {
+      key: 'materials',
+      label: 'Unique Materials',
+      sublabel: 'grades detected',
+      icon: BeakerIcon,
+      tone: 'from-sky-500 via-cyan-500 to-blue-600',
+      ring: 'ring-sky-300/40',
+      glow: 'shadow-sky-500/30',
+      compute: (a) => a.uniqueMaterials,
+      format: (v) => v.toLocaleString(),
+      barPct: (a) => a.totalClasses ? Math.min(100, (a.uniqueMaterials / a.totalClasses) * 100) : 0,
+    },
+    {
+      key: 'ratings',
+      label: 'Pressure Ratings',
+      sublabel: 'class families',
+      icon: CircleStackIcon,
+      tone: 'from-amber-500 via-orange-500 to-red-500',
+      ring: 'ring-amber-300/40',
+      glow: 'shadow-amber-500/30',
+      compute: (a) => a.uniqueRatings,
+      format: (v) => v.toLocaleString(),
+      barPct: (a) => Math.min(100, a.uniqueRatings * 12),
+    },
+    {
+      key: 'confidence',
+      label: 'Avg Confidence',
+      sublabel: 'AI verified',
+      icon: ShieldCheckIcon,
+      tone: 'from-emerald-500 via-teal-500 to-green-600',
+      ring: 'ring-emerald-300/40',
+      glow: 'shadow-emerald-500/30',
+      compute: (a) => a.avgConfidence,
+      format: (v) => (v == null ? '—' : `${Math.round(v * 100)}%`),
+      barPct: (a) => a.avgConfidence == null ? 0 : a.avgConfidence * 100,
+      pulse: true,
+    },
+  ],
+  // Quick-filter chips (rating) — populated from the data, capped at this many.
+  maxRatingChips: 10,
+  // Confidence colour bands (left-edge accent bar + label).
+  confidenceBands: [
+    { min: 0.85, className: 'bg-emerald-500', stroke: 'stroke-emerald-500', label: 'High',    text: 'text-emerald-700', bg: 'bg-emerald-50' },
+    { min: 0.65, className: 'bg-lime-500',    stroke: 'stroke-lime-500',    label: 'Good',    text: 'text-lime-700',    bg: 'bg-lime-50'    },
+    { min: 0.45, className: 'bg-amber-500',   stroke: 'stroke-amber-500',   label: 'Review',  text: 'text-amber-700',   bg: 'bg-amber-50'   },
+    { min: 0.0,  className: 'bg-rose-500',    stroke: 'stroke-rose-500',    label: 'Low',     text: 'text-rose-700',    bg: 'bg-rose-50'    },
+  ],
+  emptyFilterMessage: 'No Piping Classes match your filters.',
+};
+
+// ─── Soft-coded component-type colour map (used by detail panel chips) ───────
+// Add a new type → add a row. Falls back to slate for unknowns.
+const COMPONENT_TYPE_TONES = {
+  pipe:        'bg-sky-100 text-sky-800 border-sky-200',
+  flange:      'bg-violet-100 text-violet-800 border-violet-200',
+  fitting:     'bg-indigo-100 text-indigo-800 border-indigo-200',
+  valve:       'bg-rose-100 text-rose-800 border-rose-200',
+  gasket:      'bg-amber-100 text-amber-800 border-amber-200',
+  bolt:        'bg-stone-100 text-stone-800 border-stone-200',
+  branch:      'bg-emerald-100 text-emerald-800 border-emerald-200',
+  instrument:  'bg-pink-100 text-pink-800 border-pink-200',
+  default:     'bg-slate-100 text-slate-700 border-slate-200',
+};
+const componentTone = (t) =>
+  COMPONENT_TYPE_TONES[(t || '').toLowerCase()] || COMPONENT_TYPE_TONES.default;
+
+// ─── Soft-coded detail-panel section configuration ───────────────────────────
+// Each section is rendered only if `visible(cls)` returns true.
+const DETAIL_CONFIG = {
+  sections: [
+    {
+      key: 'services',
+      title: 'Services',
+      icon: SparklesIcon,
+      accent: 'from-pink-500 to-rose-500',
+      visible: (c) => (c.service_list || []).length > 0,
+    },
+    {
+      key: 'pt',
+      title: 'Pressure / Temperature Rating',
+      icon: ShieldCheckIcon,
+      accent: 'from-emerald-500 to-teal-500',
+      visible: (c) => (c.pt_rating_table || []).length > 0,
+    },
+    {
+      key: 'components',
+      title: 'Components',
+      icon: TableCellsIcon,
+      accent: 'from-violet-500 to-indigo-600',
+      visible: (c) => (c.components || []).length > 0,
+    },
+    {
+      key: 'notes',
+      title: 'AI Notes',
+      icon: SparklesIcon,
+      accent: 'from-amber-500 to-orange-500',
+      visible: (c) => Boolean(c.raw_notes),
+    },
+  ],
+  // Soft-coded component-table column definitions.
+  componentColumns: [
+    { key: 'component_type',     header: 'Type',     align: 'left',  render: (c) => (
+        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded border ${componentTone(c.component_type)}`}>
+          {c.component_type || '—'}
+        </span>
+      ) },
+    { key: 'sub_type',           header: 'Sub-type',  align: 'left' },
+    { key: 'size_from',          header: 'From',      align: 'center' },
+    { key: 'size_to',            header: 'To',        align: 'center' },
+    { key: 'schedule_or_rating', header: 'Sched / Rating', align: 'left' },
+    { key: 'material_standard',  header: 'Material',  align: 'left' },
+    { key: 'end_connection',     header: 'Ends',      align: 'left' },
+    { key: 'description',        header: 'Description', align: 'left' },
+  ],
+};
 
 // ─── Soft-coded panel configuration ──────────────────────────────────────────
 const PANEL_CONFIG = {
@@ -75,6 +275,13 @@ const PaperSpecExtractor = () => {
   const [expandedClassId, setExpandedClassId] = useState(null);
   const [classDetailCache, setClassDetailCache] = useState({});
   const [config, setConfig]                 = useState(null);
+  const [isDragging, setIsDragging]         = useState(false);
+  const [classSearch, setClassSearch]       = useState('');
+  const [ratingFilter, setRatingFilter]     = useState(null);
+  // Top-level view tab inside the results section.
+  // 'classes'  → original piping-class cards
+  // 'canvas'   → editable SPEC/CAT workbook canvas (cross-check + edit)
+  const [activeView, setActiveView]         = useState('classes');
   const pollRef = useRef(null);
 
   // Fetch backend config once for displaying caps to the user.
@@ -122,20 +329,57 @@ const PaperSpecExtractor = () => {
     }
   }, [job, classes.length]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────
+  // Build the effective accept list — prefer server config if present.
+  const acceptedExts = useMemo(() => {
+    return config?.accepted_extensions || SPEC_API_CONFIG.acceptedExts;
+  }, [config]);
+  const acceptAttr = useMemo(
+    () => config?.accept_attribute || acceptedExts.map((e) => `.${e}`).join(','),
+    [acceptedExts, config]
+  );
+
+  const fileFormat = useMemo(() => (file ? detectFormat(file.name) : null), [file]);
+
+  const validateFile = useCallback((f) => {
+    if (!f) return 'No file selected.';
+    const { ext } = detectFormat(f.name);
+    if (!ext) return 'File has no extension; cannot detect format.';
+    if (!acceptedExts.includes(ext)) {
+      return `\u201C.${ext}\u201D is not supported. Accepted: ${acceptedExts.join(', ')}.`;
+    }
+    const maxBytes = PANEL_CONFIG.maxFileSizeMB * 1024 * 1024;
+    if (f.size > maxBytes) {
+      return `File exceeds ${PANEL_CONFIG.maxFileSizeMB} MB limit.`;
+    }
+    return '';
+  }, [acceptedExts]);
+
+  // ── Handlers ───────────────────────────────────────
   const handleFilePick = (e) => {
     const f = e.target.files?.[0];
     setUploadError('');
     if (!f) return;
-    if (!/\.pdf$/i.test(f.name)) {
-      setUploadError('Only PDF files are accepted.');
-      return;
-    }
-    const maxBytes = PANEL_CONFIG.maxFileSizeMB * 1024 * 1024;
-    if (f.size > maxBytes) {
-      setUploadError(`File exceeds ${PANEL_CONFIG.maxFileSizeMB} MB limit.`);
-      return;
-    }
+    const err = validateFile(f);
+    if (err) { setUploadError(err); return; }
+    setFile(f);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+  const handleDragLeave = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setIsDragging(false);
+  };
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setIsDragging(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    setUploadError('');
+    const err = validateFile(f);
+    if (err) { setUploadError(err); return; }
     setFile(f);
   };
 
@@ -215,11 +459,83 @@ const PaperSpecExtractor = () => {
     } catch (e) { /* ignore */ }
   };
 
+  const handleExportSmartplantSpec = async () => {
+    if (!job) return;
+    try {
+      const blob = await specCustomizationAPI.exportSmartplantSpec(job.id);
+      downloadBlob(blob, `spec_customisation_${job.id}_SPEC.xlsx`);
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleExportSmartplantCat = async () => {
+    if (!job) return;
+    try {
+      const blob = await specCustomizationAPI.exportSmartplantCat(job.id);
+      downloadBlob(blob, `spec_customisation_${job.id}_CAT.xlsx`);
+    } catch (e) { /* ignore */ }
+  };
+
   // ── Derived UI bits ──────────────────────────────────────────────────
   const statusMeta = job ? (STATUS_META[job.status] || STATUS_META.queued) : null;
   const progressPct = job?.progress_percent ?? 0;
   const livePhase   = job?.current_phase || job?.live_progress?.status || '';
   const partialCount = job?.live_progress?.classes_found ?? classes.length;
+
+  // ── Class aggregates (soft-coded; powers the stats strip) ────────────
+  const classAggregates = useMemo(() => {
+    if (!classes.length) {
+      return { totalClasses: 0, totalComponents: 0, uniqueMaterials: 0,
+               uniqueRatings: 0, avgConfidence: null, ratingCounts: [] };
+    }
+    const materials = new Set();
+    const ratings   = new Map();   // rating → count
+    let totalComponents = 0;
+    let confSum = 0;
+    let confN   = 0;
+    classes.forEach((c) => {
+      if (c.material_grade) materials.add(c.material_grade);
+      if (c.pressure_rating) {
+        ratings.set(c.pressure_rating, (ratings.get(c.pressure_rating) || 0) + 1);
+      }
+      totalComponents += (c.components_count || 0);
+      if (typeof c.confidence_score === 'number') {
+        confSum += c.confidence_score;
+        confN   += 1;
+      }
+    });
+    return {
+      totalClasses:    classes.length,
+      totalComponents,
+      uniqueMaterials: materials.size,
+      uniqueRatings:   ratings.size,
+      avgConfidence:   confN ? confSum / confN : null,
+      ratingCounts:    [...ratings.entries()].sort((a, b) => b[1] - a[1]),
+    };
+  }, [classes]);
+
+  // Filtered class list — search text + active rating chip.
+  const filteredClasses = useMemo(() => {
+    const q = classSearch.trim().toLowerCase();
+    if (!q && !ratingFilter) return classes;
+    return classes.filter((c) => {
+      if (ratingFilter && c.pressure_rating !== ratingFilter) return false;
+      if (!q) return true;
+      const blob = [
+        c.class_code, c.class_full_code, c.material_grade,
+        c.pressure_rating, c.flange_facing,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return blob.includes(q);
+    });
+  }, [classes, classSearch, ratingFilter]);
+
+  // Look up the full colour band for a class's confidence score.
+  const confidenceBandFor = useCallback((score) => {
+    if (typeof score !== 'number') {
+      return { className: 'bg-slate-300', stroke: 'stroke-slate-300', label: 'N/A', text: 'text-slate-500', bg: 'bg-slate-50' };
+    }
+    const band = CLASS_SUMMARY_CONFIG.confidenceBands.find((b) => score >= b.min);
+    return band || { className: 'bg-slate-300', stroke: 'stroke-slate-300', label: 'N/A', text: 'text-slate-500', bg: 'bg-slate-50' };
+  }, []);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-pink-100 dark:border-pink-900/40 overflow-hidden">
@@ -252,31 +568,62 @@ const PaperSpecExtractor = () => {
 
         {/* ── Upload zone ─────────────────────────────────────────────── */}
         {!job && (
-          <div className="border-2 border-dashed border-pink-300 dark:border-pink-700 rounded-xl p-8 bg-pink-50/40 dark:bg-pink-900/10">
+          <div
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-xl p-8 transition-colors ${
+              isDragging
+                ? 'border-pink-500 bg-pink-100/70 dark:bg-pink-900/30'
+                : 'border-pink-300 dark:border-pink-700 bg-pink-50/40 dark:bg-pink-900/10'
+            }`}
+          >
             <div className="flex flex-col items-center text-center gap-3">
-              <CloudArrowUpIcon className="w-12 h-12 text-pink-500" />
+              {(() => {
+                const Icon = fileFormat?.group ? (GROUP_ICONS[fileFormat.group] || CloudArrowUpIcon) : CloudArrowUpIcon;
+                return <Icon className="w-12 h-12 text-pink-500" />;
+              })()}
               <div>
                 <p className="font-semibold text-slate-800 dark:text-slate-100">
-                  {file ? file.name : 'Drop a Paper Spec PDF here, or click to browse'}
+                  {file ? file.name : 'Drop a Paper Spec here, or click to browse'}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  {file ? fmtBytes(file.size) : `Max ${PANEL_CONFIG.maxFileSizeMB} MB · PDF only`}
+                  {file
+                    ? fmtBytes(file.size)
+                    : `Max ${PANEL_CONFIG.maxFileSizeMB} MB · ${acceptedExts.length} formats supported`}
                 </p>
+                {file && fileFormat?.meta && (
+                  <div className="mt-2 inline-flex items-center gap-2 text-xs">
+                    <span className={`px-2 py-0.5 rounded font-semibold ${fileFormat.meta.badge}`}>
+                      {fileFormat.meta.label} · .{fileFormat.ext}
+                    </span>
+                    <span className="text-slate-500">{fileFormat.meta.hint}</span>
+                  </div>
+                )}
               </div>
               <input
                 id="paper-spec-file"
                 type="file"
-                accept={PANEL_CONFIG.acceptStr}
+                accept={acceptAttr}
                 onChange={handleFilePick}
                 className="hidden"
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-center">
                 <label
                   htmlFor="paper-spec-file"
                   className="px-4 py-2 bg-white border border-pink-300 text-pink-700 rounded-lg text-sm font-medium hover:bg-pink-50 cursor-pointer"
                 >
-                  Choose PDF
+                  Choose File
                 </label>
+                {file && (
+                  <button
+                    onClick={() => { setFile(null); setUploadError(''); }}
+                    className="px-3 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
+                  >
+                    Clear
+                  </button>
+                )}
                 <button
                   onClick={handleUpload}
                   disabled={!file || uploading}
@@ -285,6 +632,20 @@ const PaperSpecExtractor = () => {
                   {uploading ? 'Uploading…' : 'Extract with AI'}
                 </button>
               </div>
+
+              {/* Supported-format chips */}
+              <div className="flex flex-wrap gap-1.5 justify-center pt-1">
+                {Object.entries(SPEC_API_CONFIG.formatGroups).map(([key, g]) => (
+                  <span
+                    key={key}
+                    className={`px-2 py-0.5 text-[10px] font-semibold rounded ${g.badge}`}
+                    title={g.hint}
+                  >
+                    {g.label}
+                  </span>
+                ))}
+              </div>
+
               {uploading && (
                 <div className="w-full max-w-md bg-pink-100 dark:bg-pink-900/30 rounded-full h-2 overflow-hidden">
                   <div
@@ -322,6 +683,20 @@ const PaperSpecExtractor = () => {
               <div className="flex gap-2">
                 {isTerminal && job.status === 'completed' && (
                   <>
+                    <button
+                      onClick={handleExportSmartplantSpec}
+                      title="SmartPlant 3D — Piping Spec Rules workbook (25 sheets)"
+                      className="px-3 py-1.5 text-xs font-semibold bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200 rounded-lg hover:bg-fuchsia-100 inline-flex items-center gap-1"
+                    >
+                      <DocumentArrowDownIcon className="w-4 h-4" /> SPEC.xlsx
+                    </button>
+                    <button
+                      onClick={handleExportSmartplantCat}
+                      title="SmartPlant 3D — Component Catalog workbook (23 sheets)"
+                      className="px-3 py-1.5 text-xs font-semibold bg-pink-50 text-pink-700 border border-pink-200 rounded-lg hover:bg-pink-100 inline-flex items-center gap-1"
+                    >
+                      <DocumentArrowDownIcon className="w-4 h-4" /> CAT.xlsx
+                    </button>
                     <button
                       onClick={handleExportXlsx}
                       className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 inline-flex items-center gap-1"
@@ -389,65 +764,301 @@ const PaperSpecExtractor = () => {
 
         {/* ── Extracted classes ───────────────────────────────────────── */}
         {classes.length > 0 && (
-          <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div className="bg-slate-50 dark:bg-slate-900/40 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                {classes.length} Piping Class{classes.length !== 1 ? 'es' : ''} extracted
-              </p>
+          <div className="space-y-4">
+            {/* ── View tabs (Piping Classes ⇄ Workbook Canvas) ────── */}
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { key: 'classes', label: 'Piping Classes',  hint: 'Extracted spec cards' },
+                { key: 'canvas',  label: 'Workbook Canvas', hint: 'Cross-check & edit SPEC / CAT data' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveView(tab.key)}
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition ${
+                    activeView === tab.key
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-transparent shadow'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-pink-300 hover:text-pink-600'
+                  }`}
+                  title={tab.hint}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              {activeView === 'canvas' && (
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                  Edit any cell — changes autosave and are baked into the downloaded xlsx.
+                </span>
+              )}
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {classes.map((cls) => {
-                const expanded = expandedClassId === cls.id;
-                const detail = classDetailCache[cls.id];
-                const Chevron = expanded ? ChevronDownIcon : ChevronRightIcon;
+
+            {activeView === 'canvas' ? (
+              <WorkbookCanvas job={job} />
+            ) : (
+            <>
+            {/* ── 1. AI Insight Banner ──────────────────────────────── */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 shadow-xl">
+              {/* Animated glow blobs */}
+              <div className="absolute -top-16 -left-16 w-64 h-64 bg-pink-500/20 rounded-full blur-3xl animate-pulse" />
+              <div className="absolute -bottom-16 -right-16 w-64 h-64 bg-violet-500/20 rounded-full blur-3xl animate-pulse"
+                   style={{ animationDelay: '1.5s' }} />
+              {/* Grid pattern overlay */}
+              <div
+                className="absolute inset-0 opacity-10"
+                style={{
+                  backgroundImage: 'linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)',
+                  backgroundSize: '24px 24px',
+                }}
+              />
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-pink-300">
+                    {CLASS_SUMMARY_CONFIG.aiBanner.eyebrow}
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+                  <SparklesIcon className="w-5 h-5 text-pink-300" />
+                  {CLASS_SUMMARY_CONFIG.aiBanner.title}
+                </h3>
+                <p className="text-sm text-slate-200 leading-relaxed max-w-3xl">
+                  {CLASS_SUMMARY_CONFIG.aiBanner.insight(classAggregates).map((tok, i) => (
+                    <span key={i} className={tok.tone ? CLASS_SUMMARY_CONFIG.highlightTones[tok.tone] : ''}>
+                      {tok.text}
+                    </span>
+                  ))}
+                </p>
+              </div>
+            </div>
+
+            {/* ── 2. KPI Card Strip (soft-coded) ────────────────────── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {CLASS_SUMMARY_CONFIG.stats.map((stat) => {
+                const Icon  = stat.icon;
+                const raw   = stat.compute(classAggregates);
+                const value = stat.format(raw);
+                const pct   = stat.barPct ? stat.barPct(classAggregates) : 0;
                 return (
-                  <div key={cls.id}>
-                    <button
-                      onClick={() => handleExpandClass(cls)}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-900/40 text-left"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Chevron className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                        <div className="font-mono font-bold text-pink-700 dark:text-pink-300 w-10">
-                          {cls.class_code}
+                  <div
+                    key={stat.key}
+                    className={`group relative overflow-hidden rounded-2xl p-4 bg-gradient-to-br ${stat.tone} text-white shadow-lg ${stat.glow} ring-1 ${stat.ring} transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl`}
+                  >
+                    {/* Decorative giant icon */}
+                    <Icon className="absolute -right-3 -bottom-3 w-20 h-20 opacity-10 group-hover:opacity-20 transition" />
+                    {/* Diagonal sheen */}
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="relative">
+                      <div className="flex items-start justify-between">
+                        <div className="p-1.5 bg-white/20 backdrop-blur-sm rounded-lg ring-1 ring-white/30">
+                          <Icon className="w-4 h-4" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
-                            {cls.class_full_code || cls.material_grade || '—'}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {cls.material_grade} · {cls.pressure_rating} · {cls.flange_facing || '—'}
-                            {cls.source_pages?.length === 2 && ` · p.${cls.source_pages[0]}–${cls.source_pages[1]}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded">
-                          {cls.components_count} rows
-                        </span>
-                        <span className="px-2 py-0.5 text-[10px] font-semibold bg-pink-100 text-pink-700 rounded">
-                          {cls.extraction_engine || '—'}
-                        </span>
-                        {typeof cls.confidence_score === 'number' && (
-                          <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded">
-                            {(cls.confidence_score * 100).toFixed(0)}%
+                        {stat.pulse && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-white/25 backdrop-blur-sm rounded-full animate-pulse">
+                            AI
                           </span>
                         )}
                       </div>
-                    </button>
-                    {expanded && (
-                      <div className="bg-slate-50/60 dark:bg-slate-900/20 px-4 py-3">
-                        {!detail ? (
-                          <p className="text-xs text-slate-500 italic">Loading…</p>
-                        ) : (
-                          <ClassDetailPanel cls={detail} />
-                        )}
+                      <p className="mt-3 text-3xl font-extrabold leading-none tracking-tight tabular-nums">
+                        {value}
+                      </p>
+                      <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider opacity-95">
+                        {stat.label}
+                      </p>
+                      <p className="text-[10px] opacity-75">{stat.sublabel}</p>
+                      {/* Activity bar */}
+                      <div className="mt-3 h-1 bg-black/20 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-white/70 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.max(4, pct)}%` }}
+                        />
                       </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* ── 3. Filter / search bar ────────────────────────────── */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={classSearch}
+                    onChange={(e) => setClassSearch(e.target.value)}
+                    placeholder="Search by class code, material grade, rating, flange facing…"
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-pink-400"
+                  />
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                  Showing <strong className="text-slate-700 dark:text-slate-200">{filteredClasses.length}</strong>
+                  {' '}of {classes.length}
+                </span>
+              </div>
+
+              {classAggregates.ratingCounts.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">
+                    Rating:
+                  </span>
+                  <button
+                    onClick={() => setRatingFilter(null)}
+                    className={`px-2 py-0.5 text-[11px] font-semibold rounded-full border transition ${
+                      !ratingFilter
+                        ? 'bg-pink-600 text-white border-pink-600'
+                        : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-pink-50'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {classAggregates.ratingCounts
+                    .slice(0, CLASS_SUMMARY_CONFIG.maxRatingChips)
+                    .map(([rating, count]) => (
+                      <button
+                        key={rating}
+                        onClick={() => setRatingFilter(ratingFilter === rating ? null : rating)}
+                        className={`px-2 py-0.5 text-[11px] font-semibold rounded-full border transition ${
+                          ratingFilter === rating
+                            ? 'bg-pink-600 text-white border-pink-600'
+                            : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-pink-50'
+                        }`}
+                      >
+                        {rating} <span className="opacity-70">· {count}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── 4. Class cards ─────────────────────────────────────── */}
+            {filteredClasses.length === 0 ? (
+              <div className="border border-dashed border-slate-300 rounded-xl px-4 py-8 text-sm text-slate-500 dark:text-slate-400 text-center">
+                {CLASS_SUMMARY_CONFIG.emptyFilterMessage}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filteredClasses.map((cls) => {
+                  const expanded = expandedClassId === cls.id;
+                  const detail = classDetailCache[cls.id];
+                  const band   = confidenceBandFor(cls.confidence_score);
+                  const score  = typeof cls.confidence_score === 'number' ? cls.confidence_score : null;
+                  return (
+                    <div
+                      key={cls.id}
+                      className={`group relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 transition-all duration-300 hover:shadow-lg ${
+                        expanded
+                          ? 'md:col-span-2 border-pink-300 shadow-lg ring-1 ring-pink-200'
+                          : 'border-slate-200 dark:border-slate-700 hover:-translate-y-0.5'
+                      }`}
+                    >
+                      {/* Left confidence rail */}
+                      <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${band.className}`} />
+                      <button
+                        onClick={() => handleExpandClass(cls)}
+                        className="w-full text-left pl-5 pr-4 py-3"
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Class code monogram */}
+                          <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 text-white font-mono font-extrabold flex items-center justify-center shadow-md text-base">
+                            {cls.class_code}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                {cls.class_full_code || cls.material_grade || '—'}
+                              </p>
+                              {score !== null && (
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {/* Mini radial confidence */}
+                                  <svg className="w-7 h-7 -rotate-90" viewBox="0 0 32 32">
+                                    <circle cx="16" cy="16" r="13" fill="none"
+                                      className="stroke-slate-200 dark:stroke-slate-700" strokeWidth="3" />
+                                    <circle cx="16" cy="16" r="13" fill="none"
+                                      className={band.stroke}
+                                      strokeWidth="3" strokeLinecap="round"
+                                      strokeDasharray={`${2 * Math.PI * 13}`}
+                                      strokeDashoffset={`${2 * Math.PI * 13 * (1 - score)}`} />
+                                  </svg>
+                                  <span className={`text-[11px] font-bold ${band.text}`}>
+                                    {Math.round(score * 100)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Meta chips */}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {cls.material_grade && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 rounded">
+                                  {cls.material_grade}
+                                </span>
+                              )}
+                              {cls.pressure_rating && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 rounded">
+                                  {cls.pressure_rating}
+                                </span>
+                              )}
+                              {cls.flange_facing && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 rounded">
+                                  {cls.flange_facing}
+                                </span>
+                              )}
+                              {cls.source_pages?.length === 2 && (
+                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-slate-50 text-slate-600 border border-slate-200 rounded">
+                                  p.{cls.source_pages[0]}–{cls.source_pages[1]}
+                                </span>
+                              )}
+                              <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${band.bg} ${band.text}`}>
+                                {band.label}
+                              </span>
+                            </div>
+
+                            {/* Footer: components count + engine + expand hint */}
+                            <div className="mt-2 flex items-center justify-between">
+                              <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                                <span className="inline-flex items-center gap-1">
+                                  <TableCellsIcon className="w-3.5 h-3.5" />
+                                  <strong className="text-slate-700 dark:text-slate-200">{cls.components_count}</strong>
+                                  rows
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <SparklesIcon className="w-3.5 h-3.5 text-pink-500" />
+                                  {cls.extraction_engine || 'AI'}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-semibold text-pink-600 dark:text-pink-300 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">
+                                {expanded ? 'Collapse' : 'Open detail'}
+                                {expanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Expanded detail */}
+                      {expanded && (
+                        <div className="border-t border-pink-200 bg-gradient-to-b from-pink-50/40 to-white dark:from-slate-900/40 dark:to-slate-800 px-4 py-3">
+                          {!detail ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-500 italic">
+                              <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                              Loading detail…
+                            </div>
+                          ) : (
+                            <ClassDetailPanel cls={detail} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            </>
+            )}
           </div>
         )}
 
@@ -463,95 +1074,141 @@ const PaperSpecExtractor = () => {
   );
 };
 
-// ─── Subcomponent: per-class detail ──────────────────────────────────────────
+// ─── Subcomponent: per-class detail (soft-coded sections) ────────────────────
+const SectionHeader = ({ icon: Icon, title, accent, count }) => (
+  <div className="flex items-center gap-2 mb-2">
+    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br ${accent} text-white shadow-sm`}>
+      <Icon className="w-3.5 h-3.5" />
+    </span>
+    <h4 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-700 dark:text-slate-200">
+      {title}
+    </h4>
+    {typeof count === 'number' && (
+      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full">
+        {count}
+      </span>
+    )}
+    <div className={`flex-1 h-px bg-gradient-to-r ${accent} opacity-30`} />
+  </div>
+);
+
 const ClassDetailPanel = ({ cls }) => {
   if (!cls) return null;
-  const components = cls.components || [];
-  const services = cls.service_list || [];
-  const pt = cls.pt_rating_table || [];
+  const sections = DETAIL_CONFIG.sections.filter((s) => s.visible(cls));
+
+  if (sections.length === 0) {
+    return (
+      <p className="text-xs text-slate-500 italic">No additional detail captured for this class.</p>
+    );
+  }
+
+  const renderBody = (key) => {
+    if (key === 'services') {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {(cls.service_list || []).map((s, i) => (
+            <span
+              key={`${s}-${i}`}
+              className="px-2 py-1 text-xs font-medium bg-gradient-to-r from-pink-50 to-rose-50 text-pink-700 border border-pink-200 rounded-full shadow-sm"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    if (key === 'pt') {
+      const rows = cls.pt_rating_table || [];
+      return (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+          <table className="text-xs w-full">
+            <thead>
+              <tr className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-slate-700 dark:to-slate-700">
+                <th className="px-3 py-2 text-left font-bold text-emerald-800 dark:text-emerald-200">Pressure (bar-g)</th>
+                <th className="px-3 py-2 text-left font-bold text-emerald-800 dark:text-emerald-200">Temperature (°C)</th>
+                <th className="px-3 py-2 text-left font-bold text-emerald-800 dark:text-emerald-200">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="odd:bg-white even:bg-slate-50/40 dark:odd:bg-slate-800 dark:even:bg-slate-900/30">
+                  <td className="px-3 py-1.5 font-mono tabular-nums">{r.pressure_bar_g ?? '—'}</td>
+                  <td className="px-3 py-1.5 font-mono tabular-nums">{r.temperature_c ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-slate-600 dark:text-slate-300">{r.notes || ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (key === 'components') {
+      const rows = cls.components || [];
+      const cols = DETAIL_CONFIG.componentColumns;
+      return (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+          <table className="text-xs w-full">
+            <thead className="sticky top-0">
+              <tr className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-slate-700 dark:to-slate-700">
+                {cols.map((c) => (
+                  <th
+                    key={c.key}
+                    className={`px-3 py-2 font-bold text-violet-800 dark:text-violet-200 text-${c.align || 'left'} whitespace-nowrap`}
+                  >
+                    {c.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((c) => (
+                <tr
+                  key={c.id}
+                  className="odd:bg-white even:bg-slate-50/40 dark:odd:bg-slate-800 dark:even:bg-slate-900/30 hover:bg-pink-50/30 dark:hover:bg-pink-900/10 transition-colors"
+                >
+                  {cols.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`px-3 py-1.5 text-${col.align || 'left'} ${col.key === 'description' ? 'text-slate-600 dark:text-slate-300' : ''}`}
+                    >
+                      {col.render ? col.render(c) : (c[col.key] ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (key === 'notes') {
+      return (
+        <div className="relative bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-900 dark:to-slate-900 border-l-4 border-amber-400 rounded-r-lg p-3">
+          <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
+            {cls.raw_notes}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Counts used in section headers (where meaningful).
+  const counts = {
+    services:   (cls.service_list   || []).length,
+    pt:         (cls.pt_rating_table|| []).length,
+    components: (cls.components     || []).length,
+    notes:      undefined,
+  };
 
   return (
-    <div className="space-y-3">
-      {services.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Services</p>
-          <div className="flex flex-wrap gap-1">
-            {services.map((s, i) => (
-              <span key={`${s}-${i}`} className="px-2 py-0.5 text-xs bg-pink-100 text-pink-700 rounded">
-                {s}
-              </span>
-            ))}
-          </div>
+    <div className="space-y-4">
+      {sections.map((s) => (
+        <div key={s.key}>
+          <SectionHeader icon={s.icon} title={s.title} accent={s.accent} count={counts[s.key]} />
+          {renderBody(s.key)}
         </div>
-      )}
-      {pt.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">P/T Rating</p>
-          <div className="overflow-x-auto">
-            <table className="text-xs w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border border-slate-200 px-2 py-1 text-left">Pressure (bar-g)</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Temperature (°C)</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pt.map((r, i) => (
-                  <tr key={i}>
-                    <td className="border border-slate-200 px-2 py-1">{r.pressure_bar_g ?? '—'}</td>
-                    <td className="border border-slate-200 px-2 py-1">{r.temperature_c ?? '—'}</td>
-                    <td className="border border-slate-200 px-2 py-1">{r.notes || ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {components.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-            Components ({components.length})
-          </p>
-          <div className="overflow-x-auto">
-            <table className="text-xs w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border border-slate-200 px-2 py-1 text-left">Type</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Sub-type</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Size From</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Size To</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Sched/Rating</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Material</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Ends</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {components.map((c) => (
-                  <tr key={c.id} className="odd:bg-white even:bg-slate-50/40">
-                    <td className="border border-slate-200 px-2 py-1 capitalize">{c.component_type}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.sub_type}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.size_from}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.size_to}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.schedule_or_rating}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.material_standard}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.end_connection}</td>
-                    <td className="border border-slate-200 px-2 py-1">{c.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      {cls.raw_notes && (
-        <div>
-          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Notes</p>
-          <p className="text-xs text-slate-700 whitespace-pre-wrap">{cls.raw_notes}</p>
-        </div>
-      )}
+      ))}
     </div>
   );
 };
