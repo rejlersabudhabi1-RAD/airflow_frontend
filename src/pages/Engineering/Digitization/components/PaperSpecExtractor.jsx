@@ -236,6 +236,60 @@ const PANEL_CONFIG = {
   ],
 };
 
+// ─── Soft-coded upload UX (animated console + rotating AI tips) ──────────────
+// Tweak any of the below to change the live-upload experience without touching
+// rendering logic. `tips` rotates one-per-tipRotateMs while uploading; `phases`
+// label progress thresholds; `routes` describes the dispatch path that ended
+// up being used (presigned-S3 vs legacy multipart) — purely cosmetic.
+const UPLOAD_UX_CONFIG = {
+  tipRotateMs: 4200,
+  // Animated tooltips shown one at a time during upload. Add/edit freely.
+  tips: [
+    { icon: SparklesIcon,         tone: 'from-pink-500 to-rose-500',
+      title: 'Tip · clean scans win',
+      text:  'Higher-quality scans (300 dpi+) help the AI catch every component row — even small footnotes.' },
+    { icon: BeakerIcon,           tone: 'from-fuchsia-500 to-purple-500',
+      title: 'Did you know?',
+      text:  'RAD AI runs Gemini first, then OpenAI as a fallback — you get speed AND accuracy without overpaying.' },
+    { icon: TableCellsIcon,       tone: 'from-sky-500 to-cyan-500',
+      title: 'Soon as it lands…',
+      text:  'We split your spec into 20-page chunks and process them in parallel — even 2,000-page specs stay fluid.' },
+    { icon: ShieldCheckIcon,      tone: 'from-emerald-500 to-teal-500',
+      title: 'Safe by design',
+      text:  'Your file is encrypted in-transit. Identical re-uploads are deduped by SHA-256 — no double-charging.' },
+    { icon: CircleStackIcon,      tone: 'from-violet-500 to-indigo-500',
+      title: 'Auto-export ready',
+      text:  'Once extracted you can ship straight to SmartPlant 3D (SPEC + CAT workbooks) or plain Excel/JSON.' },
+    { icon: MagnifyingGlassIcon,  tone: 'from-amber-500 to-orange-500',
+      title: 'Smart page skipping',
+      text:  'Index, TOC and blank pages are auto-skipped so the AI budget is spent only where it matters.' },
+  ],
+  // Phase label by progress percent (inclusive lower bound).
+  phases: [
+    { pct: 0,   label: 'Preparing secure transfer…',   icon: ShieldCheckIcon },
+    { pct: 8,   label: 'Streaming bytes to the cloud…', icon: CloudArrowUpIcon },
+    { pct: 60,  label: 'Almost there — finalising…',    icon: ArrowPathIcon },
+    { pct: 96,  label: 'Handing off to RAD AI…',        icon: SparklesIcon },
+  ],
+  // Cosmetic badge describing which dispatch path was used.
+  routes: {
+    presigned: {
+      label:   'Direct-to-S3 · Turbo',
+      sublabel:'Bypassing the API edge for max throughput',
+      badge:   'bg-emerald-100 text-emerald-700 border-emerald-300',
+      glow:    'shadow-emerald-300/50',
+    },
+    legacy: {
+      label:   'API Multipart',
+      sublabel:'Standard upload — best for smaller files',
+      badge:   'bg-sky-100 text-sky-700 border-sky-300',
+      glow:    'shadow-sky-300/50',
+    },
+  },
+  // Speed smoothing factor (EMA). 1 = use latest value only; 0.2 = smooth.
+  speedSmoothing: 0.25,
+};
+
 // Map status → tailwind/heroicon
 const STATUS_META = {
   queued:     { color: 'bg-slate-100 text-slate-700 border-slate-300',     label: 'Queued' },
@@ -264,11 +318,148 @@ const downloadBlob = (blob, filename) => {
   URL.revokeObjectURL(url);
 };
 
+// ─── Animated upload console ────────────────────────────────────────────────
+// Pure presentational component driven by props. All styling tokens / copy
+// come from `UPLOAD_UX_CONFIG`, so changing the experience is config-only.
+const UploadConsole = ({ file, progress, speedBps, etaSec, route, tipIndex }) => {
+  // Find the latest phase whose threshold ≤ current progress.
+  const phase = UPLOAD_UX_CONFIG.phases
+    .slice()
+    .reverse()
+    .find((p) => progress >= p.pct) || UPLOAD_UX_CONFIG.phases[0];
+  const PhaseIcon = phase.icon;
+
+  const tip = UPLOAD_UX_CONFIG.tips[tipIndex % UPLOAD_UX_CONFIG.tips.length];
+  const TipIcon = tip.icon;
+
+  const routeMeta = route ? UPLOAD_UX_CONFIG.routes[route] : null;
+
+  const speedHuman = (() => {
+    if (!speedBps || speedBps <= 0) return '—';
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    let v = speedBps, i = 0;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+    return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
+  })();
+
+  const etaHuman = (() => {
+    if (etaSec == null || !isFinite(etaSec) || etaSec < 0) return '—';
+    if (etaSec < 60)  return `${etaSec}s`;
+    const m = Math.floor(etaSec / 60);
+    const s = etaSec % 60;
+    return m < 60 ? `${m}m ${s}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+  })();
+
+  return (
+    <div className="w-full max-w-2xl mx-auto mt-2 space-y-3">
+      {/* Header row — phase + route badge */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-200 font-semibold">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-pink-500" />
+          </span>
+          <PhaseIcon className="w-4 h-4 text-pink-600 animate-pulse" />
+          <span>{phase.label}</span>
+        </div>
+        {routeMeta && (
+          <div
+            className={`inline-flex items-center gap-2 text-[11px] font-semibold border rounded-full px-2.5 py-1 shadow-sm ${routeMeta.badge} ${routeMeta.glow}`}
+            title={routeMeta.sublabel}
+          >
+            <SparklesIcon className="w-3.5 h-3.5" />
+            {routeMeta.label}
+          </div>
+        )}
+      </div>
+
+      {/* Shimmering progress bar */}
+      <div className="relative w-full h-3.5 rounded-full bg-pink-100 dark:bg-pink-900/30 overflow-hidden ring-1 ring-pink-200/60 dark:ring-pink-700/40">
+        <div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-rose-500 transition-all duration-500 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+        {/* Moving sheen */}
+        <div
+          className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_1.6s_linear_infinite] pointer-events-none"
+          style={{
+            width: `${Math.max(15, progress)}%`,
+            mixBlendMode: 'overlay',
+          }}
+        />
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="rounded-lg bg-white/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2">
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">Progress</div>
+          <div className="font-bold text-slate-800 dark:text-slate-100 tabular-nums">{progress}%</div>
+        </div>
+        <div className="rounded-lg bg-white/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2">
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">Speed</div>
+          <div className="font-bold text-slate-800 dark:text-slate-100 tabular-nums">{speedHuman}</div>
+        </div>
+        <div className="rounded-lg bg-white/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2">
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">Time left</div>
+          <div className="font-bold text-slate-800 dark:text-slate-100 tabular-nums">{etaHuman}</div>
+        </div>
+        <div className="rounded-lg bg-white/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 px-3 py-2 truncate">
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">File</div>
+          <div className="font-bold text-slate-800 dark:text-slate-100 truncate" title={file?.name}>
+            {file?.name || '—'}
+          </div>
+        </div>
+      </div>
+
+      {/* Rotating AI tip card — cross-fades softly */}
+      <div
+        key={tipIndex}
+        className={`relative overflow-hidden rounded-xl p-3 text-white shadow-lg bg-gradient-to-br ${tip.tone} animate-[fadeInUp_500ms_ease-out]`}
+      >
+        <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+        <div className="absolute -left-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-xl" />
+        <div className="relative flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-white/20 ring-1 ring-white/20">
+            <TipIcon className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wider font-bold text-white/80">
+              {tip.title}
+            </div>
+            <div className="text-sm font-medium leading-snug mt-0.5">
+              {tip.text}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Inline keyframes — local to component to avoid touching global CSS */}
+      <style>{`
+        @keyframes shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const PaperSpecExtractor = () => {
   const [file, setFile]                     = useState(null);
   const [uploading, setUploading]           = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError]       = useState('');
+  // Live upload telemetry — soft-coded UX (speed/ETA/route/tip rotation).
+  const [uploadSpeedBps, setUploadSpeedBps] = useState(0);
+  const [uploadEtaSec, setUploadEtaSec]     = useState(null);
+  const [uploadRoute, setUploadRoute]       = useState(null);    // 'presigned' | 'legacy' | null
+  const [tipIndex, setTipIndex]             = useState(0);
+  const uploadStartRef                      = useRef(0);
+  const lastTickRef                         = useRef({ t: 0, loaded: 0 });
   const [job, setJob]                       = useState(null);
   const [document, setDocument]             = useState(null);
   const [classes, setClasses]               = useState([]);
@@ -329,6 +520,16 @@ const PaperSpecExtractor = () => {
     }
   }, [job, classes.length]);
 
+  // Rotate the AI tip cards while the upload is in flight. Cycles soft-coded
+  // `UPLOAD_UX_CONFIG.tips` every `tipRotateMs` until the upload completes.
+  useEffect(() => {
+    if (!uploading) return undefined;
+    const id = setInterval(() => {
+      setTipIndex((i) => (i + 1) % UPLOAD_UX_CONFIG.tips.length);
+    }, UPLOAD_UX_CONFIG.tipRotateMs);
+    return () => clearInterval(id);
+  }, [uploading]);
+
   // Build the effective accept list — prefer server config if present.
   const acceptedExts = useMemo(() => {
     return config?.accepted_extensions || SPEC_API_CONFIG.acceptedExts;
@@ -388,13 +589,41 @@ const PaperSpecExtractor = () => {
     setUploading(true);
     setUploadError('');
     setUploadProgress(0);
+    setUploadSpeedBps(0);
+    setUploadEtaSec(null);
+    setUploadRoute(null);
+    setTipIndex(0);
+    uploadStartRef.current = Date.now();
+    lastTickRef.current    = { t: uploadStartRef.current, loaded: 0 };
     setClasses([]);
     setExpandedClassId(null);
     try {
+      // Mirror the dispatcher's decision so the UI can show the actual route
+      // — purely cosmetic; the service layer remains the source of truth.
+      const willPresign =
+        SPEC_API_CONFIG.presignedUpload?.enabled &&
+        file.size >= (SPEC_API_CONFIG.presignedUpload?.minSizeBytes || 0);
+      setUploadRoute(willPresign ? 'presigned' : 'legacy');
+
       const resp = await specCustomizationAPI.upload({
         file,
         onUploadProgress: (evt) => {
-          if (evt.total) setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+          if (!evt.total) return;
+          const pct = Math.round((evt.loaded / evt.total) * 100);
+          setUploadProgress(pct);
+
+          // Smoothed instantaneous speed (EMA) + ETA.
+          const now = Date.now();
+          const dt  = (now - lastTickRef.current.t) / 1000;
+          if (dt > 0.15) {
+            const inst    = (evt.loaded - lastTickRef.current.loaded) / dt;
+            const smooth  = UPLOAD_UX_CONFIG.speedSmoothing;
+            setUploadSpeedBps((prev) =>
+              prev > 0 ? prev * (1 - smooth) + inst * smooth : inst);
+            const remaining = Math.max(0, evt.total - evt.loaded);
+            setUploadEtaSec(inst > 0 ? Math.round(remaining / inst) : null);
+            lastTickRef.current = { t: now, loaded: evt.loaded };
+          }
         },
       });
       setDocument(resp.document);
@@ -573,10 +802,10 @@ const PaperSpecExtractor = () => {
             onDragEnter={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-8 transition-colors ${
+            className={`relative group border-2 border-dashed rounded-xl p-8 transition-all duration-300 ${
               isDragging
-                ? 'border-pink-500 bg-pink-100/70 dark:bg-pink-900/30'
-                : 'border-pink-300 dark:border-pink-700 bg-pink-50/40 dark:bg-pink-900/10'
+                ? 'border-pink-500 bg-pink-100/70 dark:bg-pink-900/30 scale-[1.01] shadow-lg shadow-pink-300/40'
+                : 'border-pink-300 dark:border-pink-700 bg-pink-50/40 dark:bg-pink-900/10 hover:border-pink-400 hover:bg-pink-50/70'
             }`}
           >
             <div className="flex flex-col items-center text-center gap-3">
@@ -627,8 +856,9 @@ const PaperSpecExtractor = () => {
                 <button
                   onClick={handleUpload}
                   disabled={!file || uploading}
-                  className="px-4 py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-lg text-sm font-semibold shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-lg text-sm font-semibold shadow hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 inline-flex items-center gap-1.5"
                 >
+                  <SparklesIcon className={`w-4 h-4 ${uploading ? 'animate-spin' : 'group-hover:animate-pulse'}`} />
                   {uploading ? 'Uploading…' : 'Extract with AI'}
                 </button>
               </div>
@@ -647,12 +877,14 @@ const PaperSpecExtractor = () => {
               </div>
 
               {uploading && (
-                <div className="w-full max-w-md bg-pink-100 dark:bg-pink-900/30 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-pink-500 h-full transition-all"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
+                <UploadConsole
+                  file={file}
+                  progress={uploadProgress}
+                  speedBps={uploadSpeedBps}
+                  etaSec={uploadEtaSec}
+                  route={uploadRoute}
+                  tipIndex={tipIndex}
+                />
               )}
               {uploadError && (
                 <p className="text-rose-600 text-sm flex items-center gap-1">
