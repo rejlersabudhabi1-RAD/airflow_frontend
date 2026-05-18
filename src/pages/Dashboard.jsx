@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchFeatures } from '../store/featureSlice'
 import ContactSupport from '../components/support/ContactSupport'
 import Documentation from '../components/documentation/Documentation'
+import GoogleAnalyticsRealtime from '../components/Dashboard/GoogleAnalyticsRealtime'
 import { API_BASE_URL } from '../config/api.config'
 import analyticsService from '../services/analyticsService'
 import {
@@ -15,7 +16,7 @@ import {
   BoltIcon, EyeIcon, DocumentMagnifyingGlassIcon, ChartBarIcon,
   CalendarDaysIcon, ArrowDownTrayIcon, FunnelIcon, KeyIcon,
   UserCircleIcon, BuildingOffice2Icon, UsersIcon, SignalIcon,
-  TrophyIcon,
+  TrophyIcon, GlobeAltIcon,
 } from '@heroicons/react/24/outline'
 import { USER_DISPLAY_CONFIG } from '../config/userDisplay.config'
 
@@ -899,10 +900,11 @@ const Dashboard = () => {
 
               {/* Tabs */}
               <div className="px-5 pt-4 pb-0 flex items-center gap-6 border-b border-gray-100">
-                {[{ id: 'features',  label: 'Feature Activity', icon: BoltIcon        },
-                  { id: 'analytics', label: 'Analytics',         icon: ChartBarIcon     },
-                  { id: 'roadmap',   label: 'AI Roadmap',        icon: RocketLaunchIcon },
-                  { id: 'usage',     label: 'Usage',             icon: SignalIcon       },
+                {[{ id: 'features',   label: 'Feature Activity',           icon: BoltIcon        },
+                  { id: 'analytics',  label: 'Analytics',                  icon: ChartBarIcon     },
+                  { id: 'roadmap',    label: 'AI Roadmap',                 icon: RocketLaunchIcon },
+                  { id: 'usage',      label: 'Usage',                      icon: SignalIcon       },
+                  { id: 'gaRealtime', label: 'Google Analytics — Real-time', icon: GlobeAltIcon     },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                     className={`pb-3 text-sm font-semibold border-b-2 transition flex items-center gap-1.5
@@ -1225,6 +1227,13 @@ const Dashboard = () => {
                   </div>
                 )
               })()}
+
+              {/* ── Google Analytics Real-time tab ─────────────────────── */}
+              {activeTab === 'gaRealtime' && (
+                <div className="px-5 py-4">
+                  <GoogleAnalyticsRealtime isAdmin={isAdmin} />
+                </div>
+              )}
             </div>
 
             {/* ── Quick Launch ─────────────────────────────────────────────── */}
