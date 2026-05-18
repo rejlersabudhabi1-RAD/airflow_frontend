@@ -21,6 +21,7 @@ import {
   XCircleIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
+import axios from 'axios';
 
 // ---------------------------------------------------------------------------
 // SOFT-CODED constants
@@ -97,6 +98,89 @@ const computeChunkTimeout = (fileCount, byteCount) => {
   const serverMs   = fileCount * t.perFileMs;
   const raw        = t.baseMs + transferMs + serverMs;
   return Math.min(t.maxMs, Math.max(t.minMs, Math.round(raw)));
+};
+
+// ─── Direct-to-S3 presigned upload (large-file path) ─────────────────────
+// Railway's edge proxy caps request bodies at ~100-500 MB and request
+// duration at ~5-10 min. A 2 GB multipart POST is architecturally
+// impossible — the edge kills the upload mid-flight and the browser
+// surfaces the missing CORS headers as a "CORS policy" error.
+//
+// Solution: for any file ≥ NONTEFF_PRESIGNED.minSizeBytes, we ask the
+// backend for a presigned PUT URL, upload the blob STRAIGHT TO S3
+// (bypassing Railway entirely), then call /upload/complete/ with the
+// staged S3 keys so the backend ingests them like a normal upload.
+//
+// Soft-coded — override via Vite env without code change:
+//   VITE_NONTEFF_PRESIGNED_UPLOAD   "false" to disable (forces legacy path)
+//   VITE_NONTEFF_PRESIGNED_MIN_MB   threshold MB (default 50)
+//   VITE_NONTEFF_PUT_TIMEOUT_MS     S3 PUT timeout per file (default 60 min)
+const _ntEnvNum = (raw, fallback) => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const _ntEnvFlag = (raw, fallback) => {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  return !['0', 'false', 'no', 'off'].includes(String(raw).toLowerCase());
+};
+const NONTEFF_PRESIGNED = {
+  enabled:       _ntEnvFlag(import.meta.env?.VITE_NONTEFF_PRESIGNED_UPLOAD, true),
+  minSizeBytes:  _ntEnvNum(import.meta.env?.VITE_NONTEFF_PRESIGNED_MIN_MB, 50) * 1024 * 1024,
+  putTimeoutMs:  _ntEnvNum(import.meta.env?.VITE_NONTEFF_PUT_TIMEOUT_MS, 60 * 60 * 1000),
+  endpoints: {
+    presign:  (bid) => `${BULK_API}/${bid}/upload/presign/`,
+    complete: (bid) => `${BULK_API}/${bid}/upload/complete/`,
+  },
+};
+
+/**
+ * Upload ONE file directly to S3 via a presigned PUT URL.
+ * Returns the {s3_key, file_name, relative_path, size} record needed by
+ * the `/upload/complete/` endpoint. Throws on any failure so the caller
+ * can fall back to the legacy multipart path.
+ *
+ * The S3 PUT uses a fresh `axios` instance (NOT `apiClient`) so the JWT
+ * Authorization header isn't sent — S3 would reject the signature otherwise.
+ * `transformRequest: [(d) => d]` keeps axios from JSON-stringifying the Blob.
+ */
+const _uploadOneFileToS3 = async (batchId, file, onProgress) => {
+  const presignRes = await apiClient.post(
+    NONTEFF_PRESIGNED.endpoints.presign(batchId),
+    {
+      filename:      file.name,
+      content_type:  file.type || 'application/octet-stream',
+      size:          file.size,
+      relative_path: file.webkitRelativePath || file.name,
+    },
+    { timeout: 30000 },
+  );
+
+  const p = presignRes?.data || {};
+  if (!p.enabled || !p.upload_url || !p.s3_key) {
+    const reason = p.reason || 'presign disabled';
+    const err = new Error(`presign not available: ${reason}`);
+    err.code = 'PRESIGN_DISABLED';
+    throw err;
+  }
+
+  await axios.put(p.upload_url, file, {
+    headers: p.headers || { 'Content-Type': file.type || 'application/octet-stream' },
+    timeout: NONTEFF_PRESIGNED.putTimeoutMs,
+    transformRequest: [(d) => d],            // do not stringify the Blob
+    transitional: { clarifyTimeoutError: true },
+    onUploadProgress: (ev) => {
+      if (!ev?.total) return;
+      onProgress?.(Math.min(ev.loaded, ev.total));
+    },
+  });
+
+  return {
+    s3_key:        p.s3_key,
+    file_name:     file.name,
+    relative_path: file.webkitRelativePath || file.name,
+    size:          file.size,
+    content_type:  file.type || 'application/octet-stream',
+  };
 };
 
 // Only this field is required before upload; everything else is optional and
@@ -454,15 +538,86 @@ const BulkMasterIndex = ({ loadBatchId = null, onSelectItem = null } = {}) => {
 
       for (let ci = 0; ci < chunks.length; ci++) {
         const chunk = chunks[ci];
-        const chunkBytes = chunk.reduce((s, f) => s + f.size, 0);
+
+        // ── Smart dispatcher: large files go direct-to-S3 (presigned PUT),
+        //    small files stay on the legacy multipart path. Falls back to
+        //    multipart for any large file whose presign fails — production
+        //    remains safe even if S3 / boto3 / env vars regress.
+        const largeFiles = NONTEFF_PRESIGNED.enabled
+          ? chunk.filter((f) => f.size >= NONTEFF_PRESIGNED.minSizeBytes)
+          : [];
+        const smallFiles = chunk.filter((f) => !largeFiles.includes(f));
+        const stagedRefs = [];           // {s3_key, file_name, ...} per success
+        const fallbackToMultipart = [];  // large files whose presign failed
+
+        // 1) Direct-to-S3 PUT for each large file (sequential to keep memory
+        //    + bandwidth predictable on slow uplinks). Progress updates are
+        //    relative to the global byte counter so the bar stays smooth.
+        for (let li = 0; li < largeFiles.length; li++) {
+          const f = largeFiles[li];
+          let lastReported = 0;
+          try {
+            const ref = await _uploadOneFileToS3(
+              currentBatch.batch_id,
+              f,
+              (loaded) => {
+                const delta = loaded - lastReported;
+                lastReported = loaded;
+                sentBytes += delta;
+                setUploadProgress(
+                  Math.min(100, Math.round((sentBytes / totalBytes) * 100)),
+                );
+              },
+            );
+            // Make sure we end up exactly at file.size for this file even if
+            // S3 didn't report a final progress event.
+            const tail = f.size - lastReported;
+            if (tail > 0) {
+              sentBytes += tail;
+              setUploadProgress(
+                Math.min(100, Math.round((sentBytes / totalBytes) * 100)),
+              );
+            }
+            stagedRefs.push(ref);
+          } catch (err) {
+            // Roll back the progress we partially counted, then fall back.
+            sentBytes -= lastReported;
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[BulkUpload] presigned path failed for',
+              f.name,
+              '— falling back to multipart:',
+              err?.message || err,
+            );
+            fallbackToMultipart.push(f);
+          }
+        }
+
+        // 2) Notify backend about all S3-staged files in one batched call.
+        if (stagedRefs.length > 0) {
+          await apiClient.post(
+            NONTEFF_PRESIGNED.endpoints.complete(currentBatch.batch_id),
+            { items: stagedRefs },
+            { timeout: 5 * 60 * 1000 },   // server may stream-download — give it room
+          );
+        }
+
+        // 3) Anything that didn't go direct (small + fallback) → legacy
+        //    multipart POST through Django, unchanged behaviour.
+        const multipartFiles = smallFiles.concat(fallbackToMultipart);
+        if (multipartFiles.length === 0) {
+          continue;
+        }
+
+        const chunkBytes = multipartFiles.reduce((s, f) => s + f.size, 0);
         const fd = new FormData();
-        chunk.forEach((f) => {
+        multipartFiles.forEach((f) => {
           fd.append('files', f);
           fd.append('relative_paths', f.webkitRelativePath || f.name);
         });
 
         // Dynamic timeout for THIS chunk (not a fixed global value)
-        const chunkTimeout = computeChunkTimeout(chunk.length, chunkBytes);
+        const chunkTimeout = computeChunkTimeout(multipartFiles.length, chunkBytes);
 
         // Retry loop — network hiccups or a single slow chunk shouldn't abort
         let attempt = 0;

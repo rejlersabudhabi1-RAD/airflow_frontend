@@ -78,7 +78,19 @@ const FIELD_INFO = [
 // ---------------------------------------------------------------------------
 const POLL_INTERVAL_MS  = 3000;
 const POLL_MAX_WAIT_MS  = 300000;  // 5 min
-const UPLOAD_TIMEOUT_MS = 120000;  // 2 min
+// SOFT-CODED per-endpoint upload timeout. Keeps the global axios timeout
+// (used by /auth/login/) small while letting Non-TEFF uploads run long.
+// Override via Vite env: VITE_NONTEFF_UPLOAD_TIMEOUT_MS (ms).
+// Default 30 min covers cold-start + large PDF normalisation on Railway
+// without forcing the global timeout up (which would break login UX).
+const _nontEffEnvNum = (raw, fallback) => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const UPLOAD_TIMEOUT_MS = _nontEffEnvNum(
+  import.meta.env?.VITE_NONTEFF_UPLOAD_TIMEOUT_MS,
+  30 * 60 * 1000,
+);
 
 // ---------------------------------------------------------------------------
 // Supported formats
