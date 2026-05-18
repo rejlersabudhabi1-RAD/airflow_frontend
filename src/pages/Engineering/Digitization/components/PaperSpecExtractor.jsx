@@ -29,6 +29,7 @@ import {
 } from '@heroicons/react/24/outline';
 import specCustomizationAPI, { SPEC_API_CONFIG } from '../../../../services/specCustomizationAPI';
 import WorkbookCanvas from './WorkbookCanvas';
+import WrenchAiDocAssist from '../../../../components/Engineering/WrenchAiDocAssist';
 
 // ─── Soft-coded helpers (file format detection) ──────────────────────────────
 // Per-group icon (kept local because heroicons are JSX components and cannot
@@ -234,6 +235,26 @@ const PANEL_CONFIG = {
     'Identical PDFs are auto-deduped by SHA-256; you instantly see the previous extraction.',
     'Export to Excel (one sheet per Piping Class) or JSON for downstream tools.',
   ],
+};
+
+// ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
+// Mirrors the panel already used on PID Verification / Non-TEFF Metadata /
+// PMS / Instrument Index / CLL / PFD Quality Checker / Line List / Equipment
+// List. Flip `enabled: false` to hide without touching JSX.
+// Spec Customization currently ingests Paper Spec PDFs only — accepted
+// extensions mirror that. When the upstream extractor learns to consume
+// other formats, extend `acceptedExts` here in one place.
+const SPEC_AI_ASSIST_CONFIG = {
+  enabled:         true,
+  title:           'AI Document Assist',
+  subtitleTag:     '(Wrench · optional)',
+  subtitle:        'Let RAD AI pick & recommend the right Piping Material Specification document for this project from Wrench DMS — drop it straight into the extractor below.',
+  defaultHint:     'piping material specification',
+  hintPlaceholder: 'e.g. PMS, piping spec, valve list',
+  topN:            6,
+  // Mirror the extractor's accepted formats so the panel's file-type
+  // filter matches the page's <input accept=...>. PDF-only today.
+  acceptedExts:    ['pdf'],
 };
 
 // ─── Soft-coded upload UX (animated console + rotating AI tips) ──────────────
@@ -966,6 +987,29 @@ const PaperSpecExtractor = () => {
         <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 dark:text-slate-400 list-disc pl-5">
           {PANEL_CONFIG.helperPoints.map((p) => <li key={p}>{p}</li>)}
         </ul>
+
+        {/* ── AI Document Assist (Wrench) — soft-coded, optional ─────── */}
+        {SPEC_AI_ASSIST_CONFIG.enabled && !job && (
+          <WrenchAiDocAssist
+            title={SPEC_AI_ASSIST_CONFIG.title}
+            subtitleTag={SPEC_AI_ASSIST_CONFIG.subtitleTag}
+            subtitle={SPEC_AI_ASSIST_CONFIG.subtitle}
+            defaultHint={SPEC_AI_ASSIST_CONFIG.defaultHint}
+            hintPlaceholder={SPEC_AI_ASSIST_CONFIG.hintPlaceholder}
+            topN={SPEC_AI_ASSIST_CONFIG.topN}
+            acceptedExts={SPEC_AI_ASSIST_CONFIG.acceptedExts}
+            projectName=""
+            onFileSelected={(f) => {
+              // Reuse the same validator the manual drop-zone uses so
+              // size / extension errors surface identically.
+              const err = validateFile(f);
+              if (err) { setUploadError(err); return; }
+              setUploadError('');
+              setFile(f);
+            }}
+            onError={(msg) => setUploadError(msg)}
+          />
+        )}
 
         {/* ── Upload zone ─────────────────────────────────────────────── */}
         {!job && (
