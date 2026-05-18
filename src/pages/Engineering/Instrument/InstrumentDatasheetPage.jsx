@@ -218,7 +218,7 @@ const InstrumentDatasheetPage = () => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Instrument Data Sheets
+              Instrument Datasheets
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
               Comprehensive instrumentation engineering data management and specification system
@@ -348,7 +348,7 @@ const InstrumentDatasheetPage = () => {
             </div>
             <div className="flex-1">
               <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-100 mb-1">
-                About Instrument Data Sheets
+                About Instrument Datasheets
               </h4>
               <p className="text-sm text-purple-800 dark:text-purple-200">
                 This centralized hub will provide access to all instrumentation engineering data sheet functionality. 

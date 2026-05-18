@@ -11,9 +11,15 @@ import {
   BoltIcon,
   ChartBarIcon,
   UsersIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  PlusCircleIcon,
+  XMarkIcon,
+  LightBulbIcon,
+  CheckBadgeIcon,
 } from '@heroicons/react/24/outline';
 import analyticsService from '../../services/analyticsService';
-import { isUserAdmin } from '../../utils/rbac.utils';
+import { isUserAdmin, isUserSuperuser } from '../../utils/rbac.utils';
 
 /**
  * AI Champion of the Month — gamified leaderboard, real-time activity tracking,
@@ -53,13 +59,14 @@ const TIER_STYLES = {
 // ---------------------------------------------------------------------------
 // Honorary Hall of Fame — soft-coded permanent entries.
 //
-// These users are pinned at the top of the Hall of Fame regardless of the
-// rolling monthly winner cycle. Designed for super-administrators, platform
-// architects and core developers whose contribution predates the gamified
-// scoring system.
+// Members are now fully manageable from the UI (add / edit / delete) by
+// SuperAdmins. The list is persisted in browser localStorage so changes
+// survive reloads without any backend migration. The default list ships
+// EMPTY — administrators curate their own founders & architects via the
+// "Manage Honorary Members" panel.
 //
-// Add a new contributor by appending an object below — no other changes
-// required. Each entry supports:
+// Each entry supports the following (soft-coded) fields:
+//   - id             : stable client id (auto-generated)
 //   - email          : unique identifier (matched case-insensitively)
 //   - name           : display name
 //   - title          : short role label (rendered in the badge)
@@ -68,29 +75,53 @@ const TIER_STYLES = {
 //   - achievements   : 1..N short bullets shown in the spotlight card
 //   - links          : optional [{ label, href }] (LinkedIn, GitHub, etc.)
 //   - avatar         : optional override avatar URL
+//   - tagline        : optional short quote
 // ---------------------------------------------------------------------------
-const HONORARY_HALL_OF_FAME = [
-  {
-    email: 'tanzeem.agra@rejlers.ae',
-    name: 'Tanzeem Agra',
-    title: 'Super Administrator · Lead Developer',
-    tier: 'founder',
-    since: '2025-01-01',
-    achievements: [
-      'Founding Super-Administrator of the RAD AI platform',
-      'Core developer of PID Verification, PFD Quality, DesignIQ & Non-TEFF Metadata Extractor',
-      'Architected the soft-coded RBAC, AI Champion scoring & Wrench integration pipelines',
-      'Designed the gamified leaderboard and Hall of Fame system itself',
-    ],
-    tagline: 'Built the system you are looking at.',
-  },
+const DEFAULT_HONORARY_HALL_OF_FAME = [];
+
+// Persistence (soft-coded keys — bump version to invalidate stored data)
+const HOF_STORAGE_KEY = 'radai.aiChampion.honoraryHallOfFame.v1';
+const HOF_STORAGE_VERSION = 1;
+
+// Tier choices exposed in the add/edit form (subset of TIER_STYLES)
+const HOF_TIER_OPTIONS = [
+  { id: 'founder',   label: 'Founder 👑' },
+  { id: 'architect', label: 'Architect 🏛️' },
+  { id: 'diamond',   label: 'Diamond 💎' },
+  { id: 'platinum',  label: 'Platinum 🏆' },
+  { id: 'gold',      label: 'Gold 🥇' },
 ];
 
-// Honorary emails are excluded from the gamified Hall of Fame — they already
-// sit in the permanent Founders & Architects panel above.
-const HONORARY_EMAILS = new Set(
-  HONORARY_HALL_OF_FAME.map((h) => (h.email || '').trim().toLowerCase())
-);
+// Soft-coded AI-style nomination recommender thresholds.
+// A leaderboard row is recommended as honorary if it satisfies ALL gates
+// AND the composite signal exceeds MIN_SIGNAL. Tune freely — no logic
+// changes required.
+const HOF_RECOMMENDATION_CONFIG = {
+  // Minimum gates (all must pass)
+  minChampionScore: 60,
+  minDistinctFeatures: 3,
+  minAiRequests: 25,
+  minSuccessRate: 80,
+  // Composite signal weights (must sum ~1.0)
+  weights: {
+    score:    0.45,
+    features: 0.20,
+    requests: 0.20,
+    success:  0.15,
+  },
+  // Normalisation caps used when computing the 0..1 composite signal
+  caps: {
+    score:    100,
+    features: 20,
+    requests: 500,
+    success:  100,
+  },
+  minSignal: 0.55,
+  maxSuggestions: 5,
+  // Default tier proposed when nominating from a recommendation
+  defaultTier: 'architect',
+};
+
 
 // ---------------------------------------------------------------------------
 // Multi-period Hall of Fame — soft-coded recognition windows.
@@ -138,6 +169,81 @@ const fmtNum = (n) => (Number(n) || 0).toLocaleString();
 const tierStyle = (id) => TIER_STYLES[id] || TIER_STYLES.rookie;
 
 // ---------------------------------------------------------------------------
+// Honorary HoF persistence helpers (soft-coded, localStorage backed)
+// ---------------------------------------------------------------------------
+const makeHofId = () =>
+  (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `hof_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const sanitizeHofEntry = (raw = {}) => {
+  const achievements = Array.isArray(raw.achievements)
+    ? raw.achievements.map((a) => String(a || '').trim()).filter(Boolean)
+    : String(raw.achievements || '')
+        .split('\n')
+        .map((a) => a.trim())
+        .filter(Boolean);
+  const links = Array.isArray(raw.links)
+    ? raw.links
+        .map((l) => ({ label: String(l?.label || '').trim(), href: String(l?.href || '').trim() }))
+        .filter((l) => l.label && l.href)
+    : [];
+  return {
+    id: raw.id || makeHofId(),
+    email: String(raw.email || '').trim().toLowerCase(),
+    name: String(raw.name || '').trim(),
+    title: String(raw.title || '').trim(),
+    tier: HOF_TIER_OPTIONS.some((t) => t.id === raw.tier) ? raw.tier : 'architect',
+    since: String(raw.since || '').trim(),
+    achievements,
+    links,
+    avatar: String(raw.avatar || '').trim(),
+    tagline: String(raw.tagline || '').trim(),
+  };
+};
+
+const loadHofFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(HOF_STORAGE_KEY);
+    if (!raw) return [...DEFAULT_HONORARY_HALL_OF_FAME];
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== HOF_STORAGE_VERSION || !Array.isArray(parsed.entries)) {
+      return [...DEFAULT_HONORARY_HALL_OF_FAME];
+    }
+    return parsed.entries.map(sanitizeHofEntry);
+  } catch {
+    return [...DEFAULT_HONORARY_HALL_OF_FAME];
+  }
+};
+
+const saveHofToStorage = (entries) => {
+  try {
+    localStorage.setItem(
+      HOF_STORAGE_KEY,
+      JSON.stringify({ version: HOF_STORAGE_VERSION, entries })
+    );
+  } catch {
+    /* quota exceeded or storage disabled — silently ignore */
+  }
+};
+
+// Compute a 0..1 composite "honorary candidate" signal from a leaderboard row
+const computeHofRecommendationSignal = (row) => {
+  const { weights, caps } = HOF_RECOMMENDATION_CONFIG;
+  const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0));
+  const score    = clamp01((row?.champion_score || 0)         / caps.score);
+  const features = clamp01((row?.stats?.distinct_features_used || 0) / caps.features);
+  const requests = clamp01((row?.stats?.total_ai_requests || 0)      / caps.requests);
+  const success  = clamp01((row?.stats?.success_rate || 0)           / caps.success);
+  return (
+    score * weights.score +
+    features * weights.features +
+    requests * weights.requests +
+    success * weights.success
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 const AIChampion = () => {
@@ -160,6 +266,86 @@ const AIChampion = () => {
   const [hofData, setHofData] = useState({});       // { periodId: [rows] }
   const [hofLoading, setHofLoading] = useState(false);
   const [hofUpdatedAt, setHofUpdatedAt] = useState(null);
+
+  // -----------------------------------------------------------------------
+  // Honorary Hall of Fame — CRUD state (super-admin only)
+  // -----------------------------------------------------------------------
+  const [honoraryList, setHonoraryList] = useState(() => loadHofFromStorage());
+  const [hofEditor, setHofEditor] = useState({ open: false, mode: 'add', draft: null });
+  const [hofToast, setHofToast] = useState(null); // { type, message }
+
+  const isSuperAdmin = useMemo(() => {
+    if (isUserSuperuser && isUserSuperuser(authUser)) return true;
+    return Array.isArray(rbacRoles)
+      && rbacRoles.some((r) => (r?.role_code || r?.code || r) === 'super_admin');
+  }, [authUser, rbacRoles]);
+
+  // Derived: emails to exclude from gamified leaderboards
+  const honoraryEmails = useMemo(
+    () => new Set(honoraryList.map((h) => (h.email || '').trim().toLowerCase()).filter(Boolean)),
+    [honoraryList]
+  );
+
+  // Persist whenever the list changes
+  useEffect(() => {
+    saveHofToStorage(honoraryList);
+  }, [honoraryList]);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!hofToast) return undefined;
+    const id = setTimeout(() => setHofToast(null), 3500);
+    return () => clearTimeout(id);
+  }, [hofToast]);
+
+  // ---- CRUD handlers ----
+  const openHofAdd = useCallback((prefill = {}) => {
+    setHofEditor({
+      open: true,
+      mode: 'add',
+      draft: sanitizeHofEntry({ tier: HOF_RECOMMENDATION_CONFIG.defaultTier, ...prefill }),
+    });
+  }, []);
+
+  const openHofEdit = useCallback((entry) => {
+    setHofEditor({ open: true, mode: 'edit', draft: sanitizeHofEntry(entry) });
+  }, []);
+
+  const closeHofEditor = useCallback(() => {
+    setHofEditor({ open: false, mode: 'add', draft: null });
+  }, []);
+
+  const saveHofEntry = useCallback((draft) => {
+    const entry = sanitizeHofEntry(draft);
+    if (!entry.email || !entry.name) {
+      setHofToast({ type: 'error', message: 'Name and email are required.' });
+      return;
+    }
+    setHonoraryList((prev) => {
+      const idx = prev.findIndex((p) => p.id === entry.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = entry;
+        return next;
+      }
+      // Prevent duplicate emails
+      if (prev.some((p) => p.email === entry.email)) {
+        setHofToast({ type: 'error', message: `Email ${entry.email} is already honorary.` });
+        return prev;
+      }
+      return [...prev, entry];
+    });
+    setHofToast({ type: 'success', message: `Saved "${entry.name}".` });
+    closeHofEditor();
+  }, [closeHofEditor]);
+
+  const deleteHofEntry = useCallback((entry) => {
+    if (!entry) return;
+    if (!confirm(`Remove "${entry.name || entry.email}" from the Hall of Fame?`)) return;
+    setHonoraryList((prev) => prev.filter((p) => p.id !== entry.id));
+    setHofToast({ type: 'success', message: `Removed "${entry.name || entry.email}".` });
+  }, []);
+
 
   const isAdmin = useMemo(() => {
     if (isUserAdmin && isUserAdmin(authUser)) return true;
@@ -219,7 +405,7 @@ const AIChampion = () => {
       HOF_PERIODS.forEach((p, idx) => {
         const rows = results[idx]?.results || [];
         next[p.id] = rows
-          .filter((r) => !HONORARY_EMAILS.has((r.user?.email || '').trim().toLowerCase()))
+          .filter((r) => !honoraryEmails.has((r.user?.email || '').trim().toLowerCase()))
           .slice(0, HOF_TOP_N);
       });
       setHofData(next);
@@ -227,7 +413,7 @@ const AIChampion = () => {
     } finally {
       setHofLoading(false);
     }
-  }, []);
+  }, [honoraryEmails]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -292,6 +478,41 @@ const AIChampion = () => {
   const totals = costReport?.totals || {};
   const byProvider = costReport?.by_provider || [];
   const byApp = costReport?.by_application || [];
+
+  // -----------------------------------------------------------------------
+  // AI-style recommendations — suggest nominees for honorary status by
+  // scanning leaderboard rows against the soft-coded thresholds. Excludes
+  // anyone already pinned in the Hall of Fame.
+  // -----------------------------------------------------------------------
+  const hofRecommendations = useMemo(() => {
+    const cfg = HOF_RECOMMENDATION_CONFIG;
+    const candidates = [];
+    for (const r of ranked) {
+      const email = (r.user?.email || '').trim().toLowerCase();
+      if (!email || honoraryEmails.has(email)) continue;
+      const stats = r.stats || {};
+      if (
+        (r.champion_score || 0)        < cfg.minChampionScore   ||
+        (stats.distinct_features_used || 0) < cfg.minDistinctFeatures ||
+        (stats.total_ai_requests || 0)      < cfg.minAiRequests       ||
+        (stats.success_rate || 0)           < cfg.minSuccessRate
+      ) continue;
+      const signal = computeHofRecommendationSignal(r);
+      if (signal < cfg.minSignal) continue;
+      candidates.push({
+        row: r,
+        signal,
+        reasons: [
+          `Score ${Number(r.champion_score).toFixed(1)}/100`,
+          `${fmtNum(stats.distinct_features_used)} distinct features`,
+          `${fmtNum(stats.total_ai_requests)} AI requests`,
+          `${Number(stats.success_rate || 0).toFixed(1)}% success`,
+        ],
+      });
+    }
+    candidates.sort((a, b) => b.signal - a.signal);
+    return candidates.slice(0, cfg.maxSuggestions);
+  }, [ranked, honoraryEmails]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50 p-4 md:p-8">
@@ -570,20 +791,30 @@ const AIChampion = () => {
         </Panel>
 
         {/* ------------------------------ Founders & Architects spotlight ------------------------------ */}
-        {HONORARY_HALL_OF_FAME.length > 0 && (
+        {honoraryList.length > 0 && (
           <Panel
             title="Founders & Architects"
             icon={<SparklesIcon className="w-5 h-5 text-fuchsia-500" />}
+            right={
+              isSuperAdmin && (
+                <button
+                  onClick={() => openHofAdd()}
+                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-1"
+                >
+                  <PlusCircleIcon className="w-3.5 h-3.5" /> Add Member
+                </button>
+              )
+            }
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {HONORARY_HALL_OF_FAME.map((h) => {
+              {honoraryList.map((h) => {
                 const ts = tierStyle(h.tier);
                 const sinceLabel = h.since
                   ? new Date(h.since).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
                   : null;
                 return (
                   <div
-                    key={h.email}
+                    key={h.id || h.email}
                     className="relative overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-white via-purple-50 to-fuchsia-50 p-5 shadow-sm hover:shadow-md transition-shadow"
                   >
                     {/* Decorative ribbon */}
@@ -591,6 +822,24 @@ const AIChampion = () => {
                       aria-hidden="true"
                       className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 bg-gradient-to-br ${ts.ring}`}
                     />
+                    {isSuperAdmin && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                        <button
+                          onClick={() => openHofEdit(h)}
+                          className="p-1 rounded-md bg-white/80 border border-purple-200 text-purple-700 hover:bg-purple-100"
+                          title="Edit"
+                        >
+                          <PencilSquareIcon className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteHofEntry(h)}
+                          className="p-1 rounded-md bg-white/80 border border-rose-200 text-rose-600 hover:bg-rose-100"
+                          title="Delete"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <div className="relative flex items-start gap-4">
                       {/* Avatar */}
                       <div className={`flex-shrink-0 p-1 rounded-full bg-gradient-to-br ${ts.ring}`}>
@@ -664,6 +913,160 @@ const AIChampion = () => {
             </div>
           </Panel>
         )}
+
+        {/* ------------------------------ Manage Honorary Members (SuperAdmin) ------------------------------ */}
+        {isSuperAdmin && (
+          <Panel
+            title="Manage Honorary Members"
+            icon={<CheckBadgeIcon className="w-5 h-5 text-purple-600" />}
+            right={
+              <button
+                onClick={() => openHofAdd()}
+                className="px-2.5 py-1 rounded-md text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-1"
+              >
+                <PlusCircleIcon className="w-3.5 h-3.5" /> Add Member
+              </button>
+            }
+          >
+            {honoraryList.length === 0 ? (
+              <Empty text="No honorary members yet. Click 'Add Member' or accept an AI recommendation below." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200">
+                      <th className="py-2 pr-3">Name</th>
+                      <th className="py-2 pr-3">Email</th>
+                      <th className="py-2 pr-3">Title</th>
+                      <th className="py-2 pr-3">Tier</th>
+                      <th className="py-2 pr-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {honoraryList.map((h) => {
+                      const ts = tierStyle(h.tier);
+                      return (
+                        <tr key={h.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-2 pr-3 font-medium text-slate-800">{h.name}</td>
+                          <td className="py-2 pr-3 text-slate-600">{h.email}</td>
+                          <td className="py-2 pr-3 text-slate-600">{h.title}</td>
+                          <td className="py-2 pr-3">
+                            <span className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${ts.pill}`}>
+                              {ts.emoji} {h.tier}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openHofEdit(h)}
+                                className="px-2 py-1 rounded-md text-xs bg-white border border-slate-200 hover:border-purple-400 text-purple-700 flex items-center gap-1"
+                              >
+                                <PencilSquareIcon className="w-3.5 h-3.5" /> Edit
+                              </button>
+                              <button
+                                onClick={() => deleteHofEntry(h)}
+                                className="px-2 py-1 rounded-md text-xs bg-white border border-slate-200 hover:border-rose-400 text-rose-600 flex items-center gap-1"
+                              >
+                                <TrashIcon className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="mt-3 text-[11px] text-slate-500">
+              Changes persist in your browser via localStorage (key{' '}
+              <code>{HOF_STORAGE_KEY}</code>). Soft-coded thresholds &amp; tiers live at the top of
+              this file — no backend migration required.
+            </div>
+          </Panel>
+        )}
+
+        {/* ------------------------------ AI Recommendations (SuperAdmin) ------------------------------ */}
+        {isSuperAdmin && (
+          <Panel
+            title="AI Recommendations · Honorary Nominees"
+            icon={<LightBulbIcon className="w-5 h-5 text-amber-500" />}
+            right={
+              <span className="text-[11px] text-slate-500">
+                Threshold ≥ {(HOF_RECOMMENDATION_CONFIG.minSignal * 100).toFixed(0)}% signal
+              </span>
+            }
+          >
+            {hofRecommendations.length === 0 ? (
+              <Empty text="No qualifying nominees in the current window. Adjust the time window or wait for more engagement." />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {hofRecommendations.map(({ row, signal, reasons }) => {
+                  const ts = tierStyle(row.tier);
+                  const pct = Math.round(signal * 100);
+                  return (
+                    <div
+                      key={`rec-${row.user_id || row.user?.email}`}
+                      className="relative rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-0.5 rounded-full bg-gradient-to-br ${ts.ring}`}>
+                          <div className="w-11 h-11 rounded-full bg-white text-slate-700 text-sm font-bold flex items-center justify-center">
+                            {getInitials(row.user?.name, row.user?.email)}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-slate-900 truncate">
+                            {row.user?.name || row.user?.email}
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate">{row.user?.email}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold">
+                            Signal
+                          </div>
+                          <div className="text-lg font-extrabold text-amber-600 tabular-nums">{pct}%</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1.5 rounded-full bg-amber-100 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-400 to-orange-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <ul className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1">
+                        {reasons.map((rsn, i) => (
+                          <li key={i} className="text-[11px] text-slate-600 flex items-center gap-1">
+                            <span className="text-emerald-500">✓</span> {rsn}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-3 flex items-center justify-end">
+                        <button
+                          onClick={() =>
+                            openHofAdd({
+                              email: row.user?.email,
+                              name: row.user?.name || row.user?.email,
+                              title: `${row.tier_label || row.tier || 'Top performer'} · auto-nominated`,
+                              tier: HOF_RECOMMENDATION_CONFIG.defaultTier,
+                              since: new Date().toISOString().slice(0, 10),
+                              achievements: reasons,
+                              tagline: 'Recommended by RAD AI based on platform engagement.',
+                            })
+                          }
+                          className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-1"
+                        >
+                          <SparklesIcon className="w-3.5 h-3.5" /> Nominate
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+        )}
+
 
         {/* ------------------------------ Top RADAI Users · multi-period Hall of Fame ------------------------------ */}
         <Panel
@@ -813,16 +1216,16 @@ const AIChampion = () => {
 
         {/* ------------------------------ Hall of Fame ------------------------------ */}
         <Panel title="Hall of Fame" icon={<TrophyIcon className="w-5 h-5 text-amber-500" />}>
-          {history.length === 0 && HONORARY_HALL_OF_FAME.length === 0 ? (
+          {history.length === 0 && honoraryList.length === 0 ? (
             <Empty text="No prior champions yet — first month will be selected automatically on the 1st of next month." />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {/* Honorary entries — always pinned at the top */}
-              {HONORARY_HALL_OF_FAME.map((h) => {
+              {honoraryList.map((h) => {
                 const ts = tierStyle(h.tier);
                 return (
                   <div
-                    key={`honorary-${h.email}`}
+                    key={`honorary-${h.id || h.email}`}
                     className="relative bg-gradient-to-br from-purple-50 to-fuchsia-50 border-2 border-purple-200 rounded-xl p-3 text-center shadow-sm"
                     title={`${h.name} — ${h.title}`}
                   >
@@ -880,6 +1283,29 @@ const AIChampion = () => {
           </div>
         )}
       </div>
+
+      {/* ------------------------------ Toast ------------------------------ */}
+      {hofToast && (
+        <div
+          className={`fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium border ${
+            hofToast.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-700'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          }`}
+        >
+          {hofToast.message}
+        </div>
+      )}
+
+      {/* ------------------------------ Add/Edit Honorary Member Modal ------------------------------ */}
+      {hofEditor.open && (
+        <HonoraryEditorModal
+          mode={hofEditor.mode}
+          draft={hofEditor.draft}
+          onCancel={closeHofEditor}
+          onSave={saveHofEntry}
+        />
+      )}
     </div>
   );
 };
@@ -943,6 +1369,152 @@ const BreakdownRow = ({ label, cost, requests, max }) => {
           style={{ width: `${pct}%` }}
         />
       </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// HonoraryEditorModal — soft-coded add/edit form.
+// Field list is driven by EDITOR_FIELDS so adding a new attribute is a
+// single line change.
+// ---------------------------------------------------------------------------
+const EDITOR_FIELDS = [
+  { key: 'name',    label: 'Full name *',  type: 'text',     placeholder: 'e.g. Tanzeem Agra' },
+  { key: 'email',   label: 'Email *',      type: 'email',    placeholder: 'user@company.com' },
+  { key: 'title',   label: 'Title / Role', type: 'text',     placeholder: 'e.g. Lead Developer' },
+  { key: 'since',   label: 'Contributing since', type: 'date' },
+  { key: 'avatar',  label: 'Avatar URL',   type: 'url',      placeholder: 'https://…' },
+  { key: 'tagline', label: 'Tagline',      type: 'text',     placeholder: 'One-line motto' },
+];
+
+const HonoraryEditorModal = ({ mode, draft, onCancel, onSave }) => {
+  const [form, setForm] = useState(draft || {});
+
+  useEffect(() => {
+    setForm(draft || {});
+  }, [draft]);
+
+  const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const achievementsText = Array.isArray(form.achievements)
+    ? form.achievements.join('\n')
+    : (form.achievements || '');
+
+  const linksText = Array.isArray(form.links)
+    ? form.links.map((l) => `${l.label} | ${l.href}`).join('\n')
+    : '';
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const links = linksText
+      .split('\n')
+      .map((line) => {
+        const [label, href] = line.split('|').map((s) => (s || '').trim());
+        return label && href ? { label, href } : null;
+      })
+      .filter(Boolean);
+    onSave({
+      ...form,
+      achievements: achievementsText.split('\n').map((a) => a.trim()).filter(Boolean),
+      links,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+          <SparklesIcon className="w-5 h-5 text-purple-600" />
+          <h3 className="font-semibold text-slate-800">
+            {mode === 'edit' ? 'Edit Honorary Member' : 'Add Honorary Member'}
+          </h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="ml-auto p-1 rounded-md text-slate-500 hover:bg-slate-100"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {EDITOR_FIELDS.map((f) => (
+            <label key={f.key} className="text-xs font-medium text-slate-600 block">
+              {f.label}
+              <input
+                type={f.type}
+                placeholder={f.placeholder || ''}
+                value={form[f.key] || ''}
+                onChange={(e) => update(f.key, e.target.value)}
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 text-sm text-slate-800"
+              />
+            </label>
+          ))}
+
+          <label className="text-xs font-medium text-slate-600 block">
+            Tier
+            <select
+              value={form.tier || HOF_TIER_OPTIONS[0].id}
+              onChange={(e) => update('tier', e.target.value)}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 text-sm text-slate-800"
+            >
+              {HOF_TIER_OPTIONS.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-xs font-medium text-slate-600 block md:col-span-2">
+            Achievements (one per line)
+            <textarea
+              rows={4}
+              value={achievementsText}
+              onChange={(e) => update('achievements', e.target.value)}
+              placeholder={'e.g. Founded the platform\nDesigned the RBAC system'}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 text-sm text-slate-800"
+            />
+          </label>
+
+          <label className="text-xs font-medium text-slate-600 block md:col-span-2">
+            Links (one per line — format: <code>Label | https://url</code>)
+            <textarea
+              rows={2}
+              defaultValue={linksText}
+              onChange={(e) => update('_linksRaw', e.target.value)}
+              placeholder={'LinkedIn | https://linkedin.com/in/user'}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 text-sm text-slate-800"
+              onBlur={(e) => {
+                const links = e.target.value
+                  .split('\n')
+                  .map((line) => {
+                    const [label, href] = line.split('|').map((s) => (s || '').trim());
+                    return label && href ? { label, href } : null;
+                  })
+                  .filter(Boolean);
+                update('links', links);
+              }}
+            />
+          </label>
+        </div>
+        <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-1"
+          >
+            <CheckBadgeIcon className="w-4 h-4" />
+            {mode === 'edit' ? 'Save Changes' : 'Add Member'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
