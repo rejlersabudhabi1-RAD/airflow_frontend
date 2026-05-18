@@ -30,7 +30,7 @@ import {
   STORAGE_KEY, REFRESH_EVENT, PROJECT_FIELDS, VALVE_COLUMNS, VALVE_TABS,
   DEFAULT_ROW, AREA_OPTIONS,
 } from '../../../config/valveMTO.config';
-import { deriveRemarksFromRow } from '../../../config/valveMTORemarks';
+import { deriveRemarksFromRow, mergeRemarks } from '../../../config/valveMTORemarks';
 import importValveMTOFile from '../../../config/valveMTOImporter';
 import exportValveMTOWorkbook from '../../../config/valveMTOExporter';
 import {
@@ -412,7 +412,7 @@ const ValveMTOPage = () => {
             const liveRows = snapshot.rows.map((r) => {
               const merged = { ...DEFAULT_ROW(), ...r };
               const derived = deriveRemarksFromRow(merged);
-              if (derived) merged.remarks = derived;
+              if (derived) merged.remarks = mergeRemarks(merged.remarks, derived);
               return merged;
             });
             setPartialRows(liveRows);
@@ -431,7 +431,7 @@ const ValveMTOPage = () => {
         parsed      = (lastSnapshot?.rows || []).map((r) => {
           const merged = { ...DEFAULT_ROW(), ...r };
           const derived = deriveRemarksFromRow(merged);
-          if (derived) merged.remarks = derived;
+          if (derived) merged.remarks = mergeRemarks(merged.remarks, derived);
           return merged;
         });
         projectMeta = lastSnapshot?.project_meta || {};

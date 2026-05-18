@@ -14,7 +14,7 @@
  */
 import * as XLSX from 'xlsx';
 import { VALVE_COLUMNS, AREA_OPTIONS, DEFAULT_ROW } from './valveMTO.config';
-import { deriveRemarksFromRow } from './valveMTORemarks';
+import { deriveRemarksFromRow, mergeRemarks } from './valveMTORemarks';
 
 // ─── Soft-coded constants ────────────────────────────────────────────────
 const HEADER_SCAN_DEPTH    = 12;   // rows scanned at top of each sheet
@@ -156,9 +156,10 @@ export const importValveMTOFile = async (file) => {
       if (!row.valve_tag && !row.description && !row.type) continue;
       if (filled < 3) continue;
       if (!row.area && sheetArea) row.area = sheetArea;
-      // Soft-coded Remark derivation from tag / description / remarks.
+      // Soft-coded Remark derivation from any text field; merge with any
+      // pre-existing free-text remarks so engineering notes survive.
       const derived = deriveRemarksFromRow(row);
-      if (derived) row.remarks = derived;
+      if (derived) row.remarks = mergeRemarks(row.remarks, derived);
       collected.push(row);
     }
   }
