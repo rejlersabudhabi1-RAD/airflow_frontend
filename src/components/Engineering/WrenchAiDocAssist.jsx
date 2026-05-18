@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   Sparkles, Brain, Loader, Download, AlertTriangle,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, FolderTree, X as XIcon,
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api.config';
 
@@ -33,6 +33,10 @@ import { API_BASE_URL } from '../../config/api.config';
 const DEFAULTS = {
   endpointProjects:    '/wrench/sync/projects/',
   endpointRecommend:   '/wrench/sync/pid-recommendations/',
+  endpointFolders:     '/wrench/sync/project-folders/',
+  timeoutFoldersMs:    60000,
+  foldersMinForSearch: 8,
+  foldersListMaxH:     '180px',
   topN:                5,
   minHighlightScore:   80,
   acceptedExts:        ['pdf', 'xls', 'xlsx', 'csv'],
@@ -426,7 +430,7 @@ const WrenchAiDocAssist = ({
           </div>
 
           {/* ── Sub-folders (multi-select, optional) ──────────────────── */}
-          {(foldersLoading || folders.length > 0 || foldersError) && (
+          {(foldersLoading || folders.length > 0 || foldersError || foldersOrderNo) && (
             <div className="rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
