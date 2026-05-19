@@ -187,6 +187,19 @@ export const ENGINEERING_DISCIPLINES = {
         moduleCode: 'instrument_index',
         badge: 'New'
       },
+      // SOFT-CODED: IO List promoted from the Datasheets hub to a first-class
+      // sub-feature under 1.3 Instrument (route unchanged — reuses existing
+      // IOListPage at /engineering/instrument/datasheet/io-list).
+      {
+        id: 'instrumentIoList',
+        name: 'IO List',
+        fullName: 'Instrument IO List',
+        icon: CircleStackIcon,
+        path: '/engineering/instrument/datasheet/io-list',
+        description: 'Generate a canonical Input/Output list from the instrument register, or run a deterministic QC on an existing list',
+        moduleCode: 'instrument_datasheet',
+        badge: 'Generator + QC'
+      },
       {
         id: 'instrumentDataSheet',
         name: 'Datasheets',

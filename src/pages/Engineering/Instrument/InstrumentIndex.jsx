@@ -381,6 +381,35 @@ const AI_DOC_ASSIST_CONFIG = {
   acceptedExts:    ['pdf'],
 };
 
+// ─── Related-tools recommendations (soft-coded) ──────────────────────────────
+// Each entry produces a cross-link pill in the hero, a quick-launch button in
+// the toolbar, and a capabilities-list bullet.  Add new tools here without
+// touching JSX.
+const INST_RELATED_TOOLS = [
+  {
+    id:           'line_list',
+    label:        'Line List',
+    path:         '/engineering/process/line-list',
+    heroPrefix:   'Cross-linked with',
+    capability:   ['Combine with Line List', 'Use the Line List page to extract piping lines from the same P&ID for a complete project dataset.'],
+    showHero:     true,
+    showToolbar:  true,
+    showCapability: true,
+    toolbarStyle: 'primary',   // uses T_INST.accent gradient
+  },
+  {
+    id:           'io_list',
+    label:        'IO List',
+    path:         '/engineering/instrument/datasheet/io-list',
+    heroPrefix:   'Also recommended',
+    capability:   ['Generate IO List', 'Pipe the extracted instruments straight into the IO List generator — IO type, system (DCS/ESD), signal, IS/NIS, wiring and voltage are inferred automatically using the project rule set.'],
+    showHero:     true,
+    showToolbar:  true,
+    showCapability: true,
+    toolbarStyle: 'secondary', // outlined button
+  },
+];
+
 // ─── Fullscreen layout (soft-coded) ──────────────────────────────────────────
 // Edit max-widths / paddings here without touching JSX.  Mirrors LineList
 // pattern (LAYOUT_CONFIG) so behaviour is consistent across the engineering
@@ -1181,14 +1210,19 @@ const InstrumentIndex = () => {
                   </span>
                 ))}
               </div>
-              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
-                style={{ animation: 'instChipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' }}>
-                <BoltIcon className="w-3.5 h-3.5" style={{ animation: 'instPulse 2s ease-in-out infinite' }} />
-                Cross-linked with
-                <a href="/engineering/process/line-list"
-                  className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
-                  Line List <ArrowTopRightOnSquareIcon className="w-3 h-3" />
-                </a>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {INST_RELATED_TOOLS.filter(t => t.showHero).map((t, i) => (
+                  <div key={t.id}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold"
+                    style={{ animation: `instChipPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${0.55 + i * 0.08}s both` }}>
+                    <BoltIcon className="w-3.5 h-3.5" style={{ animation: 'instPulse 2s ease-in-out infinite' }} />
+                    {t.heroPrefix}
+                    <a href={t.path}
+                      className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-blue-900 transition-colors">
+                      {t.label} <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                    </a>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1420,12 +1454,22 @@ const InstrumentIndex = () => {
               className="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors">
               Switch / Edit
             </button>
-            <button
-              onClick={() => navigate('/engineering/process/line-list')}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-lg transition-all hover:-translate-y-px"
-              style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
-              Line List <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-            </button>
+            {INST_RELATED_TOOLS.filter(t => t.showToolbar).map(t => (
+              t.toolbarStyle === 'primary' ? (
+                <button key={t.id}
+                  onClick={() => navigate(t.path)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white rounded-lg transition-all hover:-translate-y-px"
+                  style={{ background: T_INST.accent, boxShadow: T_INST.accentShadow }}>
+                  {t.label} <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button key={t.id}
+                  onClick={() => navigate(t.path)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-all hover:-translate-y-px">
+                  {t.label} <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+                </button>
+              )
+            ))}
           </div>
         </div>
 
@@ -2685,7 +2729,7 @@ const InstrumentIndex = () => {
                 ['Tag Number Recognition', 'Values inside instrument circles/bubbles are automatically read — e.g. FIT-3901-08A, PIT-3901-01, SDV-3601-01.'],
                 ['Category Colour Coding', 'Each instrument category has its own colour for quick visual scanning in the table and Excel export.'],
                 ['Excel Export', 'Two-sheet workbook: Instrument Index (all tags) + Summary (category counts).'],
-                ['Combine with Line List', 'Use the Line List page to extract piping lines from the same P&ID for a complete project dataset.'],
+                ...INST_RELATED_TOOLS.filter(t => t.showCapability).map(t => t.capability),
               ].map(([title, desc]) => (
                 <li key={title} className="flex items-start gap-2">
                   <span className="font-bold text-purple-600 mt-0.5">•</span>

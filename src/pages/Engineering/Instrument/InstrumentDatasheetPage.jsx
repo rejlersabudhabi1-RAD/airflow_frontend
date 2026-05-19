@@ -18,6 +18,12 @@ import {
  * Central hub for all instrumentation engineering data sheet functionality
  * Follows the same design pattern as Process Datasheets for consistency
  */
+// SOFT-CODED: IO List has been promoted to a first-class sub-feature under
+// 1.3 Instrument (see engineeringStructure.config.js → instrumentIoList).
+// Set this flag to true if you ever need to surface it inside the Datasheets
+// hub again — no other change required.
+const SHOW_IO_LIST_IN_DATASHEET_HUB = false;
+
 const InstrumentDatasheetPage = () => {
   const navigate = useNavigate();
 
@@ -235,7 +241,9 @@ const InstrumentDatasheetPage = () => {
       {/* Data Sheet Cards Grid */}
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {dataSheetTypes.map((type) => {
+          {dataSheetTypes
+            .filter((type) => SHOW_IO_LIST_IN_DATASHEET_HUB || type.id !== 'io_list')
+            .map((type) => {
             const IconComponent = type.icon;
             const isDisabled = type.disabled || false;
 
