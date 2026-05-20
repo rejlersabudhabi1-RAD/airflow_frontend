@@ -98,6 +98,41 @@ const PREVIEW_COLUMN_COUNT       = 14
 const DOWNLOAD_FILENAME          = 'IO_List_from_Instrument_Index.xlsx'
 const ACCEPTED_EXCEL_EXT         = '.xlsx,.xls,.csv'
 
+// ─── Soft-coded Instrument Index report (mirrors /engineering/instrument/index) ─
+// Rendered after a P&ID extraction so the user gets the SAME report on this page
+// without leaving — no core logic duplicated, just the read-only display layer.
+const INSTRUMENT_INDEX_REPORT_CONFIG = {
+  title:           'Instrument Index Report',
+  subtitle:        'AI-extracted instrument tags from the uploaded P&ID',
+  maxPreviewRows:  50,                       // table preview cap (download has all rows)
+  downloadLabel:   'Download Instrument Index (.xlsx)',
+  emptyHint:       'Run extraction from a P&ID PDF (Stage 1) to populate this report.',
+  // Column projection — keeps the table readable on narrow screens. Add/remove
+  // freely; falls back to the instrument key if no value found.
+  columns: [
+    { key: 'index_no',         label: '#',           width: 'w-12' },
+    { key: 'tag_number',       label: 'Tag No.',     width: 'w-32' },
+    { key: 'category',         label: 'Category',    width: 'w-28' },
+    { key: 'service',          label: 'Service',     width: 'w-56' },
+    { key: 'line_or_equipment',label: 'Line / Equipment', width: 'w-40' },
+    { key: 'function',         label: 'Function',    width: 'w-32' },
+    { key: 'signal_type',      label: 'Signal',      width: 'w-24' },
+    { key: 'location',         label: 'Location',    width: 'w-24' },
+    { key: 'remarks',          label: 'Remarks',     width: 'w-48' },
+  ],
+  // Tailwind colour palette per category — first-match wins, default last.
+  categoryColors: {
+    Flow:        'bg-cyan-100 text-cyan-800 border-cyan-200',
+    Pressure:    'bg-rose-100 text-rose-800 border-rose-200',
+    Temperature: 'bg-orange-100 text-orange-800 border-orange-200',
+    Level:       'bg-emerald-100 text-emerald-800 border-emerald-200',
+    Analysis:    'bg-violet-100 text-violet-800 border-violet-200',
+    Valve:       'bg-amber-100 text-amber-800 border-amber-200',
+    Safety:      'bg-red-100 text-red-800 border-red-200',
+    default:     'bg-slate-100 text-slate-700 border-slate-200',
+  },
+}
+
 // ─── Soft-coded P&ID → Instrument Index extraction config ───────────────────
 // Mirrors the same backend endpoint and form fields used by the Instrument
 // Index page so the user can go straight to IO List without a detour.
@@ -119,10 +154,48 @@ const PID_EXTRACT_CONFIG = {
   ],
 }
 
-const SOURCE_TABS = [
-  { id: 'file', label: 'Excel / CSV Upload',     icon: DocumentArrowUpIcon },
-  { id: 'pid',  label: 'P&ID PDF (AI Extract)', icon: CpuChipIcon },
-  { id: 'json', label: 'Paste JSON Payload',     icon: CodeBracketIcon },
+// ─── Soft-coded 3-stage wizard ───────────────────────────────────────────────
+// Stage 1 → "Instrument Index" source docs — P&ID PDF (+ optional Legend) that
+//           the AI-vision extractor turns into the instrument register.
+// Stage 2 → "IO List" source — the Instrument Index workbook (or pasted JSON)
+//           that seeds the IO routing engine directly.
+// Stage 3 → generator knobs + run/download
+// Add / reorder stages here without touching the JSX.
+const WIZARD_STAGES = [
+  {
+    id:       1,
+    key:      'index',
+    label:    'Instrument Index',
+    title:    'Stage 1 — Instrument Index source documents',
+    subtitle: 'Drop the P&ID PDF (and optional Legend PDF) — the AI-vision extractor builds the instrument register for you.',
+    icon:     CpuChipIcon,
+    accent:   'from-fuchsia-100 to-pink-100 text-fuchsia-700',
+  },
+  {
+    id:       2,
+    key:      'iolist',
+    label:    'IO List',
+    title:    'Stage 2 — IO List source workbook',
+    subtitle: 'Already have an Instrument Index workbook (or JSON payload)? Drop it here to feed the IO routing engine directly.',
+    icon:     DocumentArrowUpIcon,
+    accent:   'from-violet-100 to-purple-100 text-purple-700',
+  },
+  {
+    id:       3,
+    key:      'tune',
+    label:    'Tune & Generate',
+    title:    'Stage 3 — Tune the generator',
+    subtitle: 'Set the project context, then generate and download the IO List.',
+    icon:     SparklesIcon,
+    accent:   'from-indigo-100 to-blue-100 text-indigo-700',
+  },
+]
+
+// Sub-modes inside Stage 2 (workbook vs JSON paste). Soft-coded so adding a new
+// register source (e.g. Google Sheet) is a one-line change.
+const IOLIST_SOURCE_MODES = [
+  { id: 'file', label: 'Excel / CSV Upload', icon: DocumentArrowUpIcon },
+  { id: 'json', label: 'Paste JSON Payload', icon: CodeBracketIcon },
 ]
 
 const API_BASE = getApiBaseUrl()
@@ -456,7 +529,11 @@ export default function IOListPage() {
   // Project context (null = list view; object = working inside a project)
   const [activeProject, setActiveProject] = useState(null)
 
-  const [tab, setTab]                 = useState('file')
+  // Wizard navigation (soft-coded — stages defined in WIZARD_STAGES)
+  const [stage, setStage]             = useState(1)
+  // Sub-mode for Stage 2 (IO List workbook source): 'file' or 'json'
+  const [iolistMode, setIolistMode]   = useState('file')
+
   const [file, setFile]               = useState(null)
   const [rawJson, setRawJson]         = useState('')
   const [includeInd, setIncludeInd]   = useState(DEFAULT_INCLUDE_INDICATORS)
@@ -473,6 +550,11 @@ export default function IOListPage() {
     Object.fromEntries(PID_EXTRACT_CONFIG.metaFields.map((f) => [f.key, ''])),
   )
   const [extractStatus, setExtractStatus] = useState('')
+
+  // Full backend payload from the P&ID extraction (instruments + drawing_info
+  // + category_summary + excel_url). Powers the on-page Instrument Index
+  // Report — identical data to the standalone /engineering/instrument/index page.
+  const [pidIndexResult, setPidIndexResult] = useState(null)
 
   // When a project is opened, hydrate the generator form with its defaults
   // and any previously generated snapshot.
@@ -609,10 +691,9 @@ export default function IOListPage() {
       toast.warn('Upload a P&ID PDF first.')
       return
     }
-    if (!activeProject) {
-      toast.warn('Open or create a project first.')
-      return
-    }
+    // NOTE: activeProject is optional here — matches runFromFile / runFromJson.
+    // Generation must never silently bail just because no project is open;
+    // the snapshot save below is wrapped in try/catch and skipped if absent.
 
     setBusy(true)
     setExtractStatus('Uploading P&ID…')
@@ -632,12 +713,13 @@ export default function IOListPage() {
       )
       fd.append('drawing_title',  pidMeta.drawing_title || '')
       fd.append('revision',        rev || PID_EXTRACT_CONFIG.defaultRevision)
-      fd.append('project_name',    activeProject.project_name || '')
-      fd.append('project_id',      activeProject.id || '')
-      fd.append('project_code',    activeProject.code || '')
-      fd.append('project_category', activeProject.category || '')
-      fd.append('project_client',  activeProject.client || '')
-      fd.append('project_unit',    activeProject.unit || '')
+      // Project context is optional — extractor accepts blanks.
+      fd.append('project_name',     activeProject?.project_name || '')
+      fd.append('project_id',       activeProject?.id || '')
+      fd.append('project_code',     activeProject?.code || '')
+      fd.append('project_category', activeProject?.category || '')
+      fd.append('project_client',   activeProject?.client || '')
+      fd.append('project_unit',     activeProject?.unit || '')
 
       setExtractStatus('AI scanning P&ID for all instrument tags…')
 
@@ -676,6 +758,9 @@ export default function IOListPage() {
       }
 
       const data        = await resp.json()
+      // Persist the full payload so the on-page Instrument Index Report can
+      // mirror the standalone Instrument Index page (table + summary + Excel).
+      setPidIndexResult(data || null)
       const instruments = (
         Array.isArray(data?.instruments) ? data.instruments
         : Array.isArray(data?.results?.instruments) ? data.results.instruments
@@ -698,14 +783,16 @@ export default function IOListPage() {
       setGenerated(rows)
       setSourceCount(instruments.length)
 
-      try {
-        const updated = attachIoListToProject(activeProject.id, {
-          rows,
-          source_count: instruments.length,
-          last_source_name: pidPdfFile.name,
-        })
-        setActiveProject(updated)
-      } catch (e) { console.warn('[IOList] snapshot save failed:', e) }
+      if (activeProject) {
+        try {
+          const updated = attachIoListToProject(activeProject.id, {
+            rows,
+            source_count: instruments.length,
+            last_source_name: pidPdfFile.name,
+          })
+          setActiveProject(updated)
+        } catch (e) { console.warn('[IOList] snapshot save failed:', e) }
+      }
 
       toast.success(`Generated ${rows.length} IO row(s) from ${instruments.length} extracted instrument(s).`)
       setExtractStatus('')
@@ -730,13 +817,26 @@ export default function IOListPage() {
     setLegendPdfFile(null)
     setPidMeta(Object.fromEntries(PID_EXTRACT_CONFIG.metaFields.map((f) => [f.key, ''])))
     setExtractStatus('')
+    setPidIndexResult(null)
   }
 
-  const canGenerate = (
-    tab === 'file' ? !!file
-    : tab === 'pid' ? !!pidPdfFile
-    : !!rawJson.trim()
+  // Resolve which generator path to use based on the inputs the user filled in.
+  // Priority: explicit workbook > pasted JSON > P&ID PDF extraction.
+  // Soft-coded so adding a new source means appending one entry below.
+  const resolvedSource = (
+    file               ? 'file'
+    : rawJson.trim()   ? 'json'
+    : pidPdfFile       ? 'pid'
+    :                    null
   )
+  const canGenerate = resolvedSource !== null
+  // Per-stage completion flags drive the stepper visual & Next button enablement.
+  // Stage 1 = Instrument Index source (P&ID PDF), Stage 2 = IO List workbook/JSON.
+  const stageComplete = {
+    1: !!pidPdfFile,
+    2: !!file || !!rawJson.trim(),
+    3: false,
+  }
 
   return (
     <div className={LAYOUT_CONFIG.wrapper}>
@@ -842,33 +942,164 @@ export default function IOListPage() {
       ) : (
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="rounded-2xl bg-white border border-gray-200 shadow-lg overflow-hidden">
-          {/* card header */}
+          {/* card header — current stage title */}
           <div className={`px-6 py-5 bg-gradient-to-r ${PAGE_CONFIG.brandGradient} text-white flex items-center gap-4`}>
             <div className="p-3 rounded-xl bg-white/15 backdrop-blur">
               <CircleStackIcon className="h-6 w-6" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-bold">Step 1 — Provide the instrument register</h2>
+              <h2 className="text-lg font-bold">
+                {WIZARD_STAGES.find((s) => s.id === stage)?.title}
+              </h2>
               <p className="text-xs text-purple-100 mt-0.5">
-                Choose how you want to feed the engine. All processing happens locally in your browser.
+                {WIZARD_STAGES.find((s) => s.id === stage)?.subtitle}
               </p>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur text-xs font-semibold">
+              Step {stage} of {WIZARD_STAGES.length}
             </div>
           </div>
 
-          {/* tabs */}
-          <div className="px-6 pt-5">
-            <div className="inline-flex p-1 rounded-xl bg-gray-100 border border-gray-200">
-              {SOURCE_TABS.map(({ id, label, icon: Icon }) => {
-                const active = tab === id
+          {/* stepper — soft-coded from WIZARD_STAGES */}
+          <div className="px-6 pt-5 pb-2">
+            <ol className="flex items-center gap-2 sm:gap-4">
+              {WIZARD_STAGES.map(({ id, label, icon: StageIcon }, idx) => {
+                const isActive    = stage === id
+                const isComplete  = stageComplete[id] && stage > id
+                const isReachable = id <= stage || stageComplete[id - 1] || id === 2
+                return (
+                  <li key={id} className="flex-1 flex items-center gap-2 min-w-0">
+                    <button
+                      type="button"
+                      disabled={!isReachable}
+                      onClick={() => isReachable && setStage(id)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all w-full min-w-0 ${
+                        isActive
+                          ? `bg-gradient-to-r ${PAGE_CONFIG.brandGradient} text-white shadow-sm`
+                          : isComplete
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      <span className={`flex items-center justify-center h-6 w-6 rounded-full text-[11px] font-bold flex-shrink-0 ${
+                        isActive ? 'bg-white/20' : isComplete ? 'bg-emerald-100' : 'bg-white border border-gray-300'
+                      }`}>
+                        {isComplete ? <CheckBadgeIcon className="h-3.5 w-3.5" /> : id}
+                      </span>
+                      <StageIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </button>
+                    {idx < WIZARD_STAGES.length - 1 && (
+                      <span className="hidden sm:block h-px flex-1 bg-gray-200" aria-hidden />
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+
+          {/* ─── Stage 1: Instrument Index — P&ID + Legend PDFs ─────── */}
+          {stage === 1 && (
+          <div className="px-6 pt-4 pb-6">
+            <div className="rounded-xl border-2 border-dashed border-fuchsia-200 bg-fuchsia-50/40 p-6">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-white shadow-sm border border-fuchsia-200">
+                  <CpuChipIcon className="h-5 w-5 text-fuchsia-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-800">
+                    Upload Instrument Index source documents (P&amp;ID)
+                  </div>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Drop the P&amp;ID PDF (and optional Legend PDF). We run the same AI-vision extractor used by{' '}
+                    <Link to={PAGE_CONFIG.instrumentIndexLink} className="font-semibold text-fuchsia-700 hover:underline">
+                      Instrument Index
+                    </Link>{' '}
+                    and pipe the result straight into the IO List.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-[11px] font-semibold text-gray-700 mb-1">P&amp;ID PDF (required)</span>
+                  <input
+                    type="file"
+                    accept={PID_EXTRACT_CONFIG.acceptedPidExt}
+                    onChange={(e) => { setPidPdfFile(e.target.files?.[0] || null); setGenerated([]); setSourceCount(0); }}
+                    className="w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-fuchsia-600 file:text-white hover:file:bg-fuchsia-700 cursor-pointer"
+                  />
+                  {pidPdfFile && (
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-fuchsia-200 text-[11px] text-gray-700">
+                      <CheckBadgeIcon className="h-3.5 w-3.5 text-emerald-600" />
+                      <span className="font-mono truncate max-w-[200px]">{pidPdfFile.name}</span>
+                      <span className="text-gray-500">({Math.round(pidPdfFile.size / 1024)} KB)</span>
+                    </div>
+                  )}
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-semibold text-gray-700 mb-1">Legend PDF (optional)</span>
+                  <input
+                    type="file"
+                    accept={PID_EXTRACT_CONFIG.acceptedLegendExt}
+                    onChange={(e) => setLegendPdfFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-fuchsia-100 file:text-fuchsia-800 hover:file:bg-fuchsia-200 cursor-pointer"
+                  />
+                  {legendPdfFile && (
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-fuchsia-200 text-[11px] text-gray-700">
+                      <CheckBadgeIcon className="h-3.5 w-3.5 text-emerald-600" />
+                      <span className="font-mono truncate max-w-[200px]">{legendPdfFile.name}</span>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {PID_EXTRACT_CONFIG.metaFields.map((f) => (
+                  <label key={f.key} className="block">
+                    <span className="block text-[11px] font-semibold text-gray-700 mb-1">{f.label}</span>
+                    <input
+                      type="text"
+                      value={pidMeta[f.key] || ''}
+                      onChange={(e) => setPidMeta((m) => ({ ...m, [f.key]: e.target.value }))}
+                      placeholder={f.placeholder}
+                      className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              {extractStatus && (
+                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-fuchsia-200 text-xs text-gray-700">
+                  <ArrowPathIcon className="h-3.5 w-3.5 text-fuchsia-600 animate-spin" />
+                  {extractStatus}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 text-[11px] text-gray-500">
+              No P&amp;ID handy? Skip ahead to{' '}
+              <button type="button" onClick={() => setStage(2)} className="font-semibold text-purple-700 hover:underline">
+                Stage 2
+              </button>{' '}
+              and feed the engine with an existing Instrument Index workbook.
+            </div>
+          </div>
+          )}
+
+          {/* ─── Stage 2: IO List — Instrument Index workbook / JSON ── */}
+          {stage === 2 && (
+          <div className="px-6 pt-4 pb-6">
+            <div className="inline-flex p-1 rounded-xl bg-gray-100 border border-gray-200 mb-4">
+              {IOLIST_SOURCE_MODES.map(({ id, label, icon: Icon }) => {
+                const active = iolistMode === id
                 return (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setTab(id)}
+                    onClick={() => setIolistMode(id)}
                     className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      active
-                        ? 'bg-white text-purple-700 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
+                      active ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -877,11 +1108,8 @@ export default function IOListPage() {
                 )
               })}
             </div>
-          </div>
 
-          {/* tab body */}
-          <div className="px-6 pt-4 pb-6">
-            {tab === 'file' ? (
+            {iolistMode === 'file' ? (
               <div className="rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/40 p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   <div className="p-3 rounded-xl bg-white shadow-sm border border-purple-200">
@@ -909,83 +1137,6 @@ export default function IOListPage() {
                   </div>
                 )}
               </div>
-            ) : tab === 'pid' ? (
-              <div className="rounded-xl border-2 border-dashed border-fuchsia-200 bg-fuchsia-50/40 p-6">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-white shadow-sm border border-fuchsia-200">
-                    <CpuChipIcon className="h-5 w-5 text-fuchsia-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-gray-800">
-                      Upload the same source files as Instrument Index
-                    </div>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      Skip the detour — drop the P&amp;ID PDF (and optional Legend PDF) here.
-                      We run the same AI-vision extractor used by{' '}
-                      <Link to={PAGE_CONFIG.instrumentIndexLink} className="font-semibold text-fuchsia-700 hover:underline">
-                        Instrument Index
-                      </Link>{' '}
-                      and pipe the result straight into the IO List.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="block text-[11px] font-semibold text-gray-700 mb-1">P&amp;ID PDF (required)</span>
-                    <input
-                      type="file"
-                      accept={PID_EXTRACT_CONFIG.acceptedPidExt}
-                      onChange={(e) => { setPidPdfFile(e.target.files?.[0] || null); setGenerated([]); setSourceCount(0); }}
-                      className="w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-fuchsia-600 file:text-white hover:file:bg-fuchsia-700 cursor-pointer"
-                    />
-                    {pidPdfFile && (
-                      <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-fuchsia-200 text-[11px] text-gray-700">
-                        <CheckBadgeIcon className="h-3.5 w-3.5 text-emerald-600" />
-                        <span className="font-mono truncate max-w-[200px]">{pidPdfFile.name}</span>
-                        <span className="text-gray-500">({Math.round(pidPdfFile.size / 1024)} KB)</span>
-                      </div>
-                    )}
-                  </label>
-                  <label className="block">
-                    <span className="block text-[11px] font-semibold text-gray-700 mb-1">Legend PDF (optional)</span>
-                    <input
-                      type="file"
-                      accept={PID_EXTRACT_CONFIG.acceptedLegendExt}
-                      onChange={(e) => setLegendPdfFile(e.target.files?.[0] || null)}
-                      className="w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-fuchsia-100 file:text-fuchsia-800 hover:file:bg-fuchsia-200 cursor-pointer"
-                    />
-                    {legendPdfFile && (
-                      <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-fuchsia-200 text-[11px] text-gray-700">
-                        <CheckBadgeIcon className="h-3.5 w-3.5 text-emerald-600" />
-                        <span className="font-mono truncate max-w-[200px]">{legendPdfFile.name}</span>
-                      </div>
-                    )}
-                  </label>
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {PID_EXTRACT_CONFIG.metaFields.map((f) => (
-                    <label key={f.key} className="block">
-                      <span className="block text-[11px] font-semibold text-gray-700 mb-1">{f.label}</span>
-                      <input
-                        type="text"
-                        value={pidMeta[f.key] || ''}
-                        onChange={(e) => setPidMeta((m) => ({ ...m, [f.key]: e.target.value }))}
-                        placeholder={f.placeholder}
-                        className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
-                      />
-                    </label>
-                  ))}
-                </div>
-
-                {extractStatus && (
-                  <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-fuchsia-200 text-xs text-gray-700">
-                    <ArrowPathIcon className="h-3.5 w-3.5 text-fuchsia-600 animate-spin" />
-                    {extractStatus}
-                  </div>
-                )}
-              </div>
             ) : (
               <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/40 p-6">
                 <div className="flex items-center gap-3 mb-3">
@@ -1008,16 +1159,19 @@ export default function IOListPage() {
                 />
               </div>
             )}
-          </div>
 
-          {/* Step 2 — options */}
-          <div className="px-6 pb-2 pt-2 border-t border-gray-100">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`p-2 rounded-lg bg-gradient-to-br ${PAGE_CONFIG.brandGradient} text-white`}>
-                <SparklesIcon className="h-4 w-4" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-800">Step 2 — Tune the generator</h3>
+            <div className="mt-3 text-[11px] text-gray-500">
+              Already extracted the register in Stage 1? You can skip this and go straight to{' '}
+              <button type="button" onClick={() => setStage(3)} className="font-semibold text-indigo-700 hover:underline">
+                Stage 3
+              </button>.
             </div>
+          </div>
+          )}
+
+          {/* ─── Stage 3: Tune the generator ───────────────────────── */}
+          {stage === 3 && (
+          <div className="px-6 pt-4 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <label className="text-sm">
                 <span className="block text-xs font-semibold text-gray-700 mb-1">P&amp;ID No. (fallback)</span>
@@ -1052,35 +1206,96 @@ export default function IOListPage() {
                 </div>
               </label>
             </div>
-          </div>
 
-          {/* Step 3 — actions */}
-          <div className="px-6 pb-6 pt-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
-              <div className={`p-2 rounded-lg bg-gradient-to-br ${PAGE_CONFIG.brandGradient} text-white inline-flex`}>
-                <BoltIcon className="h-4 w-4" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-800">Step 3 — Generate &amp; download</h3>
+            {/* Source summary so the user knows which path will run */}
+            <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-700">
+              <span className="font-semibold">Source detected:</span>{' '}
+              {resolvedSource === 'file' ? (
+                <>Excel/CSV workbook — <span className="font-mono">{file?.name}</span></>
+              ) : resolvedSource === 'json' ? (
+                <>Pasted JSON ({rawJson.trim().length} chars)</>
+              ) : resolvedSource === 'pid' ? (
+                <>P&amp;ID PDF — <span className="font-mono">{pidPdfFile?.name}</span> (AI extract)</>
+              ) : (
+                <span className="text-amber-700">
+                  No source provided yet. Go back to Stage 1 or Stage 2 to add one.
+                </span>
+              )}
             </div>
+          </div>
+          )}
+
+          {/* ─── Wizard navigation footer ──────────────────────────── */}
+          <div className="px-6 pb-6 pt-2 border-t border-gray-100">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={!canGenerate || busy}
-                onClick={tab === 'file' ? runFromFile : tab === 'pid' ? runFromPid : runFromJson}
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r ${PAGE_CONFIG.brandGradient} hover:shadow-lg hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0`}
+                disabled={stage === 1}
+                onClick={() => setStage((s) => Math.max(1, s - 1))}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {busy ? (
-                  <>
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    Processing…
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="h-4 w-4" />
-                    Generate IO List
-                  </>
-                )}
+                <ArrowLeftIcon className="h-4 w-4" />
+                Back
               </button>
+
+              {stage < WIZARD_STAGES.length ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setStage((s) => Math.min(WIZARD_STAGES.length, s + 1))}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r ${PAGE_CONFIG.brandGradient} hover:shadow-lg hover:-translate-y-px transition-all`}
+                  >
+                    Next: {WIZARD_STAGES[stage]?.label}
+                    <ArrowUpTrayIcon className="h-4 w-4 rotate-90" />
+                  </button>
+                  {/* Shortcut — fire generation directly from any stage once a source is ready */}
+                  {canGenerate && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={
+                        resolvedSource === 'file' ? runFromFile
+                        : resolvedSource === 'pid' ? runFromPid
+                        : resolvedSource === 'json' ? runFromJson
+                        : undefined
+                      }
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Skip ahead and generate using the source you've already provided"
+                    >
+                      {busy ? (
+                        <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Processing…</>
+                      ) : (
+                        <><SparklesIcon className="h-4 w-4" /> Generate now</>
+                      )}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!canGenerate || busy}
+                  onClick={
+                    resolvedSource === 'file' ? runFromFile
+                    : resolvedSource === 'pid' ? runFromPid
+                    : resolvedSource === 'json' ? runFromJson
+                    : undefined
+                  }
+                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r ${PAGE_CONFIG.brandGradient} hover:shadow-lg hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0`}
+                >
+                  {busy ? (
+                    <>
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      Processing…
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="h-4 w-4" />
+                      Generate IO List
+                    </>
+                  )}
+                </button>
+              )}
+
               <button
                 type="button"
                 disabled={!generated.length}
@@ -1092,7 +1307,7 @@ export default function IOListPage() {
               </button>
               <button
                 type="button"
-                onClick={resetAll}
+                onClick={() => { resetAll(); setStage(1) }}
                 className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <ArrowPathIcon className="h-4 w-4" />
@@ -1106,6 +1321,119 @@ export default function IOListPage() {
               )}
             </div>
           </div>
+
+
+          {/* ─── Instrument Index Report (mirrors /engineering/instrument/index) ─── */}
+          {pidIndexResult && Array.isArray(pidIndexResult.instruments) && pidIndexResult.instruments.length > 0 && (
+            <div className="px-6 pb-6">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <CpuChipIcon className="h-5 w-5 text-violet-600" />
+                <h3 className="text-sm font-bold text-gray-800">
+                  {INSTRUMENT_INDEX_REPORT_CONFIG.title}
+                </h3>
+                <span className="text-[11px] text-gray-500">— {INSTRUMENT_INDEX_REPORT_CONFIG.subtitle}</span>
+                <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+                  <CheckBadgeIcon className="h-3.5 w-3.5" />
+                  {pidIndexResult.total ?? pidIndexResult.instruments.length} instruments
+                </span>
+                {pidIndexResult.excel_url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const token   = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN)
+                      const base    = API_BASE.replace(/\/api\/v1\/?$/, '')
+                      let fullUrl   = `${base}${pidIndexResult.excel_url}`
+                      if (token) fullUrl += (fullUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`
+                      const safeName = (pidIndexResult?.drawing_info?.drawing_number || pidNo || 'export')
+                        .replace(/[^a-zA-Z0-9_-]/g, '_')
+                      const a = document.createElement('a')
+                      a.href = fullUrl
+                      a.download = `instrument_index_${safeName}.xlsx`
+                      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-md transition-all"
+                  >
+                    <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                    {INSTRUMENT_INDEX_REPORT_CONFIG.downloadLabel}
+                  </button>
+                )}
+              </div>
+
+              {/* Category summary chips */}
+              {pidIndexResult.category_summary && Object.keys(pidIndexResult.category_summary).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {Object.entries(pidIndexResult.category_summary).sort().map(([cat, count]) => {
+                    const cls = INSTRUMENT_INDEX_REPORT_CONFIG.categoryColors[cat]
+                            || INSTRUMENT_INDEX_REPORT_CONFIG.categoryColors.default
+                    return (
+                      <span
+                        key={cat}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${cls}`}
+                      >
+                        {cat}
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/70 text-[10px] font-bold">{count}</span>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Instrument table */}
+              <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gradient-to-r from-violet-50 to-indigo-50 text-gray-700">
+                    <tr>
+                      {INSTRUMENT_INDEX_REPORT_CONFIG.columns.map((c) => (
+                        <th
+                          key={c.key}
+                          className={`px-2.5 py-2 text-left font-semibold whitespace-nowrap border-b border-violet-100 ${c.width || ''}`}
+                        >
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pidIndexResult.instruments
+                      .slice(0, INSTRUMENT_INDEX_REPORT_CONFIG.maxPreviewRows)
+                      .map((inst, i) => {
+                        const cat = inst.category || 'Unknown'
+                        const catCls = INSTRUMENT_INDEX_REPORT_CONFIG.categoryColors[cat]
+                                    || INSTRUMENT_INDEX_REPORT_CONFIG.categoryColors.default
+                        return (
+                          <tr key={`${inst.tag_number || 'tag'}-${i}`} className="hover:bg-violet-50/40 transition-colors">
+                            {INSTRUMENT_INDEX_REPORT_CONFIG.columns.map((c) => {
+                              const raw = c.key === 'index_no'
+                                ? (inst.index_no ?? i + 1)
+                                : (inst[c.key] ?? '')
+                              if (c.key === 'category') {
+                                return (
+                                  <td key={c.key} className="px-2.5 py-1.5 whitespace-nowrap">
+                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${catCls}`}>
+                                      {String(raw || '—')}
+                                    </span>
+                                  </td>
+                                )
+                              }
+                              return (
+                                <td key={c.key} className="px-2.5 py-1.5 whitespace-nowrap text-gray-700">
+                                  {String(raw ?? '')}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+              {pidIndexResult.instruments.length > INSTRUMENT_INDEX_REPORT_CONFIG.maxPreviewRows && (
+                <p className="mt-2 text-[11px] text-gray-500 italic">
+                  Showing first {INSTRUMENT_INDEX_REPORT_CONFIG.maxPreviewRows} of {pidIndexResult.instruments.length} rows — full set is in the Excel download.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* preview */}
           {generated.length > 0 && (
