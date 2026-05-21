@@ -119,6 +119,7 @@ import MechanicalDatasheetPage from './pages/Engineering/Mechanical/MechanicalDa
 import CivilDatasheetPage from './pages/Engineering/Civil/CivilDatasheetPage'
 // Digitization Components
 import SpecCustomizationPage from './pages/Engineering/Digitization/SpecCustomizationPage'
+import SpecProjectsPage from './pages/Engineering/Digitization/SpecProjectsPage'
 import DigitizationDatasheetPage from './pages/Engineering/Digitization/DigitizationDatasheetPage'
 import NonTeffMetadataPage from './pages/Engineering/Digitization/NonTeffMetadataPage'
 import NonTeffProjectsPage from './pages/Engineering/Digitization/NonTeffProjectsPage'
@@ -982,6 +983,14 @@ function App() {
           element={
             <ProtectedRoute>
               <SpecCustomizationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/digitization/spec-customization/projects"
+          element={
+            <ProtectedRoute>
+              <SpecProjectsPage />
             </ProtectedRoute>
           }
         />

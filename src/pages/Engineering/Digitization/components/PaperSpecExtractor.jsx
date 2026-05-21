@@ -154,6 +154,11 @@ const CLASS_SUMMARY_CONFIG = {
     { min: 0.0,  className: 'bg-rose-500',    stroke: 'stroke-rose-500',    label: 'Low',     text: 'text-rose-700',    bg: 'bg-rose-50'    },
   ],
   emptyFilterMessage: 'No Piping Classes match your filters.',
+  // Shown when a job completes but 0 piping classes were detected.
+  emptyJobTitle:   'No Piping Classes detected',
+  emptyJobMessage: 'The AI did not find any recognisable Piping Material Specification headers in this document. '
+                 + 'You can still browse the SmartPlant 3D workbook template using the Workbook Canvas tab above, '
+                 + 'or try uploading a higher-quality scan / digital-text PDF with clearly labelled Piping Spec sections.',
 };
 
 // ─── Soft-coded component-type colour map (used by detail panel chips) ───────
@@ -626,7 +631,7 @@ const ProcessingConsole = ({ job, partialCount, tipIndex }) => {
   );
 };
 
-const PaperSpecExtractor = () => {
+const PaperSpecExtractor = ({ projectId = null } = {}) => {
   const [file, setFile]                     = useState(null);
   const [uploading, setUploading]           = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -799,6 +804,7 @@ const PaperSpecExtractor = () => {
 
       const resp = await specCustomizationAPI.upload({
         file,
+        projectId,
         onUploadProgress: (evt) => {
           if (!evt.total) return;
           const pct = Math.round((evt.loaded / evt.total) * 100);
@@ -1219,8 +1225,8 @@ const PaperSpecExtractor = () => {
           </div>
         )}
 
-        {/* ── Extracted classes ───────────────────────────────────────── */}
-        {classes.length > 0 && (
+        {/* ── Extracted classes / Workbook Canvas ────────────────────── */}
+        {job?.status === 'completed' && (
           <div className="space-y-4">
             {/* ── View tabs (Piping Classes ⇄ Workbook Canvas) ────── */}
             <div className="flex flex-wrap items-center gap-2">
@@ -1250,6 +1256,18 @@ const PaperSpecExtractor = () => {
 
             {activeView === 'canvas' ? (
               <WorkbookCanvas job={job} />
+            ) : classes.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/60 dark:bg-amber-900/10 dark:border-amber-700 px-6 py-10 text-center space-y-3">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/40 mb-1">
+                <ExclamationTriangleIcon className="w-6 h-6 text-amber-500" />
+              </div>
+              <p className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                {CLASS_SUMMARY_CONFIG.emptyJobTitle}
+              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-300 max-w-xl mx-auto leading-relaxed">
+                {CLASS_SUMMARY_CONFIG.emptyJobMessage}
+              </p>
+            </div>
             ) : (
             <>
             {/* ── 1. AI Insight Banner ──────────────────────────────── */}
@@ -1516,14 +1534,6 @@ const PaperSpecExtractor = () => {
             )}
             </>
             )}
-          </div>
-        )}
-
-        {job?.status === 'completed' && classes.length === 0 && (
-          <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 flex items-center gap-2">
-            <CheckCircleIcon className="w-5 h-5" />
-            Extraction completed but no Piping Classes were detected.
-            Try uploading a higher-quality scan or a digital-text PDF.
           </div>
         )}
       </div>
