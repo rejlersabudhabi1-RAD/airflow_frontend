@@ -1,5 +1,19 @@
-import React from 'react'
-import { BRANDING, PAGE_CONTENT, THEME, LOGIN_RESPONSIVE, ICON } from '../../config/login.config'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  BRANDING,
+  PAGE_CONTENT,
+  THEME,
+  LOGIN_RESPONSIVE,
+  ICON,
+  INTERACTIONS,
+  ROTATING_TAGLINES,
+  STATS_COUNTERS,
+  TRUST_BADGES,
+  WAVE_FOOTER,
+  FLOATING_KEYWORDS,
+  LIVE_PULSE,
+  LOGO_PULSE,
+} from '../../config/login.config'
 
 /**
  * LoginBranding Component
@@ -11,8 +25,126 @@ const LoginBranding = () => {
   const { features } = PAGE_CONTENT
   const { colors, gradients, animations } = THEME
 
+  // Mouse-aurora spotlight (soft-coded toggle)
+  const wrapperRef = useRef(null)
+  const [aurora, setAurora] = useState({ x: 50, y: 50 })
+  const handleMouseMove = (e) => {
+    if (!INTERACTIONS.mouseAurora.enabled || !wrapperRef.current) return
+    const rect = wrapperRef.current.getBoundingClientRect()
+    setAurora({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    })
+  }
+
+  // Typewriter rotating tagline
+  const [tlIndex, setTlIndex] = useState(0)
+  const [tlText, setTlText] = useState('')
+  useEffect(() => {
+    if (!ROTATING_TAGLINES.enabled || ROTATING_TAGLINES.items.length === 0) return
+    const word = ROTATING_TAGLINES.items[tlIndex]
+    let i = 0
+    setTlText('')
+    const typer = setInterval(() => {
+      i += 1
+      setTlText(word.slice(0, i))
+      if (i >= word.length) clearInterval(typer)
+    }, ROTATING_TAGLINES.typingSpeedMs)
+    const next = setTimeout(() => {
+      setTlIndex((idx) => (idx + 1) % ROTATING_TAGLINES.items.length)
+    }, ROTATING_TAGLINES.intervalMs)
+    return () => { clearInterval(typer); clearTimeout(next) }
+  }, [tlIndex])
+
+  // Count-up stats
+  const [counts, setCounts] = useState(() => STATS_COUNTERS.items.map(() => 0))
+  useEffect(() => {
+    if (!STATS_COUNTERS.enabled) return
+    const start = performance.now()
+    let raf
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / STATS_COUNTERS.durationMs)
+      const eased = 1 - Math.pow(1 - t, 3)
+      setCounts(STATS_COUNTERS.items.map((s) => s.value * eased))
+      if (t < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const formatCount = (n, item) => {
+    const num = Number(n).toFixed(item.decimals || 0)
+    const withCommas = (item.decimals ? num : Number(num).toLocaleString())
+    return `${withCommas}${item.suffix || ''}`
+  }
+
+  // Live "engineers online" pulse (cosmetic only — does NOT call any API)
+  const [liveCount, setLiveCount] = useState(
+    LIVE_PULSE.enabled ? LIVE_PULSE.baseCount : 0
+  )
+  useEffect(() => {
+    if (!LIVE_PULSE.enabled) return
+    const tick = () => {
+      const delta = Math.round((Math.random() - 0.5) * 2 * LIVE_PULSE.jitter)
+      setLiveCount(LIVE_PULSE.baseCount + delta)
+    }
+    const id = setInterval(tick, LIVE_PULSE.refreshMs)
+    return () => clearInterval(id)
+  }, [])
+
+  // Pre-compute floating keyword positions ONCE (so they don't reshuffle on rerender)
+  const floatingKeywords = React.useMemo(() => {
+    if (!FLOATING_KEYWORDS.enabled) return []
+    const [dMin, dMax] = FLOATING_KEYWORDS.durationRange
+    const [sMin, sMax] = FLOATING_KEYWORDS.sizeRange
+    return Array.from({ length: FLOATING_KEYWORDS.count }, (_, i) => ({
+      text: FLOATING_KEYWORDS.items[i % FLOATING_KEYWORDS.items.length],
+      left: Math.random() * 95,
+      delay: -Math.random() * dMax,
+      duration: dMin + Math.random() * (dMax - dMin),
+      size: sMin + Math.random() * (sMax - sMin),
+    }))
+  }, [])
+
   return (
-    <div className={`${LOGIN_RESPONSIVE.branding.wrapper} ${LOGIN_RESPONSIVE.branding.padding} flex-col relative overflow-hidden`} style={{ background: 'linear-gradient(135deg, #2B3A55 0%, #617AAD 50%, #73BDC8 100%)', maxHeight: '100vh' }}>
+    <div
+      ref={wrapperRef}
+      onMouseMove={handleMouseMove}
+      className={`${LOGIN_RESPONSIVE.branding.wrapper} ${LOGIN_RESPONSIVE.branding.padding} flex-col relative overflow-hidden`}
+      style={{ background: 'linear-gradient(135deg, #2B3A55 0%, #617AAD 50%, #73BDC8 100%)', maxHeight: '100vh' }}
+    >
+      {/* Mouse-tracking aurora spotlight */}
+      {INTERACTIONS.mouseAurora.enabled && (
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+          style={{
+            background: `radial-gradient(${INTERACTIONS.mouseAurora.radius}px circle at ${aurora.x}% ${aurora.y}%, rgba(127, 202, 181, ${INTERACTIONS.mouseAurora.opacity}), transparent 60%)`,
+            mixBlendMode: 'screen',
+          }}
+        />
+      )}
+
+      {/* Floating engineering keyword particles (soft-coded) */}
+      {FLOATING_KEYWORDS.enabled && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
+          {floatingKeywords.map((p, i) => (
+            <span
+              key={i}
+              className="absolute font-mono font-bold tracking-wider text-white whitespace-nowrap"
+              style={{
+                left: `${p.left}%`,
+                bottom: '-10%',
+                fontSize: `${p.size}px`,
+                opacity: FLOATING_KEYWORDS.opacity,
+                animation: `login-float-up ${p.duration}s linear ${p.delay}s infinite`,
+                textShadow: '0 0 12px rgba(127, 202, 181, 0.4)',
+              }}
+            >
+              {p.text}
+            </span>
+          ))}
+        </div>
+      )}
       {/* Industrial Grid Pattern Overlay */}
       <div className="absolute inset-0 opacity-8" style={{
         backgroundImage: `linear-gradient(rgba(211, 218, 234, 0.25) 1px, transparent 1px),
@@ -78,6 +210,23 @@ const LoginBranding = () => {
               </div>
             </div>
           </div>
+          {/* Rotating typewriter tagline (soft-coded) */}
+          {ROTATING_TAGLINES.enabled && (
+            <div className="ml-4 mt-1 text-sm sm:text-base font-medium text-white/85 flex items-center min-h-[1.5rem]">
+              <span className="text-white/60 mr-2">{ROTATING_TAGLINES.prefix}</span>
+              <span
+                className="font-bold"
+                style={{
+                  background: 'linear-gradient(to right, #7FCAB5, #73BDC8)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                {tlText}
+              </span>
+              <span className="ml-0.5 inline-block w-[2px] h-4 bg-white/80 animate-pulse" />
+            </div>
+          )}
         </div>
         
         {/* Technical Separator with Animation */}
@@ -104,21 +253,34 @@ const LoginBranding = () => {
             {company.description}
           </p>
 
-          {/* Technical Metrics */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
-            <div className="text-center">
-              <div className="text-xl font-black" style={{ color: '#73BDC8' }}>99.9%</div>
-              <div className="text-xs text-white/70 font-medium">Uptime</div>
+          {/* Technical Metrics — Animated Count-Up (soft-coded) */}
+          {STATS_COUNTERS.enabled ? (
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
+              {STATS_COUNTERS.items.map((item, i) => (
+                <div key={item.label} className={`text-center ${i === 1 ? 'border-x border-white/10' : ''}`}>
+                  <div className="text-xl font-black tabular-nums" style={{ color: item.color }}>
+                    {formatCount(counts[i] || 0, item)}
+                  </div>
+                  <div className="text-xs text-white/70 font-medium">{item.label}</div>
+                </div>
+              ))}
             </div>
-            <div className="text-center border-x border-white/10">
-              <div className="text-xl font-black" style={{ color: '#7FCAB5' }}>24/7</div>
-              <div className="text-xs text-white/70 font-medium">Support</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10">
+              <div className="text-center">
+                <div className="text-xl font-black" style={{ color: '#73BDC8' }}>99.9%</div>
+                <div className="text-xs text-white/70 font-medium">Uptime</div>
+              </div>
+              <div className="text-center border-x border-white/10">
+                <div className="text-xl font-black" style={{ color: '#7FCAB5' }}>24/7</div>
+                <div className="text-xs text-white/70 font-medium">Support</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-black" style={{ color: '#F6B2BB' }}>AI</div>
+                <div className="text-xs text-white/70 font-medium">Powered</div>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-xl font-black" style={{ color: '#F6B2BB' }}>AI</div>
-              <div className="text-xs text-white/70 font-medium">Powered</div>
-            </div>
-          </div>
+          )}
         </div>
         
         {/* Location Badge - Enhanced */}
@@ -162,16 +324,62 @@ const LoginBranding = () => {
         ))}
       </div>
 
+      {/* Trust / Compliance Badges (soft-coded) */}
+      {TRUST_BADGES.enabled && (
+        <div className="relative z-10 mt-3 flex flex-wrap gap-1.5">
+          {TRUST_BADGES.items.map((b) => (
+            <span
+              key={b.code}
+              className="inline-flex items-center text-[10px] font-bold tracking-wide text-white/85 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-2.5 py-1 hover:bg-white/15 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: '#7FCAB5' }} />
+              {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Bottom Technical Footer */}
       <div className="relative z-10 mt-4 pt-4 border-t border-white/10">
         <div className="flex items-center justify-between text-xs text-white/60">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#7FCAB5' }}></div>
             <span>System Online</span>
+            {LIVE_PULSE.enabled && (
+              <span className="ml-2 inline-flex items-center text-[10px] font-bold bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 rounded-full px-2 py-0.5">
+                <span className="relative flex h-1.5 w-1.5 mr-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-300" />
+                </span>
+                <span className="tabular-nums">{liveCount}</span>
+                <span className="ml-1 opacity-80">{LIVE_PULSE.label}</span>
+              </span>
+            )}
           </div>
           <div>Secure Connection</div>
         </div>
       </div>
+
+      {/* Animated Wave Footer (soft-coded) */}
+      {WAVE_FOOTER.enabled && (
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-0 opacity-40">
+          <svg viewBox="0 0 1440 120" className="w-full h-16" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="loginWaveGrad" x1="0" y1="0" x2="1" y2="0">
+                {WAVE_FOOTER.colors.map((c, i) => (
+                  <stop key={i} offset={`${(i / (WAVE_FOOTER.colors.length - 1)) * 100}%`} stopColor={c} />
+                ))}
+              </linearGradient>
+            </defs>
+            <path fill="url(#loginWaveGrad)" fillOpacity="0.55">
+              <animate attributeName="d" dur="9s" repeatCount="indefinite"
+                values="M0,60 C240,100 480,20 720,60 C960,100 1200,20 1440,60 L1440,120 L0,120 Z;
+                        M0,60 C240,20 480,100 720,60 C960,20 1200,100 1440,60 L1440,120 L0,120 Z;
+                        M0,60 C240,100 480,20 720,60 C960,100 1200,20 1440,60 L1440,120 L0,120 Z" />
+            </path>
+          </svg>
+        </div>
+      )}
       
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -187,6 +395,16 @@ const LoginBranding = () => {
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: linear-gradient(to bottom, #7FCAB5, #73BDC8);
+        }
+        @keyframes login-float-up {
+          0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+          10%  { opacity: ${FLOATING_KEYWORDS.opacity}; }
+          90%  { opacity: ${FLOATING_KEYWORDS.opacity}; }
+          100% { transform: translate3d(20px, -120vh, 0) rotate(2deg); opacity: 0; }
+        }
+        @keyframes login-logo-pulse {
+          0%   { transform: scale(1);   opacity: 0.7; }
+          100% { transform: scale(2.4); opacity: 0;   }
         }
       `}</style>
     </div>

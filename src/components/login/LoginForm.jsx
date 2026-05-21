@@ -1,7 +1,17 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
 import { Link } from 'react-router-dom'
-import { BRANDING, PAGE_CONTENT, FORM_CONFIG, THEME, LOGIN_RESPONSIVE, ICON } from '../../config/login.config'
+import {
+  BRANDING,
+  PAGE_CONTENT,
+  FORM_CONFIG,
+  THEME,
+  LOGIN_RESPONSIVE,
+  ICON,
+  INTERACTIONS,
+  BUTTON_SHIMMER,
+  FORM_TILT,
+} from '../../config/login.config'
 
 /**
  * LoginForm Component
@@ -14,6 +24,29 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
   const { fields, buttons, options } = FORM_CONFIG
   const { colors, gradients } = THEME
 
+  // Soft-coded UX state — purely cosmetic, never affects auth payload
+  const [showPassword, setShowPassword] = useState(false)
+  const [capsLockOn, setCapsLockOn] = useState(false)
+  const handleCapsLock = (e) => {
+    if (!INTERACTIONS.capsLockWarning.enabled) return
+    if (typeof e.getModifierState === 'function') setCapsLockOn(e.getModifierState('CapsLock'))
+  }
+
+  // 3D card tilt — pure CSS transform tracked by mouse position
+  const cardRef = useRef(null)
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 })
+  const handleTiltMove = (e) => {
+    if (!FORM_TILT.enabled || !cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const px = (e.clientX - rect.left) / rect.width  // 0..1
+    const py = (e.clientY - rect.top) / rect.height
+    setTilt({
+      ry: (px - 0.5) * 2 * FORM_TILT.maxDeg,   // left/right
+      rx: -(py - 0.5) * 2 * FORM_TILT.maxDeg,  // up/down
+    })
+  }
+  const resetTilt = () => setTilt({ rx: 0, ry: 0 })
+
   return (
     <div className={`${LOGIN_RESPONSIVE.form.wrapper} relative overflow-y-auto`} style={{ maxHeight: '100vh' }}>
       {/* Subtle Technical Background */}
@@ -22,7 +55,19 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-amber-500 to-orange-500 rounded-full blur-3xl"></div>
       </div>
 
-      <div className={`${LOGIN_RESPONSIVE.form.maxWidth} w-full ${LOGIN_RESPONSIVE.form.container} relative z-10`}>
+      <div
+        ref={cardRef}
+        onMouseMove={handleTiltMove}
+        onMouseLeave={resetTilt}
+        className={`${LOGIN_RESPONSIVE.form.maxWidth} w-full ${LOGIN_RESPONSIVE.form.container} relative z-10`}
+        style={FORM_TILT.enabled ? {
+          perspective: `${FORM_TILT.perspective}px`,
+          transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
+          transformStyle: 'preserve-3d',
+          transition: `transform ${FORM_TILT.resetMs}ms ease-out`,
+          willChange: 'transform',
+        } : undefined}
+      >
         {/* Mobile Logo - Enhanced */}
         <div className="lg:hidden text-center mb-4">
           <div className="inline-flex items-center space-x-2 mb-2">
@@ -70,7 +115,7 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
           {({ errors, touched }) => (
             <Form className="space-y-3">
               {/* Email Field - Enhanced Industrial Design - Compact */}
-              <div className="relative group">
+              <div className={`relative group ${INTERACTIONS.errorShake.enabled && errors.email && touched.email ? 'login-shake' : ''}`}>
                 <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center">
                   <span className="w-1 h-3.5 bg-gradient-to-b from-blue-600 to-cyan-600 rounded-full mr-2"></span>
                   {fields.email.label}
@@ -105,10 +150,18 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
               </div>
 
               {/* Password Field - Enhanced Industrial Design - Compact */}
-              <div className="relative group">
-                <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center">
-                  <span className="w-1 h-3.5 bg-gradient-to-b from-amber-600 to-orange-600 rounded-full mr-2"></span>
-                  {fields.password.label}
+              <div className={`relative group ${INTERACTIONS.errorShake.enabled && errors.password && touched.password ? 'login-shake' : ''}`}>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center">
+                    <span className="w-1 h-3.5 bg-gradient-to-b from-amber-600 to-orange-600 rounded-full mr-2"></span>
+                    {fields.password.label}
+                  </span>
+                  {INTERACTIONS.capsLockWarning.enabled && capsLockOn && (
+                    <span className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full animate-pulse">
+                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 01.78.375l6 7.5a1 1 0 01-.78 1.625H13v5a1 1 0 01-1 1H8a1 1 0 01-1-1v-5H4a1 1 0 01-.78-1.625l6-7.5A1 1 0 0110 2z"/></svg>
+                      {INTERACTIONS.capsLockWarning.message}
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
@@ -120,8 +173,10 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
                   </div>
                   <Field
                     name="password"
-                    type={fields.password.type}
-                    className={`w-full pl-16 pr-4 py-3 text-base border-2 rounded-xl 
+                    type={INTERACTIONS.passwordToggle.enabled && showPassword ? 'text' : fields.password.type}
+                    onKeyDown={handleCapsLock}
+                    onKeyUp={handleCapsLock}
+                    className={`w-full pl-16 pr-14 py-3 text-base border-2 rounded-xl 
                       ${errors.password && touched.password 
                         ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
                         : 'border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
@@ -131,6 +186,21 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
                       shadow-sm hover:shadow-md focus:shadow-lg`}
                     placeholder={fields.password.placeholder}
                   />
+                  {INTERACTIONS.passwordToggle.enabled && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      tabIndex={-1}
+                      aria-label={showPassword ? INTERACTIONS.passwordToggle.hideLabel : INTERACTIONS.passwordToggle.showLabel}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-blue-600 transition-colors z-10"
+                    >
+                      {showPassword ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.93 11.93 0 013.34-4.66M9.88 9.88a3 3 0 104.24 4.24M3 3l18 18" /></svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      )}
+                    </button>
+                  )}
                 </div>
                 <ErrorMessage
                   name="password"
@@ -176,6 +246,18 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
                                    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
                   backgroundSize: '20px 20px'
                 }}></div>
+
+                {/* Soft-coded shimmer sweep */}
+                {BUTTON_SHIMMER.enabled && !isLoading && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.45) 50%, transparent 70%)',
+                      backgroundSize: '200% 100%',
+                      animation: `login-shimmer ${BUTTON_SHIMMER.intervalMs}ms ease-in-out infinite`,
+                    }}
+                  />
+                )}
 
                 {/* Button Content */}
                 <div className="relative z-10 flex items-center justify-center space-x-2.5">
@@ -268,6 +350,21 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
           </div>
         </div>
       </div>
+      <style>{`
+        @keyframes login-shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+        .login-shake { animation: login-shake ${INTERACTIONS.errorShake.durationMs}ms ease-in-out; }
+        @keyframes login-shimmer {
+          0%   { background-position: 200% 0; }
+          60%  { background-position: -100% 0; }
+          100% { background-position: -100% 0; }
+        }
+      `}</style>
     </div>
   )
 }

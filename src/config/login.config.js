@@ -211,3 +211,110 @@ export const ICON = {
   md: 'w-6 h-6',
   lg: 'w-8 h-8',
 }
+
+// =====================================================================
+// SOFT-CODED INNOVATIVE UX ENHANCEMENTS
+// All toggles below are additive — disabling any of them returns the
+// page to its previous behaviour without code changes.
+// =====================================================================
+
+// Interaction Feature Flags
+export const INTERACTIONS = {
+  passwordToggle: { enabled: true, showLabel: 'Show', hideLabel: 'Hide' },
+  capsLockWarning: { enabled: true, message: 'Caps Lock is ON' },
+  mouseAurora: { enabled: true, radius: 320, opacity: 0.35 },
+  errorShake: { enabled: true, durationMs: 420 },
+  focusGlow: { enabled: true },
+  particleField: { enabled: true, count: 14 },
+}
+
+// Rotating Taglines (typewriter effect on branding panel)
+export const ROTATING_TAGLINES = {
+  enabled: true,
+  intervalMs: 3800,
+  typingSpeedMs: 38,
+  prefix: 'AI for',
+  items: [
+    'P&ID Verification',
+    'PFD Quality Checks',
+    'Equipment Datasheets',
+    'Line List Validation',
+    'Engineering Compliance',
+  ],
+}
+
+// Animated Count-Up Stats (replaces static metrics block when enabled)
+export const STATS_COUNTERS = {
+  enabled: true,
+  durationMs: 1600,
+  items: [
+    { label: 'Accuracy',    value: 99.7, suffix: '%', decimals: 1, color: '#73BDC8' },
+    { label: 'Drawings/yr', value: 12500, suffix: '+', decimals: 0, color: '#7FCAB5' },
+    { label: 'Hours Saved', value: 38000, suffix: '+', decimals: 0, color: '#F6B2BB' },
+  ],
+}
+
+// Trust / Compliance Badges (footer of branding panel)
+export const TRUST_BADGES = {
+  enabled: true,
+  items: [
+    { code: 'ISO',  label: 'ISO 27001' },
+    { code: 'GDPR', label: 'GDPR Ready' },
+    { code: 'SOC',  label: 'SOC 2 Type II' },
+    { code: 'SSL',  label: 'TLS 1.3' },
+  ],
+}
+
+// Animated wave footer on branding panel
+export const WAVE_FOOTER = {
+  enabled: true,
+  colors: ['#7FCAB5', '#73BDC8', '#617AAD'],
+}
+
+// Floating engineering keywords drifting across the branding panel
+export const FLOATING_KEYWORDS = {
+  enabled: true,
+  count: 14,
+  durationRange: [16, 32], // seconds, randomised per particle
+  sizeRange: [10, 16],     // px font-size, randomised per particle
+  opacity: 0.18,
+  items: [
+    'P&ID', 'PFD', 'ISO 27001', 'ASME', 'API 14C', 'HAZOP',
+    'SIL-3', 'SLD', 'NDE', 'PSV', 'ESD', 'ISA-5.1',
+    'PMS', 'IFC-2x3', 'COMPLIANT', 'AI-OCR', 'FEED', 'EPC',
+    'DCS', 'SCADA', 'GA', 'BFD', 'P-101', 'V-204',
+  ],
+}
+
+// Live "engineers online" pulse indicator (cosmetic, soft-coded)
+export const LIVE_PULSE = {
+  enabled: true,
+  baseCount: 247,
+  jitter: 18,                // ±jitter random variation
+  refreshMs: 4500,
+  label: 'engineers online',
+}
+
+// Animated pulse rings around the logo / company avatar
+export const LOGO_PULSE = {
+  enabled: true,
+  rings: 3,
+  durationMs: 2400,
+  color: 'rgba(127, 202, 181, 0.55)',
+}
+
+// Shimmer sweep on the primary submit button (CSS-driven)
+export const BUTTON_SHIMMER = {
+  enabled: true,
+  durationMs: 2800,
+  intervalMs: 6000, // sweep every N ms
+}
+
+// Subtle 3D tilt on the form card following cursor
+export const FORM_TILT = {
+  enabled: true,
+  maxDeg: 4,        // max rotation
+  perspective: 1200,
+  resetMs: 320,
+}
+
