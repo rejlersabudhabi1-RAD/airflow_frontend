@@ -111,6 +111,7 @@ import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartEl
 import InstrumentDatasheetPage from './pages/Engineering/Instrument/InstrumentDatasheetPage'
 import InstrumentIndex from './pages/Engineering/Instrument/InstrumentIndex'
 import IOListPage from './pages/Engineering/Instrument/IOListPage'
+import IOListWorkflowPage from './pages/Engineering/Instrument/IOListWorkflow/IOListWorkflowPage'
 import CableBlockDiagramPage from './pages/Engineering/Instrument/CableBlockDiagramPage'
 import CableSchedulePage from './pages/Engineering/Instrument/CableSchedulePage'
 // Mechanical Datasheet Components
@@ -934,6 +935,14 @@ function App() {
         />
         <Route
           path="engineering/instrument/datasheet/io-list"
+          element={
+            <ModuleProtectedRoute moduleCode="instrument_datasheet">
+              <IOListWorkflowPage />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="engineering/instrument/datasheet/io-list/generator"
           element={
             <ModuleProtectedRoute moduleCode="instrument_datasheet">
               <IOListPage />
