@@ -62,6 +62,12 @@ export const VALVE_COLUMNS = [
     aliases: ['type', 'valve type'] },
   { key: 'pms_class',   label: 'PIPING MATERIAL CLASS',  width: 22, type: 'text',
     aliases: ['piping material class', 'pms', 'pms class', 'material class', 'class', 'pm class'] },
+  // Short piping spec code (e.g. A1A, B1B). Distinct from `pms_class`
+  // (the long descriptive name). Soft-coded — UI / exporter / importer
+  // auto-pick up via VALVE_COLUMNS; no core logic change required.
+  { key: 'piping_class', label: 'PIPING CLASS',          width: 14, type: 'text',
+    aliases: ['piping class', 'pipe class', 'pipe spec', 'piping spec', 'spec', 'spec class',
+              'class code', 'pipe class code', 'piping class code'] },
   { key: 'rating',      label: 'RATING / FACING',        width: 18, type: 'text',
     aliases: ['rating / facing', 'rating', 'rating facing', 'pressure rating'] },
   { key: 'size_1',      label: 'SIZE 1 (NB)',            width: 12, type: 'select', options: SIZE_OPTIONS,
@@ -73,8 +79,18 @@ export const VALVE_COLUMNS = [
     aliases: ['size 2 (nb)', 'size 2', 'reduced size'] },
   { key: 'bore',        label: 'BORE',                   width:  8, type: 'select', options: BORE_OPTIONS,
     aliases: ['bore', 'fb/rb'] },
-  { key: 'line_number', label: 'LINE NUMBER',            width: 24, type: 'text',
-    aliases: ['line number', 'line no', 'line no.', 'line', 'line #', 'pipeline number', 'pipeline no', 'line tag', 'line id'] },
+  // Display label is "P&ID NUMBER" but the underlying field key stays
+  // `line_number` so all extractor / exporter / storage logic remains
+  // unchanged. Legacy "LINE NUMBER" sheets continue to import via aliases.
+  { key: 'line_number', label: 'P&ID NUMBER',            width: 24, type: 'text',
+    aliases: ['p&id number', 'p&id no', 'p&id no.', 'p&id', 'pid number', 'pid no', 'pid no.',
+              'line number', 'line no', 'line no.', 'line', 'line #', 'pipeline number', 'pipeline no', 'line tag', 'line id'] },
+  // Reference to the Line List document / entry (e.g. LL doc no, line-list
+  // tag, or the originating line-list row id). Soft-coded — UI / exporter /
+  // importer auto-pick up via VALVE_COLUMNS; no core logic change required.
+  { key: 'line_list',   label: 'LINE LIST',              width: 18, type: 'text',
+    aliases: ['line list', 'line list ref', 'line list reference', 'line list no', 'line list no.',
+              'line-list', 'll', 'll no', 'll no.', 'll ref', 'll reference', 'line list document'] },
   { key: 'valve_tag',   label: 'VALVE TAG',              width: 14, type: 'text',
     aliases: ['valve tag', 'tag', 'tag no', 'tag number'] },
   { key: 'description', label: 'DESCRIPTION',            width: 38, type: 'text',

@@ -7,7 +7,24 @@ import http from 'http'
 // hostname on every request.  Without this, Node caches the old container IP
 // after a backend restart, causing 503 "connect ECONNREFUSED" errors until
 // the frontend container is also restarted.
-const PROXY_AGENT = new http.Agent({ keepAlive: false })
+//
+// NOTE: the custom `agent` option does not always propagate cleanly through
+// Vite's bundled http-proxy in dev mode and has been observed to silently
+// stall requests (proxyReq event never fires).  It is therefore opt-in via
+// `VITE_PROXY_DISABLE_KEEPALIVE=1` rather than always-on.
+const PROXY_AGENT = process.env.VITE_PROXY_DISABLE_KEEPALIVE === '1'
+  ? new http.Agent({ keepAlive: false })
+  : undefined
+
+// Soft-coded proxy timeouts (override via env vars when needed)
+// Default raised to 20 min to accommodate long-running AI extractions on
+// dense multi-page P&IDs (Instrument Index, PID Verification, PFD Quality).
+// Must outlive the client-side fetch timeout (currently 18 min in
+// InstrumentIndex.jsx) AND stay within Gunicorn's 20-min worker timeout,
+// otherwise the proxy aborts the socket and the browser shows
+// ERR_CONNECTION_RESET / "upstream proxy reset".
+const PROXY_TIMEOUT_MS = Number(process.env.VITE_PROXY_TIMEOUT_MS || 1200000)
+const PROXY_UPSTREAM_TIMEOUT_MS = Number(process.env.VITE_PROXY_UPSTREAM_TIMEOUT_MS || 1200000)
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -44,8 +61,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path,
-          // Force a fresh DNS lookup per request — prevents stale-IP 503s after backend restarts.
-          agent: PROXY_AGENT,
+          // Soft-coded explicit timeouts so a stuck upstream surfaces as a
+          // 504 rather than hanging the browser request indefinitely.
+          timeout: PROXY_TIMEOUT_MS,
+          proxyTimeout: PROXY_UPSTREAM_TIMEOUT_MS,
+          // Optional fresh-DNS agent — only enabled when explicitly requested.
+          ...(PROXY_AGENT ? { agent: PROXY_AGENT } : {}),
           configure: (proxy, options) => {
             proxy.on('error', (err, req, res) => {
               // SOFT-CODED: send a proper JSON 503 instead of a silent empty 500

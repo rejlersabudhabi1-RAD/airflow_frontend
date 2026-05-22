@@ -36,6 +36,7 @@ const AUTH_RESILIENCE_CONFIG = {
     '/spec-customization/paper-spec/',  // job-status polling
     '/health/',                          // warmup ping — caller treats failure as non-fatal
     '/process-datasheet/mov-job-status/', // MOV async job poller — server may be briefly busy with extraction
+    '/rbac/ai-champion/track/',          // fire-and-forget telemetry (route view + AI usage); never block UX or spam toasts when a worker is busy with a long extraction
   ],
   // Endpoints that should NEVER attempt a refresh (refresh endpoint itself, login, etc.)
   REFRESH_BLACKLIST: [

@@ -22,6 +22,18 @@ import analyticsService from '../services/analyticsService';
 // Soft-coded configuration
 // ---------------------------------------------------------------------------
 
+// Telemetry transport tuning. The route-view track is fire-and-forget, so we
+// cap its request timeout aggressively — otherwise this background POST can
+// queue behind a long synchronous extraction (e.g. ADNOC P&ID instrument
+// index) and hang for the global 120 s default, surfacing a noisy
+// `ECONNABORTED` error in DevTools. Tweak via env without code changes:
+//   VITE_TRACKER_TIMEOUT_MS — axios timeout for telemetry POST (default 10s)
+const TRACKER_TIMEOUT_MS = Number(import.meta.env?.VITE_TRACKER_TIMEOUT_MS ?? 10000);
+
+// ---------------------------------------------------------------------------
+// Soft-coded configuration
+// ---------------------------------------------------------------------------
+
 // Skip tracking for these route prefixes (auth pages, error pages, public pages)
 const EXCLUDE_PREFIXES = [
   '/login',
@@ -160,14 +172,22 @@ const useAIChampionTracker = () => {
         },
       };
 
-      analyticsService.trackActivity(payload).catch((err) => {
+      // Fire-and-forget telemetry. We pass an aggressive soft-coded
+      // timeout so this background POST can never block the UI for the
+      // 120 s global default, even when a worker is busy with a long
+      // synchronous extraction. Errors are silenced — the global axios
+      // interceptor also treats `/rbac/ai-champion/track/` as a silent
+      // endpoint to avoid noisy `[API Error]` logs / toasts.
+      analyticsService.trackActivity(payload, {
+        timeout: TRACKER_TIMEOUT_MS,
+      }).then(() => {
+        lastTrackRef.current = { path: pathname, at: now };
+      }).catch((err) => {
         if (process.env.NODE_ENV !== 'production') {
           // eslint-disable-next-line no-console
           console.debug('[AIChampionTracker] track failed:', err?.message);
         }
       });
-
-      lastTrackRef.current = { path: pathname, at: now };
     }, MIN_DWELL_MS);
 
     return () => clearTimeout(timer);

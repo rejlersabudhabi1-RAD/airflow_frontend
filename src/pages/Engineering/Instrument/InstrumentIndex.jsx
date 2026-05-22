@@ -331,8 +331,16 @@ function InstConfirmModal({ open, title, message, onCancel, onConfirm, danger })
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const API_BASE = getApiBaseUrl();
-// Upload timeout — multi-page P&IDs can take a few minutes
-const UPLOAD_TIMEOUT_MS = 600_000;  // 10 min
+// Upload timeout — multi-page P&IDs can take a long time per sheet.
+// Soft-coded (env-tunable) so dense ADNOC-style drawings with hundreds of
+// instrument tags per page don't trip a fixed 10-min cap.  Override at build
+// time via VITE_INSTRUMENT_INDEX_UPLOAD_TIMEOUT_MS (milliseconds).
+// Must stay <= Vite proxy `proxyTimeout` (see frontend/vite.config.js) and
+// <= Gunicorn worker timeout (30 min). Default: 28 min — leaves headroom
+// for dense 5-page ADNOC P&IDs even when AI providers are slow.
+const UPLOAD_TIMEOUT_MS = Number(
+  import.meta.env?.VITE_INSTRUMENT_INDEX_UPLOAD_TIMEOUT_MS
+) || 1_680_000;
 
 // ─── Network resilience (soft-coded) ─────────────────────────────────────────
 // Railway's edge proxy / shared infra occasionally drops long-running HTTPS
@@ -817,8 +825,18 @@ const InstrumentIndex = () => {
     s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 
   // ── Fake progress (visual only — real work is done server-side) ──────
-  // Multi-pass extraction: 1 standard + 2 rotations + 4 tiles = 7 passes total
-  // Progress milestones match approximate pass sequence
+  // Multi-pass extraction: 1 standard + 2 rotations + 4 tiles = 7 passes total.
+  // Progress milestones match approximate pass sequence.
+  //
+  // Soft-coded heartbeat: after the initial pass-by-pass animation reaches its
+  // primary cap, a second slower asymptote keeps the bar advancing toward an
+  // upper cap so the user sees the request is still alive (instead of looking
+  // frozen at 91% during long server-side AI work).  All thresholds are
+  // module-level consts — tune without changing the request/retry logic.
+  const PROGRESS_PRIMARY_CAP   = 91;   // pass-animation upper bound
+  const PROGRESS_HEARTBEAT_CAP = 98;   // heartbeat upper bound (until real 100%)
+  const PROGRESS_HEARTBEAT_AFTER_SEC = 60;  // start heartbeat after this many s
+  const PROGRESS_LONG_RUN_SEC  = 8 * 60;    // when to surface "still working" notice
   const PROGRESS_MESSAGES = [
     { pct: 5,  msg: 'Uploading P&ID…' },
     { pct: 15, msg: 'Pass 1 — Full drawing (standard orientation)…' },
@@ -828,21 +846,37 @@ const InstrumentIndex = () => {
     { pct: 63, msg: 'Pass 5 — Tile scan: top-right quadrant…' },
     { pct: 73, msg: 'Pass 6 — Tile scan: bottom-left quadrant…' },
     { pct: 83, msg: 'Pass 7 — Tile scan: bottom-right quadrant…' },
-    { pct: 91, msg: 'Merging & deduplicating results…' },
+    { pct: PROGRESS_PRIMARY_CAP, msg: 'Merging & deduplicating results…' },
   ];
 
   useEffect(() => {
     if (!isProcessing) return;
     let msgIdx = 0;
+    let ticks  = 0;          // 1 tick ≈ 1.8 s
     const id = setInterval(() => {
+      ticks += 1;
+      const elapsedSec = ticks * 1.8;
       setProgress(p => {
         const next = PROGRESS_MESSAGES[msgIdx];
         if (next && p >= next.pct - 5) {
           setStatusMessage(next.msg);
           msgIdx = Math.min(msgIdx + 1, PROGRESS_MESSAGES.length - 1);
         }
-        if (p >= 91) return p;
-        return p + (91 - p) * 0.035;
+        // Heartbeat: once we hit the primary cap and the call is still in
+        // flight, keep crawling toward the heartbeat cap so the bar never
+        // looks frozen — even on very dense, multi-page P&IDs.
+        if (p >= PROGRESS_PRIMARY_CAP && elapsedSec >= PROGRESS_HEARTBEAT_AFTER_SEC) {
+          if (elapsedSec >= PROGRESS_LONG_RUN_SEC) {
+            setStatusMessage(
+              'Still working — dense multi-page P&IDs can take several minutes. ' +
+              'No action needed; results will appear automatically.'
+            );
+          }
+          if (p >= PROGRESS_HEARTBEAT_CAP) return p;
+          return p + (PROGRESS_HEARTBEAT_CAP - p) * 0.008;
+        }
+        if (p >= PROGRESS_PRIMARY_CAP) return p;
+        return p + (PROGRESS_PRIMARY_CAP - p) * 0.035;
       });
     }, 1800);
     return () => clearInterval(id);

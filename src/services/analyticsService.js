@@ -190,13 +190,17 @@ const analyticsService = {
   },
 
   // ===== AI Champion of the Month =====
-  trackActivity: async (payload) => {
-    const response = await apiClient.post('/rbac/ai-champion/track/activity/', payload);
+  // `config` is an optional axios request config — useful for callers that
+  // want a shorter timeout for fire-and-forget telemetry so the POST can
+  // never queue behind a long-running synchronous request and hang for
+  // the global default (120 s). See `useAIChampionTracker`.
+  trackActivity: async (payload, config = {}) => {
+    const response = await apiClient.post('/rbac/ai-champion/track/activity/', payload, config);
     return response.data;
   },
 
-  trackAIUsage: async (payload) => {
-    const response = await apiClient.post('/rbac/ai-champion/track/ai-usage/', payload);
+  trackAIUsage: async (payload, config = {}) => {
+    const response = await apiClient.post('/rbac/ai-champion/track/ai-usage/', payload, config);
     return response.data;
   },
 
