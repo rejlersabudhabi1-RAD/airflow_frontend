@@ -142,6 +142,25 @@ import useAIChampionTracker from './hooks/useAIChampionTracker'
 // SOFT-CODED: Toggle Digitization Datasheet route visibility
 const ENABLE_DIGITIZATION_DATASHEET_ROUTE = false
 
+// SOFT-CODED: Public path aliases — map convenience URLs to the page that
+// should actually serve them. Useful when a URL exists in marketing material
+// or muscle memory (e.g. /register, /contact, /contact-us) but no dedicated
+// page lives at that path. Each entry becomes a public `<Route>` that
+// `<Navigate>`s to the target. Edit this map (no JSX changes needed) to add
+// or retarget aliases. Set the value to `null` to disable an alias.
+//
+//   /register   → /enquiry   (self-service signup is disabled; admin-provisioned)
+//   /contact    → /enquiry   (public "Contact Us" form lives at /enquiry)
+//   /contact-us → /enquiry   (alternate spelling used in external links)
+const PUBLIC_PATH_REDIRECTS = {
+  register:     '/enquiry',
+  contact:      '/enquiry',
+  'contact-us': '/enquiry',
+}
+
+// Back-compat alias (kept for any external reference to this constant)
+const REGISTER_REDIRECT_TARGET = PUBLIC_PATH_REDIRECTS.register
+
 function App() {
   // Mount AI Champion route-tracker (no-op when unauthenticated)
   useAIChampionTracker()
@@ -352,6 +371,19 @@ function App() {
             </PublicRoute>
           }
         />
+        {/* SOFT-CODED: Public path aliases (see PUBLIC_PATH_REDIRECTS at top
+            of this file). Smart-redirects URLs like /register, /contact and
+            /contact-us to their real destination so visitors never land on a
+            blank/404 page. Add new aliases in the map — no JSX changes here. */}
+        {Object.entries(PUBLIC_PATH_REDIRECTS).map(([path, target]) =>
+          target ? (
+            <Route
+              key={`alias-${path}`}
+              path={path}
+              element={<Navigate to={target} replace />}
+            />
+          ) : null
+        )}
         {/* SOFT-CODED: Subscription pricing page disabled for in-house deployment */}
         {/* <Route
           path="pricing"
