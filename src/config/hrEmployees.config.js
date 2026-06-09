@@ -214,9 +214,10 @@ export const HR_FILTERS = [
 // 6. VIEW MODES
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_VIEW_MODES = [
-  { id: 'cards', label: 'Cards',       icon: 'Squares2X2Icon' },
-  { id: 'table', label: 'Table',       icon: 'TableCellsIcon' },
-  { id: 'dept',  label: 'Departments', icon: 'BuildingOffice2Icon' },
+  { id: 'cards',     label: 'Cards',          icon: 'Squares2X2Icon' },
+  { id: 'table',     label: 'Table',          icon: 'TableCellsIcon' },
+  { id: 'dept',      label: 'Departments',    icon: 'BuildingOffice2Icon' },
+  { id: 'timesheet', label: 'Time Sheet',     icon: 'ClockIcon' },
 ]
 export const HR_DEFAULT_VIEW_MODE = 'cards'
 

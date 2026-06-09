@@ -1,0 +1,150 @@
+/**
+ * Time Sheet Analytics — Soft-Coded Configuration
+ * ------------------------------------------------
+ * Centralised configuration for the `/hr/employees → Time Sheet` view. Every
+ * endpoint, poll interval, status colour and table column is defined here so
+ * the page component stays free of magic values.
+ *
+ * Backend pairing: `backend/apps/timesheet/*` (mounted at
+ * `${API_BASE_URL}/timesheet/`).
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. ENDPOINTS — paths are appended to API_BASE_URL by the service layer
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_ENDPOINTS = {
+  health:           '/timesheet/health/',
+  databases:        '/timesheet/discovery/databases/',
+  tables:           '/timesheet/discovery/tables/',
+  columns:          '/timesheet/discovery/columns/',
+  preview:          '/timesheet/discovery/preview/',
+  live:             '/timesheet/live/',
+  daily:            '/timesheet/daily/',
+  monthly:          '/timesheet/monthly/',
+  user:             '/timesheet/user/',
+  exportDaily:      '/timesheet/export/daily/',
+  exportMonthly:    '/timesheet/export/monthly/',
+  exportMonthlyPdf: '/timesheet/export/monthly/pdf/',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. POLLING — how often the Live tab re-fetches (ms)
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_POLL_MS = Number(
+  import.meta.env?.VITE_TIMESHEET_POLL_MS || 30000
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. TABS shown across the top of the Time Sheet view
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_TABS = [
+  { id: 'live',    label: 'Live',    icon: 'SignalIcon',         description: 'Real-time IN / OUT status' },
+  { id: 'daily',   label: 'Daily',   icon: 'CalendarDaysIcon',   description: 'Per-day attendance' },
+  { id: 'monthly', label: 'Monthly', icon: 'CalendarIcon',       description: 'Monthly roll-up' },
+  { id: 'reports', label: 'Reports', icon: 'ArrowDownTrayIcon',  description: 'Export Excel / PDF' },
+  { id: 'setup',   label: 'Setup',   icon: 'Cog6ToothIcon',      description: 'SQL Server configuration' },
+]
+export const TIMESHEET_DEFAULT_TAB = 'live'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. STATUS COLOURS for live cards / row badges
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_STATUS_TONES = {
+  in:           'bg-emerald-100 text-emerald-700 border-emerald-200',
+  out:          'bg-slate-100 text-slate-600 border-slate-200',
+  late:         'bg-amber-100 text-amber-700 border-amber-200',
+  full_day:     'bg-blue-100 text-blue-700 border-blue-200',
+  half_day:     'bg-orange-100 text-orange-700 border-orange-200',
+  unmatched:    'bg-rose-100 text-rose-700 border-rose-200',
+  configured:   'bg-emerald-100 text-emerald-700 border-emerald-200',
+  unconfigured: 'bg-rose-100 text-rose-700 border-rose-200',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. TABLE COLUMN DEFINITIONS
+//    Each `accessor` is a pure fn(row) => string|number. Render keeps minimal.
+// ─────────────────────────────────────────────────────────────────────────────
+const safe = (v, fallback = '—') => (v === null || v === undefined || v === '' ? fallback : v)
+const fmtTime = (v) => {
+  if (!v) return '—'
+  try {
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return String(v)
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch { return String(v) }
+}
+
+export const TIMESHEET_LIVE_COLUMNS = [
+  { id: 'name',       label: 'Employee',  accessor: (r) => r.radai_full_name || r.name || r.employee_code },
+  { id: 'employee',   label: 'Code',      accessor: (r) => safe(r.employee_code) },
+  { id: 'email',      label: 'Email',     accessor: (r) => safe(r.radai_email || r.email) },
+  { id: 'dept',       label: 'Dept',      accessor: (r) => safe(r.radai_department || r.department) },
+  { id: 'last_punch', label: 'Last Punch', accessor: (r) => fmtTime(r.punch_time || r.login_time || r.logout_time) },
+  { id: 'type',       label: 'Type',      accessor: (r) => safe(r.punch_type) },
+  { id: 'matched',    label: 'Matched',   accessor: (r) => r.matched_by || 'unmatched' },
+]
+
+export const TIMESHEET_DAILY_COLUMNS = [
+  { id: 'name',     label: 'Employee', accessor: (r) => r.radai_full_name || r.name || r.employee_code },
+  { id: 'code',     label: 'Code',     accessor: (r) => safe(r.employee_code) },
+  { id: 'dept',     label: 'Dept',     accessor: (r) => safe(r.radai_department || r.department) },
+  { id: 'first_in', label: 'First In', accessor: (r) => fmtTime(r.first_in) },
+  { id: 'last_out', label: 'Last Out', accessor: (r) => fmtTime(r.last_out) },
+  { id: 'hours',    label: 'Hours',    accessor: (r) => (r.hours_worked ?? 0).toFixed(2) },
+  { id: 'late',     label: 'Late?',    accessor: (r) => (r.is_late ? 'Yes' : 'No') },
+  { id: 'full',     label: 'Full Day?', accessor: (r) => (r.is_full_day ? 'Yes' : 'No') },
+]
+
+export const TIMESHEET_MONTHLY_COLUMNS = [
+  { id: 'name',         label: 'Employee',     accessor: (r) => r.radai_full_name || r.name || r.employee_code },
+  { id: 'code',         label: 'Code',         accessor: (r) => safe(r.employee_code) },
+  { id: 'dept',         label: 'Dept',         accessor: (r) => safe(r.radai_department || r.department) },
+  { id: 'days',         label: 'Days Present', accessor: (r) => r.days_present || 0 },
+  { id: 'full',         label: 'Full Days',    accessor: (r) => r.full_days || 0 },
+  { id: 'half',         label: 'Half Days',    accessor: (r) => r.half_days || 0 },
+  { id: 'late',         label: 'Late',         accessor: (r) => r.late_arrivals || 0 },
+  { id: 'hours',        label: 'Total Hours',  accessor: (r) => (r.total_hours || 0).toFixed(2) },
+  { id: 'avg',          label: 'Avg/Day',      accessor: (r) => (r.avg_hours_per_day || 0).toFixed(2) },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. SETUP WIZARD — env-var names the user must paste into backend/.env
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_ENV_VARS = [
+  { name: 'TIMESHEET_HOST',          example: '192.168.99.52',  required: false, hint: 'SQL Server host (defaults to 192.168.99.52)' },
+  { name: 'TIMESHEET_PORT',          example: '1433',           required: false, hint: 'SQL Server port (defaults to 1433)' },
+  { name: 'TIMESHEET_USER',          example: 'svc_radai',      required: true,  hint: 'SQL login with SELECT on the attendance table' },
+  { name: 'TIMESHEET_PASSWORD',      example: '••••••••',       required: true,  hint: 'SQL login password' },
+  { name: 'TIMESHEET_DATABASE',      example: 'AttendanceDB',   required: true,  hint: 'Database that holds attendance rows' },
+  { name: 'TIMESHEET_TABLE',         example: 'dbo.tbl_punches', required: true, hint: '[schema].[table] of attendance rows' },
+  { name: 'TIMESHEET_COL_EMP_CODE',  example: 'EmployeeCode',   required: true,  hint: 'Column = employee code (NIK / staff number)' },
+  { name: 'TIMESHEET_COL_EMP_EMAIL', example: 'Email',          required: false, hint: 'Column = employee email (used for RAD AI matching)' },
+  { name: 'TIMESHEET_COL_EMP_NAME',  example: 'FullName',       required: false, hint: 'Column = display name' },
+  { name: 'TIMESHEET_COL_DEPARTMENT', example: 'Department',    required: false, hint: 'Column = department / discipline' },
+  { name: 'TIMESHEET_COL_PUNCH_TIME', example: 'PunchTime',     required: false, hint: 'Event-stream schema: punch timestamp column' },
+  { name: 'TIMESHEET_COL_PUNCH_TYPE', example: 'Direction',     required: false, hint: 'Event-stream schema: column with IN / OUT marker' },
+  { name: 'TIMESHEET_COL_IN_VALUE',   example: 'IN',            required: false, hint: 'Event-stream schema: value of punch_type that means "in"' },
+  { name: 'TIMESHEET_COL_LOGIN_TIME', example: 'LoginTime',     required: false, hint: 'Two-column schema: login time column' },
+  { name: 'TIMESHEET_COL_LOGOUT_TIME', example: 'LogoutTime',   required: false, hint: 'Two-column schema: logout time column' },
+  { name: 'TIMESHEET_COL_DATE',       example: 'WorkDate',      required: false, hint: 'Two-column schema: date column' },
+  { name: 'TIMESHEET_EXPECTED_LOGIN_HOUR', example: '9',        required: false, hint: 'Hour (24h) employees are expected to log in (default 9)' },
+  { name: 'TIMESHEET_LATE_THRESHOLD_MIN',  example: '15',       required: false, hint: 'Grace period before marking late (default 15 min)' },
+  { name: 'TIMESHEET_FULL_DAY_HOURS',     example: '8.0',       required: false, hint: 'Minimum hours that count as a full day (default 8)' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. COPY
+// ─────────────────────────────────────────────────────────────────────────────
+export const TIMESHEET_COPY = {
+  title: 'Time Sheet Analytics',
+  subtitle: 'Live attendance fed from the biometric SQL Server. Tracks every login / logout and rolls up to daily and monthly reports.',
+  notConfiguredTitle: 'Time Sheet is not configured yet',
+  notConfiguredSubtitle:
+    'Open the Setup tab to point RAD AI at your SQL Server biometric database. The Setup wizard helps you list databases, pick a table, preview rows, and produce the exact environment variables you need to add to backend/.env.',
+  driverMissingTitle: 'SQL Server driver is not installed in the backend container',
+  driverMissingSubtitle:
+    'pymssql is missing. Run: docker exec aiflow_backend_local pip install pymssql>=2.2 — or rebuild the container so requirements.txt is re-applied.',
+  connectionFailedTitle: 'Cannot reach the SQL Server',
+  connectionFailedSubtitle:
+    'Make sure the host is reachable from inside the backend Docker container. On Windows Docker Desktop you can try using "host.docker.internal" instead of an IP.',
+}

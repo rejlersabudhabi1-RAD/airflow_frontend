@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
 import PeopleNav from '../../components/PeopleNav/PeopleNav'
+import TimeSheetAnalytics from './TimeSheetAnalytics'
 import {
   HR_KPIS,
   HR_FILTERS,
@@ -742,7 +743,7 @@ export default function HREmployees() {
         </div>
 
         {/* KPI strip */}
-        <KpiStrip employees={employees} loading={loading} />
+        {viewMode !== 'timesheet' && <KpiStrip employees={employees} loading={loading} />}
 
         {/* Filters */}
         <FiltersBar
@@ -756,6 +757,14 @@ export default function HREmployees() {
           onReset={resetFilters}
         />
 
+        {/* Time Sheet view replaces the directory body entirely */}
+        {viewMode === 'timesheet' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <TimeSheetAnalytics />
+          </div>
+        )}
+
+        {viewMode !== 'timesheet' && (<>
         {/* Result count */}
         <div className="flex items-center justify-between text-xs text-slate-600">
           <div>
@@ -860,6 +869,7 @@ export default function HREmployees() {
             ))}
           </div>
         </div>
+        </>)}
       </div>
 
       {/* Detail drawer */}
