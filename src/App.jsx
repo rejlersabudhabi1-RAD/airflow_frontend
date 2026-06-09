@@ -41,6 +41,7 @@ import CRSMultipleRevisionClassic from './pages/CRSMultipleRevision'
 import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
+import ProjectsPage from './pages/Projects/ProjectsPage'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import QHSEHub from './pages/QHSE/QHSEHub'
 // SOFT-CODED: QHSEInterconnectedDemo removed (not needed)
@@ -1084,12 +1085,12 @@ function App() {
           }
         />
 
-        {/* Project Control */}
+        {/* Project Management — phased: Cost Dashboard → Estimates → Documents → (Phase 2+) AI/EVM/Risk */}
         <Route
           path="projects"
           element={
             <ModuleProtectedRoute moduleCode="project_control">
-              <ProjectControl />
+              <ProjectsPage />
             </ModuleProtectedRoute>
           }
         />
