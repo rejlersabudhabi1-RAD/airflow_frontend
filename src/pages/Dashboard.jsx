@@ -29,6 +29,7 @@ const CATEGORY_META = {
   sales:               { label: 'Sales',        color: 'text-rose-700',   bg: 'bg-rose-50',   badge: 'bg-rose-100 text-rose-700'    },
   finance:             { label: 'Finance',      color: 'text-amber-700',  bg: 'bg-amber-50',  badge: 'bg-amber-100 text-amber-700'  },
   procurement:         { label: 'Procurement',  color: 'text-indigo-700', bg: 'bg-indigo-50', badge: 'bg-indigo-100 text-indigo-700' },
+  human_resource:      { label: 'Human Resource', color: 'text-pink-700', bg: 'bg-pink-50',   badge: 'bg-pink-100 text-pink-700'    },
 }
 
 // ── Roadmap items ─────────────────────────────────────────────────────────────
@@ -276,6 +277,7 @@ const MODULE_CATEGORY_MAP = {
   sales:                  'sales',
   finance:                'finance',
   procurement:            'procurement',
+  human_resource:         'human_resource',
   designiq:               'engineering',
 }
 
@@ -291,6 +293,7 @@ const MODULE_DISPLAY = {
   sales:                { label: 'Sales',           color: 'bg-rose-100 text-rose-700'     },
   finance:              { label: 'Finance',         color: 'bg-amber-100 text-amber-700'   },
   procurement:          { label: 'Procurement',     color: 'bg-orange-100 text-orange-700' },
+  human_resource:       { label: 'Human Resource',  color: 'bg-pink-100 text-pink-700'     },
   designiq:             { label: 'Design IQ',       color: 'bg-cyan-100 text-cyan-700'     },
 }
 
