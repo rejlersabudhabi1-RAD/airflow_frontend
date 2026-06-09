@@ -42,13 +42,16 @@ import CRSMultiRevisionSmart from './pages/CRSMultiRevisionSmart'
 const CRSMultipleRevision = FEATURE_FLAGS.crsMultiRevisionVersion === 'classic' ? CRSMultipleRevisionClassic : CRSMultiRevisionSmart
 import ProjectControl from './pages/ProjectControl'
 import GeneralQHSE from './pages/QHSE/GeneralQHSE'
+import QHSEHub from './pages/QHSE/QHSEHub'
 // SOFT-CODED: QHSEInterconnectedDemo removed (not needed)
 // import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
+import HREmployees from './pages/HR/HREmployees'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
+import FinanceHub from './pages/Finance/FinanceHub'
 import InternalSalesDashboard from './pages/InternalSalesDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import UserManagement from './pages/UserManagement'
@@ -66,6 +69,7 @@ import Enquiry from './pages/Enquiry'
 import ConsultingService from './pages/ConsultingService'
 import PFDConversionService from './pages/PFDConversionService'
 import AssetIntegrityService from './pages/AssetIntegrityService'
+import PIDAnalysisService from './pages/PIDAnalysisService'
 import DataGovernanceService from './pages/DataGovernanceService'
 import SecurityService from './pages/SecurityService'
 import About from './pages/About'
@@ -358,6 +362,7 @@ function App() {
           <Route path="services/consulting" element={<ConsultingService />} />
           <Route path="services/pfd-conversion" element={<PFDConversionService />} />
           <Route path="services/asset-integrity" element={<AssetIntegrityService />} />
+          <Route path="services/pid-analysis" element={<PIDAnalysisService />} />
           <Route path="data-governance" element={<DataGovernanceService />} />
           <Route path="security" element={<SecurityService />} />
           <Route path="about" element={<About />} />
@@ -581,6 +586,14 @@ function App() {
 
         {/* Feature Routes - Finance Invoice Automation */}
         <Route
+          path="finance"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <FinanceHub />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="finance/upload"
           element={
             <ModuleProtectedRoute moduleCode="finance">
@@ -610,6 +623,15 @@ function App() {
             <ModuleProtectedRoute moduleCode="finance">
               <SalarySlip />
             </ModuleProtectedRoute>
+          }
+        />
+        {/* Human Resources Routes */}
+        <Route
+          path="hr/employees"
+          element={
+            <ProtectedRoute>
+              <HREmployees />
+            </ProtectedRoute>
           }
         />
         {/* Internal Sales Analytics Dashboard */}
@@ -1073,6 +1095,14 @@ function App() {
         />
 
         {/* QHSE Routes */}
+        <Route
+          path="qhse"
+          element={
+            <ModuleProtectedRoute moduleCode="qhse">
+              <QHSEHub />
+            </ModuleProtectedRoute>
+          }
+        />
         <Route
           path="qhse/general/*"
           element={
