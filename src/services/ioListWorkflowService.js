@@ -80,6 +80,20 @@ const ioListWorkflowService = {
     window.URL.revokeObjectURL(url)
   },
 
+  /**
+   * Patch a single extracted row.
+   * Accepts a flat object: any key from IO_PREVIEW_COLUMNS.
+   * 'tag_number' and 'page_number' are top-level model fields;
+   * all other keys are merged into the row.data JSONField on the backend.
+   */
+  async updateRow(docId, rowId, patch) {
+    const { data } = await apiClient.patch(
+      IO_LIST_WORKFLOW_API.patchRow(docId, rowId),
+      patch,
+    )
+    return data
+  },
+
   /** Diff two documents (typically two revisions of the same chain). */
   async diff(oldId, newId) {
     const { data } = await apiClient.post(IO_LIST_WORKFLOW_API.diff, {

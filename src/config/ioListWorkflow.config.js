@@ -17,7 +17,24 @@ export const IO_LIST_WORKFLOW_API = {
   documentById:   (id) => `/instrument-io-workflow/documents/${id}/`,
   reextract:      (id) => `/instrument-io-workflow/documents/${id}/re-extract/`,
   exportXlsx:     (id) => `/instrument-io-workflow/documents/${id}/export-xlsx/`,
+  patchRow:       (docId, rowId) => `/instrument-io-workflow/documents/${docId}/rows/${rowId}/`,
   diff:           '/instrument-io-workflow/diff/',
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// INLINE CELL EDITING — feature flags (soft-coded)
+// Set enabled: false to disable edit mode entirely without touching page code.
+// ─────────────────────────────────────────────────────────────────────
+export const IO_LIST_EDIT_CONFIG = {
+  /** Master switch — hides the Edit button when false. */
+  enabled: true,
+  /**
+   * Columns whose cells are read-only even in edit mode.
+   * 'page_number' is a PDF-source reference and should not be manually changed.
+   */
+  nonEditableColumns: ['page_number'],
+  /** Milliseconds to keep the green 'saved' indicator before clearing it. */
+  savedIndicatorMs: 2000,
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -89,6 +106,14 @@ export const STATUS_BADGE_COLOURS = {
   '2': { bg: 'bg-amber-100',   fg: 'text-amber-800',   dot: 'bg-amber-500',   label: 'As Noted'     },
   '3': { bg: 'bg-emerald-100', fg: 'text-emerald-800', dot: 'bg-emerald-500', label: 'No Comments'  },
   '4': { bg: 'bg-sky-100',     fg: 'text-sky-800',     dot: 'bg-sky-500',     label: 'Info Only'    },
+}
+
+// Fallback style for status codes that don't match the standard 1–4 ADNOC codes.
+// Applied to any extra codes that appear in the data (soft-coded so one edit updates all bars).
+export const UNKNOWN_STATUS_STYLE = {
+  bg:  'bg-slate-100',
+  fg:  'text-slate-700',
+  dot: 'bg-slate-400',
 }
 
 // ─────────────────────────────────────────────────────────────────────

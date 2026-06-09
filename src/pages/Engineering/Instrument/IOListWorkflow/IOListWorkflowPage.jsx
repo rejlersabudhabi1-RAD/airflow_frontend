@@ -16,14 +16,14 @@
  *   - detail  → tabbed view: Overview · Comments · I/O Table · Metadata
  */
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Upload, RefreshCw, Download, Trash2, ArrowLeft, FileText, Search,
   Filter, X, AlertTriangle, CheckCircle2, Clock, Loader2, Tag,
   MessageSquare, Table2, BarChart3, Info, MessagesSquare, List, Link2,
   Sparkles, Zap, FolderOpen, Hash, Layers, Calendar, User as UserIcon,
-  ExternalLink, Plus, ChevronRight,
+  ExternalLink, Plus, ChevronRight, Edit3,
 } from 'lucide-react'
 
 import ioListWorkflowService from '../../../../services/ioListWorkflowService'
@@ -31,9 +31,10 @@ import {
   IO_LIST_WORKFLOW_API,
   THEME, PAGE_COPY,
   COMMENT_DISPLAY_COLUMNS, IO_PREVIEW_COLUMNS,
-  STATUS_BADGE_COLOURS, DOC_STATUS_BADGE,
+  STATUS_BADGE_COLOURS, DOC_STATUS_BADGE, UNKNOWN_STATUS_STYLE,
   DETAIL_TABS, UPLOAD_CONFIG, STATS_CARDS, TONE_CLASSES,
   COST_BADGES, ROUTES, SORT_OPTIONS, STATUS_FILTER_OPTIONS,
+  IO_LIST_EDIT_CONFIG,
 } from '../../../../config/ioListWorkflow.config'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -423,17 +424,26 @@ const ListView = ({ documents, loading, onOpen, onUploadClick, onRefresh,
 // ─────────────────────────────────────────────────────────────────────
 const OverviewPanel = ({ doc }) => {
   const stats = doc.extraction_stats || {}
+
+  // Primary: use the precomputed breakdown stored in extraction_stats by the orchestrator.
+  // Fallback: compute dynamically from the embedded extracted_comments array.
+  // Both paths count ALL unique codes (not just the hard-coded 1–4) so the
+  // chart always reflects what is actually in the data.
   const statusBreakdown = useMemo(() => {
-    const counts = { '1': 0, '2': 0, '3': 0, '4': 0, unknown: 0 }
+    const precomputed = stats.status_code_breakdown
+    if (precomputed && typeof precomputed === 'object' && Object.keys(precomputed).length > 0) {
+      return precomputed
+    }
+    const counts = {}
     ;(doc.extracted_comments || []).forEach(c => {
-      const code = (c.status_code || '').trim()
-      if (counts[code] !== undefined) counts[code]++
-      else counts.unknown++
+      const code = (c.status_code || '').trim() || 'unknown'
+      counts[code] = (counts[code] || 0) + 1
     })
     return counts
-  }, [doc.extracted_comments])
+  }, [doc.extracted_comments, stats.status_code_breakdown])
 
-  const totalComments = doc.extracted_comments?.length || 0
+  // Prefer the backend-reported count (includes comments whose status_code is empty)
+  const totalComments = stats.comments_found ?? doc.extracted_comments?.length ?? 0
 
   return (
     <div className="space-y-5">
@@ -453,25 +463,58 @@ const OverviewPanel = ({ doc }) => {
             <h4 className="text-sm font-semibold text-slate-900">Comments by Status</h4>
           </div>
           <div className="p-5 space-y-3">
-            {Object.entries(STATUS_BADGE_COLOURS).map(([code, s]) => {
-              const n = statusBreakdown[code]
-              const pct = totalComments ? (n / totalComments) * 100 : 0
-              return (
-                <div key={code}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-700">{code} · {s.label}</span>
-                    <span className="text-slate-500">{n} ({pct.toFixed(0)}%)</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${s.dot} transition-all`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-            {statusBreakdown.unknown > 0 && (
-              <div className="text-[11px] text-slate-400 pt-1">
-                {statusBreakdown.unknown} comment{statusBreakdown.unknown !== 1 ? 's' : ''} without a recognised status code.
+            {totalComments === 0 ? (
+              /* ── Empty state: no comments extracted ───────────────── */
+              <div className="flex flex-col items-center justify-center py-6 text-center gap-2">
+                <MessagesSquare className="w-8 h-8 text-slate-300" />
+                <p className="text-sm font-medium text-slate-600">No comments extracted</p>
+                <p className="text-xs text-slate-400 max-w-xs">
+                  {(stats.comment_pages ?? 0) > 0
+                    ? `${stats.comment_pages} page${stats.comment_pages !== 1 ? 's' : ''} were identified as comment sheets but no table structure could be parsed.`
+                    : 'No Comments Resolution Sheet pages were detected in this PDF.'}
+                </p>
               </div>
+            ) : (
+              <>
+                {/* Known ADNOC status codes 1–4 */}
+                {Object.entries(STATUS_BADGE_COLOURS).map(([code, s]) => {
+                  const n = statusBreakdown[code] || 0
+                  const pct = (n / totalComments) * 100
+                  return (
+                    <div key={code}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-medium text-slate-700">{code} · {s.label}</span>
+                        <span className="text-slate-500">{n} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full ${s.dot} transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Extra codes that appear in the data but aren't in STATUS_BADGE_COLOURS */}
+                {Object.entries(statusBreakdown)
+                  .filter(([code]) => !STATUS_BADGE_COLOURS[code] && code !== 'unknown' && code)
+                  .map(([code, n]) => {
+                    const pct = (n / totalComments) * 100
+                    return (
+                      <div key={code}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className={`font-medium ${UNKNOWN_STATUS_STYLE.fg}`}>{code}</span>
+                          <span className="text-slate-500">{n} ({pct.toFixed(0)}%)</span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${UNKNOWN_STATUS_STYLE.dot} transition-all`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                {(statusBreakdown.unknown || 0) > 0 && (
+                  <div className="text-[11px] text-slate-400 pt-1">
+                    {statusBreakdown.unknown} comment{statusBreakdown.unknown !== 1 ? 's' : ''} without a recognised status code.
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -584,27 +627,153 @@ const CommentsPanel = ({ doc, filterTag, setFilterTag }) => {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Editable cell — click-to-edit input used inside I/O List Table
+// ─────────────────────────────────────────────────────────────────────
+const EditableCell = ({ value, onSave, cellKey, savingState, isSticky, editingCell, setEditingCell }) => {
+  const isEditing = editingCell === cellKey
+  const [draft, setDraft] = useState(String(value ?? ''))
+  const inputRef = useRef(null)
+
+  // Keep draft in sync when an external save updates the value
+  useEffect(() => {
+    if (!isEditing) setDraft(String(value ?? ''))
+  }, [value, isEditing])
+
+  // Focus & select-all when edit starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const commit = () => {
+    setEditingCell(null)
+    const next = draft.trim()
+    if (next !== String(value ?? '').trim()) onSave(next)
+  }
+
+  const cancel = () => {
+    setDraft(String(value ?? ''))
+    setEditingCell(null)
+  }
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') cancel()
+        }}
+        className="w-full text-xs border border-indigo-400 rounded-md px-1.5 py-0.5 bg-indigo-50 outline-none ring-1 ring-indigo-300 min-w-[60px]"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={() => setEditingCell(cellKey)}
+      title="Click to edit"
+      className={`cursor-pointer min-h-[16px] flex items-center gap-1 px-1 rounded -mx-1
+                  hover:bg-amber-50 hover:ring-1 hover:ring-amber-200 transition-colors
+                  ${isSticky ? 'font-mono font-semibold text-indigo-700' : 'text-slate-700'}`}
+    >
+      <span className="flex-1 min-w-0 truncate">
+        {value != null && value !== '' ? String(value) : <span className="text-slate-300">—</span>}
+      </span>
+      {savingState === 'saving' && <Loader2 className="w-2.5 h-2.5 text-indigo-400 animate-spin flex-shrink-0" />}
+      {savingState === 'saved'  && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" />}
+      {savingState === 'error'  && <AlertTriangle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Detail — I/O List tab
 // ─────────────────────────────────────────────────────────────────────
 const IOListPanel = ({ doc, filterTag, setFilterTag }) => {
+  const [editMode, setEditMode]       = useState(false)
+  const [localRows, setLocalRows]     = useState(null)   // optimistic overrides
+  const [editingCell, setEditingCell] = useState(null)   // active cell key: 'rowId_field'
+  const [savingCells, setSavingCells] = useState({})     // { 'rowId_field': 'saving'|'saved'|'error' }
+
+  // Reset when the user navigates to a different document
+  useEffect(() => {
+    setLocalRows(null)
+    setEditMode(false)
+    setEditingCell(null)
+    setSavingCells({})
+  }, [doc.id])
+
+  const rows = localRows || doc.extracted_rows || []
+
+  const handleCellSave = useCallback(async (rowId, field, newValue) => {
+    const cellKey = `${rowId}_${field}`
+    // Optimistic update so the UI reflects the change immediately
+    setLocalRows(prev => {
+      const src = prev || doc.extracted_rows || []
+      return src.map(r => {
+        if (r.id !== rowId) return r
+        if (field === 'tag_number')  return { ...r, tag_number: newValue }
+        if (field === 'page_number') return { ...r, page_number: newValue }
+        return { ...r, data: { ...(r.data || {}), [field]: newValue } }
+      })
+    })
+    setSavingCells(p => ({ ...p, [cellKey]: 'saving' }))
+    try {
+      await ioListWorkflowService.updateRow(doc.id, rowId, { [field]: newValue })
+      setSavingCells(p => ({ ...p, [cellKey]: 'saved' }))
+      setTimeout(
+        () => setSavingCells(p => { const n = { ...p }; delete n[cellKey]; return n }),
+        IO_LIST_EDIT_CONFIG.savedIndicatorMs,
+      )
+    } catch {
+      // Revert to original value on failure
+      setSavingCells(p => ({ ...p, [cellKey]: 'error' }))
+      setLocalRows(prev => {
+        const src = prev || doc.extracted_rows || []
+        const original = (doc.extracted_rows || []).find(r => r.id === rowId)
+        return original ? src.map(r => r.id === rowId ? original : r) : src
+      })
+    }
+  }, [doc.id, doc.extracted_rows])
+
   const filtered = useMemo(() => {
-    const rows = doc.extracted_rows || []
     if (!filterTag) return rows
     const t = filterTag.toUpperCase()
     return rows.filter(r =>
       (r.tag_number || '').toUpperCase().includes(t)
       || Object.values(r.data || {}).some(v => String(v ?? '').toUpperCase().includes(t)),
     )
-  }, [doc.extracted_rows, filterTag])
+  }, [rows, filterTag])
 
   return (
     <div className={THEME.card}>
-      <div className={`${THEME.cardHeader} flex items-center justify-between`}>
-        <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className={`${THEME.cardHeader} flex items-center justify-between gap-2 flex-wrap`}>
+        <div className="flex items-center gap-2 flex-wrap">
           <Table2 className="w-4 h-4 text-indigo-600" />
           <h4 className="text-sm font-semibold text-slate-900">I/O List Table</h4>
           <Badge tone="emerald">{filtered.length} rows</Badge>
           <span className="text-[11px] text-slate-400">Preview · full 40 columns in Excel export</span>
+          {/* Edit mode toggle — controlled by IO_LIST_EDIT_CONFIG.enabled */}
+          {IO_LIST_EDIT_CONFIG.enabled && (
+            <button
+              onClick={() => { setEditMode(e => !e); setEditingCell(null) }}
+              className={`text-xs px-2.5 py-1 rounded-lg font-medium flex items-center gap-1.5 border transition-all
+                          ${editMode
+                            ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 shadow-sm'
+                            : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+            >
+              {editMode
+                ? <><X className="w-3 h-3" /> Done editing</>
+                : <><Edit3 className="w-3 h-3" /> Edit cells</>}
+            </button>
+          )}
         </div>
         <div className="relative w-64">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -613,6 +782,25 @@ const IOListPanel = ({ doc, filterTag, setFilterTag }) => {
                  className="w-full text-xs border border-slate-300 rounded-md pl-8 pr-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400" />
         </div>
       </div>
+
+      {/* Hint bar shown only when edit mode is active */}
+      {editMode && (
+        <div className="px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-700">
+          <Edit3 className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>
+            Click any cell to edit ·{' '}
+            <kbd className="px-1 py-0.5 bg-amber-100 rounded font-mono">Enter</kbd> or{' '}
+            <kbd className="px-1 py-0.5 bg-amber-100 rounded font-mono">Tab</kbd> to confirm ·{' '}
+            <kbd className="px-1 py-0.5 bg-amber-100 rounded font-mono">Esc</kbd> to cancel
+          </span>
+          {Object.keys(savingCells).length > 0 && (
+            <span className="ml-auto flex items-center gap-1 text-indigo-600 font-medium">
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="overflow-x-auto max-h-[68vh] overflow-y-auto">
         <table className="text-xs w-full">
           <thead className={`${THEME.tableHead} sticky top-0 z-10`}>
@@ -631,10 +819,27 @@ const IOListPanel = ({ doc, filterTag, setFilterTag }) => {
                   const val = c.key === 'tag_number' ? r.tag_number
                             : c.key === 'page_number' ? r.page_number
                             : (r.data || {})[c.key]
+                  const cellKey = `${r.id}_${c.key}`
+                  const canEdit = editMode
+                    && IO_LIST_EDIT_CONFIG.enabled
+                    && !IO_LIST_EDIT_CONFIG.nonEditableColumns.includes(c.key)
                   return (
                     <td key={c.key}
-                        className={`px-3 py-2 ${c.sticky ? 'sticky left-0 bg-white font-mono font-semibold text-indigo-700' : 'text-slate-700'}`}>
-                      {val ?? <span className="text-slate-300">—</span>}
+                        className={`px-3 py-2 ${c.sticky ? 'sticky left-0 bg-white z-10' : ''}`}>
+                      {canEdit
+                        ? <EditableCell
+                            value={val}
+                            onSave={(v) => handleCellSave(r.id, c.key, v)}
+                            cellKey={cellKey}
+                            savingState={savingCells[cellKey]}
+                            isSticky={c.sticky}
+                            editingCell={editingCell}
+                            setEditingCell={setEditingCell}
+                          />
+                        : <span className={c.sticky ? 'font-mono font-semibold text-indigo-700' : 'text-slate-700'}>
+                            {val ?? <span className="text-slate-300">—</span>}
+                          </span>
+                      }
                     </td>
                   )
                 })}
