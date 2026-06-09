@@ -54,6 +54,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     // Other sections
     crs: true,
     finance: true,
+    human_resource: true,
     projectControl: true,
     procurement: true,
     qhse: true,
@@ -263,6 +264,40 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           }
         ]
       },
+      // ── Section 4: Human Resource ──────────────────────────────────────────
+      {
+        id: 'human_resource',
+        title: getSectionTitle('human_resource'),
+        icon: UsersIcon,
+        type: 'section',
+        expanded: expandedSections.human_resource,
+        children: [
+          {
+            id: 'hrEmployees',
+            title: '4.1 Employees',
+            icon: UsersIcon,
+            path: '/hr/employees',
+            description: 'Employee records and profiles',
+            moduleCode: 'human_resource'
+          },
+          {
+            id: 'hrPayroll',
+            title: '4.2 Payroll',
+            icon: CurrencyDollarIcon,
+            path: '/hr/payroll',
+            description: 'Payroll processing and management',
+            moduleCode: 'human_resource'
+          },
+          {
+            id: 'hrLeave',
+            title: '4.3 Leave Management',
+            icon: DocumentTextIcon,
+            path: '/hr/leave',
+            description: 'Leave requests and approvals',
+            moduleCode: 'human_resource'
+          }
+        ]
+      },
       {
         id: 'sales',
         title: getSectionTitle('sales'),
@@ -283,7 +318,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'projectManagement',
-          title: '5.1 Projects',
+          title: '6.1 Projects',
           icon: FolderIcon,
           path: '/projects',
           description: 'Manage and track projects',
@@ -300,7 +335,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'procurementDashboard',
-          title: '6.1 Dashboard',
+          title: '7.1 Dashboard',
           icon: HomeIcon,
           path: '/procurement',
           description: 'Procurement overview',
@@ -308,7 +343,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'vendors',
-          title: '6.2 Vendors',
+          title: '7.2 Vendors',
           icon: UsersIcon,
           path: '/procurement/vendors',
           description: 'Vendor management',
@@ -316,7 +351,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'requisitions',
-          title: '6.3 Recommendations',
+          title: '7.3 Recommendations',
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
           description: 'Purchase recommendations',
@@ -324,7 +359,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'purchaseOrders',
-          title: '6.4 Purchase Orders',
+          title: '7.4 Purchase Orders',
           icon: DocumentPlusIcon,
           path: '/procurement/orders',
           description: 'PO management',
@@ -332,7 +367,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'receipts',
-          title: '6.5 Receipts',
+          title: '7.5 Receipts',
           icon: FolderIcon,
           path: '/procurement/receipts',
           description: 'Goods receipt',
@@ -349,7 +384,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'generalQHSE',
-          title: '7.1 Project Quality',
+          title: '8.1 Project Quality',
           icon: ShieldCheckIcon,
           path: '/qhse/general',
           description: 'Project quality management',
@@ -357,7 +392,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'detailedView',
-          title: '7.2 Project Quality Details',
+          title: '8.2 Project Quality Details',
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
           description: 'Detailed project quality view',
@@ -365,7 +400,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'qualityManagement',
-          title: '7.3 Quality Management',
+          title: '8.3 Quality Management',
           icon: ChartBarIcon,
           path: '/qhse/general/quality',
           description: 'Quality metrics and audits',
@@ -373,7 +408,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'healthSafety',
-          title: '7.4 Health & Safety',
+          title: '8.4 Health & Safety',
           icon: ShieldCheckIcon,
           path: '/qhse/general/health-safety',
           description: 'Health and safety management',
@@ -381,7 +416,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'environmental',
-          title: '7.5 Environmental',
+          title: '8.5 Environmental',
           icon: DocumentTextIcon,
           path: '/qhse/general/environmental',
           description: 'Environmental management',
@@ -389,7 +424,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'energy',
-          title: '7.6 Energy',
+          title: '8.6 Energy',
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
@@ -468,7 +503,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   if (isAdmin) {
     filteredMenu.push({
       id: 'admin',
-      title: '8. Admin',
+      title: getSectionTitle('admin'),
       icon: CogIcon,
       type: 'section',
       expanded: expandedSections.admin,
@@ -476,28 +511,28 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       children: [
         {
           id: 'adminDashboard',
-          title: '8.1 Dashboard',
+          title: '9.1 Dashboard',
           icon: ChartBarIcon,
           path: '/admin/dashboard',
           description: 'System overview & analytics'
         },
         {
           id: 'userManagement',
-          title: '8.2 Users & Roles',
+          title: '9.2 Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
           description: 'User accounts & permissions'
         },
         {
           id: 'wrenchIntegration',
-          title: '8.3 Wrench Integration',
+          title: '9.3 Wrench Integration',
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
           description: 'Wrench Project Platform sync'
         },
         {
           id: 'aiChampion',
-          title: '8.4 AI Champion',
+          title: '9.4 AI Champion',
           icon: SparklesIcon,
           path: '/admin/ai-champion',
           description: 'Top AI users leaderboard & badges'

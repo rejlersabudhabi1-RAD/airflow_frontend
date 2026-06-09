@@ -29,32 +29,46 @@ export const NAVIGATION_LABELS = {
     number: '3'
   },
   
-  // Section 4: Dept of Sales
+  // Section 4: Human Resource
+  human_resource: {
+    main: 'Human Resource',
+    fullName: 'Human Resource Management',
+    number: '4'
+  },
+
+  // Section 5: Dept of Sales
   sales: {
     main: 'Dept of Sales',
     fullName: 'Department of Sales',
-    number: '4'
-  },
-  
-  // Section 5: Project Control
-  projectControl: {
-    main: 'Project Control',
-    fullName: 'Project Control & Management',
     number: '5'
   },
   
-  // Section 6: Procurement
-  procurement: {
-    main: 'Procurement',
-    fullName: 'Procurement & Supply Chain',
+  // Section 6: Project Control
+  projectControl: {
+    main: 'Project Control',
+    fullName: 'Project Control & Management',
     number: '6'
   },
   
-  // Section 7: QHSE
+  // Section 7: Procurement
+  procurement: {
+    main: 'Procurement',
+    fullName: 'Procurement & Supply Chain',
+    number: '7'
+  },
+  
+  // Section 8: QHSE
   hse: {
     main: 'QHSE',
     fullName: 'Quality, Health, Safety & Environment',
-    number: '7'
+    number: '8'
+  },
+
+  // Section 9: Admin
+  admin: {
+    main: 'Admin',
+    fullName: 'System Administration',
+    number: '9'
   }
 }
 
