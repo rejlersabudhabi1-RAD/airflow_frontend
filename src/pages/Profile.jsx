@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api.config';
 import { S3_UPLOAD_CONFIG, validateFile, formatFileSize } from '../config/s3Upload.config';
+import PeopleNav from '../components/PeopleNav/PeopleNav';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Soft-coded engineering constants
@@ -388,6 +389,9 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto space-y-6">
+
+        {/* ── Cross-link nav (Profile / HR Directory / User Management) ── */}
+        <PeopleNav activeId="profile" />
 
         {/* ── Profile Hero ─────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">

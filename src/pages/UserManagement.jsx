@@ -17,6 +17,7 @@ import {
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
 import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
+import PeopleNav from '../components/PeopleNav/PeopleNav';
 
 /**
  * User Management Page - Rebuilt
@@ -1240,6 +1241,11 @@ const UserManagement = ({ pageControls }) => {
   // ========== RENDER: MAIN COMPONENT ==========
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+      {/* Cross-link nav (Profile / HR Directory / User Management) */}
+      <div className="mb-6">
+        <PeopleNav activeId="admin" />
+      </div>
+
       {/* Notification */}
       {notification.show && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${

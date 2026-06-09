@@ -28,6 +28,13 @@ class RBACService {
     return apiService.get(`${RBAC_BASE_URL}/users/`, { params });
   }
 
+  async getUserById(id) {
+    // Returns the full UserProfileSerializer payload (roles, modules,
+    // engineer_profile, MFA, security fields) — used by feature pages that
+    // need the rich record on demand (e.g. HR detail drawer).
+    return apiService.get(`${RBAC_BASE_URL}/users/${id}/`);
+  }
+
   async getCurrentUser() {
     return apiService.get(`${RBAC_BASE_URL}/users/me/`);
   }

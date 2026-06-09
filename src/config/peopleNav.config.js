@@ -1,0 +1,67 @@
+/**
+ * People Navigation Configuration (soft-coded)
+ * -----------------------------------------------------------------
+ * Single source of truth for the cross-link tab bar that ties together
+ * the three people-related surfaces:
+ *
+ *   /profile         — current user's own profile (UserProfileSerializer)
+ *   /hr/employees    — HR directory (UserProfileListSerializer)
+ *   /admin/users     — RBAC user management (UserProfileListSerializer)
+ *
+ * All three back-end endpoints now expose the same nested user shape
+ * (see backend/apps/rbac/serializers.py · UserProfileListSerializer),
+ * so the pages are data-aligned. This config powers the visual
+ * inter-connection via <PeopleNav />.
+ *
+ * To add / rename / re-order tabs: edit only this file.
+ */
+
+// Tab visibility predicates — keyed by canonical capability codes.
+// Receive the same `user` object used by `isUserAdmin()` (Redux auth user).
+export const PEOPLE_NAV_VISIBILITY = {
+  always:     () => true,
+  adminOnly:  (user, helpers) => Boolean(helpers?.isUserAdmin?.(user)),
+}
+
+// Soft-coded tab definitions. Order = display order (left → right).
+export const PEOPLE_NAV_TABS = [
+  {
+    id: 'profile',
+    label: 'My Profile',
+    description: 'Personal details & engineering profile',
+    to: '/profile',
+    icon: 'UserCircleIcon',
+    visibility: 'always',
+    accent: 'from-blue-500 to-indigo-500',
+  },
+  {
+    id: 'hr',
+    label: 'HR Directory',
+    description: 'Workforce directory & competency view',
+    to: '/hr/employees',
+    icon: 'UserGroupIcon',
+    visibility: 'always',
+    accent: 'from-emerald-500 to-teal-500',
+  },
+  {
+    id: 'admin',
+    label: 'User Management',
+    description: 'Roles, modules & access control',
+    to: '/admin/users',
+    icon: 'ShieldCheckIcon',
+    visibility: 'adminOnly',
+    accent: 'from-purple-500 to-fuchsia-500',
+  },
+]
+
+// Section header copy (rendered above the tabs).
+export const PEOPLE_NAV_COPY = {
+  title: 'People & Access',
+  subtitle: 'One workforce, three lenses — switch any time.',
+}
+
+export default {
+  PEOPLE_NAV_TABS,
+  PEOPLE_NAV_VISIBILITY,
+  PEOPLE_NAV_COPY,
+}

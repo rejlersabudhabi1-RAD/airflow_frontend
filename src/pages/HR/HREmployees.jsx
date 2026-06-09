@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
+import PeopleNav from '../../components/PeopleNav/PeopleNav'
 import {
   HR_KPIS,
   HR_FILTERS,
@@ -42,6 +43,7 @@ import {
   initials,
   matchDiscipline,
   getStatusMeta,
+  normalizeEmployee,
 } from '../../config/hrEmployees.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,7 +377,7 @@ const Field = ({ label, value, mono = false }) => (
   </div>
 )
 
-const DetailDrawer = ({ emp, onClose }) => {
+const DetailDrawer = ({ emp, loading, onClose }) => {
   const [tab, setTab] = useState(HR_DEFAULT_DETAIL_TAB)
   useEffect(() => { setTab(HR_DEFAULT_DETAIL_TAB) }, [emp?.id])
 
@@ -413,6 +415,12 @@ const DetailDrawer = ({ emp, onClose }) => {
               <HeroIcons.XMarkIcon className="w-5 h-5" />
             </button>
           </div>
+          {loading && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] opacity-80">
+              <HeroIcons.ArrowPathIcon className="w-3 h-3 animate-spin" />
+              Loading full profile…
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -558,12 +566,15 @@ export default function HREmployees() {
   const [exportOpen, setExportOpen] = useState(false)
 
   // ──────── Data load ────────
+  // Always normalise so downstream code can rely on a single shape (nested
+  // `user`, `roles`, `modules`, `engineer_profile`) regardless of whether
+  // the backend served the lightweight list or the rich detail serializer.
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const resp = await rbacService.getUsers({ page_size: HR_DATA_FETCH_PAGE_SIZE })
-      const list = extractUserList(resp)
+      const list = extractUserList(resp).map(normalizeEmployee)
       setEmployees(list)
     } catch (err) {
       console.error('[HR] Failed to load employees:', err)
@@ -574,6 +585,28 @@ export default function HREmployees() {
   }, [])
 
   useEffect(() => { fetchEmployees() }, [fetchEmployees])
+
+  // ──────── Lazy-load full detail when drawer opens ────────
+  // The list endpoint returns a thin payload (no roles list, modules,
+  // engineer_profile, MFA, security fields). Fetch the full record on demand
+  // so the drawer renders the rich detail tabs without bloating the list.
+  const [detailLoading, setDetailLoading] = useState(false)
+  useEffect(() => {
+    if (!selectedEmp?.id) return
+    let cancelled = false
+    setDetailLoading(true)
+    rbacService.getUserById(selectedEmp.id)
+      .then((resp) => {
+        if (cancelled) return
+        const full = normalizeEmployee(resp?.data ?? resp)
+        // Merge — keep any list-only fields, overlay the rich fields
+        setSelectedEmp(prev => prev && prev.id === full.id ? { ...prev, ...full } : prev)
+      })
+      .catch((err) => console.error('[HR] Failed to load employee detail:', err))
+      .finally(() => { if (!cancelled) setDetailLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmp?.id])
 
   // ──────── Filtering pipeline ────────
   const filteredEmployees = useMemo(() => {
@@ -647,6 +680,9 @@ export default function HREmployees() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 lg:p-6">
       <div className="max-w-[1600px] mx-auto space-y-4">
+        {/* Cross-link nav (Profile / HR Directory / User Management) */}
+        <PeopleNav activeId="hr" />
+
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
@@ -827,7 +863,7 @@ export default function HREmployees() {
       </div>
 
       {/* Detail drawer */}
-      {selectedEmp && <DetailDrawer emp={selectedEmp} onClose={() => setSelectedEmp(null)} />}
+      {selectedEmp && <DetailDrawer emp={selectedEmp} loading={detailLoading} onClose={() => setSelectedEmp(null)} />}
     </div>
   )
 }

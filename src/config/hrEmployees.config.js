@@ -321,10 +321,10 @@ export const formatDate = (iso) => {
 }
 
 export const fullName = (emp) => {
-  const first = emp.user?.first_name || ''
-  const last = emp.user?.last_name || ''
+  const first = emp.user?.first_name || emp.first_name || ''
+  const last = emp.user?.last_name || emp.last_name || ''
   const joined = `${first} ${last}`.trim()
-  return joined || emp.user?.email || 'Unnamed user'
+  return joined || emp.full_name || emp.user?.email || emp.email || 'Unnamed user'
 }
 
 export const initials = (emp) => {
@@ -335,6 +335,44 @@ export const initials = (emp) => {
     .slice(0, 2)
     .map(p => p[0]?.toUpperCase())
     .join('') || '?'
+}
+
+/**
+ * Normalise an employee record so the rest of the UI can rely on a single
+ * shape, regardless of whether it came from:
+ *   - the lightweight list endpoint (flat: { email, full_name, primary_role })
+ *   - the rich detail endpoint     (nested: { user: {...}, roles: [...] })
+ *
+ * The function is **idempotent** — calling it on an already-normalised record
+ * returns the same shape.
+ *
+ * Soft-coded: extend this helper if the backend list serializer ever exposes
+ * new fields the UI consumes; no component code needs to change.
+ */
+export const normalizeEmployee = (raw) => {
+  if (!raw || typeof raw !== 'object') return raw
+  // Build nested `user` if missing — happens with the list serializer's flat shape.
+  const user = raw.user && typeof raw.user === 'object'
+    ? raw.user
+    : {
+        id: raw.user_id || null,
+        email: raw.email || '',
+        first_name: raw.first_name || (raw.full_name ? raw.full_name.split(/\s+/)[0] : ''),
+        last_name: raw.last_name || (raw.full_name ? raw.full_name.split(/\s+/).slice(1).join(' ') : ''),
+        is_active: raw.is_active ?? true,
+      }
+  // Build `roles` from `primary_role` if the rich list isn't present.
+  let roles = Array.isArray(raw.roles) ? raw.roles : []
+  if (roles.length === 0 && raw.primary_role && typeof raw.primary_role === 'object') {
+    roles = [{ id: raw.primary_role.id, name: raw.primary_role.name, is_primary: true }]
+  }
+  return {
+    ...raw,
+    user,
+    roles,
+    modules: Array.isArray(raw.modules) ? raw.modules : [],
+    engineer_profile: raw.engineer_profile || {},
+  }
 }
 
 export default {
@@ -361,4 +399,5 @@ export default {
   initials,
   matchDiscipline,
   getStatusMeta,
+  normalizeEmployee,
 }
