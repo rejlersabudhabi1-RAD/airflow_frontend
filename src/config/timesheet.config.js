@@ -147,4 +147,14 @@ export const TIMESHEET_COPY = {
   connectionFailedTitle: 'Cannot reach the SQL Server',
   connectionFailedSubtitle:
     'Make sure the host is reachable from inside the backend Docker container. On Windows Docker Desktop you can try using "host.docker.internal" instead of an IP.',
+
+  // Mirror mode (production) — biometric data comes from the office-side
+  // sync agent that pushes events into a Postgres mirror table on Railway.
+  mirrorEmptyTitle: 'Waiting for the first sync from the office',
+  mirrorEmptySubtitle:
+    'The biometric mirror is set up but no events have been received yet. The office-side sync agent (timesheet_mirror_sync.py) needs to run at least once. See scripts/TIMESHEET_MIRROR_SETUP.md for setup instructions.',
+  mirrorErrorTitle: 'Cannot read the biometric mirror',
+  mirrorErrorSubtitle:
+    'The Postgres mirror table is unreachable. Check the backend service status and database connection.',
+  mirrorOkLatestPrefix: 'Last event synced:',
 }

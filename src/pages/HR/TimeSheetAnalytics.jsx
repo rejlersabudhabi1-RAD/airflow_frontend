@@ -130,9 +130,25 @@ const DataTable = ({ rows, columns, emptyMessage }) => {
 const HealthBanner = ({ health, onOpenSetup }) => {
   if (!health) return null
   const { driver, config, ping } = health
+  // Soft-coded backend mode. Falls back to legacy behaviour if the backend
+  // doesn't yet return `data_source` (older deployments).
+  const dataSource = (health.data_source || config?.data_source || 'sqlserver').toLowerCase()
 
   let title, subtitle, tone = TIMESHEET_STATUS_TONES.unconfigured
-  if (!driver?.driver_in_use) {
+
+  // ── Mirror mode (production / Railway): no SQL Server reachability concept.
+  // Decide based on the local Postgres mirror table.
+  if (dataSource === 'mirror') {
+    if (ping?.ok) return null  // Healthy mirror with events → no banner.
+    if (ping?.error) {
+      title = TIMESHEET_COPY.mirrorErrorTitle
+      subtitle = `${TIMESHEET_COPY.mirrorErrorSubtitle}\n${ping.error}`
+    } else {
+      title = TIMESHEET_COPY.mirrorEmptyTitle
+      subtitle = TIMESHEET_COPY.mirrorEmptySubtitle
+    }
+  // ── SQL Server (direct LAN) mode: original behaviour.
+  } else if (!driver?.driver_in_use) {
     title = TIMESHEET_COPY.driverMissingTitle
     subtitle = TIMESHEET_COPY.driverMissingSubtitle
   } else if (!config?.configured) {
