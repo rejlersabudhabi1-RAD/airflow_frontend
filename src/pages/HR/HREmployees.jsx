@@ -439,22 +439,26 @@ const EmployeeTimesheetPanel = ({ emp }) => {
   const [error, setError] = useState(null)
   const [showPunches, setShowPunches] = useState(false)
 
-  // The biometric system keys on the office "employee code". When that's not
-  // present on the RAD AI record we fall back to email so HR still sees data.
+  // Hand the backend every identifier we know about. It will OR-match on
+  // biometric `employee_code` and `email`, and resolve any missing piece from
+  // the RAD AI UserProfile via `user_id` — so even users whose RAD AI
+  // `employee_id` doesn't equal their Matrix code still get their report.
   const lookup = useMemo(() => ({
+    user_id:       emp?.id || emp?.user?.id || '',
     employee_code: emp?.employee_id || emp?.employee_code || '',
     email:         emp?.user?.email || emp?.email || '',
   }), [emp])
 
   useEffect(() => {
     if (!emp) return
-    if (!lookup.employee_code && !lookup.email) {
+    if (!lookup.user_id && !lookup.employee_code && !lookup.email) {
       setData(null); setError(null); return
     }
     let cancelled = false
     const { from, to } = _rangeToDates(rangeId)
     setLoading(true); setError(null)
     fetchUserHistory({
+      user_id:         lookup.user_id       || undefined,
       employee_code:   lookup.employee_code || undefined,
       email:           lookup.email         || undefined,
       from, to,
@@ -464,12 +468,13 @@ const EmployeeTimesheetPanel = ({ emp }) => {
       .catch(err => { if (!cancelled) setError(err?.response?.data?.error || err?.message || 'error') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [emp?.id, rangeId, showPunches, lookup.employee_code, lookup.email])
+  }, [emp?.id, rangeId, showPunches, lookup.user_id, lookup.employee_code, lookup.email])
 
   const summary  = data?.summary  || {}
   const monthly  = data?.monthly_breakdown || []
   const daily    = data?.rows || []
   const punches  = data?.punches || []
+  const resolved = data?.resolved || {}
   const noMatch  = !loading && !error && data && daily.length === 0 && (summary.range_days || 0) > 0
 
   const exportCsv = () => {
@@ -485,7 +490,7 @@ const EmployeeTimesheetPanel = ({ emp }) => {
     URL.revokeObjectURL(url)
   }
 
-  if (!lookup.employee_code && !lookup.email) {
+  if (!lookup.user_id && !lookup.employee_code && !lookup.email) {
     return <div className="text-sm text-slate-500 italic">{HR_TIMESHEET_COPY.noMatchState}</div>
   }
 
@@ -541,7 +546,14 @@ const EmployeeTimesheetPanel = ({ emp }) => {
       )}
       {noMatch && !loading && !error && (
         <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-          {HR_TIMESHEET_COPY.noMatchState}
+          <div>{HR_TIMESHEET_COPY.noMatchState}</div>
+          {(resolved.employee_code || resolved.email) && (
+            <div className="mt-1 text-[11px] text-amber-600 font-mono">
+              Tried: {resolved.employee_code ? `code=${resolved.employee_code}` : ''}
+              {resolved.employee_code && resolved.email ? '  ·  ' : ''}
+              {resolved.email ? `email=${resolved.email}` : ''}
+            </div>
+          )}
         </div>
       )}
 
