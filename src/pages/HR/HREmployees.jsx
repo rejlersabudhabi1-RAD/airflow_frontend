@@ -20,6 +20,7 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
 import PeopleNav from '../../components/PeopleNav/PeopleNav'
 import TimeSheetAnalytics from './TimeSheetAnalytics'
+import { fetchUserHistory } from '../../services/timesheet.service'
 import {
   HR_KPIS,
   HR_FILTERS,
@@ -37,6 +38,11 @@ import {
   HR_ADMIN_USER_LINK,
   HR_ADMIN_USERS_LIST_LINK,
   HR_DISCIPLINES,
+  HR_TIMESHEET_RANGES,
+  HR_TIMESHEET_DEFAULT_RANGE,
+  HR_TIMESHEET_KPIS,
+  HR_TIMESHEET_DAILY_COLUMNS,
+  HR_TIMESHEET_COPY,
   formatYearsOfService,
   formatDateTime,
   formatDate,
@@ -226,44 +232,57 @@ const DisciplineTag = ({ emp }) => {
 // Sub-component: Employee Card (Cards view)
 // ─────────────────────────────────────────────────────────────────────────────
 const EmployeeCard = ({ emp, onSelect }) => (
-  <button
-    type="button"
-    onClick={() => onSelect(emp)}
-    className="group text-left bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-lg transition p-4 flex flex-col"
-  >
-    <div className="flex items-start gap-3">
-      <Avatar emp={emp} size="md" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="font-semibold text-slate-900 truncate">{fullName(emp)}</div>
-          <StatusBadge status={emp.status} />
-        </div>
-        <div className="text-xs text-slate-500 truncate">{emp.user?.email || '—'}</div>
-        <div className="mt-1 flex flex-wrap gap-1">
-          <DisciplineTag emp={emp} />
-          {emp.is_mfa_enabled && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
-              <HeroIcons.ShieldCheckIcon className="w-3 h-3" /> MFA
-            </span>
-          )}
+  <div className="group bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-lg transition p-4 flex flex-col">
+    <button
+      type="button"
+      onClick={() => onSelect(emp)}
+      className="text-left flex-1 flex flex-col"
+    >
+      <div className="flex items-start gap-3">
+        <Avatar emp={emp} size="md" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="font-semibold text-slate-900 truncate">{fullName(emp)}</div>
+            <StatusBadge status={emp.status} />
+          </div>
+          <div className="text-xs text-slate-500 truncate">{emp.user?.email || '—'}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <DisciplineTag emp={emp} />
+            {emp.is_mfa_enabled && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
+                <HeroIcons.ShieldCheckIcon className="w-3 h-3" /> MFA
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-    <div className="mt-3 grid grid-cols-1 gap-1 text-xs">
-      {HR_CARD_FIELDS.map(f => (
-        <div key={f.id} className="flex items-center gap-2 text-slate-600 truncate">
-          <Icon name={f.icon} className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <span className="truncate">{f.accessor(emp)}</span>
-        </div>
-      ))}
-    </div>
+      <div className="mt-3 grid grid-cols-1 gap-1 text-xs">
+        {HR_CARD_FIELDS.map(f => (
+          <div key={f.id} className="flex items-center gap-2 text-slate-600 truncate">
+            <Icon name={f.icon} className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <span className="truncate">{f.accessor(emp)}</span>
+          </div>
+        ))}
+      </div>
+    </button>
     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-      <span className="flex items-center gap-1">
-        <HeroIcons.ClockIcon className="w-3.5 h-3.5" /> {formatYearsOfService(emp.created_at)}
-      </span>
-      <span className="text-blue-600 group-hover:underline">View details →</span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onSelect(emp, 'timesheet') }}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-blue-50 text-blue-700 font-medium"
+        title="Open consolidated time-sheet report"
+      >
+        <HeroIcons.ClockIcon className="w-3.5 h-3.5" /> Time Sheet
+      </button>
+      <button
+        type="button"
+        onClick={() => onSelect(emp)}
+        className="text-blue-600 hover:underline"
+      >
+        View details →
+      </button>
     </div>
-  </button>
+  </div>
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -378,9 +397,276 @@ const Field = ({ label, value, mono = false }) => (
   </div>
 )
 
-const DetailDrawer = ({ emp, loading, onClose }) => {
-  const [tab, setTab] = useState(HR_DEFAULT_DETAIL_TAB)
-  useEffect(() => { setTab(HR_DEFAULT_DETAIL_TAB) }, [emp?.id])
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-user timesheet panel — rendered as a tab inside the drawer.
+// Reuses the existing `/api/v1/timesheet/user/` endpoint (no core change).
+// ─────────────────────────────────────────────────────────────────────────────
+const HR_KPI_TONES = {
+  blue:    'bg-blue-50 text-blue-700 border-blue-100',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  violet:  'bg-violet-50 text-violet-700 border-violet-100',
+  amber:   'bg-amber-50 text-amber-700 border-amber-100',
+  sky:     'bg-sky-50 text-sky-700 border-sky-100',
+  rose:    'bg-rose-50 text-rose-700 border-rose-100',
+}
+
+const _toISO = (d) => d.toISOString().slice(0, 10)
+const _rangeToDates = (rangeId) => {
+  const today = new Date()
+  const cfg = HR_TIMESHEET_RANGES.find(r => r.id === rangeId) || HR_TIMESHEET_RANGES[0]
+  if (cfg.preset === 'mtd') {
+    return { from: _toISO(new Date(today.getFullYear(), today.getMonth(), 1)), to: _toISO(today) }
+  }
+  if (cfg.preset === 'ytd') {
+    return { from: _toISO(new Date(today.getFullYear(), 0, 1)), to: _toISO(today) }
+  }
+  const from = new Date(today)
+  from.setDate(today.getDate() - (cfg.days - 1))
+  return { from: _toISO(from), to: _toISO(today) }
+}
+
+const _formatMonth = (ym) => {
+  if (!ym || ym.length < 7) return ym || '—'
+  const [y, m] = ym.split('-')
+  const date = new Date(Number(y), Number(m) - 1, 1)
+  return date.toLocaleString(undefined, { month: 'short', year: 'numeric' })
+}
+
+const EmployeeTimesheetPanel = ({ emp }) => {
+  const [rangeId, setRangeId] = useState(HR_TIMESHEET_DEFAULT_RANGE)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [showPunches, setShowPunches] = useState(false)
+
+  // The biometric system keys on the office "employee code". When that's not
+  // present on the RAD AI record we fall back to email so HR still sees data.
+  const lookup = useMemo(() => ({
+    employee_code: emp?.employee_id || emp?.employee_code || '',
+    email:         emp?.user?.email || emp?.email || '',
+  }), [emp])
+
+  useEffect(() => {
+    if (!emp) return
+    if (!lookup.employee_code && !lookup.email) {
+      setData(null); setError(null); return
+    }
+    let cancelled = false
+    const { from, to } = _rangeToDates(rangeId)
+    setLoading(true); setError(null)
+    fetchUserHistory({
+      employee_code:   lookup.employee_code || undefined,
+      email:           lookup.email         || undefined,
+      from, to,
+      include_punches: showPunches ? 'true' : undefined,
+    })
+      .then(res => { if (!cancelled) setData(res) })
+      .catch(err => { if (!cancelled) setError(err?.response?.data?.error || err?.message || 'error') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [emp?.id, rangeId, showPunches, lookup.employee_code, lookup.email])
+
+  const summary  = data?.summary  || {}
+  const monthly  = data?.monthly_breakdown || []
+  const daily    = data?.rows || []
+  const punches  = data?.punches || []
+  const noMatch  = !loading && !error && data && daily.length === 0 && (summary.range_days || 0) > 0
+
+  const exportCsv = () => {
+    if (!daily.length) return
+    const header = HR_TIMESHEET_DAILY_COLUMNS.map(c => c.label).join(',')
+    const lines  = daily.map(r => HR_TIMESHEET_DAILY_COLUMNS.map(c => String(c.accessor(r)).replace(/,/g, ' ')).join(','))
+    const blob   = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url    = URL.createObjectURL(blob)
+    const a      = document.createElement('a')
+    a.href = url
+    a.download = `timesheet_${lookup.employee_code || lookup.email}_${data?.from || ''}_${data?.to || ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  if (!lookup.employee_code && !lookup.email) {
+    return <div className="text-sm text-slate-500 italic">{HR_TIMESHEET_COPY.noMatchState}</div>
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header: range selector + export */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            {HR_TIMESHEET_COPY.rangeLabel}
+          </span>
+          <select
+            value={rangeId}
+            onChange={(e) => setRangeId(e.target.value)}
+            className="text-sm border border-slate-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {HR_TIMESHEET_RANGES.map(r => (
+              <option key={r.id} value={r.id}>{r.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowPunches(v => !v)}
+            className="text-xs font-medium px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50 text-slate-700"
+          >
+            {showPunches ? HR_TIMESHEET_COPY.hidePunches : HR_TIMESHEET_COPY.showPunches}
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!daily.length}
+            className="text-xs font-medium px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+          >
+            <HeroIcons.ArrowDownTrayIcon className="w-3.5 h-3.5" />
+            {HR_TIMESHEET_COPY.exportCsv}
+          </button>
+        </div>
+      </div>
+
+      {/* Loading / error / empty states */}
+      {loading && (
+        <div className="text-sm text-slate-500 flex items-center gap-2">
+          <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
+          {HR_TIMESHEET_COPY.loadingState}
+        </div>
+      )}
+      {error && !loading && (
+        <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+          {HR_TIMESHEET_COPY.errorState} <span className="opacity-70">({String(error)})</span>
+        </div>
+      )}
+      {noMatch && !loading && !error && (
+        <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          {HR_TIMESHEET_COPY.noMatchState}
+        </div>
+      )}
+
+      {/* KPI tiles */}
+      {!loading && !error && data && daily.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {HR_TIMESHEET_KPIS.map(k => (
+            <div
+              key={k.id}
+              className={`rounded-lg border p-3 flex items-start gap-2 ${HR_KPI_TONES[k.tone] || HR_KPI_TONES.blue}`}
+            >
+              <Icon name={k.icon} className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80 truncate">{k.label}</div>
+                <div className="text-lg font-bold leading-tight truncate">{k.accessor(summary)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Monthly breakdown */}
+      {!loading && monthly.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            {HR_TIMESHEET_COPY.monthlyTitle}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {monthly.map(m => (
+              <div key={m.month} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-slate-800">{_formatMonth(m.month)}</div>
+                  <div className="text-sm font-bold text-blue-700">{(m.hours || 0).toFixed(1)}h</div>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {m.days_present} days · {(m.avg_per_day || 0).toFixed(2)} h/day · {m.punches} punches
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Daily attendance */}
+      {!loading && daily.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            {HR_TIMESHEET_COPY.dailyTitle}
+          </div>
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="max-h-72 overflow-y-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
+                      <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {daily.map(r => (
+                    <tr key={r.date} className="hover:bg-blue-50/50">
+                      {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
+                        <td key={c.id} className="px-3 py-1.5 text-slate-700 whitespace-nowrap">
+                          {c.accessor(r)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hourly raw punches */}
+      {!loading && showPunches && punches.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            {HR_TIMESHEET_COPY.punchesTitle}
+          </div>
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="max-h-60 overflow-y-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Time</th>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {punches.map((p, i) => (
+                    <tr key={`${p.event_time}-${i}`} className="hover:bg-blue-50/50">
+                      <td className="px-3 py-1 text-slate-700 whitespace-nowrap">{p.date}</td>
+                      <td className="px-3 py-1 text-slate-700 whitespace-nowrap font-mono">
+                        {(p.event_time || '').slice(11, 19)}
+                      </td>
+                      <td className="px-3 py-1 whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          String(p.event_type).toUpperCase() === 'IN'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {p.event_type || '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
+  const [tab, setTab] = useState(initialTab || HR_DEFAULT_DETAIL_TAB)
+  useEffect(() => { setTab(initialTab || HR_DEFAULT_DETAIL_TAB) }, [emp?.id, initialTab])
 
   if (!emp) return null
   const ep = emp.engineer_profile || {}
@@ -468,6 +754,10 @@ const DetailDrawer = ({ emp, loading, onClose }) => {
               <Field label="Status" value={getStatusMeta(emp.status).label} />
               <Field label="Discipline" value={matchDiscipline(ep.discipline || emp.department)?.label || ep.discipline || '—'} />
             </div>
+          )}
+
+          {tab === 'timesheet' && (
+            <EmployeeTimesheetPanel emp={emp} />
           )}
 
           {tab === 'competency' && (
@@ -563,8 +853,14 @@ export default function HREmployees() {
   const [pageSize, setPageSize] = useState(HR_DEFAULT_PAGE_SIZE)
   const [pageIndex, setPageIndex] = useState(0)
   const [selectedEmp, setSelectedEmp] = useState(null)
+  const [selectedTab, setSelectedTab] = useState(null)  // optional initial tab when opening drawer
   const [exporting, setExporting] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+
+  const openEmp = useCallback((emp, tab = null) => {
+    setSelectedTab(tab)
+    setSelectedEmp(emp)
+  }, [])
 
   // ──────── Data load ────────
   // Always normalise so downstream code can rely on a single shape (nested
@@ -822,15 +1118,15 @@ export default function HREmployees() {
             {viewMode === 'cards' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {paginated.map(emp => (
-                  <EmployeeCard key={emp.id} emp={emp} onSelect={setSelectedEmp} />
+                  <EmployeeCard key={emp.id} emp={emp} onSelect={openEmp} />
                 ))}
               </div>
             )}
             {viewMode === 'table' && (
-              <EmployeesTable employees={paginated} onSelect={setSelectedEmp} />
+              <EmployeesTable employees={paginated} onSelect={openEmp} />
             )}
             {viewMode === 'dept' && (
-              <DepartmentsView employees={filteredEmployees} onSelect={setSelectedEmp} />
+              <DepartmentsView employees={filteredEmployees} onSelect={openEmp} />
             )}
 
             {/* Pagination */}
@@ -873,7 +1169,14 @@ export default function HREmployees() {
       </div>
 
       {/* Detail drawer */}
-      {selectedEmp && <DetailDrawer emp={selectedEmp} loading={detailLoading} onClose={() => setSelectedEmp(null)} />}
+      {selectedEmp && (
+        <DetailDrawer
+          emp={selectedEmp}
+          loading={detailLoading}
+          initialTab={selectedTab}
+          onClose={() => { setSelectedEmp(null); setSelectedTab(null) }}
+        />
+      )}
     </div>
   )
 }

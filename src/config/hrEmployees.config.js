@@ -254,11 +254,60 @@ export const HR_TABLE_COLUMNS = [
 export const HR_DETAIL_TABS = [
   { id: 'overview',    label: 'Overview',     icon: 'UserCircleIcon' },
   { id: 'employment',  label: 'Employment',   icon: 'BriefcaseIcon' },
+  { id: 'timesheet',   label: 'Time Sheet',   icon: 'ClockIcon' },
   { id: 'competency',  label: 'Competency',   icon: 'AcademicCapIcon' },
   { id: 'access',      label: 'Roles & Access', icon: 'KeyIcon' },
   { id: 'security',    label: 'Security & Activity', icon: 'ShieldCheckIcon' },
 ]
 export const HR_DEFAULT_DETAIL_TAB = 'overview'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9b. PER-USER TIMESHEET PANEL — drill-down inside detail drawer
+// All copy + ranges + KPI definitions are soft-coded here.
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_TIMESHEET_RANGES = [
+  { id: '7d',   label: 'Last 7 days',   days: 7   },
+  { id: '30d',  label: 'Last 30 days',  days: 30  },
+  { id: '90d',  label: 'Last 90 days',  days: 90  },
+  { id: 'mtd',  label: 'Month to date', preset: 'mtd' },
+  { id: 'ytd',  label: 'Year to date',  preset: 'ytd' },
+  { id: '365d', label: 'Last 12 months', days: 365 },
+]
+export const HR_TIMESHEET_DEFAULT_RANGE = '30d'
+
+// KPI tiles rendered at the top of the panel. Accessor receives `summary`.
+export const HR_TIMESHEET_KPIS = [
+  { id: 'total_hours',   label: 'Total Hours',     icon: 'ClockIcon',          tone: 'blue',    accessor: (s) => (s.total_hours ?? 0).toFixed(1) },
+  { id: 'days_present',  label: 'Days Present',    icon: 'CheckCircleIcon',    tone: 'emerald', accessor: (s) => s.days_present ?? 0 },
+  { id: 'avg_per_day',   label: 'Avg Hours / Day', icon: 'ChartBarIcon',       tone: 'violet',  accessor: (s) => (s.avg_hours_per_day ?? 0).toFixed(2) },
+  { id: 'days_full',     label: 'Full Days',       icon: 'SunIcon',            tone: 'amber',   accessor: (s) => s.days_full ?? 0 },
+  { id: 'avg_first_in',  label: 'Avg First In',    icon: 'ArrowRightOnRectangleIcon',  tone: 'sky',  accessor: (s) => s.avg_first_in || '—' },
+  { id: 'avg_last_out',  label: 'Avg Last Out',    icon: 'ArrowLeftOnRectangleIcon',   tone: 'rose', accessor: (s) => s.avg_last_out || '—' },
+]
+
+export const HR_TIMESHEET_DAILY_COLUMNS = [
+  { id: 'date',     label: 'Date',     accessor: (r) => r.date },
+  { id: 'first_in', label: 'First In', accessor: (r) => (r.first_in || '').slice(11, 16) || '—' },
+  { id: 'last_out', label: 'Last Out', accessor: (r) => (r.last_out || '').slice(11, 16) || '—' },
+  { id: 'hours',    label: 'Hours',    accessor: (r) => ((r.hours_worked ?? r.hours ?? 0)).toFixed(2) },
+  { id: 'punches',  label: 'Punches',  accessor: (r) => r.punch_count ?? r.punches ?? 0 },
+]
+
+export const HR_TIMESHEET_COPY = {
+  panelTitle:      'Time Sheet',
+  panelSubtitle:   'Consolidated attendance based on biometric punches',
+  loadingState:    'Loading time-sheet records…',
+  emptyState:      'No punches recorded for this period.',
+  noMatchState:    'No biometric record matches this employee. Ensure their employee code or email is mapped in the directory.',
+  errorState:      'Unable to load time-sheet data right now.',
+  rangeLabel:      'Period',
+  monthlyTitle:    'Monthly Breakdown',
+  dailyTitle:      'Daily Attendance',
+  punchesTitle:    'Hourly Records (raw punches)',
+  showPunches:     'Show hourly records',
+  hidePunches:     'Hide hourly records',
+  exportCsv:       'Export CSV',
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. PAGINATION & DATA LOAD
@@ -386,6 +435,12 @@ export default {
   HR_CARD_FIELDS,
   HR_TABLE_COLUMNS,
   HR_DETAIL_TABS,
+  HR_DEFAULT_DETAIL_TAB,
+  HR_TIMESHEET_RANGES,
+  HR_TIMESHEET_DEFAULT_RANGE,
+  HR_TIMESHEET_KPIS,
+  HR_TIMESHEET_DAILY_COLUMNS,
+  HR_TIMESHEET_COPY,
   HR_PAGE_SIZES,
   HR_DEFAULT_PAGE_SIZE,
   HR_DATA_FETCH_PAGE_SIZE,
