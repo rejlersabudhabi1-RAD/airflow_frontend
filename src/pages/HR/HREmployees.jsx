@@ -847,15 +847,22 @@ const EmployeeTimesheetPanel = ({ emp }) => {
                 <div>RAD profile matched: <span className="text-amber-900">{diag.profile_matched ? 'yes' : 'no'}</span></div>
                 <div>Master rows by email: <span className="text-amber-900">{(diag.master_email_hits || []).length}</span></div>
                 <div>Master rows by code:  <span className="text-amber-900">{(diag.master_code_hits  || []).length}</span></div>
+                <div>Master rows by name:  <span className="text-amber-900">
+                  {(diag.master_name_hits || []).length}
+                  {diag.master_name_strategy ? ` (${diag.master_name_strategy})` : ''}
+                </span></div>
                 <div>Name-resolver used:   <span className="text-amber-900">{diag.name_resolver_used ? 'yes' : 'no'}</span></div>
                 <div>Resolved aliases (emails): <span className="text-amber-900">{(diag.final_emails || []).join(', ') || '—'}</span></div>
                 <div>Resolved aliases (codes):  <span className="text-amber-900">{(diag.final_codes  || []).join(', ') || '—'}</span></div>
                 <div>Matched events in range:   <span className="text-amber-900">{diag.matched_events_in_range ?? '—'}</span></div>
                 <div>Matched events all time:   <span className="text-amber-900">{diag.matched_events_all_time ?? '—'}</span></div>
-                {(diag.master_email_hits || []).length === 0 && (diag.master_code_hits || []).length === 0 && (
+                {(diag.master_email_hits || []).length === 0
+                  && (diag.master_code_hits || []).length === 0
+                  && (diag.master_name_hits || []).length === 0 && (
                   <div className="mt-1 text-rose-700">
-                    Likely cause: BiometricUserMaster has no row matching this user&apos;s email or code.
-                    Run the office-side <span className="font-bold">timesheet_mirror_sync.py --users</span> backfill once.
+                    Likely cause: BiometricUserMaster has no row matching this user&apos;s email, code, or name.
+                    Run the office-side <span className="font-bold">timesheet_mirror_sync.py --users</span> backfill once
+                    so OfficeEmail / FullName / Card1 columns are populated for every user.
                   </div>
                 )}
               </div>
