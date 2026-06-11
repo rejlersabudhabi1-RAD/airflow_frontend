@@ -708,6 +708,7 @@ const EmployeeTimesheetPanel = ({ emp }) => {
   const daily    = data?.rows || []
   const punches  = data?.punches || []
   const resolved = data?.resolved || {}
+  const diag     = data?.diagnostic || null
   const noMatch  = !loading && !error && data && daily.length === 0 && (summary.range_days || 0) > 0
 
   const exportCsv = () => {
@@ -834,6 +835,31 @@ const EmployeeTimesheetPanel = ({ emp }) => {
               {resolved.employee_code && resolved.email ? '  ·  ' : ''}
               {resolved.email ? `email=${resolved.email}` : ''}
             </div>
+          )}
+          {diag && (
+            <details className="mt-2 text-[11px]">
+              <summary className="cursor-pointer text-amber-700 hover:text-amber-900 font-medium">
+                Diagnostic details (for IT)
+              </summary>
+              <div className="mt-1.5 font-mono text-amber-800 space-y-0.5">
+                <div>Input email: <span className="text-amber-900">{diag.input_email || '—'}</span></div>
+                <div>Input code:  <span className="text-amber-900">{diag.input_code  || '—'}</span></div>
+                <div>RAD profile matched: <span className="text-amber-900">{diag.profile_matched ? 'yes' : 'no'}</span></div>
+                <div>Master rows by email: <span className="text-amber-900">{(diag.master_email_hits || []).length}</span></div>
+                <div>Master rows by code:  <span className="text-amber-900">{(diag.master_code_hits  || []).length}</span></div>
+                <div>Name-resolver used:   <span className="text-amber-900">{diag.name_resolver_used ? 'yes' : 'no'}</span></div>
+                <div>Resolved aliases (emails): <span className="text-amber-900">{(diag.final_emails || []).join(', ') || '—'}</span></div>
+                <div>Resolved aliases (codes):  <span className="text-amber-900">{(diag.final_codes  || []).join(', ') || '—'}</span></div>
+                <div>Matched events in range:   <span className="text-amber-900">{diag.matched_events_in_range ?? '—'}</span></div>
+                <div>Matched events all time:   <span className="text-amber-900">{diag.matched_events_all_time ?? '—'}</span></div>
+                {(diag.master_email_hits || []).length === 0 && (diag.master_code_hits || []).length === 0 && (
+                  <div className="mt-1 text-rose-700">
+                    Likely cause: BiometricUserMaster has no row matching this user&apos;s email or code.
+                    Run the office-side <span className="font-bold">timesheet_mirror_sync.py --users</span> backfill once.
+                  </div>
+                )}
+              </div>
+            </details>
           )}
         </div>
       )}
