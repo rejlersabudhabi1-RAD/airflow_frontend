@@ -92,6 +92,7 @@ export const HR_KPIS = [
     id: 'headcount',
     label: 'Total Headcount',
     accent: 'from-blue-500 to-indigo-600',
+    calmTone: 'bg-blue-50 text-blue-700 border-blue-100',
     icon: 'UsersIcon',
     compute: (list) => list.length,
     sub: 'All registered employees',
@@ -100,6 +101,7 @@ export const HR_KPIS = [
     id: 'active',
     label: 'Active',
     accent: 'from-emerald-500 to-teal-600',
+    calmTone: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     icon: 'CheckBadgeIcon',
     compute: (list) => list.filter(e => e.status === 'active').length,
     sub: 'Currently working',
@@ -108,6 +110,7 @@ export const HR_KPIS = [
     id: 'pending_onboarding',
     label: 'Pending Onboarding',
     accent: 'from-amber-500 to-orange-600',
+    calmTone: 'bg-amber-50 text-amber-700 border-amber-100',
     icon: 'ClockIcon',
     compute: (list) => list.filter(e => e.status === 'pending').length,
     sub: 'Awaiting first login / setup',
@@ -116,6 +119,7 @@ export const HR_KPIS = [
     id: 'new_joiners_30d',
     label: 'New Joiners (30d)',
     accent: 'from-purple-500 to-fuchsia-600',
+    calmTone: 'bg-purple-50 text-purple-700 border-purple-100',
     icon: 'SparklesIcon',
     compute: (list) => list.filter(e => daysAgo(e.created_at, 30)).length,
     sub: 'Joined in the last 30 days',
@@ -124,6 +128,7 @@ export const HR_KPIS = [
     id: 'departments',
     label: 'Departments',
     accent: 'from-cyan-500 to-blue-600',
+    calmTone: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     icon: 'BuildingOffice2Icon',
     compute: (list) => new Set(list.map(e => (e.department || '').trim()).filter(Boolean)).size,
     sub: 'Distinct department codes',
@@ -132,6 +137,7 @@ export const HR_KPIS = [
     id: 'disciplines',
     label: 'Disciplines Covered',
     accent: 'from-rose-500 to-pink-600',
+    calmTone: 'bg-rose-50 text-rose-700 border-rose-100',
     icon: 'BeakerIcon',
     compute: (list) => new Set(list.map(e => matchDiscipline(e.engineer_profile?.discipline || e.department)?.code).filter(Boolean)).size,
     sub: 'Engineering specialisations',
@@ -140,6 +146,7 @@ export const HR_KPIS = [
     id: 'mfa_adoption',
     label: 'MFA Adoption',
     accent: 'from-indigo-500 to-violet-600',
+    calmTone: 'bg-indigo-50 text-indigo-700 border-indigo-100',
     icon: 'ShieldCheckIcon',
     compute: (list) => list.length === 0 ? '0%' : `${Math.round((list.filter(e => e.is_mfa_enabled).length / list.length) * 100)}%`,
     sub: 'Two-factor enabled accounts',
@@ -148,6 +155,7 @@ export const HR_KPIS = [
     id: 'long_tenure',
     label: 'Veterans (10y+)',
     accent: 'from-yellow-500 to-amber-600',
+    calmTone: 'bg-amber-50 text-amber-700 border-amber-100',
     icon: 'TrophyIcon',
     compute: (list) => list.filter(e => yearsSince(e.created_at) >= 10).length,
     sub: '10+ years of service',
@@ -222,6 +230,31 @@ export const HR_VIEW_MODES = [
 export const HR_DEFAULT_VIEW_MODE = 'cards'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UI simplification toggles — tweak here to declutter or re-enrich the page
+// without touching component code. The HR Employees page reads these to
+// decide what to show by default.
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_UI = {
+  // Which KPIs render in the always-visible "essential" strip. The rest
+  // are hidden behind a "Show all metrics" toggle so the page is not
+  // overwhelming on first load.
+  essentialKpiIds:        ['headcount', 'active', 'pending_onboarding', 'new_joiners_30d'],
+  // Filter dropdowns start collapsed. The search bar + view-mode toggle
+  // remain visible at all times.
+  filtersCollapsedByDefault: true,
+  // Use solid pastel tiles for KPIs instead of vivid gradients. Set to
+  // false to re-enable the original gradient look.
+  calmKpis: true,
+  // Master switch for motion: hover transitions, transforms, pulse skeletons
+  // and spinners. When false, the page renders as plain static records —
+  // no animation, no hover lift, no shimmer.
+  animationsEnabled: false,
+  // Loading placeholder shown in place of pulsing skeleton bars when
+  // animations are off. Plain text only.
+  staticLoadingPlaceholder: '…',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 7. CARD FIELDS — controls which secondary lines appear on the employee card
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_CARD_FIELDS = [
@@ -261,6 +294,17 @@ export const HR_DETAIL_TABS = [
   { id: 'security',    label: 'Security & Activity', icon: 'ShieldCheckIcon' },
 ]
 export const HR_DEFAULT_DETAIL_TAB = 'overview'
+
+// Soft-coded drawer width per active tab. Tabs that visualise dense data
+// (time sheet, competency matrices …) get a wider canvas; record-style
+// tabs stay narrow. Add a tab id here to override its width. Fallback is
+// `HR_DRAWER_WIDTH_DEFAULT`. Tailwind max-w-* class names only.
+export const HR_DRAWER_WIDTH_DEFAULT = 'max-w-xl'
+export const HR_DRAWER_WIDTH_BY_TAB = {
+  timesheet:  'max-w-6xl',
+  competency: 'max-w-3xl',
+  access:     'max-w-3xl',
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 9b. PER-USER TIMESHEET PANEL — drill-down inside detail drawer
@@ -305,9 +349,79 @@ export const HR_TIMESHEET_COPY = {
   monthlyTitle:    'Monthly Breakdown',
   dailyTitle:      'Daily Attendance',
   punchesTitle:    'Hourly Records (raw punches)',
+  punchesSubtitle: 'Every biometric event in this period — one row per punch, sorted newest first.',
   showPunches:     'Show hourly records',
   hidePunches:     'Hide hourly records',
   exportCsv:       'Export CSV',
+  heroTitle:       'Attendance Snapshot',
+  activityTitle:   'Daily Activity',
+  emptyActivity:   'No working hours recorded in this period.',
+}
+
+// Soft-coded columns for the raw-punches table. Each entry is rendered as
+// plain text in the same style as the daily-attendance table — no chips,
+// no colour pills, no animation. Add / remove / reorder by editing this
+// list; the component picks the change up automatically.
+export const HR_TIMESHEET_PUNCH_COLUMNS = [
+  { id: 'date',   label: 'Date',   accessor: (p) => p.date || (p.event_time || '').slice(0, 10) || '—' },
+  { id: 'day',    label: 'Day',    accessor: (p) => {
+      const d = new Date(p.event_time || p.date)
+      return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { weekday: 'short' })
+    } },
+  { id: 'time',   label: 'Time',   accessor: (p) => (p.event_time || '').slice(11, 19) || '—', mono: true },
+  { id: 'type',   label: 'Type',   accessor: (p) => (p.event_type || '—').toString().toUpperCase() },
+  { id: 'device', label: 'Device', accessor: (p) => p.device || p.terminal || p.reader || '—' },
+]
+
+// Sort direction for the punches table. 'desc' = newest first.
+export const HR_TIMESHEET_PUNCH_SORT = 'desc'
+
+// Soft-coded columns for the "Daily Activity" table. Renders as plain text
+// — no horizontal bar chart. The component shows hours as a number plus a
+// short status word picked from HR_TIMESHEET_VISUALS.hourBands.
+export const HR_TIMESHEET_ACTIVITY_COLUMNS = [
+  { id: 'date',   label: 'Date',   accessor: (r) => r.date || '—' },
+  { id: 'day',    label: 'Day',    accessor: (r) => {
+      const d = new Date(r.date)
+      return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { weekday: 'short' })
+    } },
+  { id: 'hours',  label: 'Hours',  accessor: (r) => {
+      const h = Number(r.hours_worked ?? r.hours ?? 0)
+      return h > 0 ? `${h.toFixed(2)} h` : '—'
+    }, mono: true },
+  { id: 'status', label: 'Status', accessor: (r) => {
+      const h = Number(r.hours_worked ?? r.hours ?? 0)
+      return r.__bandLabel || (h === 0 ? 'Absent' : '')
+    } },
+]
+// Sort for daily activity table. 'desc' = newest first.
+export const HR_TIMESHEET_ACTIVITY_SORT = 'desc'
+
+// Soft-coded columns for the "Monthly Breakdown" table.
+export const HR_TIMESHEET_MONTHLY_COLUMNS = [
+  { id: 'month',   label: 'Month',     accessor: (m) => m.__monthLabel || m.month || '—' },
+  { id: 'hours',   label: 'Hours',     accessor: (m) => `${Number(m.hours || 0).toFixed(1)} h`, mono: true },
+  { id: 'days',    label: 'Days',      accessor: (m) => `${m.days_present || 0}` },
+  { id: 'avg',     label: 'Avg/Day',   accessor: (m) => `${Number(m.avg_per_day || 0).toFixed(2)} h`, mono: true },
+  { id: 'punches', label: 'Punches',   accessor: (m) => `${m.punches || 0}` },
+]
+
+// Visual / interaction defaults for the per-user timesheet panel. All
+// thresholds, colours and chart geometry live here so tweaks never touch
+// the component. Add new keys freely — accessors below pick them up.
+export const HR_TIMESHEET_VISUALS = {
+  // Bar chart: how a single day's hours map to colour zones.
+  hourBands: [
+    { upTo: 0,   color: 'bg-slate-200', label: 'Absent' },
+    { upTo: 4,   color: 'bg-amber-300', label: 'Half day' },
+    { upTo: 8,   color: 'bg-sky-400',   label: 'Standard' },
+    { upTo: 999, color: 'bg-emerald-500', label: 'Overtime' },
+  ],
+  // Target hours per day — drives the bar-width %.
+  targetHoursPerDay: 8,
+  // Donut ring (utilisation) — px geometry.
+  ringSize: 132,
+  ringStroke: 12,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -467,15 +581,24 @@ export default {
   HR_KPIS,
   HR_FILTERS,
   HR_VIEW_MODES,
+  HR_UI,
   HR_CARD_FIELDS,
   HR_TABLE_COLUMNS,
   HR_DETAIL_TABS,
   HR_DEFAULT_DETAIL_TAB,
+  HR_DRAWER_WIDTH_DEFAULT,
+  HR_DRAWER_WIDTH_BY_TAB,
   HR_TIMESHEET_RANGES,
   HR_TIMESHEET_DEFAULT_RANGE,
   HR_TIMESHEET_KPIS,
   HR_TIMESHEET_DAILY_COLUMNS,
   HR_TIMESHEET_COPY,
+  HR_TIMESHEET_PUNCH_COLUMNS,
+  HR_TIMESHEET_PUNCH_SORT,
+  HR_TIMESHEET_ACTIVITY_COLUMNS,
+  HR_TIMESHEET_ACTIVITY_SORT,
+  HR_TIMESHEET_MONTHLY_COLUMNS,
+  HR_TIMESHEET_VISUALS,
   HR_PAGE_SIZES,
   HR_DEFAULT_PAGE_SIZE,
   HR_DATA_FETCH_PAGE_SIZE,

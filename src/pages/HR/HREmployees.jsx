@@ -25,11 +25,14 @@ import {
   HR_KPIS,
   HR_FILTERS,
   HR_VIEW_MODES,
+  HR_UI,
   HR_DEFAULT_VIEW_MODE,
   HR_CARD_FIELDS,
   HR_TABLE_COLUMNS,
   HR_DETAIL_TABS,
   HR_DEFAULT_DETAIL_TAB,
+  HR_DRAWER_WIDTH_DEFAULT,
+  HR_DRAWER_WIDTH_BY_TAB,
   HR_PAGE_SIZES,
   HR_DEFAULT_PAGE_SIZE,
   HR_DATA_FETCH_PAGE_SIZE,
@@ -43,6 +46,12 @@ import {
   HR_TIMESHEET_KPIS,
   HR_TIMESHEET_DAILY_COLUMNS,
   HR_TIMESHEET_COPY,
+  HR_TIMESHEET_PUNCH_COLUMNS,
+  HR_TIMESHEET_PUNCH_SORT,
+  HR_TIMESHEET_ACTIVITY_COLUMNS,
+  HR_TIMESHEET_ACTIVITY_SORT,
+  HR_TIMESHEET_MONTHLY_COLUMNS,
+  HR_TIMESHEET_VISUALS,
   formatYearsOfService,
   formatDateTime,
   formatDate,
@@ -64,6 +73,19 @@ const Icon = ({ name, className = 'w-5 h-5' }) => {
   return <C className={className} aria-hidden="true" />
 }
 
+// ─── Motion gate ────────────────────────────────────────────────────────────
+// Driven by HR_UI.animationsEnabled. When animations are off we strip out
+// every transition / animate-* / hover-transform class so the page renders
+// as plain static records. Flip the config flag to bring motion back.
+const ANIM = HR_UI?.animationsEnabled !== false
+/** Return the given class string only when animations are enabled. */
+const anim = (cls) => (ANIM ? cls : '')
+/** Spinner that becomes a static glyph when animations are off. */
+const Spinner = ({ className = 'w-4 h-4' }) =>
+  ANIM
+    ? <HeroIcons.ArrowPathIcon className={`${className} animate-spin`} aria-hidden="true" />
+    : <HeroIcons.EllipsisHorizontalIcon className={className} aria-hidden="true" />
+
 /** Normalise the various shapes rbacService.getUsers() can return. */
 const extractUserList = (resp) => {
   if (Array.isArray(resp)) return resp
@@ -76,25 +98,59 @@ const extractUserList = (resp) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: KPI Strip
 // ─────────────────────────────────────────────────────────────────────────────
-const KpiStrip = ({ employees, loading }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-    {HR_KPIS.map((kpi) => (
-      <div
-        key={kpi.id}
-        className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${kpi.accent} text-white p-4 shadow-md`}
-      >
-        <div className="flex items-start justify-between">
-          <Icon name={kpi.icon} className="w-6 h-6 opacity-80" />
-          <span className="text-[10px] uppercase tracking-wider opacity-80">{kpi.label}</span>
-        </div>
-        <div className="mt-2 text-2xl font-bold leading-tight">
-          {loading ? <span className="inline-block w-8 h-6 bg-white/30 animate-pulse rounded" /> : kpi.compute(employees)}
-        </div>
-        <div className="mt-1 text-[11px] opacity-80 line-clamp-1">{kpi.sub}</div>
+const KpiStrip = ({ employees, loading }) => {
+  // Show only the "essential" KPIs by default to keep the page calm. Users
+  // can reveal the rest with a single click. The split is driven by
+  // HR_UI.essentialKpiIds — edit the config to change what's prominent.
+  const [showAll, setShowAll] = useState(false)
+  const essentialIds = HR_UI.essentialKpiIds || []
+  const essentials   = HR_KPIS.filter(k => essentialIds.includes(k.id))
+  const extras       = HR_KPIS.filter(k => !essentialIds.includes(k.id))
+  const visible      = showAll ? [...essentials, ...extras] : essentials
+  const useCalm      = HR_UI.calmKpis !== false
+
+  return (
+    <div className="space-y-2">
+      <div className={`grid gap-3 ${showAll
+        ? 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-8'
+        : 'grid-cols-2 sm:grid-cols-4'}`}>
+        {visible.map((kpi) => (
+          <div
+            key={kpi.id}
+            className={useCalm
+              ? `rounded-xl border ${kpi.calmTone || 'bg-slate-50 text-slate-700 border-slate-100'} p-4`
+              : `relative overflow-hidden rounded-xl bg-gradient-to-br ${kpi.accent} text-white p-4 shadow-md`}
+          >
+            <div className="flex items-center justify-between">
+              <Icon name={kpi.icon} className={useCalm ? 'w-5 h-5 opacity-80' : 'w-6 h-6 opacity-80'} />
+              <span className="text-[10px] uppercase tracking-wider opacity-70 font-semibold truncate">{kpi.label}</span>
+            </div>
+            <div className="mt-2 text-3xl font-bold leading-tight tabular-nums">
+              {loading
+                ? (ANIM
+                    ? <span className="inline-block w-10 h-7 bg-current opacity-20 animate-pulse rounded" />
+                    : <span className="opacity-50">{HR_UI.staticLoadingPlaceholder || '…'}</span>)
+                : kpi.compute(employees)}
+            </div>
+            <div className="mt-1 text-[11px] opacity-70 line-clamp-1">{kpi.sub}</div>
+          </div>
+        ))}
       </div>
-    ))}
-  </div>
-)
+      {extras.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowAll(v => !v)}
+            className="text-xs font-medium text-slate-500 hover:text-slate-800 inline-flex items-center gap-1"
+          >
+            {showAll ? <HeroIcons.ChevronUpIcon className="w-3.5 h-3.5" /> : <HeroIcons.ChevronDownIcon className="w-3.5 h-3.5" />}
+            {showAll ? 'Show fewer metrics' : `Show all ${HR_KPIS.length} metrics`}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: Filters Bar
@@ -106,6 +162,14 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
   // `searchTerm` prop — no change to core filter logic in the parent.
   const [draft, setDraft] = useState(searchTerm)
   useEffect(() => { setDraft(searchTerm) }, [searchTerm])
+  // Collapse the filter dropdowns by default — soft-coded in HR_UI. Active
+  // filters bubble up as a count badge so nothing is hidden silently.
+  const [filtersOpen, setFiltersOpen] = useState(!HR_UI.filtersCollapsedByDefault)
+  const activeFilterCount = useMemo(
+    () => HR_FILTERS.reduce((n, f) => n + (filterValues[f.id] && filterValues[f.id] !== 'all' ? 1 : 0), 0),
+    [filterValues]
+  )
+
   const commitSearch = (e) => {
     e?.preventDefault?.()
     const term = draft.trim()
@@ -153,7 +217,7 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
                 type="button"
                 onClick={clearSearch}
                 aria-label={HR_COPY.searchClearLabel}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 ${anim('transition')}`}
               >
                 <HeroIcons.XMarkIcon className="w-4 h-4" />
               </button>
@@ -162,23 +226,43 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
           <button
             type="submit"
             disabled={searching}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white text-sm font-medium rounded-lg shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+            className={`inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${anim('transition')}`}
           >
             {searching
-              ? <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ? <Spinner className="w-4 h-4" />
               : <HeroIcons.MagnifyingGlassIcon className="w-4 h-4" />}
             <span className="hidden sm:inline">{HR_COPY.searchButtonLabel}</span>
           </button>
         </form>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(o => !o)}
+            className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border ${anim('transition')} ${
+              filtersOpen || activeFilterCount > 0
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+            }`}
+            aria-expanded={filtersOpen}
+            aria-controls="hr-filters-panel"
+          >
+            <HeroIcons.AdjustmentsHorizontalIcon className="w-4 h-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-blue-600 text-white">
+                {activeFilterCount}
+              </span>
+            )}
+            <HeroIcons.ChevronDownIcon className={`w-3 h-3 ${anim('transition-transform')} ${filtersOpen ? 'rotate-180' : ''}`} />
+          </button>
           <div className="inline-flex bg-slate-100 rounded-lg p-1">
             {HR_VIEW_MODES.map(vm => (
               <button
                 key={vm.id}
                 type="button"
                 onClick={() => setViewMode(vm.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${anim('transition')} ${
                   viewMode === vm.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
                 aria-pressed={viewMode === vm.id}
@@ -188,38 +272,42 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={onReset}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition"
-          >
-            Reset
-          </button>
+          {(activeFilterCount > 0 || searchTerm) && (
+            <button
+              type="button"
+              onClick={onReset}
+              className={`px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md ${anim('transition')}`}
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Filter selects */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        {HR_FILTERS.map(f => {
-          const opts = f.optionsFrom === 'static' ? f.options : (dynamicOptions[f.id] || [{ value: 'all', label: f.placeholder || 'All' }])
-          return (
-            <div key={f.id}>
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                {f.label}
-              </label>
-              <select
-                value={filterValues[f.id] || 'all'}
-                onChange={(e) => setFilterValue(f.id, e.target.value)}
-                className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {opts.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-          )
-        })}
-      </div>
+      {/* Filter selects — collapsible to keep the toolbar clean */}
+      {filtersOpen && (
+        <div id="hr-filters-panel" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 pt-1 border-t border-slate-100">
+          {HR_FILTERS.map(f => {
+            const opts = f.optionsFrom === 'static' ? f.options : (dynamicOptions[f.id] || [{ value: 'all', label: f.placeholder || 'All' }])
+            return (
+              <div key={f.id}>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                  {f.label}
+                </label>
+                <select
+                  value={filterValues[f.id] || 'all'}
+                  onChange={(e) => setFilterValue(f.id, e.target.value)}
+                  className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {opts.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -270,7 +358,7 @@ const DisciplineTag = ({ emp }) => {
 // Sub-component: Employee Card (Cards view)
 // ─────────────────────────────────────────────────────────────────────────────
 const EmployeeCard = ({ emp, onSelect }) => (
-  <div className="group bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-lg transition p-4 flex flex-col">
+  <div className={`group bg-white rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-lg p-4 flex flex-col ${anim('transition')}`}>
     <button
       type="button"
       onClick={() => onSelect(emp)}
@@ -422,7 +510,7 @@ const DepartmentsView = ({ employees, onSelect }) => {
                 type="button"
                 onClick={() => onSelect(emp)}
                 title={`${fullName(emp)} · ${emp.job_title || '—'}`}
-                className="flex items-center gap-2 px-2 py-1 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-xs transition"
+                className={`flex items-center gap-2 px-2 py-1 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-xs ${anim('transition')}`}
               >
                 <Avatar emp={emp} size="sm" />
                 <span className="font-medium text-slate-700">{fullName(emp)}</span>
@@ -482,6 +570,100 @@ const _formatMonth = (ym) => {
   const date = new Date(Number(y), Number(m) - 1, 1)
   return date.toLocaleString(undefined, { month: 'short', year: 'numeric' })
 }
+
+// ─── Visual sub-components (pure CSS/SVG — no chart library) ────────────────
+// Soft-coded via HR_TIMESHEET_VISUALS: change colours / target / ring size
+// in the config and these renderers update without a code change.
+
+const _bandFor = (hours) => {
+  for (const b of HR_TIMESHEET_VISUALS.hourBands) {
+    if (hours <= b.upTo) return b
+  }
+  return HR_TIMESHEET_VISUALS.hourBands[HR_TIMESHEET_VISUALS.hourBands.length - 1]
+}
+
+const UtilisationRing = ({ value, max, label, sublabel }) => {
+  const size   = HR_TIMESHEET_VISUALS.ringSize
+  const stroke = HR_TIMESHEET_VISUALS.ringStroke
+  const r      = (size - stroke) / 2
+  const c      = 2 * Math.PI * r
+  const pct    = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0
+  const dash   = c * pct
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.18)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          stroke="white" strokeWidth={stroke} strokeLinecap="round" fill="none"
+          strokeDasharray={`${dash} ${c}`}
+          style={ANIM ? { transition: 'stroke-dasharray 600ms ease' } : undefined}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+        <div className="text-3xl font-extrabold leading-none tabular-nums">{value.toFixed(0)}</div>
+        <div className="text-[10px] uppercase tracking-wider opacity-80 mt-0.5">{label}</div>
+        {sublabel && <div className="text-[10px] opacity-70 mt-0.5">{sublabel}</div>}
+      </div>
+    </div>
+  )
+}
+
+const ActivityBars = ({ rows }) => {
+  const target = HR_TIMESHEET_VISUALS.targetHoursPerDay || 8
+  if (!rows || rows.length === 0) {
+    return <div className="text-sm text-slate-500 italic px-1 py-4">{HR_TIMESHEET_COPY.emptyActivity}</div>
+  }
+  // Show the most recent N days first (latest at top of the list, but we
+  // sort ascending so the visual reads left-to-right by date naturally).
+  const sorted = [...rows].sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  const maxHours = Math.max(target * 1.25, ...sorted.map(r => Number(r.hours_worked ?? r.hours ?? 0)))
+  return (
+    <div className="space-y-1.5">
+      {sorted.map(r => {
+        const h = Number(r.hours_worked ?? r.hours ?? 0)
+        const pct = maxHours > 0 ? (h / maxHours) * 100 : 0
+        const band = _bandFor(h)
+        const d = new Date(r.date)
+        const dayName = isNaN(d) ? '' : d.toLocaleDateString(undefined, { weekday: 'short' })
+        return (
+          <div key={r.date} className="grid grid-cols-[80px_1fr_60px] items-center gap-2 group">
+            <div className="text-[11px] text-slate-500 font-mono">
+              <span className="text-slate-700 font-semibold">{r.date}</span>
+              <span className="ml-1 opacity-60">{dayName}</span>
+            </div>
+            <div className="relative h-5 bg-slate-100 rounded overflow-hidden">
+              <div
+                className={`h-full ${band.color} ${anim('transition-all duration-500 ease-out')}`}
+                style={{ width: `${pct}%` }}
+                title={`${h.toFixed(2)}h — ${band.label}`}
+              />
+              {/* Target marker */}
+              <div
+                className="absolute top-0 bottom-0 w-px bg-slate-400/60"
+                style={{ left: `${Math.min(100, (target / maxHours) * 100)}%` }}
+              />
+            </div>
+            <div className="text-[11px] font-semibold text-slate-700 tabular-nums text-right">
+              {h > 0 ? `${h.toFixed(1)}h` : '—'}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const HourBandLegend = () => (
+  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+    {HR_TIMESHEET_VISUALS.hourBands.map(b => (
+      <div key={b.label} className="inline-flex items-center gap-1">
+        <span className={`inline-block w-2.5 h-2.5 rounded ${b.color}`} />
+        <span>{b.label}</span>
+      </div>
+    ))}
+  </div>
+)
 
 const EmployeeTimesheetPanel = ({ emp }) => {
   const [rangeId, setRangeId] = useState(HR_TIMESHEET_DEFAULT_RANGE)
@@ -545,48 +727,96 @@ const EmployeeTimesheetPanel = ({ emp }) => {
     return <div className="text-sm text-slate-500 italic">{HR_TIMESHEET_COPY.noMatchState}</div>
   }
 
+  // ─── Derived metrics for hero band ──────────────────────────────────────
+  const totalHours    = Number(summary.hours_worked || 0)
+  const daysPresent   = Number(summary.days_present || 0)
+  const rangeDays     = Number(summary.range_days || 0)
+  const avgPerDay     = daysPresent > 0 ? totalHours / daysPresent : 0
+  const targetHours   = rangeDays * HR_TIMESHEET_VISUALS.targetHoursPerDay
+  const utilisationPc = targetHours > 0 ? Math.round((totalHours / targetHours) * 100) : 0
+
   return (
-    <div className="space-y-4">
-      {/* Header: range selector + export */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {HR_TIMESHEET_COPY.rangeLabel}
-          </span>
-          <select
-            value={rangeId}
-            onChange={(e) => setRangeId(e.target.value)}
-            className="text-sm border border-slate-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {HR_TIMESHEET_RANGES.map(r => (
-              <option key={r.id} value={r.id}>{r.label}</option>
-            ))}
-          </select>
+    <div className="space-y-5">
+      {/* ─── Hero band ──────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 text-white shadow-lg">
+        {/* Decorative blobs */}
+        <div className="absolute -top-12 -right-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-16 -left-12 w-56 h-56 rounded-full bg-fuchsia-400/20 blur-3xl" />
+
+        <div className="relative p-5 flex flex-col lg:flex-row lg:items-center gap-5">
+          {/* Ring */}
+          <div className="flex-shrink-0 flex items-center justify-center">
+            <UtilisationRing
+              value={totalHours}
+              max={targetHours || totalHours || 1}
+              label="hours"
+              sublabel={targetHours ? `${utilisationPc}% of target` : ''}
+            />
+          </div>
+
+          {/* Stats row */}
+          <div className="flex-1 grid grid-cols-3 gap-3 min-w-0">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/15">
+              <div className="text-[10px] uppercase tracking-wider opacity-80">Total Hours</div>
+              <div className="mt-1 text-3xl font-extrabold tabular-nums leading-none">{totalHours.toFixed(1)}</div>
+              <div className="mt-1 text-[11px] opacity-75">across {rangeDays} day{rangeDays === 1 ? '' : 's'}</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/15">
+              <div className="text-[10px] uppercase tracking-wider opacity-80">Days Present</div>
+              <div className="mt-1 text-3xl font-extrabold tabular-nums leading-none">{daysPresent}</div>
+              <div className="mt-1 text-[11px] opacity-75">
+                {rangeDays > 0 ? `${Math.round((daysPresent / rangeDays) * 100)}% attendance` : ''}
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/15">
+              <div className="text-[10px] uppercase tracking-wider opacity-80">Avg per Day</div>
+              <div className="mt-1 text-3xl font-extrabold tabular-nums leading-none">{avgPerDay.toFixed(2)}</div>
+              <div className="mt-1 text-[11px] opacity-75">target {HR_TIMESHEET_VISUALS.targetHoursPerDay}h</div>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowPunches(v => !v)}
-            className="text-xs font-medium px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50 text-slate-700"
-          >
-            {showPunches ? HR_TIMESHEET_COPY.hidePunches : HR_TIMESHEET_COPY.showPunches}
-          </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={!daily.length}
-            className="text-xs font-medium px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
-          >
-            <HeroIcons.ArrowDownTrayIcon className="w-3.5 h-3.5" />
-            {HR_TIMESHEET_COPY.exportCsv}
-          </button>
+
+        {/* Controls strip */}
+        <div className="relative px-5 pb-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-full pl-3 pr-1 py-1 border border-white/20">
+            <span className="text-[10px] uppercase tracking-wider opacity-90 font-semibold">
+              {HR_TIMESHEET_COPY.rangeLabel}
+            </span>
+            <select
+              value={rangeId}
+              onChange={(e) => setRangeId(e.target.value)}
+              className="text-xs font-semibold bg-white/95 text-slate-800 rounded-full px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-white"
+            >
+              {HR_TIMESHEET_RANGES.map(r => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPunches(v => !v)}
+              className={`text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 backdrop-blur-sm ${anim('transition')}`}
+            >
+              {showPunches ? HR_TIMESHEET_COPY.hidePunches : HR_TIMESHEET_COPY.showPunches}
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={!daily.length}
+              className={`text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 shadow-sm ${anim('transition')}`}
+            >
+              <HeroIcons.ArrowDownTrayIcon className="w-3.5 h-3.5" />
+              {HR_TIMESHEET_COPY.exportCsv}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Loading / error / empty states */}
       {loading && (
-        <div className="text-sm text-slate-500 flex items-center gap-2">
-          <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
+        <div className="text-sm text-slate-500 flex items-center gap-2 px-1">
+          <Spinner className="w-4 h-4" />
           {HR_TIMESHEET_COPY.loadingState}
         </div>
       )}
@@ -608,118 +838,203 @@ const EmployeeTimesheetPanel = ({ emp }) => {
         </div>
       )}
 
-      {/* KPI tiles */}
+      {/* ─── KPI tiles (wider grid when drawer is large) ───────────────── */}
       {!loading && !error && data && daily.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
           {HR_TIMESHEET_KPIS.map(k => (
             <div
               key={k.id}
-              className={`rounded-lg border p-3 flex items-start gap-2 ${HR_KPI_TONES[k.tone] || HR_KPI_TONES.blue}`}
+              className={`relative overflow-hidden rounded-xl border p-3 flex items-start gap-2.5 ${anim('hover:-translate-y-0.5 transition-transform')} ${HR_KPI_TONES[k.tone] || HR_KPI_TONES.blue}`}
             >
-              <Icon name={k.icon} className="w-5 h-5 mt-0.5 flex-shrink-0" />
-              <div className="min-w-0">
+              <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-white/60 flex items-center justify-center">
+                <Icon name={k.icon} className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80 truncate">{k.label}</div>
-                <div className="text-lg font-bold leading-tight truncate">{k.accessor(summary)}</div>
+                <div className="text-xl font-extrabold leading-tight tabular-nums truncate">{k.accessor(summary)}</div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Monthly breakdown */}
-      {!loading && monthly.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-            {HR_TIMESHEET_COPY.monthlyTitle}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {monthly.map(m => (
-              <div key={m.month} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-slate-800">{_formatMonth(m.month)}</div>
-                  <div className="text-sm font-bold text-blue-700">{(m.hours || 0).toFixed(1)}h</div>
+      {/* ─── Two-column body on wide drawers ────────────────────────────── */}
+      {!loading && daily.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+
+          {/* LEFT: Daily activity table + monthly breakdown table (plain text) */}
+          <div className="xl:col-span-3 space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-white">
+              <div className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                {HR_TIMESHEET_COPY.activityTitle}
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      {HR_TIMESHEET_ACTIVITY_COLUMNS.map(c => (
+                        <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {[...daily]
+                      .map(r => {
+                        // Attach the band label so the soft-coded accessor
+                        // can render a plain-text status without re-running
+                        // the band lookup in the component.
+                        const h = Number(r.hours_worked ?? r.hours ?? 0)
+                        return { ...r, __bandLabel: _bandFor(h)?.label || '' }
+                      })
+                      .sort((a, b) => {
+                        const av = String(a.date || '')
+                        const bv = String(b.date || '')
+                        return HR_TIMESHEET_ACTIVITY_SORT === 'asc'
+                          ? av.localeCompare(bv)
+                          : bv.localeCompare(av)
+                      })
+                      .map(r => (
+                        <tr key={r.date}>
+                          {HR_TIMESHEET_ACTIVITY_COLUMNS.map(c => (
+                            <td
+                              key={c.id}
+                              className={`px-3 py-1.5 text-slate-700 whitespace-nowrap ${c.mono ? 'font-mono' : ''}`}
+                            >
+                              {c.accessor(r)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {monthly.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <div className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {HR_TIMESHEET_COPY.monthlyTitle}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  {m.days_present} days · {(m.avg_per_day || 0).toFixed(2)} h/day · {m.punches} punches
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        {HR_TIMESHEET_MONTHLY_COLUMNS.map(c => (
+                          <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
+                            {c.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {monthly.map(m => {
+                        // Attach the human-readable month label so the
+                        // accessor stays purely declarative.
+                        const row = { ...m, __monthLabel: _formatMonth(m.month) }
+                        return (
+                          <tr key={m.month}>
+                            {HR_TIMESHEET_MONTHLY_COLUMNS.map(c => (
+                              <td
+                                key={c.id}
+                                className={`px-3 py-1.5 text-slate-700 whitespace-nowrap ${c.mono ? 'font-mono' : ''}`}
+                              >
+                                {c.accessor(row)}
+                              </td>
+                            ))}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* RIGHT: Daily table */}
+          <div className="xl:col-span-2">
+            <div className="rounded-xl border border-slate-200 bg-white">
+              <div className="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                {HR_TIMESHEET_COPY.dailyTitle}
+              </div>
+              <div className="max-h-[28rem] overflow-y-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
+                        <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
+                          {c.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {daily.map(r => (
+                      <tr key={r.date} className="hover:bg-blue-50/40">
+                        {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
+                          <td key={c.id} className="px-3 py-1.5 text-slate-700 whitespace-nowrap">
+                            {c.accessor(r)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Daily attendance */}
-      {!loading && daily.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-            {HR_TIMESHEET_COPY.dailyTitle}
+      {/* ─── Hourly raw punches — plain text records (no chips/colours) ── */}
+      {!loading && showPunches && punches.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="px-4 pt-3 pb-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {HR_TIMESHEET_COPY.punchesTitle}
+            </div>
+            {HR_TIMESHEET_COPY.punchesSubtitle && (
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {HR_TIMESHEET_COPY.punchesSubtitle} · {punches.length} record{punches.length === 1 ? '' : 's'}
+              </div>
+            )}
           </div>
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="max-h-72 overflow-y-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
-                      <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
-                        {c.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {daily.map(r => (
-                    <tr key={r.date} className="hover:bg-blue-50/50">
-                      {HR_TIMESHEET_DAILY_COLUMNS.map(c => (
-                        <td key={c.id} className="px-3 py-1.5 text-slate-700 whitespace-nowrap">
-                          {c.accessor(r)}
+          <div className="max-h-72 overflow-y-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-slate-50 sticky top-0 z-10">
+                <tr>
+                  {HR_TIMESHEET_PUNCH_COLUMNS.map(c => (
+                    <th key={c.id} className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...punches]
+                  .sort((a, b) => {
+                    const av = String(a.event_time || a.date || '')
+                    const bv = String(b.event_time || b.date || '')
+                    return HR_TIMESHEET_PUNCH_SORT === 'asc'
+                      ? av.localeCompare(bv)
+                      : bv.localeCompare(av)
+                  })
+                  .map((p, i) => (
+                    <tr key={`${p.event_time}-${i}`}>
+                      {HR_TIMESHEET_PUNCH_COLUMNS.map(c => (
+                        <td
+                          key={c.id}
+                          className={`px-3 py-1.5 text-slate-700 whitespace-nowrap ${c.mono ? 'font-mono' : ''}`}
+                        >
+                          {c.accessor(p)}
                         </td>
                       ))}
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Hourly raw punches */}
-      {!loading && showPunches && punches.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-            {HR_TIMESHEET_COPY.punchesTitle}
-          </div>
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="max-h-60 overflow-y-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Time</th>
-                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider text-slate-500">Type</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {punches.map((p, i) => (
-                    <tr key={`${p.event_time}-${i}`} className="hover:bg-blue-50/50">
-                      <td className="px-3 py-1 text-slate-700 whitespace-nowrap">{p.date}</td>
-                      <td className="px-3 py-1 text-slate-700 whitespace-nowrap font-mono">
-                        {(p.event_time || '').slice(11, 19)}
-                      </td>
-                      <td className="px-3 py-1 whitespace-nowrap">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          String(p.event_type).toUpperCase() === 'IN'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {p.event_type || '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -733,6 +1048,10 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
 
   if (!emp) return null
   const ep = emp.engineer_profile || {}
+  // Soft-coded width: tabs with dense data (timesheet, competency, access)
+  // get a wider canvas; everything else stays compact. Adding a tab id to
+  // HR_DRAWER_WIDTH_BY_TAB in the config widens the drawer for that tab.
+  const widthClass = HR_DRAWER_WIDTH_BY_TAB[tab] || HR_DRAWER_WIDTH_DEFAULT
 
   return (
     <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
@@ -742,7 +1061,7 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
         onClick={onClose}
         className="flex-1 bg-slate-900/40 backdrop-blur-sm"
       />
-      <aside className="w-full max-w-xl bg-white shadow-2xl flex flex-col">
+      <aside className={`w-full ${widthClass} bg-white shadow-2xl flex flex-col ${anim('transition-[max-width] duration-300 ease-out')}`}>
         {/* Header */}
         <div className="p-5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
           <div className="flex items-start gap-4">
@@ -767,7 +1086,7 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
           </div>
           {loading && (
             <div className="mt-2 flex items-center gap-1.5 text-[11px] opacity-80">
-              <HeroIcons.ArrowPathIcon className="w-3 h-3 animate-spin" />
+              <Spinner className="w-3 h-3" />
               Loading full profile…
             </div>
           )}
@@ -1117,7 +1436,9 @@ export default function HREmployees() {
               onClick={fetchEmployees}
               className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-sm font-medium text-slate-700 inline-flex items-center gap-1.5"
             >
-              <HeroIcons.ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+              {loading
+                ? <Spinner className="w-4 h-4" />
+                : <HeroIcons.ArrowPathIcon className="w-4 h-4" />} Refresh
             </button>
             <div className="relative">
               <button
@@ -1234,11 +1555,20 @@ export default function HREmployees() {
         )}
 
         {loading && !error && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 h-44 animate-pulse" />
-            ))}
-          </div>
+          ANIM
+            ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 h-44 animate-pulse" />
+                ))}
+              </div>
+            )
+            : (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 text-sm text-slate-500 inline-flex items-center gap-2">
+                <Spinner className="w-4 h-4" />
+                Loading employees…
+              </div>
+            )
         )}
 
         {!loading && !error && filteredEmployees.length === 0 && (
