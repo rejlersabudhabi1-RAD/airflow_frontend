@@ -20,7 +20,7 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
 import PeopleNav from '../../components/PeopleNav/PeopleNav'
 import TimeSheetAnalytics from './TimeSheetAnalytics'
-import { fetchUserHistory } from '../../services/timesheet.service'
+import { fetchUserHistory, lookupByCode } from '../../services/timesheet.service'
 import {
   HR_KPIS,
   HR_FILTERS,
@@ -47,6 +47,7 @@ import {
   formatDateTime,
   formatDate,
   fullName,
+  getEmail,
   initials,
   matchDiscipline,
   getStatusMeta,
@@ -98,7 +99,21 @@ const KpiStrip = ({ employees, loading }) => (
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: Filters Bar
 // ─────────────────────────────────────────────────────────────────────────────
-const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSearchTerm, viewMode, setViewMode, onReset }) => {
+const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSearchTerm, viewMode, setViewMode, onReset, onSubmitSearch, searching }) => {
+  // Local draft so users can type freely and commit on Enter / Search button
+  // click. Mirrors `searchTerm` so external resets (Reset button) still flow
+  // back into the input. Filtering remains driven by the committed
+  // `searchTerm` prop — no change to core filter logic in the parent.
+  const [draft, setDraft] = useState(searchTerm)
+  useEffect(() => { setDraft(searchTerm) }, [searchTerm])
+  const commitSearch = (e) => {
+    e?.preventDefault?.()
+    const term = draft.trim()
+    setSearchTerm(term)
+    onSubmitSearch?.(term)
+  }
+  const clearSearch  = () => { setDraft(''); setSearchTerm('') }
+
   // Derive dynamic filter options from the loaded employees list.
   const dynamicOptions = useMemo(() => {
     const out = {}
@@ -122,16 +137,39 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
       {/* Top row: search + view mode toggle + reset */}
       <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
-        <div className="relative flex-1">
-          <HeroIcons.MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={HR_COPY.searchPlaceholder}
-            className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-          />
-        </div>
+        <form onSubmit={commitSearch} className="relative flex-1 flex gap-2" role="search">
+          <div className="relative flex-1">
+            <HeroIcons.MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={HR_COPY.searchPlaceholder}
+              aria-label={HR_COPY.searchPlaceholder}
+              className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            />
+            {draft && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                aria-label={HR_COPY.searchClearLabel}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <HeroIcons.XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={searching}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white text-sm font-medium rounded-lg shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+          >
+            {searching
+              ? <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
+              : <HeroIcons.MagnifyingGlassIcon className="w-4 h-4" />}
+            <span className="hidden sm:inline">{HR_COPY.searchButtonLabel}</span>
+          </button>
+        </form>
 
         <div className="flex items-center gap-2">
           <div className="inline-flex bg-slate-100 rounded-lg p-1">
@@ -245,7 +283,6 @@ const EmployeeCard = ({ emp, onSelect }) => (
             <div className="font-semibold text-slate-900 truncate">{fullName(emp)}</div>
             <StatusBadge status={emp.status} />
           </div>
-          <div className="text-xs text-slate-500 truncate">{emp.user?.email || '—'}</div>
           <div className="mt-1 flex flex-wrap gap-1">
             <DisciplineTag emp={emp} />
             {emp.is_mfa_enabled && (
@@ -312,16 +349,30 @@ const EmployeesTable = ({ employees, onSelect }) => (
                     <td key={c.id} className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <Avatar emp={emp} size="sm" />
-                        <div>
-                          <div className="text-sm font-medium text-slate-900">{v}</div>
-                          <div className="text-xs text-slate-500">{emp.user?.email}</div>
-                        </div>
+                        <div className="text-sm font-medium text-slate-900">{v}</div>
                       </div>
                     </td>
                   )
                 }
                 if (c.id === 'status') return <td key={c.id} className="px-3 py-2"><StatusBadge status={v} /></td>
                 if (c.id === 'last_login') return <td key={c.id} className="px-3 py-2 text-xs text-slate-600">{formatDateTime(v)}</td>
+                if (c.id === 'email') {
+                  const mail = getEmail(emp)
+                  return (
+                    <td key={c.id} className="px-3 py-2 text-sm text-slate-700">
+                      {mail
+                        ? <a
+                            href={`mailto:${mail}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-blue-700 hover:text-blue-900 hover:underline truncate inline-block max-w-[14rem]"
+                            title={mail}
+                          >
+                            {mail}
+                          </a>
+                        : <span className="text-slate-400">—</span>}
+                    </td>
+                  )
+                }
                 return <td key={c.id} className="px-3 py-2 text-sm text-slate-700">{v}</td>
               })}
               <td className="px-3 py-2 text-right">
@@ -446,7 +497,7 @@ const EmployeeTimesheetPanel = ({ emp }) => {
   const lookup = useMemo(() => ({
     user_id:       emp?.id || emp?.user?.id || '',
     employee_code: emp?.employee_id || emp?.employee_code || '',
-    email:         emp?.user?.email || emp?.email || '',
+    email:         getEmail(emp),
   }), [emp])
 
   useEffect(() => {
@@ -699,7 +750,7 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
             <div className="flex-1 min-w-0">
               <div className="text-xl font-bold truncate">{fullName(emp)}</div>
               <div className="text-sm opacity-90 truncate">{emp.job_title || 'No designation'}</div>
-              <div className="text-xs opacity-75 truncate">{emp.user?.email}</div>
+              <div className="text-xs opacity-75 truncate">{getEmail(emp)}</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <StatusBadge status={emp.status} />
                 <DisciplineTag emp={emp} />
@@ -747,7 +798,7 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
             <div className="grid grid-cols-2 gap-4">
               <Field label="Employee ID" value={emp.employee_id} mono />
               <Field label="Years of Service" value={formatYearsOfService(emp.created_at)} />
-              <Field label="Email" value={emp.user?.email} />
+              <Field label="Email" value={getEmail(emp)} />
               <Field label="Phone" value={emp.phone} />
               <Field label="Location" value={emp.location} />
               <Field label="Joined" value={formatDate(emp.created_at)} />
@@ -838,9 +889,9 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
           >
             <HeroIcons.PencilSquareIcon className="w-4 h-4" /> Open in Admin
           </Link>
-          {emp.user?.email && (
+          {getEmail(emp) && (
             <a
-              href={`mailto:${emp.user.email}`}
+              href={`mailto:${getEmail(emp)}`}
               className="text-sm font-medium text-slate-700 hover:text-slate-900 inline-flex items-center gap-1"
             >
               <HeroIcons.EnvelopeIcon className="w-4 h-4" /> Email
@@ -927,10 +978,12 @@ export default function HREmployees() {
         if (!f.match(emp, v)) return false
       }
       if (!q) return true
-      // Search
+      // Search — `employee_id` covers RAD AI codes; if the user types a pure
+      // numeric badge number the parent component additionally fires a
+      // reverse-lookup against the biometric backend (see handleSubmitSearch).
       const hay = [
         fullName(emp),
-        emp.user?.email,
+        getEmail(emp),
         emp.employee_id,
         emp.department,
         emp.job_title,
@@ -960,6 +1013,56 @@ export default function HREmployees() {
     setFilterValues({})
     setSearchTerm('')
   }, [])
+
+  // ──────── Biometric badge-code reverse lookup ────────
+  // When the user types a pure-numeric query that doesn't match anything
+  // locally (e.g. `22972`), ask the timesheet backend who owns that badge
+  // and auto-open the matching RAD AI employee drawer. Pattern + copy come
+  // from HR_COPY so the feature stays soft-coded.
+  const [searching, setSearching] = useState(false)
+  const [searchNotice, setSearchNotice] = useState(null)  // {kind:'info'|'warn'|'error', text}
+  const handleSubmitSearch = useCallback(async (term) => {
+    setSearchNotice(null)
+    const t = (term || '').trim()
+    if (!t || !HR_COPY.searchBiometricCodePattern.test(t)) return
+    // If local list already finds it via employee_id, no need to call backend.
+    const localHit = employees.find(e =>
+      String(e.employee_id || '').toLowerCase() === t.toLowerCase()
+    )
+    if (localHit) { openEmp(localHit); return }
+    setSearching(true)
+    try {
+      const resp = await lookupByCode(t)
+      if (!resp?.found) {
+        setSearchNotice({ kind: 'warn', text: `${HR_COPY.searchLookupMissingTitle}: ${HR_COPY.searchLookupMissingBody}` })
+        return
+      }
+      const email = String(resp.employee_email || '').toLowerCase().trim()
+      const name  = String(resp.employee_name  || '').toLowerCase().trim()
+      // Try email exact first, then full-name fuzzy.
+      let match = email ? employees.find(e => getEmail(e).toLowerCase() === email) : null
+      if (!match && name) {
+        const tokens = name.split(/\s+/).filter(t => t.length >= 3)
+        match = employees.find(e => {
+          const hay = `${fullName(e)}`.toLowerCase()
+          return tokens.length && tokens.every(tok => hay.includes(tok))
+        })
+      }
+      if (match) {
+        openEmp(match)
+      } else {
+        const body = HR_COPY.searchLookupUnmappedBody
+          .replace('{name}', resp.employee_name || '—')
+          .replace('{email}', resp.employee_email || '—')
+        setSearchNotice({ kind: 'warn', text: `${HR_COPY.searchLookupUnmappedTitle}: ${body}` })
+      }
+    } catch (err) {
+      console.error('[HR] biometric lookup failed:', err)
+      setSearchNotice({ kind: 'error', text: err?.response?.data?.error || err?.message || 'Lookup failed' })
+    } finally {
+      setSearching(false)
+    }
+  }, [employees, openEmp])
 
   // ──────── Export ────────
   const handleExport = async (format) => {
@@ -1063,7 +1166,28 @@ export default function HREmployees() {
           viewMode={viewMode}
           setViewMode={setViewMode}
           onReset={resetFilters}
+          onSubmitSearch={handleSubmitSearch}
+          searching={searching}
         />
+
+        {searchNotice && (
+          <div className={`flex items-start gap-2 px-3 py-2 rounded-lg text-sm border ${
+            searchNotice.kind === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            <HeroIcons.ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span className="flex-1">{searchNotice.text}</span>
+            <button
+              type="button"
+              onClick={() => setSearchNotice(null)}
+              className="flex-shrink-0 p-0.5 hover:bg-black/5 rounded"
+              aria-label="Dismiss"
+            >
+              <HeroIcons.XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Time Sheet view replaces the directory body entirely */}
         {viewMode === 'timesheet' && (

@@ -110,11 +110,27 @@ const DataTable = ({ rows, columns, emptyMessage }) => {
           <tbody className="divide-y divide-slate-100">
             {rows.map((r, i) => (
               <tr key={r.employee_code || r.radai_user_id || i} className="hover:bg-slate-50">
-                {columns.map(c => (
-                  <td key={c.id} className="px-3 py-2 text-slate-800 whitespace-nowrap">
-                    {c.accessor(r)}
-                  </td>
-                ))}
+                {columns.map(c => {
+                  const v = c.accessor(r)
+                  // Soft-coded cell renderer dispatch — `cellType` on the
+                  // column declares the renderer (kept in the config as a
+                  // string so timesheet.config.js stays JSX-free).
+                  if (c.cellType === 'email') {
+                    const e = (v || '').toString().trim()
+                    return (
+                      <td key={c.id} className="px-3 py-2 text-slate-800 whitespace-nowrap">
+                        {e && e.includes('@')
+                          ? <a href={`mailto:${e}`} className="text-blue-700 hover:underline" title={e}>{e}</a>
+                          : <span className="text-slate-400">—</span>}
+                      </td>
+                    )
+                  }
+                  return (
+                    <td key={c.id} className="px-3 py-2 text-slate-800 whitespace-nowrap">
+                      {v}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>

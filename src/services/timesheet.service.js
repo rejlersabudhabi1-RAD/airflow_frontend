@@ -22,6 +22,7 @@ export const fetchLive       = ()                  => unwrap(apiClient.get(TIMES
 export const fetchDaily      = (date)              => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.daily,   { params: date ? { date } : {} }))
 export const fetchMonthly    = (year, month)       => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.monthly, { params: { year, month } }))
 export const fetchUserHistory = (params)           => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.user,    { params }))
+export const lookupByCode     = (code)             => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.lookupByCode, { params: { code } }))
 
 // Exports — return blob; callers handle download --------------------------------
 const downloadBlob = (url, params, filename) =>
@@ -43,6 +44,6 @@ export const downloadMonthlyPdf    = (year, month) => downloadBlob(TIMESHEET_END
 
 export default {
   fetchHealth, listDatabases, listTables, listColumns, previewTable,
-  fetchLive, fetchDaily, fetchMonthly, fetchUserHistory,
+  fetchLive, fetchDaily, fetchMonthly, fetchUserHistory, lookupByCode,
   downloadDailyExcel, downloadMonthlyExcel, downloadMonthlyPdf,
 }

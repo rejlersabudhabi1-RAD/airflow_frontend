@@ -22,6 +22,7 @@ export const TIMESHEET_ENDPOINTS = {
   daily:            '/timesheet/daily/',
   monthly:          '/timesheet/monthly/',
   user:             '/timesheet/user/',
+  lookupByCode:     '/timesheet/lookup-by-code/',
   exportDaily:      '/timesheet/export/daily/',
   exportMonthly:    '/timesheet/export/monthly/',
   exportMonthlyPdf: '/timesheet/export/monthly/pdf/',
@@ -63,6 +64,8 @@ export const TIMESHEET_STATUS_TONES = {
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. TABLE COLUMN DEFINITIONS
 //    Each `accessor` is a pure fn(row) => string|number. Render keeps minimal.
+//    Optional `cellType` (e.g. 'email') tells the DataTable to apply a richer
+//    renderer — keeps the config plain data so .js stays JSX-free.
 // ─────────────────────────────────────────────────────────────────────────────
 const safe = (v, fallback = '—') => (v === null || v === undefined || v === '' ? fallback : v)
 const fmtTime = (v) => {
@@ -74,10 +77,55 @@ const fmtTime = (v) => {
   } catch { return String(v) }
 }
 
+// Soft-coded email accessor — checks every shape the enrichment layer can
+// return. Keeps every column's email cell pointing at the same source list
+// so a backend field rename only needs to be reflected here.
+//   radai_email     → matched RAD AI user (preferred — authoritative)
+//   employee_email  → column on the attendance table (if configured)
+//   office_email    → Mx_VEW_UserDetails.OfficeEmail (Matrix master)
+//   personal_email  → Mx_VEW_UserDetails.PersEmail   (Matrix master)
+//   email           → legacy generic key
+export const TIMESHEET_EMAIL_FIELDS = [
+  'radai_email',
+  'employee_email',
+  'office_email',
+  'personal_email',
+  'email',
+]
+export const emailFrom = (r) => {
+  for (const k of TIMESHEET_EMAIL_FIELDS) {
+    const v = (r?.[k] || '').toString().trim()
+    if (v && v.includes('@')) return v
+  }
+  return ''
+}
+
+// Shared email column spec — `cellType: 'email'` tells the DataTable in
+// TimeSheetAnalytics.jsx to render the value as a clickable mailto link.
+// Re-used by every TIMESHEET_*_COLUMNS array below so the cell behaviour
+// stays uniform across Live / Daily / Monthly tabs.
+const emailColumn = { id: 'email', label: 'Email', accessor: emailFrom, cellType: 'email' }
+
+// Soft-coded biometric-card column. Source key matches the snake-cased
+// alias produced by the backend `_enrich_with_user_details` helper from
+// the env-var `TIMESHEET_USER_DETAILS_COLUMNS` (default `Card1`). Adding
+// more cards is purely additive — extend the env and push another column
+// spec here.
+const CARD_FIELDS = ['card1']
+const cardFrom = (r) => {
+  for (const k of CARD_FIELDS) {
+    const v = (r?.[k] ?? '').toString().trim()
+    if (v) return v
+  }
+  return ''
+}
+const cardColumn = { id: 'card1', label: 'Card 1', accessor: (r) => safe(cardFrom(r)) }
+
 export const TIMESHEET_LIVE_COLUMNS = [
   { id: 'name',       label: 'Employee',  accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'employee',   label: 'Code',      accessor: (r) => safe(r.employee_code) },
-  { id: 'email',      label: 'Email',     accessor: (r) => safe(r.radai_email || r.email) },
+  cardColumn,
+  emailColumn,
   { id: 'dept',       label: 'Dept',      accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'last_punch', label: 'Last Punch', accessor: (r) => fmtTime(r.punch_time || r.login_time || r.logout_time) },
   { id: 'type',       label: 'Type',      accessor: (r) => safe(r.punch_type) },
@@ -87,6 +135,8 @@ export const TIMESHEET_LIVE_COLUMNS = [
 export const TIMESHEET_DAILY_COLUMNS = [
   { id: 'name',     label: 'Employee', accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'code',     label: 'Code',     accessor: (r) => safe(r.employee_code) },
+  cardColumn,
+  emailColumn,
   { id: 'dept',     label: 'Dept',     accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'first_in', label: 'First In', accessor: (r) => fmtTime(r.first_in) },
   { id: 'last_out', label: 'Last Out', accessor: (r) => fmtTime(r.last_out) },
@@ -98,6 +148,8 @@ export const TIMESHEET_DAILY_COLUMNS = [
 export const TIMESHEET_MONTHLY_COLUMNS = [
   { id: 'name',         label: 'Employee',     accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'code',         label: 'Code',         accessor: (r) => safe(r.employee_code) },
+  cardColumn,
+  emailColumn,
   { id: 'dept',         label: 'Dept',         accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'days',         label: 'Days Present', accessor: (r) => r.days_present || 0 },
   { id: 'full',         label: 'Full Days',    accessor: (r) => r.full_days || 0 },

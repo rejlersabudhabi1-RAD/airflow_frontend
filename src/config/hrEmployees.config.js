@@ -227,7 +227,7 @@ export const HR_DEFAULT_VIEW_MODE = 'cards'
 export const HR_CARD_FIELDS = [
   { id: 'job_title',   icon: 'BriefcaseIcon',         accessor: (e) => e.job_title || '—' },
   { id: 'department',  icon: 'BuildingOffice2Icon',   accessor: (e) => e.department || '—' },
-  { id: 'email',       icon: 'EnvelopeIcon',          accessor: (e) => e.user?.email || '—' },
+  { id: 'email',       icon: 'EnvelopeIcon',          accessor: (e) => getEmail(e) || '—' },
   { id: 'phone',       icon: 'PhoneIcon',             accessor: (e) => e.phone || '—' },
   { id: 'location',    icon: 'MapPinIcon',            accessor: (e) => e.location || '—' },
   { id: 'employee_id', icon: 'IdentificationIcon',    accessor: (e) => e.employee_id || '—' },
@@ -237,7 +237,8 @@ export const HR_CARD_FIELDS = [
 // 8. TABLE COLUMNS
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_TABLE_COLUMNS = [
-  { id: 'name',         label: 'Employee',     accessor: (e) => `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim() || e.user?.email },
+  { id: 'name',         label: 'Employee',     accessor: (e) => `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim() || getEmail(e) },
+  { id: 'email',        label: 'Email',        accessor: (e) => getEmail(e) || '—' },
   { id: 'employee_id',  label: 'Employee ID',  accessor: (e) => e.employee_id || '—' },
   { id: 'job_title',    label: 'Designation',  accessor: (e) => e.job_title || '—' },
   { id: 'department',   label: 'Department',   accessor: (e) => e.department || '—' },
@@ -344,7 +345,17 @@ export const HR_COPY = {
   emptyTitle:       'No employees match the current filters',
   emptySubtitle:    'Try clearing filters or use the search box above.',
   errorTitle:       'Could not load employee data',
-  searchPlaceholder: 'Search name, email, employee ID, department, designation…',
+  searchPlaceholder: 'Search name, email, employee ID, biometric code (e.g. 22972), department…',
+  searchButtonLabel:  'Search',
+  searchClearLabel:   'Clear search',
+  // Soft-coded reverse-lookup: queries matching this regex are treated as
+  // biometric badge numbers. The page asks the timesheet backend who that
+  // code belongs to, then opens the matching RAD AI employee drawer.
+  searchBiometricCodePattern: /^\d{3,10}$/,
+  searchLookupMissingTitle: 'No biometric record found',
+  searchLookupMissingBody:  'No biometric record matches that code.',
+  searchLookupUnmappedTitle: 'Biometric record is not linked to a RAD AI user',
+  searchLookupUnmappedBody:  'Found biometric record for {name} ({email}) but no matching RAD AI employee exists.',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,6 +386,30 @@ export const fullName = (emp) => {
   const last = emp.user?.last_name || emp.last_name || ''
   const joined = `${first} ${last}`.trim()
   return joined || emp.full_name || emp.user?.email || emp.email || 'Unnamed user'
+}
+
+/**
+ * Soft-coded email accessor — handles every shape the backend can return:
+ *   - nested rich detail:   `user.email`
+ *   - flat list serializer: `email`
+ *   - legacy fallbacks:     `user.username` (when username is an email),
+ *                           `contact_email`
+ * Mirrors the `getUserEmail` helper in /admin/users so the two pages stay
+ * consistent end-to-end. Returns `''` (never null) so callers can `||` safely.
+ */
+export const getEmail = (emp) => {
+  if (!emp) return ''
+  const candidates = [
+    emp.user?.email,
+    emp.email,
+    emp.contact_email,
+    emp.user?.username,  // RAD AI uses email-as-username for many users
+  ]
+  for (const c of candidates) {
+    const v = (c || '').toString().trim()
+    if (v && v.includes('@')) return v
+  }
+  return ''
 }
 
 export const initials = (emp) => {
@@ -452,6 +487,7 @@ export default {
   formatDateTime,
   formatDate,
   fullName,
+  getEmail,
   initials,
   matchDiscipline,
   getStatusMeta,
