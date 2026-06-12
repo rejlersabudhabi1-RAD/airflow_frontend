@@ -84,6 +84,18 @@ const invoiceTrackerService = {
     const r = await apiClient.delete(`${BASE}/attachments/${attachmentId}/`)
     return r.data
   },
+
+  /** Fetch the soft-coded finance-engine rules (FX, VAT, ICV, statuses). */
+  async getConfig() {
+    const r = await apiClient.get(`${BASE}/invoices/config/`)
+    return r.data
+  },
+
+  /** Re-apply every Excel-derived formula on a single invoice. */
+  async recompute(id) {
+    const r = await apiClient.post(`${BASE}/invoices/${id}/recompute/`)
+    return r.data
+  },
 }
 
 export default invoiceTrackerService

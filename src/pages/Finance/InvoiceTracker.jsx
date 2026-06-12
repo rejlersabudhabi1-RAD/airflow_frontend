@@ -22,14 +22,17 @@ import {
   ArrowUpTrayIcon,
   BanknotesIcon,
   BoltIcon,
+  CalculatorIcon,
   CheckCircleIcon,
   ClockIcon,
   DocumentArrowUpIcon,
   ExclamationTriangleIcon,
   EyeIcon,
+  InformationCircleIcon,
   MagnifyingGlassIcon,
   PaperClipIcon,
   PlusIcon,
+  SparklesIcon,
   Squares2X2Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -421,6 +424,244 @@ const AttachmentControl = ({ invoice, onChanged }) => {
   )
 }
 
+// ─── Invoice Detail Drawer — full 28-column Excel-parity view ──────────────
+// Fields flagged with `calc: true` are produced by the soft-coded
+// finance_engine on the backend. Adding a new column == add one row to
+// TRACKER_FIELD_GROUPS. Nothing else.
+const TRACKER_FIELD_GROUPS = [
+  {
+    title: 'Identification',
+    fields: [
+      { key: 'invoice_number',         label: 'Invoice #' },
+      { key: 'category',               label: 'Category' },
+      { key: 'credit_note_reference',  label: 'Credit Note Ref' },
+    ],
+  },
+  {
+    title: 'Customer & Project',
+    fields: [
+      { key: 'account',                label: 'Account' },
+      { key: 'company',                label: 'Company' },
+      { key: 'rad_project_no',         label: 'RAD Project #' },
+      { key: 'project_name',           label: 'Project Name' },
+      { key: 'project_id',             label: 'Project ID' },
+      { key: 'pm',                     label: 'PM' },
+      { key: 'finance_pm_email',       label: 'Finance & PM Email', wide: true },
+      { key: 'contract_clause',        label: 'Contract Clause', wide: true },
+    ],
+  },
+  {
+    title: 'Dates',
+    fields: [
+      { key: 'invoice_date',           label: 'Invoice Date',   type: 'date' },
+      { key: 'invoice_sent',           label: 'Invoice Sent',   type: 'date' },
+      { key: 'due_date',               label: 'Due Date',       type: 'date', calc: true },
+      { key: 'payment_date',           label: 'Payment Date',   type: 'date' },
+      { key: 'payment_terms',          label: 'Payment Terms' },
+    ],
+  },
+  {
+    title: 'Financials',
+    fields: [
+      { key: 'currency',               label: 'Currency' },
+      { key: 'invoice_amount',         label: 'Invoice Amount', type: 'money' },
+      { key: 'ppc_value',              label: 'PPC Value',      type: 'money', calc: true },
+      { key: 'retention',              label: 'Retention',      type: 'money', calc: true },
+      { key: 'icv_applicable',         label: 'ICV Applicable' },
+      { key: 'amount_excl_vat',        label: 'Amount Excl. VAT', type: 'money', calc: true },
+      { key: 'invoice_amount_aed',     label: 'Inv Amt (AED)',  type: 'money', calc: true, currency: 'AED' },
+      { key: 'grand_total',            label: 'Grand Total',    type: 'money' },
+      { key: 'paid_amount_excl_vat',   label: 'Paid Amount Excl. VAT', type: 'money', calc: true },
+      { key: 'actual_payment_received',label: 'Actual Payment Received', type: 'money' },
+      { key: 'balance_to_be_received', label: 'Balance to be Received',  type: 'money', calc: true },
+    ],
+  },
+  {
+    title: 'Status & References',
+    fields: [
+      { key: 'payment_status',         label: 'Payment Status', calc: true },
+      { key: 'days_overdue',           label: 'Days Overdue',   calc: true },
+      { key: 'received_in_account',    label: 'Bank Account' },
+      { key: 'customer_inv_reference', label: 'Customer Inv Ref' },
+    ],
+  },
+  {
+    title: 'Notes',
+    fields: [
+      { key: 'details',                label: 'Details',  wide: true, multi: true },
+      { key: 'remarks',                label: 'Remarks',  wide: true, multi: true },
+    ],
+  },
+]
+
+const fmtFieldValue = (field, raw, invoice) => {
+  if (raw === null || raw === undefined || raw === '') return '—'
+  if (field.type === 'money') {
+    const ccy = field.currency || invoice.currency || 'AED'
+    return formatMoney(raw, ccy)
+  }
+  if (field.type === 'date') return formatDate(raw)
+  return String(raw)
+}
+
+const CalcBadge = () => (
+  <span
+    title="Auto-calculated by the finance engine (Excel formula parity)"
+    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700 border border-violet-100"
+  >
+    <CalculatorIcon className="w-2.5 h-2.5" />
+    auto
+  </span>
+)
+
+const InvoiceDetailDrawer = ({ invoice, onClose, onChanged }) => {
+  const [recomputing, setRecomputing] = useState(false)
+  const [cfg, setCfg] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    invoiceTrackerService
+      .getConfig()
+      .then((c) => { if (!cancelled) setCfg(c) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  if (!invoice) return null
+
+  const handleRecompute = async () => {
+    setRecomputing(true)
+    try {
+      await invoiceTrackerService.recompute(invoice.id)
+      onChanged?.()
+    } catch (err) {
+      console.error('[InvoiceTracker] recompute failed', err)
+    } finally {
+      setRecomputing(false)
+    }
+  }
+
+  const total = Number(invoice.grand_total ?? invoice.invoice_amount ?? 0)
+  const paid  = Number(invoice.actual_payment_received ?? 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex" onClick={onClose}>
+      <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" />
+      <div
+        className="relative ml-auto w-full max-w-2xl h-full bg-white shadow-2xl flex flex-col"
+        style={{ animation: 'slideInRight 240ms ease-out' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative px-6 py-5 bg-gradient-to-br from-slate-900 via-indigo-900 to-violet-900 text-white">
+          <div className="absolute inset-0 opacity-20 [background:radial-gradient(circle_at_30%_40%,#a78bfa_0%,transparent_50%)]" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <CategoryChip category={invoice.category} />
+                <StatusPill statusKey={invoice.payment_status} />
+              </div>
+              <p className="font-mono text-lg font-bold truncate">{invoice.invoice_number}</p>
+              <p className="text-xs text-white/70 truncate">
+                {invoice.account || invoice.company || '—'} · {invoice.project_name || invoice.rad_project_no || '—'}
+              </p>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white">
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="relative mt-4 grid grid-cols-3 gap-2">
+            <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wider text-white/60">Total</p>
+              <p className="text-sm font-bold tabular-nums">{formatMoney(total, invoice.currency)}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wider text-white/60">Paid</p>
+              <p className="text-sm font-bold tabular-nums">{formatMoney(paid, invoice.currency)}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2">
+              <p className="text-[9px] uppercase tracking-wider text-white/60">Balance</p>
+              <p className="text-sm font-bold tabular-nums">
+                {formatMoney(invoice.balance_to_be_received ?? Math.max(total - paid, 0), invoice.currency)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-gray-50/40">
+          {cfg && (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3 text-[11px] text-violet-900 flex items-start gap-2">
+              <InformationCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0 text-violet-600" />
+              <div className="leading-relaxed">
+                Fields marked <CalcBadge /> are derived by the finance engine using your
+                Excel formulas: VAT&nbsp;{Math.round(cfg.vat_rate * 100)}%, ICV retention&nbsp;
+                {Math.round(cfg.icv_retention_rate * 100)}%, FX-to-AED&nbsp;
+                {Object.entries(cfg.fx_to_aed).map(([k, v]) => `${k}=${v}`).join(' · ')}.
+              </div>
+            </div>
+          )}
+
+          {TRACKER_FIELD_GROUPS.map((group) => (
+            <div key={group.title} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-600">
+                  {group.title}
+                </p>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3">
+                {group.fields.map((f) => {
+                  const raw = invoice[f.key]
+                  return (
+                    <div
+                      key={f.key}
+                      className={f.wide ? 'col-span-2' : 'col-span-2 sm:col-span-1'}
+                    >
+                      <dt className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5 flex items-center gap-1.5">
+                        {f.label}
+                        {f.calc && <CalcBadge />}
+                      </dt>
+                      <dd
+                        className={`text-sm text-gray-800 ${f.type === 'money' ? 'tabular-nums font-semibold' : ''} ${f.multi ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+                      >
+                        {fmtFieldValue(f, raw, invoice)}
+                      </dd>
+                    </div>
+                  )
+                })}
+              </dl>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 bg-white border-t border-gray-100 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-gray-400">
+            Created {formatDate(invoice.created_at)} · Updated {formatDate(invoice.updated_at)}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-2 text-sm rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              Close
+            </button>
+            <button
+              onClick={handleRecompute}
+              disabled={recomputing}
+              title="Re-apply every Excel-derived formula on this invoice"
+              className="px-3 py-2 text-sm rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm"
+            >
+              {recomputing
+                ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                : <SparklesIcon className="w-4 h-4" />}
+              {recomputing ? 'Recomputing…' : 'Recompute'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 const InvoiceTracker = () => {
   const [invoices, setInvoices]       = useState([])
@@ -440,6 +681,7 @@ const InvoiceTracker = () => {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [importOpen, setImportOpen]     = useState(false)
   const [lastFetched, setLastFetched]   = useState(null)
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
 
   const buildFilters = useCallback(() => {
     const f = {}
@@ -805,8 +1047,9 @@ const InvoiceTracker = () => {
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex items-center gap-1">
                             <button
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                              title="View details"
+                              onClick={() => setSelectedInvoice(inv)}
+                              className="opacity-60 group-hover:opacity-100 transition-opacity p-1 rounded-md text-gray-500 hover:bg-indigo-50 hover:text-indigo-700"
+                              title="View all 28 columns + auto-calc breakdown"
                             >
                               <EyeIcon className="w-4 h-4" />
                             </button>
