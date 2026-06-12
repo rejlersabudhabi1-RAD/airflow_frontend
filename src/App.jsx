@@ -46,7 +46,8 @@ import GeneralQHSE from './pages/QHSE/GeneralQHSE'
 import QHSEHub from './pages/QHSE/QHSEHub'
 // SOFT-CODED: QHSEInterconnectedDemo removed (not needed)
 // import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
-import InvoiceUpload from './pages/Finance/InvoiceUpload'
+// SOFT-CODED: InvoiceUpload route retired — keep file for future revival
+// import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
@@ -595,14 +596,7 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
-        <Route
-          path="finance/upload"
-          element={
-            <ModuleProtectedRoute moduleCode="finance">
-              <InvoiceUpload />
-            </ModuleProtectedRoute>
-          }
-        />
+        {/* SOFT-CODED: /finance/upload route retired — link removed from UI */}
         <Route
           path="finance/invoices"
           element={

@@ -32,15 +32,6 @@ const MODULES = [
     badge: null,
   },
   {
-    key: 'upload',
-    title: 'Upload Invoice',
-    description: 'AI-powered invoice extraction — upload a PDF and let the system auto-fill structured data.',
-    icon: Upload,
-    path: '/finance/upload',
-    gradient: 'from-indigo-500 via-indigo-600 to-indigo-700',
-    badge: 'AI',
-  },
-  {
     key: 'salary-slip',
     title: 'Salary Slip',
     description: 'Generate and download official salary slips for HR processing and employee records.',
@@ -178,13 +169,6 @@ const FinanceHub = () => {
                   <List className="w-4 h-4" />
                   View Invoices
                 </button>
-                <button
-                  onClick={() => navigate('/finance/upload')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white text-sm font-semibold transition-all duration-200"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Invoice
-                </button>
               </div>
             </div>
 
@@ -281,11 +265,11 @@ const FinanceHub = () => {
                 Procurement
               </button>
               <button
-                onClick={() => navigate('/finance/upload')}
+                onClick={() => navigate('/finance/invoices')}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium shadow-sm transition-colors"
               >
-                <Upload className="w-4 h-4" />
-                Upload Invoice
+                <List className="w-4 h-4" />
+                View Invoices
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

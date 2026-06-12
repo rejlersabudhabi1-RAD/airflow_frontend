@@ -355,32 +355,7 @@ export const FEATURES_CATALOG = {
     description: 'Financial management and invoicing',
     order: 3,
     features: [
-      {
-        id: 'finance-invoice-upload',
-        name: 'Invoice Upload',
-        shortName: 'Upload',
-        description: 'AI-powered invoice processing and data extraction',
-        path: '/finance/upload',
-        moduleCode: 'finance',
-        status: FEATURE_STATUS.ACTIVE,
-        badges: [FEATURE_BADGES.AI_POWERED],
-        capabilities: [
-          'OCR data extraction',
-          'Automated validation',
-          'Multi-format support',
-          'Duplicate detection'
-        ],
-        metrics: {
-          invoicesProcessed: 12456,
-          accuracy: '99.2%',
-          avgProcessingTime: '45 sec'
-        },
-        usageStats: {
-          monthlyUses: 1567,
-          totalUses: 12456,
-          avgRating: 4.8
-        }
-      },
+      // SOFT-CODED: finance-invoice-upload feature retired — link removed from UI
       {
         id: 'finance-invoice-management',
         name: 'Invoice Management',

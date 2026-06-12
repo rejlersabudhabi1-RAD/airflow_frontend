@@ -241,22 +241,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         expanded: expandedSections.finance,
         children: [
           {
-            id: 'financeUpload',
-            title: '3.1 Upload Invoice',
-            path: '/finance/upload',
-            icon: DocumentPlusIcon,
-            moduleCode: 'finance'
-          },
-          {
             id: 'financeInvoices',
-            title: '3.2 Invoices',
+            title: '3.1 Invoices',
             path: '/finance/invoices',
             icon: DocumentTextIcon,
             moduleCode: 'finance'
           },
           {
             id: 'financeSalarySlip',
-            title: '3.3 Salary Slip',
+            title: '3.2 Salary Slip',
             path: '/finance/salary-slip',
             icon: DocumentTextIcon,
             moduleCode: 'finance',
