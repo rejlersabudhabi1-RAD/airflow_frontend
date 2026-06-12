@@ -128,6 +128,117 @@ export const ERROR_MESSAGES = {
   },
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded gate detector — categorises backend 400 responses so the UI can
+// show the user the *actual* reason (account pending, account suspended,
+// password expired, …) instead of a generic "400". Tune match patterns and
+// copy here; no JSX edits needed.
+// ─────────────────────────────────────────────────────────────────────────────
+export const LOGIN_GATES = [
+  {
+    id: 'pending_approval',
+    // Match terms (case-insensitive). Any one match wins this gate.
+    match: ['pending administrator approval', 'pending approval', 'awaiting activation'],
+    severity: 'info', // 'info' | 'warning' | 'error'
+    icon: '⏳',
+    title: 'Your account is awaiting activation',
+    body:
+      'Your email and password are correct, but your account has not been activated yet by an administrator. ' +
+      'Please contact your RAD AI administrator to enable access — this is a one-click action for them.',
+    helpEmail: 'mohammed.agra@rejlers.ae',
+    helpEmailLabel: 'Contact administrator',
+    autoSubject: 'RAD AI activation request',
+    autoBody:
+      'Hello,\n\nMy RAD AI account is pending administrator activation. Please activate my access at your earliest convenience.\n\nThank you.',
+  },
+  {
+    id: 'suspended',
+    match: ['suspended', 'disabled'],
+    severity: 'error',
+    icon: '🚫',
+    title: 'Your account has been suspended',
+    body:
+      'Your account is currently suspended. Please contact your RAD AI administrator to restore access.',
+    helpEmail: 'mohammed.agra@rejlers.ae',
+    helpEmailLabel: 'Contact administrator',
+    autoSubject: 'RAD AI account suspension — restore access',
+    autoBody:
+      'Hello,\n\nMy RAD AI account is currently suspended. Please review and restore access.\n\nThank you.',
+  },
+  {
+    id: 'expired_password',
+    match: ['password expired', 'password has expired'],
+    severity: 'warning',
+    icon: '🔑',
+    title: 'Your password has expired',
+    body:
+      'For security, your password must be changed. Please use the “Forgot password” link below to reset it.',
+  },
+  {
+    id: 'locked',
+    match: ['locked', 'too many failed attempts'],
+    severity: 'warning',
+    icon: '⛔',
+    title: 'Your account is temporarily locked',
+    body:
+      'Too many failed login attempts. Please wait a few minutes before trying again, or contact your administrator.',
+    helpEmail: 'mohammed.agra@rejlers.ae',
+    helpEmailLabel: 'Contact administrator',
+  },
+]
+
+/**
+ * Soft-coded login error parser.
+ * Extracts the most helpful message from any axios error shape and returns:
+ *   { message, gate }   where `gate` is the matched LOGIN_GATES entry or null.
+ *
+ * Handles every response shape Django/DRF can return:
+ *   - { detail: '...' }
+ *   - { message: '...' }
+ *   - { error: '...' }
+ *   - { non_field_errors: [...] }   ← root cause of the silent "400" bug
+ *   - { <fieldName>: [...] }        (first field's first message)
+ */
+export const parseLoginError = (error) => {
+  if (!error) return { message: ERROR_MESSAGES.unexpected.message, gate: null }
+  if (error.isTimeout) return { message: ERROR_MESSAGES.timeout.message, gate: null }
+  if (error.isNetworkError) return { message: ERROR_MESSAGES.network.message, gate: null }
+
+  const data = error.response?.data
+  const status = error.response?.status
+
+  // ── Collect every candidate string from the response, in priority order
+  const candidates = []
+  if (data) {
+    if (typeof data === 'string') candidates.push(data)
+    if (data.detail)  candidates.push(String(data.detail))
+    if (data.message) candidates.push(String(data.message))
+    if (data.error)   candidates.push(String(data.error))
+    if (Array.isArray(data.non_field_errors)) candidates.push(...data.non_field_errors.map(String))
+    // Fallback: first field-level error in any other key
+    Object.entries(data).forEach(([k, v]) => {
+      if (['detail', 'message', 'error', 'non_field_errors'].includes(k)) return
+      if (Array.isArray(v) && v.length > 0) candidates.push(`${k}: ${String(v[0])}`)
+      else if (typeof v === 'string') candidates.push(`${k}: ${v}`)
+    })
+  }
+  const combined = candidates.filter(Boolean).join(' ').toLowerCase()
+
+  // ── Gate matching (first match wins)
+  const gate =
+    LOGIN_GATES.find((g) => g.match.some((m) => combined.includes(m.toLowerCase()))) || null
+
+  // ── Generic message fallback by status
+  let message = candidates[0]
+  if (!message) {
+    if (status === HTTP_STATUS.UNAUTHORIZED) message = ERROR_MESSAGES.unauthorized.message
+    else if (status === HTTP_STATUS.FORBIDDEN) message = ERROR_MESSAGES.forbidden.message
+    else if (status >= HTTP_STATUS.SERVER_ERROR_START) message = ERROR_MESSAGES.serverError.message
+    else message = error.message || ERROR_MESSAGES.unexpected.message
+  }
+  return { message, gate }
+}
+
 // Success Messages
 export const SUCCESS_MESSAGES = {
   login: 'Login successful!',

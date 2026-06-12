@@ -16,6 +16,7 @@ import {
   HTTP_STATUS,
   THEME,
   LOGIN_RESPONSIVE,
+  parseLoginError,
 } from '../config/login.config'
 import { REDIRECT_AFTER_LOGIN_KEY } from '../config/solutions.config'
 
@@ -36,9 +37,14 @@ const Login = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [isLoading, setIsLoading] = useState(false)
+  // Soft-coded gate banner state: populated by parseLoginError when the
+  // backend returns a non_field_errors message that matches LOGIN_GATES
+  // (e.g. 'pending administrator approval'). Cleared on a fresh submit.
+  const [loginGate, setLoginGate] = useState(null)
 
   const handleSubmit = async (values) => {
     setIsLoading(true)
+    setLoginGate(null)
     dispatch(loginStart())
 
     try {
@@ -86,33 +92,30 @@ const Login = () => {
       }
       
       // Determine user-friendly error message from configuration
-      let errorMessage = ERROR_MESSAGES.unexpected.message
-      
-      if (error.isTimeout) {
+      // Soft-coded: parseLoginError reads every Django/DRF response shape
+      // (detail, message, error, non_field_errors, first-field-error) and
+      // matches against LOGIN_GATES so the user sees the real reason
+      // (e.g. 'pending administrator approval') instead of a silent '400'.
+      const { message: parsedMessage, gate } = parseLoginError(error)
+      let errorMessage = parsedMessage || ERROR_MESSAGES.unexpected.message
+
+      if (gate) {
+        // Surface gate in the inline banner; suppress duplicate toast so the
+        // banner is the single source of truth for the user.
+        setLoginGate(gate)
+        if (LOGGING.enabled) {
+          console.info('[Login] Matched gate:', gate.id, '-', gate.title)
+        }
+      } else if (error.isTimeout) {
         errorMessage = ERROR_MESSAGES.timeout.message
         if (LOGGING.enabled) console.error(ERROR_MESSAGES.timeout.console)
       } else if (error.isNetworkError) {
         errorMessage = ERROR_MESSAGES.network.message
         if (LOGGING.enabled) console.error(ERROR_MESSAGES.network.console)
-      } else if (error.response) {
-        if (error.response.status === HTTP_STATUS.UNAUTHORIZED) {
-          errorMessage = ERROR_MESSAGES.unauthorized.message
-        } else if (error.response.status === HTTP_STATUS.FORBIDDEN) {
-          errorMessage = ERROR_MESSAGES.forbidden.message
-        } else if (error.response.status >= HTTP_STATUS.SERVER_ERROR_START) {
-          errorMessage = ERROR_MESSAGES.serverError.message
-        } else {
-          errorMessage = error.response?.data?.detail || 
-                        error.response?.data?.message || 
-                        error.response?.data?.error ||
-                        `❌ Login failed: ${error.response.status}`
-        }
-      } else {
-        errorMessage = error.message || ERROR_MESSAGES.generic.message
       }
-      
+
       dispatch(loginFailure(errorMessage))
-      toast.error(errorMessage)
+      if (!gate) toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -134,6 +137,8 @@ const Login = () => {
         loginSchema={loginSchema}
         isLoading={isLoading}
         onSubmit={handleSubmit}
+        loginGate={loginGate}
+        onDismissGate={() => setLoginGate(null)}
       />
     </div>
   )

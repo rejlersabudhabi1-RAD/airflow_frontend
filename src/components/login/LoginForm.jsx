@@ -18,7 +18,7 @@ import {
  * Right side login form - Oil & Gas Industrial Design
  * Advanced Engineering Interface
  */
-const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
+const LoginForm = ({ loginSchema, isLoading, onSubmit, loginGate, onDismissGate }) => {
   const { company } = BRANDING
   const { title, subtitle } = PAGE_CONTENT
   const { fields, buttons, options } = FORM_CONFIG
@@ -114,6 +114,57 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit }) => {
         >
           {({ errors, touched }) => (
             <Form className="space-y-3">
+              {/* Soft-coded gate banner. Shown when parseLoginError() in
+                  Login.jsx matches a backend response against LOGIN_GATES
+                  (e.g. "pending administrator approval"). Self-dismissable. */}
+              {loginGate && (
+                <div
+                  className={`rounded-xl border p-3.5 shadow-sm ${
+                    loginGate.severity === 'error'
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : loginGate.severity === 'warning'
+                        ? 'bg-orange-50 border-orange-200 text-orange-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                  role="alert"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl leading-none" aria-hidden>{loginGate.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold">{loginGate.title}</h4>
+                      <p className="text-xs mt-1 leading-relaxed">{loginGate.body}</p>
+                      {loginGate.helpEmail && (
+                        <a
+                          href={
+                            'mailto:' +
+                            loginGate.helpEmail +
+                            (loginGate.autoSubject
+                              ? `?subject=${encodeURIComponent(loginGate.autoSubject)}`
+                              : '') +
+                            (loginGate.autoBody
+                              ? `${loginGate.autoSubject ? '&' : '?'}body=${encodeURIComponent(loginGate.autoBody)}`
+                              : '')
+                          }
+                          className="inline-flex items-center gap-1 mt-2 text-xs font-semibold underline hover:no-underline"
+                        >
+                          ✉️ {loginGate.helpEmailLabel || loginGate.helpEmail}
+                        </a>
+                      )}
+                    </div>
+                    {typeof onDismissGate === 'function' && (
+                      <button
+                        type="button"
+                        onClick={onDismissGate}
+                        className="text-xs opacity-60 hover:opacity-100 flex-shrink-0"
+                        aria-label="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Email Field - Enhanced Industrial Design - Compact */}
               <div className={`relative group ${INTERACTIONS.errorShake.enabled && errors.email && touched.email ? 'login-shake' : ''}`}>
                 <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center">
