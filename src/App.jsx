@@ -50,6 +50,7 @@ import QHSEHub from './pages/QHSE/QHSEHub'
 // import InvoiceUpload from './pages/Finance/InvoiceUpload'
 // SOFT-CODED: InvoiceList / InvoiceDetail routes retired — keep files for future revival
 // import InvoiceList from './pages/Finance/InvoiceList'
+import InvoiceTracker from './pages/Finance/InvoiceTracker'
 import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
@@ -599,6 +600,14 @@ function App() {
         />
         {/* SOFT-CODED: /finance/upload route retired — link removed from UI */}
         {/* SOFT-CODED: /finance/invoices and /finance/invoices/:id routes retired — link removed from UI */}
+        <Route
+          path="finance/invoice-tracker"
+          element={
+            <ModuleProtectedRoute moduleCode="finance">
+              <InvoiceTracker />
+            </ModuleProtectedRoute>
+          }
+        />
         <Route
           path="finance/salary-slip"
           element={

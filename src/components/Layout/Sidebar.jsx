@@ -247,6 +247,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: DocumentTextIcon,
             moduleCode: 'finance',
             description: 'Generate and manage employee salary slips'
+          },
+          {
+            id: 'financeInvoiceTracker',
+            title: '3.2 Invoice Tracker',
+            path: '/finance/invoice-tracker',
+            icon: DocumentTextIcon,
+            moduleCode: 'finance',
+            description: 'Read-only pipeline view of invoices across the approval workflow'
           }
         ]
       },

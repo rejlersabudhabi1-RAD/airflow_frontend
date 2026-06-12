@@ -22,6 +22,15 @@ import {
 // ─── Finance modules ──────────────────────────────────────────────────────────
 const MODULES = [
   {
+    key: 'invoice-tracker',
+    title: 'Invoice Tracker',
+    description: 'Real-time pipeline view of invoices across the approval workflow — read-only with filters and export.',
+    icon: Receipt,
+    path: '/finance/invoice-tracker',
+    gradient: 'from-indigo-500 via-indigo-600 to-indigo-700',
+    badge: 'Live',
+  },
+  {
 
     key: 'salary-slip',
     title: 'Salary Slip',
