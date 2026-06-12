@@ -21,6 +21,7 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 
 import rbacService from '../../services/rbac.service'
 import timesheetService from '../../services/timesheet.service'
+import analyticsService from '../../services/analyticsService'
 
 import {
   HR_DASHBOARD_POLL_MS,
@@ -29,6 +30,10 @@ import {
   HR_DASHBOARD_KPIS,
   HR_DASHBOARD_SECTIONS,
   HR_DASHBOARD_QUICK_LINKS,
+  HR_DASHBOARD_AI_CHAMPION,
+  getAIChampionTierStyle,
+  buildAIChampionPodium,
+  formatAICost,
   buildDepartmentBreakdown,
   buildDisciplineBreakdown,
   buildTodayPunctuality,
@@ -257,6 +262,80 @@ const QuickLink = ({ link }) => (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: AI Champion podium card
+// Pure presentational — receives already-shaped rows from buildAIChampionPodium
+// ─────────────────────────────────────────────────────────────────────────────
+const PodiumCard = ({ row, highlight }) => {
+  const style = getAIChampionTierStyle(row.tier)
+  const isFirst = row.rank === 1
+  return (
+    <div
+      className={`relative rounded-2xl border bg-white p-4 transition-shadow ${
+        isFirst || highlight
+          ? 'border-amber-200 shadow-lg ring-2 ring-amber-100'
+          : 'border-slate-200 hover:shadow-md'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {/* Rank badge */}
+        <div className="flex flex-col items-center flex-shrink-0">
+          <div
+            className={`w-12 h-12 rounded-full bg-gradient-to-br ${style.ring} flex items-center justify-center text-white font-bold text-lg shadow-md`}
+            title={`${row.tier} tier`}
+          >
+            {row.avatar ? (
+              <img src={row.avatar} alt={row.name} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <span>{(row.name || '?').slice(0, 1).toUpperCase()}</span>
+            )}
+          </div>
+          <span className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
+            #{row.rank}
+          </span>
+        </div>
+        {/* Identity */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-900 truncate">{row.name}</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded-md border font-semibold ${style.pill}`}
+              title={`Tier: ${row.tier}`}
+            >
+              {style.emoji} {row.tier}
+            </span>
+          </div>
+          {row.department && (
+            <div className="text-xs text-slate-500 truncate">{row.department}</div>
+          )}
+          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-600">
+            <span className="inline-flex items-center gap-1">
+              <Icon name="BoltIcon" className="w-3 h-3 text-amber-500" />
+              {row.activityCount.toLocaleString()} actions
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Icon name="SparklesIcon" className="w-3 h-3 text-purple-500" />
+              {row.aiInteractions.toLocaleString()} AI
+            </span>
+          </div>
+        </div>
+        {/* Score */}
+        <div className="text-right flex-shrink-0">
+          <div className="text-xl font-bold text-slate-900">
+            {Math.round(row.score).toLocaleString()}
+          </div>
+          <div className="text-[10px] text-slate-500 uppercase tracking-wider">score</div>
+        </div>
+      </div>
+      {isFirst && (
+        <div className="absolute -top-2 -right-2 bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+          👑 CHAMPION
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HRDashboard() {
@@ -273,6 +352,13 @@ export default function HRDashboard() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [now, setNow] = useState(new Date())
+
+  // AI Champion spotlight state (gracefully optional — never blocks the page)
+  const [aiChampion, setAiChampion] = useState(null)
+  const [aiLeaderboard, setAiLeaderboard] = useState([])
+  const [aiCost, setAiCost] = useState(null)
+  const [aiForbidden, setAiForbidden] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
 
   // ── Fetch workforce (one-time on mount; doesn't need to poll every 30s)
   const loadWorkforce = useCallback(async () => {
@@ -345,6 +431,41 @@ export default function HRDashboard() {
     return () => clearInterval(id)
   }, [])
 
+  // ── AI Champion spotlight (read-only, optional, never blocks the page)
+  const loadAIChampion = useCallback(async () => {
+    if (!HR_DASHBOARD_SECTIONS.aiChampion) return
+    setAiLoading(true)
+    try {
+      const days = HR_DASHBOARD_AI_CHAMPION.windowDays
+      const [champRes, lbRes, costRes] = await Promise.allSettled([
+        analyticsService.getCurrentChampion(),
+        analyticsService.getChampionLeaderboard(days, HR_DASHBOARD_AI_CHAMPION.podiumSize),
+        analyticsService.getCostReport(days),
+      ])
+      // Detect 403 across any call — fold into a single "forbidden" flag
+      const forbidden = [champRes, lbRes, costRes].some(
+        (r) => r.status === 'rejected' && (r.reason?.response?.status === 403 || r.reason?.status === 403)
+      )
+      setAiForbidden(forbidden)
+      if (champRes.status === 'fulfilled') setAiChampion(champRes.value)
+      if (lbRes.status === 'fulfilled') setAiLeaderboard(buildAIChampionPodium(lbRes.value))
+      if (costRes.status === 'fulfilled') setAiCost(costRes.value)
+    } catch (err) {
+      console.warn('[HRDashboard] AI champion load failed', err)
+    } finally {
+      setAiLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAIChampion()
+  }, [loadAIChampion])
+
+  useEffect(() => {
+    if (!autoRefresh || !HR_DASHBOARD_SECTIONS.aiChampion) return undefined
+    const id = setInterval(loadAIChampion, HR_DASHBOARD_AI_CHAMPION.pollMs)
+    return () => clearInterval(id)
+  }, [autoRefresh, loadAIChampion])
   // ── Derived data (memoised so re-renders stay cheap)
   const ctx = useMemo(
     () => ({ workforce, live, daily, monthly }),
@@ -617,6 +738,99 @@ export default function HRDashboard() {
             </Section>
           )}
         </div>
+
+        {/* ── AI Champion spotlight ───────────────────────────────────── */}
+        {HR_DASHBOARD_SECTIONS.aiChampion && (
+          <Section
+            title={HR_DASHBOARD_COPY.sectionAIChampion}
+            hint={HR_DASHBOARD_COPY.sectionAIChampionHint}
+            icon="TrophyIcon"
+            action={
+              <Link
+                to={HR_DASHBOARD_AI_CHAMPION.fullConsoleRoute}
+                className="text-xs font-semibold text-amber-700 hover:underline inline-flex items-center gap-1"
+              >
+                {HR_DASHBOARD_COPY.aiChampionLinkLabel} →
+              </Link>
+            }
+          >
+            {aiForbidden ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Icon name="TrophyIcon" className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                  <div className="text-sm text-amber-800 min-w-0">
+                    {HR_DASHBOARD_COPY.aiChampionForbidden}
+                  </div>
+                </div>
+                <Link
+                  to={HR_DASHBOARD_AI_CHAMPION.fullConsoleRoute}
+                  className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 flex-shrink-0"
+                >
+                  Open console
+                </Link>
+              </div>
+            ) : aiLoading && aiLeaderboard.length === 0 ? (
+              <div className="text-sm text-slate-500 italic py-6 text-center">
+                {HR_DASHBOARD_COPY.loading}
+              </div>
+            ) : aiLeaderboard.length === 0 ? (
+              <div className="text-sm text-slate-500 italic py-6 text-center">
+                {HR_DASHBOARD_COPY.emptyAIChampion}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Mini KPI strip */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {HR_DASHBOARD_AI_CHAMPION.kpis.map((kpi) => {
+                    let value = '—'
+                    if (kpi.id === 'champion') {
+                      const c =
+                        aiChampion?.user_full_name ||
+                        aiChampion?.full_name ||
+                        aiLeaderboard[0]?.name ||
+                        '—'
+                      value = c.split(/\s+/).slice(0, 2).join(' ')
+                    } else if (kpi.id === 'players') {
+                      value = (aiChampion?.total_participants ?? aiLeaderboard.length ?? 0).toLocaleString()
+                    } else if (kpi.id === 'activity') {
+                      value = aiLeaderboard
+                        .reduce((acc, r) => acc + (r.activityCount || 0), 0)
+                        .toLocaleString()
+                    } else if (kpi.id === 'savings') {
+                      value = formatAICost(aiCost)
+                    }
+                    return (
+                      <div
+                        key={kpi.id}
+                        className={`rounded-xl bg-gradient-to-br ${kpi.accent} text-white p-3 shadow-sm`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <Icon name={kpi.icon} className="w-5 h-5 opacity-90" />
+                          <span className="text-[10px] uppercase tracking-wider opacity-80">
+                            {kpi.label}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-lg font-bold truncate" title={String(value)}>
+                          {value}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Podium */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {aiLeaderboard.map((row) => (
+                    <PodiumCard key={row.email || row.rank} row={row} />
+                  ))}
+                </div>
+                <div className="text-[11px] text-slate-400 text-right">
+                  Rolling window: last {HR_DASHBOARD_AI_CHAMPION.windowDays} days · auto-refresh
+                  every {Math.round(HR_DASHBOARD_AI_CHAMPION.pollMs / 60000)} min
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
 
         {/* ── Recent joiners ─────────────────────────────────────────── */}
         {HR_DASHBOARD_SECTIONS.recentJoiners && (

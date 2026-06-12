@@ -82,6 +82,11 @@ export const HR_DASHBOARD_COPY = {
   sectionJoiners: 'Recent joiners',
   sectionJoinersHint: `New employees added in the last ${HR_DASHBOARD_RECENT_JOINER_DAYS} days.`,
   sectionLinks: 'Quick actions',
+  sectionAIChampion: 'AI Champion spotlight',
+  sectionAIChampionHint: 'This month\u2019s top engineers powering RAD AI \u2014 driven by activity, AI usage and impact.',
+  emptyAIChampion: 'No AI Champion data available yet. Activity needs to accumulate over the period.',
+  aiChampionForbidden: 'AI Champion analytics are restricted to administrators. Open the full console for details.',
+  aiChampionLinkLabel: 'Open full AI Champion console',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,6 +182,103 @@ export const HR_DASHBOARD_SECTIONS = {
   monthRollup: true,
   recentJoiners: true,
   quickLinks: true,
+  aiChampion: true,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. AI CHAMPION SPOTLIGHT — configuration for the embedded AI Champion card.
+//
+// Reads from the existing `analyticsService` (no backend changes). The card
+// degrades gracefully when:
+//   - the viewer is not admin (endpoint returns 403)  → shows a CTA
+//   - the AI Champion module is not yet seeded         → shows empty state
+//
+// Tweak the rolling window, podium size and route here — no JSX edits needed.
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DASHBOARD_AI_CHAMPION = {
+  // Rolling window (days) used for both leaderboard and cost report.
+  windowDays: 30,
+  // Top-N spots to surface in the podium row.
+  podiumSize: 3,
+  // Route the “Open full console” action navigates to.
+  fullConsoleRoute: '/admin/ai-champion',
+  // Auto-refresh interval (ms). Falls back to the dashboard’s base poll cadence
+  // when undefined. Use a larger value than HR_DASHBOARD_POLL_MS — champion
+  // metrics don’t move minute-to-minute.
+  pollMs: 5 * 60 * 1000,
+  // Tier visual styling (matches Admin/AIChampion.jsx TIER_STYLES, kept inline
+  // so the dashboard has no cross-page imports).
+  tierStyles: {
+    diamond:   { ring: 'from-cyan-400 via-blue-500 to-indigo-600',     pill: 'bg-blue-50 text-blue-700 border-blue-200',       emoji: '\uD83D\uDC8E' },
+    platinum:  { ring: 'from-slate-300 via-slate-400 to-slate-600',    pill: 'bg-slate-100 text-slate-700 border-slate-300',   emoji: '\uD83C\uDFC6' },
+    gold:      { ring: 'from-yellow-300 via-amber-400 to-orange-500',  pill: 'bg-yellow-50 text-yellow-700 border-yellow-200', emoji: '\uD83E\uDD47' },
+    silver:    { ring: 'from-gray-200 via-gray-300 to-gray-500',       pill: 'bg-gray-100 text-gray-700 border-gray-300',      emoji: '\uD83E\uDD48' },
+    bronze:    { ring: 'from-amber-300 via-amber-500 to-orange-700',   pill: 'bg-amber-50 text-amber-700 border-amber-200',    emoji: '\uD83E\uDD49' },
+    rookie:    { ring: 'from-emerald-200 via-emerald-300 to-teal-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', emoji: '\uD83C\uDF31' },
+    founder:   { ring: 'from-fuchsia-400 via-purple-500 to-indigo-700', pill: 'bg-purple-50 text-purple-700 border-purple-300', emoji: '\uD83D\uDC51' },
+    architect: { ring: 'from-sky-400 via-blue-500 to-indigo-700',      pill: 'bg-sky-50 text-sky-700 border-sky-300',          emoji: '\uD83C\uDFDB\uFE0F' },
+  },
+  // Default tier when the row doesn’t declare one.
+  defaultTier: 'rookie',
+  // KPI tiles shown alongside the podium.
+  kpis: [
+    { id: 'champion', label: 'Current Champion', icon: 'TrophyIcon',     accent: 'from-amber-400 to-orange-600' },
+    { id: 'players',  label: 'Active Players',   icon: 'UsersIcon',      accent: 'from-emerald-500 to-teal-600' },
+    { id: 'activity', label: 'Activity Events',  icon: 'BoltIcon',       accent: 'from-blue-500 to-indigo-600' },
+    { id: 'savings',  label: 'AI Cost Tracked',  icon: 'CurrencyDollarIcon', accent: 'from-purple-500 to-fuchsia-600' },
+  ],
+}
+
+// Pull a tier style by code, with safe fallback to the default tier.
+export const getAIChampionTierStyle = (tier) => {
+  const t = (tier || HR_DASHBOARD_AI_CHAMPION.defaultTier || 'rookie').toLowerCase()
+  return (
+    HR_DASHBOARD_AI_CHAMPION.tierStyles[t] ||
+    HR_DASHBOARD_AI_CHAMPION.tierStyles[HR_DASHBOARD_AI_CHAMPION.defaultTier] ||
+    { ring: 'from-slate-300 to-slate-500', pill: 'bg-slate-100 text-slate-700 border-slate-300', emoji: '\u2728' }
+  )
+}
+
+// Build a podium dataset from a raw leaderboard response.
+// Accepts either `{ leaderboard: [...] }`, `{ results: [...] }` or a bare array.
+export const buildAIChampionPodium = (raw) => {
+  const list =
+    (Array.isArray(raw?.leaderboard) && raw.leaderboard) ||
+    (Array.isArray(raw?.results) && raw.results) ||
+    (Array.isArray(raw) && raw) ||
+    []
+  return list.slice(0, HR_DASHBOARD_AI_CHAMPION.podiumSize).map((row, idx) => ({
+    rank: row.rank ?? idx + 1,
+    name:
+      row.user_full_name ||
+      row.full_name ||
+      row.name ||
+      row.user?.full_name ||
+      `${row.user?.first_name || ''} ${row.user?.last_name || ''}`.trim() ||
+      row.email ||
+      'Unknown',
+    email: row.email || row.user?.email || '',
+    department: row.department || row.user?.department || '',
+    score: Number(row.total_score ?? row.score ?? 0),
+    tier: (row.tier || row.badge_tier || HR_DASHBOARD_AI_CHAMPION.defaultTier).toLowerCase(),
+    aiInteractions: Number(row.ai_interactions ?? row.ai_usage_count ?? 0),
+    activityCount: Number(row.activity_count ?? row.total_actions ?? 0),
+    avatar: row.avatar || row.user?.avatar || null,
+  }))
+}
+
+// Format a currency-style USD value for the AI cost KPI.
+export const formatAICost = (raw) => {
+  const cost = Number(
+    raw?.total_cost_usd ??
+      raw?.total_cost ??
+      raw?.summary?.total_cost_usd ??
+      raw?.summary?.total_cost ??
+      0
+  )
+  if (!Number.isFinite(cost) || cost === 0) return '$0'
+  if (cost >= 1000) return `$${(cost / 1000).toFixed(1)}K`
+  return `$${cost.toFixed(2)}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,6 +437,14 @@ export const HR_DASHBOARD_QUICK_LINKS = [
     tone: 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100',
   },
   {
+    id: 'ai_champion',
+    label: 'AI Champion Console',
+    description: 'Leaderboard, badges and AI usage analytics',
+    to: '/admin/ai-champion',
+    icon: 'TrophyIcon',
+    tone: 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100',
+  },
+  {
     id: 'profile',
     label: 'My Profile',
     description: 'Personal details and security',
@@ -397,8 +507,12 @@ export default {
   HR_DASHBOARD_COPY,
   HR_DASHBOARD_KPIS,
   HR_DASHBOARD_SECTIONS,
+  HR_DASHBOARD_AI_CHAMPION,
   HR_DASHBOARD_QUICK_LINKS,
   HR_DASHBOARD_STATUS_PALETTE,
+  getAIChampionTierStyle,
+  buildAIChampionPodium,
+  formatAICost,
   HR_DISCIPLINES,
   buildDepartmentBreakdown,
   buildDisciplineBreakdown,
