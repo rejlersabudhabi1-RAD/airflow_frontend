@@ -1,27 +1,36 @@
 /**
- * Invoice Tracker — Accounts Receivable register.
+ * Invoice Tracker — Accounts Receivable command centre.
  *
- * Mirrors the finance team's Excel "Customer Inv masterfile" workflow:
- *   • Bulk-import .xlsx files (External + Internal sheets) with upsert
- *   • Per-row PDF/document attachment upload (S3-backed)
- *   • KPI tiles, filters, search, table view
+ * Visual layers (top → bottom):
+ *   1. Hero band with gradient mesh, live indicator, primary actions
+ *   2. Financial-health KPI cards (Outstanding, Overdue, Settled, Health)
+ *   3. Clickable pipeline bar — status segments act as filters
+ *   4. Active-filter chip bar + collapsible advanced filters
+ *   5. Modern invoice table with account avatars, balance progress, hover actions
  *
- * Distinct from apps.finance (Accounts Payable, AI extraction). All logic
- * goes through invoiceTrackerService → /api/v1/invoice-tracker/.
+ * Distinct from apps.finance (A/P, AI extraction). Talks only to
+ * invoiceTrackerService → /api/v1/invoice-tracker/.
  *
  * Soft-coded knobs live in `frontend/src/config/invoiceTracker.config.js`.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDownTrayIcon,
+  AdjustmentsHorizontalIcon,
   ArrowPathIcon,
+  ArrowTrendingUpIcon,
   ArrowUpTrayIcon,
-  ChartBarIcon,
+  BanknotesIcon,
+  BoltIcon,
+  CheckCircleIcon,
+  ClockIcon,
   DocumentArrowUpIcon,
-  FunnelIcon,
+  ExclamationTriangleIcon,
+  EyeIcon,
   MagnifyingGlassIcon,
   PaperClipIcon,
+  PlusIcon,
+  Squares2X2Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import invoiceTrackerService from '../../services/invoiceTracker.service'
@@ -30,58 +39,203 @@ import {
   INVOICE_CATEGORIES,
   PAYMENT_STATUSES,
   CURRENCIES,
-  TRACKER_COLUMNS,
-  ATTACHMENT_DISPLAY,
   formatMoney,
+  formatDate,
 } from '../../config/invoiceTracker.config'
 
+// ─── Visual config (soft-coded) ─────────────────────────────────────────────
+const HERO = {
+  eyebrow: 'Finance · 3.2 · Accounts Receivable',
+  title: 'Invoice Tracker',
+  subtitle:
+    'Live command centre for customer invoices — External & Internal — with Excel sync and S3 attachments.',
+}
+
+const PIPELINE_SEGMENTS = PAYMENT_STATUSES.filter((s) => s.key)
+
+const AVATAR_PALETTE = [
+  'from-indigo-500 to-purple-600',
+  'from-emerald-500 to-teal-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-600',
+  'from-sky-500 to-blue-600',
+  'from-fuchsia-500 to-violet-600',
+  'from-lime-500 to-green-600',
+  'from-cyan-500 to-teal-600',
+]
+
+const hashIdx = (s = '') => {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h % AVATAR_PALETTE.length
+}
+
+const initialsOf = (name = '') => {
+  const parts = String(name).trim().split(/\s+/).slice(0, 2)
+  return parts.map((p) => p[0] || '').join('').toUpperCase() || '—'
+}
+
 // ─── Small presentational helpers ───────────────────────────────────────────
-const StatusTile = ({ status, count, active, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`relative overflow-hidden rounded-2xl border text-left p-4 transition-all duration-200 ${
-      active
-        ? 'border-indigo-500 ring-2 ring-indigo-200 shadow-md scale-[1.02]'
-        : 'border-gray-100 hover:border-gray-200 hover:shadow-sm bg-white'
-    }`}
-  >
-    <div className={`absolute inset-0 opacity-5 bg-gradient-to-br ${status.tile}`} />
-    <div className="relative">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">
-        {status.label}
-      </p>
-      <p className="text-2xl font-bold text-gray-800 tabular-nums">{count}</p>
-    </div>
-  </button>
+
+const LiveDot = () => (
+  <span className="relative inline-flex h-2 w-2">
+    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+  </span>
 )
 
-const StatusBadge = ({ statusKey }) => {
+const KpiCard = ({ icon: Icon, label, value, sub, gradient }) => (
+  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md p-5 hover:bg-white/15 transition-colors">
+    <div className={`absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-25 bg-gradient-to-br ${gradient} blur-xl`} />
+    <div className="relative flex items-start justify-between">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">{label}</p>
+        <p className="text-2xl md:text-3xl font-extrabold tabular-nums text-white">{value}</p>
+        {sub && <p className="text-[11px] mt-1 text-white/60">{sub}</p>}
+      </div>
+      <div className={`p-2.5 rounded-xl bg-gradient-to-br ${gradient} shadow-lg`}>
+        <Icon className="w-4 h-4 text-white" />
+      </div>
+    </div>
+  </div>
+)
+
+const PipelineBar = ({ stats, total, activeStatus, onSelect }) => {
+  if (!total) {
+    return (
+      <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+        <div className="h-full w-full bg-gradient-to-r from-gray-100 to-gray-200 animate-pulse" />
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3">
+      <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden flex">
+        {PIPELINE_SEGMENTS.map((s) => {
+          const count = stats?.[s.key] ?? 0
+          if (count === 0) return null
+          const pct = (count / total) * 100
+          const dim = activeStatus && activeStatus !== s.key
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onSelect(activeStatus === s.key ? '' : s.key)}
+              title={`${s.label}: ${count} (${pct.toFixed(1)}%)`}
+              style={{ width: `${pct}%` }}
+              className={`h-full bg-gradient-to-r ${s.tile} transition-all duration-300 hover:opacity-90 ${dim ? 'opacity-30' : ''}`}
+            />
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {PIPELINE_SEGMENTS.map((s) => {
+          const count = stats?.[s.key] ?? 0
+          const active = activeStatus === s.key
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onSelect(active ? '' : s.key)}
+              className={`group inline-flex items-center gap-2 text-xs transition-all ${
+                active ? 'font-bold text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full bg-gradient-to-br ${s.tile} ${active ? 'ring-2 ring-offset-1 ring-gray-300' : ''}`} />
+              <span>{s.label}</span>
+              <span className={`tabular-nums ${active ? 'text-indigo-600' : 'text-gray-400'}`}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const StatusPill = ({ statusKey }) => {
   const s = PAYMENT_STATUSES.find((x) => x.key === statusKey)
   if (!s || !s.key) return <span className="text-xs text-gray-400">—</span>
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.badge}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.badge}`}>
+      <span className={`h-1.5 w-1.5 rounded-full bg-gradient-to-br ${s.tile}`} />
       {s.label}
     </span>
   )
 }
 
+const CategoryChip = ({ category }) => {
+  const isInternal = category === 'internal'
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+        isInternal
+          ? 'bg-purple-50 text-purple-700 border border-purple-100'
+          : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+      }`}
+    >
+      {isInternal ? 'INT' : 'EXT'}
+    </span>
+  )
+}
+
+const AccountAvatar = ({ name }) => {
+  const gradient = AVATAR_PALETTE[hashIdx(name || '?')]
+  return (
+    <div className={`flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br ${gradient} text-white text-[11px] font-bold shadow-sm shrink-0`}>
+      {initialsOf(name || '—')}
+    </div>
+  )
+}
+
+const BalanceBar = ({ total, paid, currency }) => {
+  const t = Number(total) || 0
+  const p = Math.max(0, Math.min(Number(paid) || 0, t))
+  const pct = t > 0 ? (p / t) * 100 : 0
+  const full = pct >= 99.5
+  return (
+    <div className="w-32">
+      <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            full
+              ? 'bg-gradient-to-r from-emerald-500 to-green-600'
+              : pct > 0
+                ? 'bg-gradient-to-r from-indigo-500 to-blue-600'
+                : 'bg-gray-200'
+          }`}
+          style={{ width: `${Math.max(pct, full ? 100 : 4)}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between mt-0.5 text-[10px] tabular-nums">
+        <span className={full ? 'text-emerald-700 font-semibold' : 'text-gray-500'}>{pct.toFixed(0)}%</span>
+        <span className="text-gray-400">{formatMoney(t - p, currency)}</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Excel-import modal ─────────────────────────────────────────────────────
 const ImportExcelModal = ({ open, onClose, onImported }) => {
-  const [file, setFile]       = useState(null)
-  const [sheets, setSheets]   = useState('')
-  const [busy, setBusy]       = useState(false)
-  const [result, setResult]   = useState(null)
-  const [error, setError]     = useState(null)
-  const inputRef              = useRef(null)
+  const [file, setFile]         = useState(null)
+  const [sheets, setSheets]     = useState('')
+  const [busy, setBusy]         = useState(false)
+  const [result, setResult]     = useState(null)
+  const [error, setError]       = useState(null)
+  const [dragOver, setDragOver] = useState(false)
+  const inputRef                = useRef(null)
 
   useEffect(() => {
     if (!open) {
-      setFile(null); setSheets(''); setResult(null); setError(null); setBusy(false)
+      setFile(null); setSheets(''); setResult(null); setError(null); setBusy(false); setDragOver(false)
     }
   }, [open])
 
   if (!open) return null
+
+  const handleFiles = (files) => {
+    const f = files?.[0]
+    if (f) setFile(f)
+  }
 
   const handleSubmit = async () => {
     if (!file) return
@@ -98,42 +252,62 @@ const ImportExcelModal = ({ open, onClose, onImported }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <DocumentArrowUpIcon className="w-5 h-5 text-indigo-600" />
-            <h3 className="font-bold text-gray-900">Import Customer-Invoice Excel</h3>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+        <div className="px-6 py-5 bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-white/15">
+              <DocumentArrowUpIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">Import Customer-Invoice Excel</h3>
+              <p className="text-[11px] text-white/80">Bulk upsert by invoice number · headers auto-detected</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <XMarkIcon className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/15">
+            <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-5 space-y-4">
-          <button
-            type="button"
+
+        <div className="p-6 space-y-4">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
             onClick={() => inputRef.current?.click()}
-            className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors"
+            className={`cursor-pointer rounded-2xl py-10 px-6 text-center border-2 border-dashed transition-all ${
+              dragOver
+                ? 'border-indigo-500 bg-indigo-50 scale-[1.01]'
+                : file
+                  ? 'border-emerald-300 bg-emerald-50/50'
+                  : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
+            }`}
           >
-            <ArrowUpTrayIcon className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-            <p className="text-sm font-medium text-gray-700">
-              {file ? file.name : 'Click to select an .xlsx file'}
+            <div className={`inline-flex p-3 rounded-2xl mb-3 ${
+              file ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'
+            }`}>
+              {file ? <CheckCircleIcon className="w-7 h-7" /> : <ArrowUpTrayIcon className="w-7 h-7" />}
+            </div>
+            <p className="text-sm font-semibold text-gray-800">
+              {file ? file.name : 'Drop your .xlsx file here, or click to browse'}
             </p>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Headers auto-detected. External + Internal sheets supported.
+            <p className="text-[11px] text-gray-500 mt-1">
+              {file
+                ? `${(file.size / 1024).toFixed(1)} KB · ready to import`
+                : 'External + Internal sheets supported · header row found automatically'}
             </p>
             <input
               ref={inputRef}
               type="file"
               accept=".xlsx,.xls"
               className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={(e) => handleFiles(e.target.files)}
             />
-          </button>
+          </div>
 
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
-              Sheets (optional, comma-separated)
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1.5">
+              Restrict to sheets (optional)
             </label>
             <input
               type="text"
@@ -142,43 +316,55 @@ const ImportExcelModal = ({ open, onClose, onImported }) => {
               placeholder="e.g. ExternalInvoice,InternalInvoice2018"
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
-            <p className="text-[11px] text-gray-400 mt-1">
-              Leave blank to import every sheet.
-            </p>
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-sm text-rose-700">
-              {error}
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-100 text-sm text-rose-700">
+              <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           {result && (
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800 space-y-1">
-              <p className="font-semibold">Import complete.</p>
-              <ul className="text-xs space-y-0.5 text-emerald-700">
-                <li>Sheets processed: <b>{result.sheets_processed}</b></li>
-                <li>Rows seen: <b>{result.rows_seen}</b></li>
-                <li>Created: <b>{result.rows_created}</b> · Updated: <b>{result.rows_updated}</b> · Skipped: <b>{result.rows_skipped}</b></li>
-                {result.errors?.length > 0 && (
-                  <li className="text-rose-700">Errors: {result.errors.length}</li>
-                )}
-              </ul>
+            <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircleIcon className="w-5 h-5 text-emerald-600" />
+                <p className="font-bold text-emerald-900">Import complete</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="bg-white/70 rounded-lg p-2">
+                  <p className="text-[10px] uppercase text-gray-500">Created</p>
+                  <p className="text-lg font-extrabold text-emerald-700 tabular-nums">{result.rows_created}</p>
+                </div>
+                <div className="bg-white/70 rounded-lg p-2">
+                  <p className="text-[10px] uppercase text-gray-500">Updated</p>
+                  <p className="text-lg font-extrabold text-indigo-700 tabular-nums">{result.rows_updated}</p>
+                </div>
+                <div className="bg-white/70 rounded-lg p-2">
+                  <p className="text-[10px] uppercase text-gray-500">Skipped</p>
+                  <p className="text-lg font-extrabold text-gray-600 tabular-nums">{result.rows_skipped}</p>
+                </div>
+                <div className="bg-white/70 rounded-lg p-2">
+                  <p className="text-[10px] uppercase text-gray-500">Errors</p>
+                  <p className={`text-lg font-extrabold tabular-nums ${result.errors?.length ? 'text-rose-700' : 'text-gray-400'}`}>
+                    {result.errors?.length || 0}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3.5 py-2 text-sm rounded-xl border border-gray-200 text-gray-700 hover:bg-white"
-          >
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-gray-200 text-gray-700 hover:bg-white">
             Close
           </button>
           <button
             onClick={handleSubmit}
             disabled={!file || busy}
-            className="px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50"
+            className="px-4 py-2 text-sm rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm inline-flex items-center gap-1.5"
           >
+            {busy ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <BoltIcon className="w-4 h-4" />}
             {busy ? 'Importing…' : 'Start Import'}
           </button>
         </div>
@@ -191,6 +377,7 @@ const ImportExcelModal = ({ open, onClose, onImported }) => {
 const AttachmentControl = ({ invoice, onChanged }) => {
   const inputRef = useRef(null)
   const [busy, setBusy] = useState(false)
+  const count = invoice.attachments_count ?? invoice.attachments?.length ?? 0
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -207,19 +394,21 @@ const AttachmentControl = ({ invoice, onChanged }) => {
     }
   }
 
-  const count = invoice.attachments_count ?? invoice.attachments?.length ?? 0
-
   return (
-    <div className="flex items-center gap-2">
+    <>
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg border border-gray-200 hover:bg-indigo-50 hover:border-indigo-200 disabled:opacity-50"
-        title="Upload PDF / supporting document"
+        title={count > 0 ? `${count} attachment(s) — click to add another` : 'Upload attachment'}
+        className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg border transition-all ${
+          count > 0
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            : 'border-gray-200 text-gray-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
+        } disabled:opacity-50`}
       >
-        <PaperClipIcon className="w-3.5 h-3.5 text-gray-500" />
-        {busy ? '…' : count > 0 ? `${count}` : ATTACHMENT_DISPLAY.noneLabel}
+        {busy ? <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" /> : <PaperClipIcon className="w-3.5 h-3.5" />}
+        {count > 0 ? count : '+'}
       </button>
       <input
         ref={inputRef}
@@ -228,7 +417,7 @@ const AttachmentControl = ({ invoice, onChanged }) => {
         accept=".pdf,.png,.jpg,.jpeg"
         onChange={handleUpload}
       />
-    </div>
+    </>
   )
 }
 
@@ -239,7 +428,6 @@ const InvoiceTracker = () => {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
 
-  // Filters
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter]     = useState('')
   const [currencyFilter, setCurrencyFilter] = useState('')
@@ -249,8 +437,9 @@ const InvoiceTracker = () => {
   const [dateFrom, setDateFrom]             = useState('')
   const [dateTo, setDateTo]                 = useState('')
 
-  const [importOpen, setImportOpen] = useState(false)
-  const [lastFetched, setLastFetched] = useState(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [importOpen, setImportOpen]     = useState(false)
+  const [lastFetched, setLastFetched]   = useState(null)
 
   const buildFilters = useCallback(() => {
     const f = {}
@@ -295,200 +484,358 @@ const InvoiceTracker = () => {
     return () => clearInterval(id)
   }, [fetchData])
 
-  const statusCounts = useMemo(() => {
-    const map = { '': invoices.length }
-    PAYMENT_STATUSES.forEach((s) => {
-      if (!s.key) return
-      map[s.key] = stats?.by_status?.[s.key] ?? invoices.filter((i) => i.payment_status === s.key).length
-    })
-    return map
-  }, [invoices, stats])
+  const kpi = useMemo(() => {
+    const total = stats?.total ?? invoices.length
+    const overdue = stats?.overdue_count ?? invoices.filter((i) => i.days_overdue > 0).length
+    const paid = stats?.by_status?.paid ?? invoices.filter((i) => i.payment_status === 'paid').length
+    const pending = stats?.by_status?.pending ?? invoices.filter((i) => i.payment_status === 'pending').length
+    const totalAed = stats?.total_aed ?? 0
+    const health = total > 0 ? Math.round(((total - overdue) / total) * 100) : 100
+    return { total, overdue, paid, pending, totalAed, health }
+  }, [stats, invoices])
+
+  const activeFilters = useMemo(() => {
+    const list = []
+    if (categoryFilter) list.push({ k: 'category',  label: INVOICE_CATEGORIES.find((x) => x.value === categoryFilter)?.label, clear: () => setCategoryFilter('') })
+    if (statusFilter)   list.push({ k: 'status',    label: PAYMENT_STATUSES.find((x) => x.key === statusFilter)?.label,       clear: () => setStatusFilter('') })
+    if (currencyFilter) list.push({ k: 'currency',  label: currencyFilter,               clear: () => setCurrencyFilter('') })
+    if (accountFilter)  list.push({ k: 'account',   label: `Account: ${accountFilter}`,  clear: () => setAccountFilter('') })
+    if (projectFilter)  list.push({ k: 'project',   label: `Project: ${projectFilter}`,  clear: () => setProjectFilter('') })
+    if (searchTerm)     list.push({ k: 'search',    label: `Search: ${searchTerm}`,      clear: () => setSearchTerm('') })
+    if (dateFrom)       list.push({ k: 'from',      label: `From ${dateFrom}`,           clear: () => setDateFrom('') })
+    if (dateTo)         list.push({ k: 'to',        label: `To ${dateTo}`,               clear: () => setDateTo('') })
+    return list
+  }, [categoryFilter, statusFilter, currencyFilter, accountFilter, projectFilter, searchTerm, dateFrom, dateTo])
+
+  const clearAll = () => {
+    setCategoryFilter(''); setStatusFilter(''); setCurrencyFilter('')
+    setAccountFilter(''); setProjectFilter(''); setSearchTerm('')
+    setDateFrom(''); setDateTo('')
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50">
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-700 uppercase tracking-widest mb-2">
-              Finance · 3.2 · A/R
+    <div className="min-h-screen bg-slate-50">
+      {/* ── HERO ────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-900 to-violet-900 text-white pb-20">
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-fuchsia-500 blur-3xl" />
+          <div className="absolute top-10 right-20 h-72 w-72 rounded-full bg-indigo-500 blur-3xl" />
+          <div className="absolute -bottom-16 left-1/3 h-72 w-72 rounded-full bg-emerald-500 blur-3xl" />
+        </div>
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }}
+        />
+
+        <div className="relative max-w-7xl mx-auto px-6 py-8 lg:py-10">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/15 text-[10px] font-bold uppercase tracking-widest text-white/90 mb-3">
+                <LiveDot /> {HERO.eyebrow}
+              </div>
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight">{HERO.title}</h1>
+              <p className="text-sm md:text-base text-white/70 mt-2 max-w-2xl">{HERO.subtitle}</p>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900">Invoice Tracker</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Customer-invoice register — External + Internal — with Excel import & S3 attachments.
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchData}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 backdrop-blur-sm border border-white/10 text-sm font-medium text-white disabled:opacity-50"
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold shadow-lg shadow-indigo-900/30"
+              >
+                <DocumentArrowUpIcon className="w-4 h-4" />
+                Import Excel
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={fetchData}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium shadow-sm"
-            >
-              <ArrowDownTrayIcon className="w-4 h-4" />
-              Import Excel
-            </button>
+
+          {/* KPI cards inside the hero */}
+          <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiCard icon={BanknotesIcon}             label="Total Outstanding"  value={formatMoney(kpi.totalAed, 'AED')} sub={`${kpi.total} invoices tracked`}                                  gradient="from-indigo-500 to-violet-600" />
+            <KpiCard icon={ExclamationTriangleIcon}   label="Overdue"            value={kpi.overdue}                       sub={kpi.total ? `${((kpi.overdue / kpi.total) * 100).toFixed(0)}% of register` : '—'} gradient="from-rose-500 to-orange-600" />
+            <KpiCard icon={CheckCircleIcon}           label="Settled"            value={kpi.paid}                          sub={kpi.total ? `${((kpi.paid / kpi.total) * 100).toFixed(0)}% of register` : '—'}    gradient="from-emerald-500 to-teal-600" />
+            <KpiCard icon={ArrowTrendingUpIcon}       label="Collection Health"  value={`${kpi.health}%`}                  sub={kpi.pending > 0 ? `${kpi.pending} pending` : 'All current'}                       gradient="from-sky-500 to-blue-600" />
           </div>
         </div>
       </div>
 
-      {/* ── Status tiles ─────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 pt-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {PAYMENT_STATUSES.map((s) => (
-            <StatusTile
-              key={s.key || 'all'}
-              status={s}
-              count={statusCounts[s.key] ?? 0}
-              active={statusFilter === s.key}
-              onClick={() => setStatusFilter(s.key)}
-            />
-          ))}
-        </div>
-        {stats && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-            <span className="inline-flex items-center gap-1.5">
-              <ChartBarIcon className="w-3.5 h-3.5" />
-              Overdue: <b className="text-rose-700">{stats.overdue_count}</b>
-            </span>
-            <span>· Total (AED): <b className="text-gray-700">{formatMoney(stats.total_aed, 'AED')}</b></span>
-            {Object.entries(stats.by_category || {}).map(([k, v]) => (
-              <span key={k}>· {k}: <b className="text-gray-700">{v}</b></span>
-            ))}
+      {/* ── PIPELINE BAR (overlaps hero) ────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 -mt-12 relative">
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Squares2X2Icon className="w-4 h-4 text-indigo-600" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Payment Pipeline</p>
+            </div>
+            {lastFetched && (
+              <p className="text-[10px] text-gray-400 flex items-center gap-1.5">
+                <ClockIcon className="w-3 h-3" />
+                Updated {lastFetched.toLocaleTimeString()}
+              </p>
+            )}
           </div>
-        )}
+          <PipelineBar stats={stats?.by_status} total={kpi.total} activeStatus={statusFilter} onSelect={setStatusFilter} />
+        </div>
       </div>
 
-      {/* ── Filters ──────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 pt-5">
-        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="relative">
-            <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search invoice #, account, project…"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            />
-          </div>
-          <input
-            type="text"
-            value={accountFilter}
-            onChange={(e) => setAccountFilter(e.target.value)}
-            placeholder="Filter by account…"
-            className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <input
-            type="text"
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            placeholder="Filter by project / RAD #…"
-            className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
-          />
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="w-4 h-4 text-gray-400 shrink-0" />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            >
-              {INVOICE_CATEGORIES.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+      {/* ── FILTERS ─────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 mt-4">
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 space-y-3">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search invoice #, account, project, customer reference…"
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300"
+              />
+            </div>
+            <div className="inline-flex rounded-xl border border-gray-200 p-0.5 bg-gray-50">
+              {INVOICE_CATEGORIES.map((c) => (
+                <button
+                  key={c.value || 'all'}
+                  type="button"
+                  onClick={() => setCategoryFilter(c.value)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    categoryFilter === c.value ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {c.label}
+                </button>
               ))}
-            </select>
-            <select
-              value={currencyFilter}
-              onChange={(e) => setCurrencyFilter(e.target.value)}
-              className="w-24 px-2 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border transition-all ${
+                showAdvanced ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+              }`}
             >
-              {CURRENCIES.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+              <AdjustmentsHorizontalIcon className="w-4 h-4" />
+              Advanced
+            </button>
+          </div>
+
+          {activeFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-100">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mr-1">Active</span>
+              {activeFilters.map((f) => (
+                <button
+                  key={f.k}
+                  onClick={f.clear}
+                  className="group inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700"
+                >
+                  {f.label}
+                  <XMarkIcon className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                </button>
               ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2 col-span-1 md:col-span-2">
-            <label className="text-[11px] text-gray-500 shrink-0">From</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                   className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-            <label className="text-[11px] text-gray-500 shrink-0">To</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                   className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-          </div>
-          {lastFetched && (
-            <span className="text-[11px] text-gray-400 self-center">
-              Updated {lastFetched.toLocaleTimeString()}
-            </span>
+              <button onClick={clearAll} className="ml-1 text-[11px] text-gray-500 hover:text-gray-800 underline underline-offset-2">
+                Clear all
+              </button>
+            </div>
           )}
-        </div>
-      </div>
 
-      {/* ── Table ────────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-          {error ? (
-            <div className="p-8 text-center text-sm text-rose-600 bg-rose-50">{error}</div>
-          ) : loading && invoices.length === 0 ? (
-            <div className="p-12 text-center text-sm text-gray-400">Loading invoices…</div>
-          ) : invoices.length === 0 ? (
-            <div className="p-12 text-center text-sm text-gray-400">
-              No invoices match the current filter. Use <b>Import Excel</b> to load the master file.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    {TRACKER_COLUMNS.map((c) => (
-                      <th key={c.key} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                        {c.label}
-                      </th>
-                    ))}
-                    <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Status</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500">Files</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => (
-                    <tr
-                      key={inv.id}
-                      className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors"
-                    >
-                      {TRACKER_COLUMNS.map((c) => (
-                        <td key={c.key} className={`px-4 py-3 ${c.className || ''}`}>
-                          {c.accessor(inv)}
-                        </td>
-                      ))}
-                      <td className="px-4 py-3"><StatusBadge statusKey={inv.payment_status} /></td>
-                      <td className="px-4 py-3">
-                        <AttachmentControl invoice={inv} onChanged={fetchData} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="px-4 py-3 text-[11px] text-gray-400 bg-gray-50 border-t border-gray-100">
-                Showing {invoices.length} row{invoices.length === 1 ? '' : 's'}
-                {' · '}page size {TRACKER_API_CONFIG.pageSize}
+          {showAdvanced && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-gray-100 animate-[fadeIn_0.2s_ease-out]">
+              <input
+                type="text"
+                value={accountFilter}
+                onChange={(e) => setAccountFilter(e.target.value)}
+                placeholder="Filter by account…"
+                className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <input
+                type="text"
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                placeholder="Filter by project / RAD #…"
+                className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <select
+                value={currencyFilter}
+                onChange={(e) => setCurrencyFilter(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                {CURRENCIES.map((o) => (
+                  <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="flex-1 px-2 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+                <span className="text-gray-300 text-xs">→</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="flex-1 px-2 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <ImportExcelModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={fetchData}
-      />
+      {/* ── TABLE ───────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-gray-900">Invoice Register</h3>
+              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold tabular-nums">
+                {invoices.length}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400">Sorted by invoice date · newest first</p>
+          </div>
+
+          {error ? (
+            <div className="p-12 text-center">
+              <div className="inline-flex p-3 rounded-2xl bg-rose-100 text-rose-700 mb-3">
+                <ExclamationTriangleIcon className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-semibold text-rose-700">{error}</p>
+            </div>
+          ) : loading && invoices.length === 0 ? (
+            <div className="p-16 text-center">
+              <ArrowPathIcon className="w-8 h-8 mx-auto text-indigo-400 animate-spin mb-2" />
+              <p className="text-sm text-gray-400">Loading invoice register…</p>
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="p-16 text-center">
+              <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100 text-indigo-700 mb-4">
+                <DocumentArrowUpIcon className="w-8 h-8" />
+              </div>
+              <p className="text-base font-bold text-gray-800 mb-1">No invoices match</p>
+              <p className="text-sm text-gray-500 mb-4">
+                {activeFilters.length > 0
+                  ? 'Try clearing filters, or import the latest Excel master file.'
+                  : 'Get started by importing your customer-invoice Excel master.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-sm font-bold shadow-sm"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Import Excel
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50/50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Invoice</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Account / Project</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Dates</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Amount</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Collection</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Files</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => {
+                    const total = Number(inv.grand_total ?? inv.invoice_amount ?? 0)
+                    const paid  = Number(inv.actual_payment_received ?? 0)
+                    const isOverdue = inv.days_overdue > 0
+                    return (
+                      <tr key={inv.id} className="group border-b border-gray-50 hover:bg-indigo-50/30 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <CategoryChip category={inv.category} />
+                            <span className="font-mono text-xs font-semibold text-gray-800">{inv.invoice_number}</span>
+                          </div>
+                          {inv.customer_inv_reference && (
+                            <p className="text-[10px] text-gray-400 mt-0.5 ml-9">ref: {inv.customer_inv_reference}</p>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <AccountAvatar name={inv.account || inv.company} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate max-w-[220px]">
+                                {inv.account || inv.company || '—'}
+                              </p>
+                              <p className="text-[11px] text-gray-500 truncate max-w-[220px]">
+                                {inv.project_name || inv.rad_project_no || '—'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <p className="text-xs text-gray-700">{formatDate(inv.invoice_date)}</p>
+                          <p className={`text-[11px] ${isOverdue ? 'text-rose-600 font-bold' : 'text-gray-400'}`}>
+                            Due {formatDate(inv.due_date)}
+                            {isOverdue && <span className="ml-1">· {inv.days_overdue}d late</span>}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <p className="text-sm font-bold text-gray-900 tabular-nums">{formatMoney(total, inv.currency)}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400">{inv.currency}</p>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <BalanceBar total={total} paid={paid} currency={inv.currency} />
+                        </td>
+
+                        <td className="px-4 py-3"><StatusPill statusKey={inv.payment_status} /></td>
+
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                              title="View details"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                            </button>
+                            <AttachmentControl invoice={inv} onChanged={fetchData} />
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div className="px-5 py-3 text-[11px] text-gray-400 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                <span>
+                  Showing {invoices.length} row{invoices.length === 1 ? '' : 's'} · page size {TRACKER_API_CONFIG.pageSize}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <LiveDot /> auto-refresh every {Math.round(TRACKER_API_CONFIG.refreshMs / 1000)}s
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ImportExcelModal open={importOpen} onClose={() => setImportOpen(false)} onImported={fetchData} />
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   )
 }
