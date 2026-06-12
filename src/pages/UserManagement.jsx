@@ -17,6 +17,7 @@ import {
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
 import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
+import PendingActivationAlert from '../components/UserManagement/PendingActivationAlert';
 import PeopleNav from '../components/PeopleNav/PeopleNav';
 
 /**
@@ -1245,6 +1246,38 @@ const UserManagement = ({ pageControls }) => {
       <div className="mb-6">
         <PeopleNav activeId="admin" />
       </div>
+
+      {/* Smart “Pending Activation” alert — surfaces accounts where
+          is_active=False so admins can one-click activate. The login gate
+          (`apps/users/serializers_jwt.py`) is intentionally untouched; this
+          banner just makes the existing fix discoverable. */}
+      <PendingActivationAlert
+        users={users}
+        actionLoading={actionLoading}
+        onActivate={async (userId, currentStatus) => {
+          // Reuse the exact same flow as the row toggle, minus the confirm() prompt.
+          // Core logic (deactivate/activate endpoint + refresh) is unchanged.
+          try {
+            setActionLoading({ [`status_${userId}`]: true });
+            await rbacService.activateUser(userId);
+            await dispatch(fetchUsers()).unwrap();
+            setNotification({
+              show: true,
+              type: 'success',
+              message: 'User activated successfully',
+            });
+          } catch (error) {
+            console.error('[UserManagement] activate error:', error);
+            setNotification({
+              show: true,
+              type: 'error',
+              message: error.response?.data?.message || 'Failed to activate user',
+            });
+          } finally {
+            setActionLoading({});
+          }
+        }}
+      />
 
       {/* Notification */}
       {notification.show && (
