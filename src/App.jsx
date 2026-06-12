@@ -50,6 +50,7 @@ import InvoiceUpload from './pages/Finance/InvoiceUpload'
 import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
+import HRDashboard from './pages/HR/HRDashboard'
 import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import FinanceHub from './pages/Finance/FinanceHub'
@@ -627,6 +628,14 @@ function App() {
           }
         />
         {/* Human Resources Routes */}
+        <Route
+          path="hr"
+          element={
+            <ProtectedRoute>
+              <HRDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="hr/employees"
           element={

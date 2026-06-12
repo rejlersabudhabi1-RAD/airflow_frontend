@@ -273,6 +273,14 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         expanded: expandedSections.human_resource,
         children: [
           {
+            id: 'hrDashboard',
+            title: '4.0 HR Dashboard',
+            icon: ChartBarIcon,
+            path: '/hr',
+            description: 'Consolidated real-time HR command center',
+            moduleCode: 'human_resource'
+          },
+          {
             id: 'hrEmployees',
             title: '4.1 Employees',
             icon: UsersIcon,
