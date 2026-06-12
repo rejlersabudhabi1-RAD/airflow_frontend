@@ -356,32 +356,7 @@ export const FEATURES_CATALOG = {
     order: 3,
     features: [
       // SOFT-CODED: finance-invoice-upload feature retired — link removed from UI
-      {
-        id: 'finance-invoice-management',
-        name: 'Invoice Management',
-        shortName: 'Invoices',
-        description: 'Complete invoice tracking and management',
-        path: '/finance/invoices',
-        moduleCode: 'finance',
-        status: FEATURE_STATUS.ACTIVE,
-        badges: [FEATURE_BADGES.POPULAR],
-        capabilities: [
-          'Invoice tracking',
-          'Payment status',
-          'Reports and analytics',
-          'Approval workflows'
-        ],
-        metrics: {
-          totalInvoices: 12456,
-          pendingApprovals: 45,
-          avgApprovalTime: '2.3 days'
-        },
-        usageStats: {
-          monthlyUses: 2345,
-          totalUses: 18790,
-          avgRating: 4.6
-        }
-      },
+      // SOFT-CODED: finance-invoice-management feature retired — link removed from UI
       {
         id: 'finance-salary-slip',
         name: 'Salary Slip',

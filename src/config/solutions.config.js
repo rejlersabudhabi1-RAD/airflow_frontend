@@ -192,7 +192,7 @@ const MANUAL_SOLUTIONS = [
     benefits: ['Eliminate manual data entry', 'Faster approvals', 'Better financial visibility'],
     tags:            ['Finance', 'AI', 'Automation'],
     moduleCode:      'finance',
-    link:            '/finance/invoices',
+    link:            '/finance',
     badge:           'AI',
     isAI:            true,
     isPremium:       true,

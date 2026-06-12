@@ -48,11 +48,12 @@ import QHSEHub from './pages/QHSE/QHSEHub'
 // import QHSEInterconnectedDemo from './pages/QHSE/QHSEInterconnectedDemo'
 // SOFT-CODED: InvoiceUpload route retired — keep file for future revival
 // import InvoiceUpload from './pages/Finance/InvoiceUpload'
-import InvoiceList from './pages/Finance/InvoiceList'
+// SOFT-CODED: InvoiceList / InvoiceDetail routes retired — keep files for future revival
+// import InvoiceList from './pages/Finance/InvoiceList'
 import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
-import InvoiceDetail from './pages/Finance/InvoiceDetail'
+// import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import FinanceHub from './pages/Finance/FinanceHub'
 import InternalSalesDashboard from './pages/InternalSalesDashboard'
@@ -597,22 +598,7 @@ function App() {
           }
         />
         {/* SOFT-CODED: /finance/upload route retired — link removed from UI */}
-        <Route
-          path="finance/invoices"
-          element={
-            <ModuleProtectedRoute moduleCode="finance">
-              <InvoiceList />
-            </ModuleProtectedRoute>
-          }
-        />
-        <Route
-          path="finance/invoices/:id"
-          element={
-            <ModuleProtectedRoute moduleCode="finance">
-              <InvoiceDetail />
-            </ModuleProtectedRoute>
-          }
-        />
+        {/* SOFT-CODED: /finance/invoices and /finance/invoices/:id routes retired — link removed from UI */}
         <Route
           path="finance/salary-slip"
           element={

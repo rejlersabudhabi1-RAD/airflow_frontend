@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   Upload,
-  List,
   DollarSign,
   TrendingUp,
   Users,
@@ -23,15 +22,7 @@ import {
 // ─── Finance modules ──────────────────────────────────────────────────────────
 const MODULES = [
   {
-    key: 'invoices',
-    title: 'Invoice List',
-    description: 'View, filter, and manage all submitted invoices. Track status from draft through to payment.',
-    icon: List,
-    path: '/finance/invoices',
-    gradient: 'from-blue-500 via-blue-600 to-blue-700',
-    badge: null,
-  },
-  {
+
     key: 'salary-slip',
     title: 'Salary Slip',
     description: 'Generate and download official salary slips for HR processing and employee records.',
@@ -161,15 +152,7 @@ const FinanceHub = () => {
               <p className="text-indigo-200 text-base md:text-lg max-w-xl leading-relaxed">
                 AI-powered invoice automation, multi-level approvals, salary management, and real-time sales analytics — all in one workspace.
               </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  onClick={() => navigate('/finance/invoices')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold shadow-lg hover:shadow-indigo-500/30 transition-all duration-200"
-                >
-                  <List className="w-4 h-4" />
-                  View Invoices
-                </button>
-              </div>
+              {/* SOFT-CODED: hero CTA buttons retired alongside /finance/invoices link */}
             </div>
 
             {/* Workflow summary badges */}
@@ -263,14 +246,6 @@ const FinanceHub = () => {
               >
                 <ShoppingCart className="w-4 h-4" />
                 Procurement
-              </button>
-              <button
-                onClick={() => navigate('/finance/invoices')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium shadow-sm transition-colors"
-              >
-                <List className="w-4 h-4" />
-                View Invoices
-                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

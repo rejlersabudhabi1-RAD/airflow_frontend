@@ -64,7 +64,7 @@ const InvoiceApproval = () => {
 
       // Redirect after 3 seconds
       setTimeout(() => {
-        navigate('/finance/invoices');
+        navigate('/finance');
       }, 3000);
 
     } catch (err) {
@@ -99,10 +99,10 @@ const InvoiceApproval = () => {
           <h2 className="text-2xl font-bold text-red-600 mb-4">Error</h2>
           <p className="text-gray-700 mb-6">{error}</p>
           <button
-            onClick={() => navigate('/finance/invoices')}
+            onClick={() => navigate('/finance')}
             className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >
-            Go to Invoices
+            Go to Finance
           </button>
         </div>
       </div>
@@ -134,13 +134,13 @@ const InvoiceApproval = () => {
             <p className="text-yellow-700">{success.next_step}</p>
           </div>
           <p className="text-gray-600 mb-6">
-            Redirecting to invoices page in 3 seconds...
+            Redirecting to Finance hub in 3 seconds...
           </p>
           <button
-            onClick={() => navigate('/finance/invoices')}
+            onClick={() => navigate('/finance')}
             className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
           >
-            Go to Invoices Now
+            Go to Finance Now
           </button>
         </div>
       </div>
@@ -168,10 +168,10 @@ const InvoiceApproval = () => {
             )}
           </div>
           <button
-            onClick={() => navigate('/finance/invoices')}
+            onClick={() => navigate('/finance')}
             className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
           >
-            Go to Invoices
+            Go to Finance
           </button>
         </div>
       </div>
