@@ -27,6 +27,7 @@ import {
   TIMESHEET_MONTHLY_COLUMNS,
   TIMESHEET_ENV_VARS,
   TIMESHEET_COPY,
+  PUNCH_TYPE_LABELS,
 } from '../../config/timesheet.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +221,25 @@ const DataTable = ({ rows, columns, emptyMessage }) => {
                         {e && e.includes('@')
                           ? <a href={`mailto:${e}`} className="text-blue-700 hover:underline" title={e}>{e}</a>
                           : <span className="text-slate-400">—</span>}
+                      </td>
+                    )
+                  }
+                  // Soft-coded punch-type badge — labels come from PUNCH_TYPE_LABELS
+                  // in timesheet.config.js so display text never needs a code change.
+                  if (c.cellType === 'punch_type') {
+                    const isIn  = v === PUNCH_TYPE_LABELS.in
+                    const isOut = v === PUNCH_TYPE_LABELS.out
+                    return (
+                      <td key={c.id} className="px-3 py-2 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          isIn  ? 'bg-emerald-100 text-emerald-700' :
+                          isOut ? 'bg-rose-100 text-rose-700' :
+                                  'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isIn  && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+                          {isOut && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />}
+                          {v}
+                        </span>
                       </td>
                     )
                   }

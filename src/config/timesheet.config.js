@@ -121,22 +121,32 @@ const cardFrom = (r) => {
 }
 const cardColumn = { id: 'card1', label: 'Card 1', accessor: (r) => safe(cardFrom(r)) }
 
+// Soft-coded punch-type labels — backend stamps `is_in` (bool) on every live
+// row so we never rely on the raw biometric value (which can be '0'/'1',
+// 'IN'/'OUT', or any locale-specific string). Edit the labels here to change
+// what users see in the Type column without touching component code.
+export const PUNCH_TYPE_LABELS = {
+  in:      'IN',
+  out:     'OUT',
+  unknown: '—',
+}
+const punchTypeLabel = (r) => {
+  if (r.is_in === true)  return PUNCH_TYPE_LABELS.in
+  if (r.is_in === false) return PUNCH_TYPE_LABELS.out
+  return PUNCH_TYPE_LABELS.unknown
+}
+
 export const TIMESHEET_LIVE_COLUMNS = [
   { id: 'name',       label: 'Employee',  accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'employee',   label: 'Code',      accessor: (r) => safe(r.employee_code) },
-  cardColumn,
-  emailColumn,
   { id: 'dept',       label: 'Dept',      accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'last_punch', label: 'Last Punch', accessor: (r) => fmtTime(r.punch_time || r.login_time || r.logout_time) },
-  { id: 'type',       label: 'Type',      accessor: (r) => safe(r.punch_type) },
-  { id: 'matched',    label: 'Matched',   accessor: (r) => r.matched_by || 'unmatched' },
+  { id: 'type',       label: 'Type',      accessor: punchTypeLabel, cellType: 'punch_type' },
 ]
 
 export const TIMESHEET_DAILY_COLUMNS = [
   { id: 'name',     label: 'Employee', accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'code',     label: 'Code',     accessor: (r) => safe(r.employee_code) },
-  cardColumn,
-  emailColumn,
   { id: 'dept',     label: 'Dept',     accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'first_in', label: 'First In', accessor: (r) => fmtTime(r.first_in) },
   { id: 'last_out', label: 'Last Out', accessor: (r) => fmtTime(r.last_out) },
@@ -148,8 +158,6 @@ export const TIMESHEET_DAILY_COLUMNS = [
 export const TIMESHEET_MONTHLY_COLUMNS = [
   { id: 'name',         label: 'Employee',     accessor: (r) => r.radai_full_name || r.name || r.employee_code },
   { id: 'code',         label: 'Code',         accessor: (r) => safe(r.employee_code) },
-  cardColumn,
-  emailColumn,
   { id: 'dept',         label: 'Dept',         accessor: (r) => safe(r.radai_department || r.department) },
   { id: 'days',         label: 'Days Present', accessor: (r) => r.days_present || 0 },
   { id: 'full',         label: 'Full Days',    accessor: (r) => r.full_days || 0 },
