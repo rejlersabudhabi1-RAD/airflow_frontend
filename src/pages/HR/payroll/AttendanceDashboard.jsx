@@ -90,7 +90,24 @@ function SummaryTab() {
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
   const [leaveCalendar, setLeaveCalendar] = useState({})  // { employee_code: { 'YYYY-MM-DD': {code,name,...} } }
-  const [summaryBranch, setSummaryBranch] = useState(null)  // null = All | 'RAD' | 'RIN'
+  const [summaryBranch,        setSummaryBranch]        = useState(null)   // null = All | 'RAD' | 'RIN'
+  // Set of employee_codes for the selected branch; null = no filter (show All)
+  const [branchCodes,           setBranchCodes]           = useState(null)
+  const [branchCodesLoading,    setBranchCodesLoading]    = useState(false)
+
+  // When branch selection changes, fetch the employee codes for that branch
+  // so we can cross-reference against biometric attendance rows (which have no branch tag)
+  useEffect(() => {
+    if (!summaryBranch) {
+      setBranchCodes(null)
+      return
+    }
+    setBranchCodesLoading(true)
+    payrollService.getBranchEmployeeCodes(summaryBranch, year)
+      .then(d => setBranchCodes(new Set(d?.codes || [])))
+      .catch(() => setBranchCodes(new Set()))   // on error: show empty rather than all
+      .finally(() => setBranchCodesLoading(false))
+  }, [summaryBranch, year])
 
   // Fetch biometric attendance
   useEffect(() => {
@@ -133,6 +150,9 @@ function SummaryTab() {
     return rows
       // Remove non-employee biometric records (facility names, visitor badges, etc.)
       .filter(filterEmployeeRow)
+      // Branch filter: when a branch is selected, only show employees whose code
+      // is in the branchCodes Set (sourced from EmployeeLeaveRecord.branch via API)
+      .filter(r => !branchCodes || branchCodes.has(r.employee_code || ''))
       .filter(r => !q ||
         empName(r).toLowerCase().includes(q) ||
         (r.department || '').toLowerCase().includes(q))
@@ -164,7 +184,7 @@ function SummaryTab() {
           diff:        round2(totalHrs - normalHrs),
         }
       })
-  }, [rows, search, workingDays, leaveCalendar])
+  }, [rows, search, workingDays, leaveCalendar, branchCodes])
 
   // Column totals row
   const totals = useMemo(() => {
@@ -210,11 +230,20 @@ function SummaryTab() {
                 }`}>All</button>
               {BRANCHES.map(b => (
                 <button key={b.id} type="button" onClick={() => setSummaryBranch(b.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  disabled={branchCodesLoading && summaryBranch === b.id}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-1 ${
                     summaryBranch === b.id
                       ? `${b.activeBg} ${b.activeText} border-transparent`
                       : `${b.badgeBg} ${b.badgeText} ${b.badgeBorder} hover:opacity-80`
-                  }`}>{b.label}</button>
+                  }`}>
+                  {branchCodesLoading && summaryBranch === b.id && (
+                    <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  )}
+                  {b.label}
+                </button>
               ))}
             </div>
           </div>

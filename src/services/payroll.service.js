@@ -96,6 +96,11 @@ const payrollService = {
   getLeaveCalendar: (year, month) =>
     unwrap(apiClient.get(`${BASE}/leave-calendar/`, { params: { year, month } })),
 
+  // ── Branch employee codes (flat list — used for attendance branch filter) ──
+  // Returns { branch, year, codes: string[] } — lightweight, no pagination
+  getBranchEmployeeCodes: (branch, year) =>
+    unwrap(apiClient.get(`${BASE}/branch-employee-codes/`, { params: { branch, year } })),
+
   // ── Finance payroll endpoints (reused from finance.service) ────────────────
   getPayrollRuns: (params = {}) =>
     unwrap(apiClient.get(`${FINANCE}/payroll-runs/`, { params })),
