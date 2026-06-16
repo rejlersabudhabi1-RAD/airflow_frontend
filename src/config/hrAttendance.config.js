@@ -1,0 +1,298 @@
+/**
+ * Attendance Dashboard — Soft-Coded Configuration
+ * ================================================
+ * All thresholds, colours, labels, column definitions, and KPI computations
+ * live here.  No magic values in component code.
+ *
+ * Data source: backend/apps/timesheet/*  (SQL Server biometric punches)
+ * API methods: timesheet.service.js  →  fetchLive / fetchDaily / fetchMonthly
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. THRESHOLDS — override via Vite env vars
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATT_FULL_DAY_HOURS      = Number(import.meta.env?.VITE_ATT_FULL_DAY_HOURS   || 8)
+export const ATT_LATE_THRESHOLD_MIN  = Number(import.meta.env?.VITE_ATT_LATE_MIN         || 15)
+export const ATT_EXPECTED_LOGIN_H    = Number(import.meta.env?.VITE_ATT_EXPECTED_LOGIN_H || 9)
+export const ATT_GOOD_RATE_PCT       = Number(import.meta.env?.VITE_ATT_GOOD_RATE        || 90)  // ≥ green
+export const ATT_WARN_RATE_PCT       = Number(import.meta.env?.VITE_ATT_WARN_RATE        || 75)  // ≥ amber; < = red
+export const ATT_TOP_ABSENT_LIMIT    = Number(import.meta.env?.VITE_ATT_TOP_ABSENT_LIMIT || 10)  // rows in alerts
+// Contractual hours per working day — used to compute Normal Hours in Summary view
+export const ATT_STANDARD_DAILY_HOURS = Number(import.meta.env?.VITE_ATT_STANDARD_DAILY_HOURS || 9)
+// Company name displayed in the Summary report header
+export const ATT_COMPANY_NAME        = import.meta.env?.VITE_ATT_COMPANY_NAME || 'Rejlers International Engineering Solutions AB'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPLOYEE FILTER — eliminate non-employee biometric records
+// ─────────────────────────────────────────────────────────────────────────────
+// When true, only rows matched to a real RAD AI user (radai_user_id is set)
+// are shown. Flip to 'false' via env var to show ALL biometric records.
+export const ATT_FILTER_REQUIRE_MATCH = (import.meta.env?.VITE_ATT_FILTER_REQUIRE_MATCH ?? 'true') !== 'false'
+
+// Secondary net: regex patterns that identify non-employee biometric entries
+// (facility access groups, visitor badges, maintenance terminals, etc.).
+// Checked ONLY when ATT_FILTER_REQUIRE_MATCH=false OR a row has no radai_user_id.
+// Add patterns here — no code changes needed.
+export const ATT_NON_EMPLOYEE_PATTERNS = [
+  /visitor/i,           // e.g. "DESCON Visitor-10", "Visitor Badge"
+  /maintenance/i,       // maintenance terminal / zone
+  /\bgate\b/i,          // gate access points
+  /\bguard\b/i,         // guard / security post
+  /^reception\b/i,
+  /^security\b/i,
+  /^test\b/i,           // test records
+  /^admin\b/i,          // admin device names
+  /^[A-Z][A-Z0-9 &\/\-_]{3,}$/, // 4+ char ALL-CAPS names (company/facility names)
+  /^\d{4,}/,            // pure numeric / badge number rows
+]
+
+/**
+ * Returns true when a biometric row should be shown to HR.
+ *
+ * Logic (in priority order):
+ *   1. Row is matched to a RAD AI user (radai_user_id set)  → always show
+ *   2. ATT_FILTER_REQUIRE_MATCH = true and no match         → always hide
+ *   3. ATT_FILTER_REQUIRE_MATCH = false, no match, name
+ *      matches a non-employee pattern                       → hide
+ *   4. Everything else                                      → show
+ */
+export const filterEmployeeRow = (row) => {
+  if (!row) return false
+  // Rule 1: RAD AI matched → definitely a real employee
+  if (row.radai_user_id) return true
+  // Rule 2: strict mode on → require match
+  if (ATT_FILTER_REQUIRE_MATCH) return false
+  // Rule 3: lenient mode — apply name-pattern blocklist
+  const name = (row.radai_full_name || row.employee_name || row.name || '').trim()
+  if (!name) return false
+  return !ATT_NON_EMPLOYEE_PATTERNS.some(p => p.test(name))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. VIEW TABS
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATTENDANCE_VIEWS = [
+  { id: 'overview', label: 'Overview',  icon: 'ChartBarSquareIcon', description: 'HR Executive Summary' },
+  { id: 'summary',  label: 'Summary',   icon: 'TableCellsIcon',     description: 'Consolidated monthly timesheet — Rejlers format' },
+  { id: 'daily',    label: 'Daily',     icon: 'CalendarDaysIcon',   description: 'Day-by-day biometric tracker' },
+  { id: 'monthly',  label: 'Monthly',   icon: 'CalendarIcon',       description: 'Monthly rollup with dept charts' },
+  { id: 'yearly',   label: 'Yearly',    icon: 'ChartBarIcon',       description: '12-month trend per employee' },
+  { id: 'reports',  label: 'Reports',   icon: 'ArrowDownTrayIcon',  description: 'Export Excel / PDF' },
+]
+export const ATTENDANCE_DEFAULT_VIEW = 'overview'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. STATUS META  (present / late / half_day / absent / on_leave)
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATTENDANCE_STATUS = {
+  present:  { label: 'Present',  bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', row: '' },
+  late:     { label: 'Late',     bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500',   row: 'bg-amber-50/50' },
+  half_day: { label: 'Half Day', bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  dot: 'bg-orange-500',  row: 'bg-orange-50/40' },
+  absent:   { label: 'Absent',   bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-500',    row: 'bg-rose-50/30' },
+  on_leave: { label: 'On Leave', bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200',  dot: 'bg-purple-500',  row: 'bg-purple-50/30' },
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. CLASSIFY a single daily record → status key
+// ─────────────────────────────────────────────────────────────────────────────
+export const classifyDay = (record) => {
+  if (!record || !record.first_in) return 'absent'
+  if (record.is_full_day)          return record.is_late ? 'late' : 'present'
+  return 'half_day'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. KPI TILE DEFINITIONS
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATTENDANCE_KPIS = [
+  {
+    id:          'present',
+    label:       'Present Today',
+    icon:        'UserGroupIcon',
+    gradient:    'from-emerald-500 to-emerald-600',
+    bgLight:     'bg-emerald-50',
+    textColor:   'text-emerald-700',
+    compute:     ({ daily }) => ({
+      value: daily.filter(r => r.first_in).length,
+      sub:   'biometric punch recorded',
+    }),
+  },
+  {
+    id:          'late',
+    label:       'Late Arrivals',
+    icon:        'ClockIcon',
+    gradient:    'from-amber-500 to-amber-600',
+    bgLight:     'bg-amber-50',
+    textColor:   'text-amber-700',
+    compute:     ({ daily }) => ({
+      value: daily.filter(r => r.is_late).length,
+      sub:   `> ${ATT_LATE_THRESHOLD_MIN} min after ${ATT_EXPECTED_LOGIN_H}:00`,
+    }),
+  },
+  {
+    id:          'half_day',
+    label:       'Half Days',
+    icon:        'AdjustmentsHorizontalIcon',
+    gradient:    'from-orange-500 to-orange-600',
+    bgLight:     'bg-orange-50',
+    textColor:   'text-orange-700',
+    compute:     ({ daily }) => ({
+      value: daily.filter(r => r.first_in && !r.is_full_day).length,
+      sub:   `< ${ATT_FULL_DAY_HOURS}h logged`,
+    }),
+  },
+  {
+    id:          'absent',
+    label:       'No Punch',
+    icon:        'UserMinusIcon',
+    gradient:    'from-rose-500 to-rose-600',
+    bgLight:     'bg-rose-50',
+    textColor:   'text-rose-700',
+    compute:     ({ daily, totalActive }) => ({
+      value: Math.max(0, totalActive - daily.filter(r => r.first_in).length),
+      sub:   'registered vs no biometric record',
+    }),
+  },
+  {
+    id:          'rate',
+    label:       'Attendance Rate',
+    icon:        'ChartPieIcon',
+    gradient:    'from-blue-500 to-blue-600',
+    bgLight:     'bg-blue-50',
+    textColor:   'text-blue-700',
+    compute:     ({ daily, totalActive }) => {
+      const present = daily.filter(r => r.first_in).length
+      const rate    = totalActive > 0 ? Math.round((present / totalActive) * 100) : 0
+      return { value: `${rate}%`, sub: 'of all registered employees' }
+    },
+  },
+  {
+    id:          'avg_hours',
+    label:       'Avg Hours Today',
+    icon:        'ClockIcon',
+    gradient:    'from-indigo-500 to-indigo-600',
+    bgLight:     'bg-indigo-50',
+    textColor:   'text-indigo-700',
+    compute:     ({ daily }) => {
+      const worked = daily.filter(r => (r.hours_worked ?? 0) > 0)
+      const avg    = worked.length > 0
+        ? (worked.reduce((s, r) => s + (r.hours_worked || 0), 0) / worked.length).toFixed(1)
+        : '—'
+      return { value: avg, sub: 'hrs per present employee' }
+    },
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. DAILY TABLE COLUMNS
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATTENDANCE_DAILY_COLS = [
+  { id: 'name',    label: 'Employee',   accessor: r => r.radai_full_name || r.name || r.employee_code || '—' },
+  { id: 'code',    label: 'Code',       accessor: r => r.employee_code || '—' },
+  { id: 'dept',    label: 'Department', accessor: r => r.radai_department || r.department || '—' },
+  { id: 'in',      label: 'Check In',   accessor: r => fmtTime(r.first_in) },
+  { id: 'out',     label: 'Check Out',  accessor: r => fmtTime(r.last_out) },
+  { id: 'hours',   label: 'Hours',      accessor: r => (r.hours_worked ?? 0) > 0 ? `${r.hours_worked.toFixed(1)}h` : '—' },
+  { id: 'status',  label: 'Status',     accessor: r => classifyDay(r), cellType: 'att_status' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. MONTHLY TABLE COLUMNS  (rows are pre-enriched with _absent, _rate)
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATTENDANCE_MONTHLY_COLS = [
+  { id: 'name',    label: 'Employee',   accessor: r => r.radai_full_name || r.name || r.employee_code || '—' },
+  { id: 'dept',    label: 'Dept',       accessor: r => r.radai_department || r.department || '—' },
+  { id: 'present', label: 'Present',    accessor: r => r.days_present || 0 },
+  { id: 'absent',  label: 'Absent',     accessor: r => r._absent || 0,         cellType: 'absent_count' },
+  { id: 'full',    label: 'Full Days',  accessor: r => r.full_days || 0 },
+  { id: 'half',    label: 'Half Days',  accessor: r => r.half_days || 0 },
+  { id: 'late',    label: 'Late In',    accessor: r => r.late_arrivals || 0,   cellType: 'late_count' },
+  { id: 'hours',   label: 'Total Hrs',  accessor: r => `${(r.total_hours || 0).toFixed(1)}h` },
+  { id: 'avg',     label: 'Avg/Day',    accessor: r => `${(r.avg_hours_per_day || 0).toFixed(1)}h` },
+  { id: 'rate',    label: 'Rate %',     accessor: r => r._rate ?? 0,           cellType: 'att_rate' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Format a date/time string as HH:MM */
+export const fmtTime = (v) => {
+  if (!v) return '—'
+  try {
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return String(v).slice(0, 8)
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch { return String(v) }
+}
+
+/** Count Mon–Fri business days in a given year-month (1-based month) */
+export const workingDaysInMonth = (year, month) => {
+  let count = 0
+  const d = new Date(year, month - 1, 1)
+  while (d.getMonth() === month - 1) {
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) count++
+    d.setDate(d.getDate() + 1)
+  }
+  return count
+}
+
+/** Attendance-rate colour class (text) */
+export const rateColor = (pct) => {
+  if (pct >= ATT_GOOD_RATE_PCT) return 'text-emerald-700'
+  if (pct >= ATT_WARN_RATE_PCT) return 'text-amber-700'
+  return 'text-rose-700'
+}
+
+/** Extract employee display name from any shape the backend returns */
+export const empName = (r) => r.radai_full_name || r.name || r.employee_code || '—'
+
+/** Extract department from any shape */
+export const empDept = (r) => r.radai_department || r.department || 'General'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. CHART PALETTE
+// ─────────────────────────────────────────────────────────────────────────────
+export const DEPT_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444',
+  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. MONTH LABELS
+// ─────────────────────────────────────────────────────────────────────────────
+export const MONTH_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+export const MONTH_FULL   = ['January','February','March','April','May','June',
+  'July','August','September','October','November','December']
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. UI COPY
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATT_COPY = {
+  pageTitle:     'Attendance Dashboard',
+  pageSubtitle:  'Consolidated HR View — Daily · Monthly · Yearly · Reports',
+  noData:        'No attendance data for this period',
+  loading:       'Loading attendance data…',
+  dailyEmpty:    'No biometric punches recorded for selected date',
+  monthlyEmpty:  'No attendance records for selected month',
+  yearlyLoading: 'Fetching 12 months of data…',
+  exportHint:    'Reports are generated directly from the biometric SQL Server database',
+  absenceNote:   'Absent = Working Days − Days Present (Mon–Fri schedule)',
+  leaveNote:     'Planned leave management integration coming soon',
+  exportOk:      'Export started — check your downloads folder',
+  sourceTag:     'Biometric SQL Server  ·  Real-time sync',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. SUMMARY VIEW HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+/** Format hours difference as "+X h Y min" / "-X h Y min" (matches Rejlers report format) */
+export const fmtDiff = (hours) => {
+  if (!isFinite(hours)) return '—'
+  const sign = hours >= 0 ? '+' : '-'
+  const abs  = Math.abs(hours)
+  const h    = Math.floor(abs)
+  const m    = Math.round((abs - h) * 60)
+  return `${sign}${h} h ${m} min`
+}
