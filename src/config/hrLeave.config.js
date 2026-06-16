@@ -1,0 +1,138 @@
+/**
+ * HR Leave Management — Soft-Coded Configuration
+ * ===============================================
+ * All leave type codes, status styles, and helpers live here.
+ * No magic strings or colour values exist in component code.
+ *
+ * Backend source of truth: /api/v1/payroll/leave-types/
+ * These defaults mirror the seeded data in migration 0003 and are used as
+ * a fallback when the API is unavailable (e.g. no network during hot-reload).
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. ABSENT SYMBOL — shown in the Summary attendance table for a working day
+//    with no biometric punch and no approved leave
+// ─────────────────────────────────────────────────────────────────────────────
+export const ABSENT_SYMBOL = import.meta.env?.VITE_ABSENT_SYMBOL || 'A'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. LEAVE TYPE DEFINITIONS
+//    Mirrored from the backend seed in migration 0003.
+//    Fields: code, name, color (chart hex), bg/text/border (badge Tailwind classes),
+//            cellBg/cellText (compact cell variant for Summary table)
+// ─────────────────────────────────────────────────────────────────────────────
+export const DEFAULT_LEAVE_TYPES = [
+  { code: 'AL', name: 'Annual Leave',    color: '#10b981',
+    bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300',
+    cellBg: 'bg-emerald-100', cellText: 'text-emerald-800' },
+  { code: 'SL', name: 'Sick Leave',      color: '#3b82f6',
+    bg: 'bg-blue-100',    text: 'text-blue-800',    border: 'border-blue-300',
+    cellBg: 'bg-blue-100',    cellText: 'text-blue-800' },
+  { code: 'EL', name: 'Emergency Leave', color: '#f59e0b',
+    bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-300',
+    cellBg: 'bg-amber-100',   cellText: 'text-amber-800' },
+  { code: 'UL', name: 'Unpaid Leave',    color: '#ef4444',
+    bg: 'bg-red-100',     text: 'text-red-800',     border: 'border-red-300',
+    cellBg: 'bg-red-100',     cellText: 'text-red-800' },
+  { code: 'ML', name: 'Maternity Leave', color: '#8b5cf6',
+    bg: 'bg-purple-100',  text: 'text-purple-800',  border: 'border-purple-300',
+    cellBg: 'bg-purple-100',  cellText: 'text-purple-800' },
+  { code: 'PL', name: 'Paternity Leave', color: '#6366f1',
+    bg: 'bg-indigo-100',  text: 'text-indigo-800',  border: 'border-indigo-300',
+    cellBg: 'bg-indigo-100',  cellText: 'text-indigo-800' },
+  { code: 'PH', name: 'Public Holiday',  color: '#6b7280',
+    bg: 'bg-slate-100',   text: 'text-slate-700',   border: 'border-slate-300',
+    cellBg: 'bg-slate-100',   cellText: 'text-slate-600' },
+  { code: 'WO', name: 'Work Off',        color: '#14b8a6',
+    bg: 'bg-teal-100',    text: 'text-teal-800',    border: 'border-teal-300',
+    cellBg: 'bg-teal-100',    cellText: 'text-teal-800' },
+]
+
+/** Fallback for unknown leave type codes */
+const LEAVE_FALLBACK = {
+  code: '?', name: 'Leave', color: '#6b7280',
+  bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300',
+  cellBg: 'bg-slate-100', cellText: 'text-slate-700',
+}
+
+/**
+ * Look up a leave type by its code.
+ * apiTypes (optional): array from GET /api/v1/payroll/leave-types/ — when
+ * supplied these take precedence over DEFAULT_LEAVE_TYPES so admin-created
+ * custom types are automatically styled.
+ */
+export const getLeaveType = (code, apiTypes = null) => {
+  if (apiTypes) {
+    const hit = apiTypes.find(t => t.code === code)
+    if (hit) return {
+      ...hit,
+      cellBg:   hit.badge_bg    || hit.cellBg    || 'bg-slate-100',
+      cellText: hit.badge_text  || hit.cellText  || 'text-slate-700',
+    }
+  }
+  return DEFAULT_LEAVE_TYPES.find(t => t.code === code) || { ...LEAVE_FALLBACK, code }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. REQUEST STATUS STYLES
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEAVE_STATUS = {
+  PENDING:   { label: 'Pending',   bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-400',   icon: 'ClockIcon' },
+  APPROVED:  { label: 'Approved',  bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', icon: 'CheckCircleIcon' },
+  REJECTED:  { label: 'Rejected',  bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-500',    icon: 'XCircleIcon' },
+  CANCELLED: { label: 'Cancelled', bg: 'bg-slate-50',   text: 'text-slate-500',   border: 'border-slate-200',   dot: 'bg-slate-300',   icon: 'MinusCircleIcon' },
+}
+
+export const leaveStatusMeta = (code) =>
+  LEAVE_STATUS[code] || LEAVE_STATUS.PENDING
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. LEAVE REQUEST VIEWS (tabs inside the Requests panel)
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEAVE_REQ_VIEWS = [
+  { id: 'new',     label: 'New Request', icon: 'PlusCircleIcon' },
+  { id: 'pending', label: 'Pending',     icon: 'ClockIcon' },
+  { id: 'history', label: 'History',     icon: 'ArchiveBoxIcon' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. TABLE COLUMNS — leave request list
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEAVE_REQUEST_COLS = [
+  { id: 'name',       label: 'Employee',   accessor: r => r.employee_name },
+  { id: 'leave_type', label: 'Type',       accessor: r => r.leave_type_detail?.code || r.leave_type },
+  { id: 'start',      label: 'From',       accessor: r => r.start_date },
+  { id: 'end',        label: 'To',         accessor: r => r.end_date },
+  { id: 'days',       label: 'Days',       accessor: r => Number(r.days_requested || 0).toFixed(1) },
+  { id: 'reason',     label: 'Reason',     accessor: r => r.reason || '—' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Count Mon–Fri working days between two ISO date strings (inclusive). */
+export const countWorkingDays = (from, to) => {
+  if (!from || !to) return 0
+  let count = 0
+  const start = new Date(from)
+  const end   = new Date(to)
+  if (start > end) return 0
+  const cur = new Date(start)
+  while (cur <= end) {
+    const dow = cur.getDay()
+    if (dow !== 0 && dow !== 6) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count
+}
+
+/** Return today as ISO YYYY-MM-DD */
+export const todayISO = () => new Date().toISOString().slice(0, 10)
+
+/** Return tomorrow as ISO YYYY-MM-DD */
+export const tomorrowISO = () => {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}

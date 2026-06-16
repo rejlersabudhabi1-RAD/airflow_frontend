@@ -74,9 +74,10 @@ const BalanceBadge = ({ value }) => {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 const VIEWS = [
-  { id: 'overview', label: 'Overview',   icon: 'ChartBarSquareIcon' },
-  { id: 'list',     label: 'Employees',  icon: 'TableCellsIcon' },
-  { id: 'detail',   label: 'Detail',     icon: 'UserCircleIcon' },
+  { id: 'overview',  label: 'Overview',   icon: 'ChartBarSquareIcon' },
+  { id: 'list',      label: 'Employees',  icon: 'TableCellsIcon' },
+  { id: 'detail',    label: 'Detail',     icon: 'UserCircleIcon' },
+  { id: 'requests',  label: 'Requests',   icon: 'ClipboardDocumentListIcon' },
 ]
 
 export default function LeaveDashboard() {
@@ -91,6 +92,20 @@ export default function LeaveDashboard() {
   const [page,        setPage]        = useState(1)
   const [sortCol,     setSortCol]     = useState('name')
   const [sortAsc,     setSortAsc]     = useState(true)
+
+  // ── Requests view state ────────────────────────────────────────────────────
+  const [reqTab,       setReqTab]       = useState('new')   // 'new' | 'pending' | 'history'
+  const [leaveTypes,   setLeaveTypes]   = useState([])
+  const [requests,     setRequests]     = useState([])
+  const [reqLoading,   setReqLoading]   = useState(false)
+  const [reqNote,      setReqNote]      = useState('')       // reviewer note for approve/reject
+  const [formState,    setFormState]    = useState({
+    employee_name: '', employee_code: '', department: '',
+    leave_type: '', start_date: '', end_date: '', reason: '',
+  })
+  const [formBusy,     setFormBusy]     = useState(false)
+  const [formMsg,      setFormMsg]      = useState(null)     // { type: 'ok'|'err', text }
+  const [reviewBusy,   setReviewBusy]   = useState(null)     // UUID being reviewed
 
   // ── Fetch all records ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -145,6 +160,86 @@ export default function LeaveDashboard() {
       .catch(() => setSelected(rec))
       .finally(() => setDetailLoading(false))
   }, [])
+
+  // ── Load leave types (once) ────────────────────────────────────────────────
+  useEffect(() => {
+    payrollService.getLeaveTypes()
+      .then(d => setLeaveTypes(Array.isArray(d) ? d : (d?.results ?? [])))
+      .catch(() => {})
+  }, [])
+
+  // ── Load requests whenever requests tab is active ──────────────────────────
+  useEffect(() => {
+    if (view !== 'requests') return
+    setReqLoading(true)
+    const params = reqTab === 'pending'
+      ? { status: 'PENDING' }
+      : reqTab === 'history'
+      ? { status: 'APPROVED,REJECTED,CANCELLED' }
+      : {}
+    payrollService.getLeaveRequests(params)
+      .then(d => setRequests(Array.isArray(d) ? d : (d?.results ?? [])))
+      .catch(() => setRequests([]))
+      .finally(() => setReqLoading(false))
+  }, [view, reqTab])
+
+  // ── Working days preview for the new-request form ─────────────────────────
+  const formWorkDays = useMemo(() => {
+    if (!formState.start_date || !formState.end_date) return null
+    const s = new Date(formState.start_date)
+    const e = new Date(formState.end_date)
+    if (e < s) return null
+    let d = 0; let c = new Date(s)
+    while (c <= e) { if (c.getDay() !== 0 && c.getDay() !== 6) d++; c.setDate(c.getDate() + 1) }
+    return d
+  }, [formState.start_date, formState.end_date])
+
+  // ── Submit new leave request ───────────────────────────────────────────────
+  const submitRequest = async () => {
+    if (!formState.employee_name || !formState.leave_type || !formState.start_date || !formState.end_date) {
+      setFormMsg({ type: 'err', text: 'Please fill in all required fields.' })
+      return
+    }
+    setFormBusy(true)
+    setFormMsg(null)
+    try {
+      await payrollService.createLeaveRequest({
+        employee_name: formState.employee_name,
+        employee_code: formState.employee_code || undefined,
+        department:    formState.department    || undefined,
+        leave_type:    Number(formState.leave_type),
+        start_date:    formState.start_date,
+        end_date:      formState.end_date,
+        reason:        formState.reason,
+      })
+      setFormMsg({ type: 'ok', text: 'Leave request submitted successfully.' })
+      setFormState({ employee_name: '', employee_code: '', department: '', leave_type: '', start_date: '', end_date: '', reason: '' })
+    } catch {
+      setFormMsg({ type: 'err', text: 'Failed to submit request. Please try again.' })
+    } finally {
+      setFormBusy(false)
+    }
+  }
+
+  // ── Approve / Reject helper ────────────────────────────────────────────────
+  const reviewRequest = async (id, action) => {
+    setReviewBusy(id)
+    try {
+      if (action === 'approve') await payrollService.approveLeaveRequest(id, reqNote)
+      else                      await payrollService.rejectLeaveRequest(id, reqNote)
+      setRequests(prev => prev.filter(r => r.id !== id))
+    } catch { /* silently fail — server error shown via no-update */ }
+    finally { setReviewBusy(null); setReqNote('') }
+  }
+
+  const cancelRequest = async (id) => {
+    setReviewBusy(id)
+    try {
+      await payrollService.cancelLeaveRequest(id)
+      setRequests(prev => prev.filter(r => r.id !== id))
+    } catch {}
+    finally { setReviewBusy(null) }
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // KPI computations
@@ -513,6 +608,219 @@ export default function LeaveDashboard() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // REQUESTS VIEW
+  // ─────────────────────────────────────────────────────────────────────────
+  const REQ_TABS = [
+    { id: 'new',     label: 'New Request',  icon: 'PlusCircleIcon' },
+    { id: 'pending', label: 'Pending',      icon: 'ClockIcon' },
+    { id: 'history', label: 'History',      icon: 'ArchiveBoxIcon' },
+  ]
+
+  const STATUS_STYLES = {
+    PENDING:   'bg-amber-100 text-amber-800 border-amber-300',
+    APPROVED:  'bg-emerald-100 text-emerald-800 border-emerald-300',
+    REJECTED:  'bg-rose-100 text-rose-800 border-rose-300',
+    CANCELLED: 'bg-slate-100 text-slate-600 border-slate-300',
+  }
+
+  const renderRequests = () => (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-2 flex gap-1">
+        {REQ_TABS.map(t => {
+          const Icon = HeroIcons[t.icon] || HeroIcons.ClipboardDocumentListIcon
+          return (
+            <button key={t.id} type="button" onClick={() => setReqTab(t.id)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                reqTab === t.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}>
+              <Icon className="w-4 h-4" />{t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── NEW REQUEST form ─────────────────────────────────────────────── */}
+      {reqTab === 'new' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 max-w-2xl">
+          <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+            <HeroIcons.PlusCircleIcon className="w-4 h-4 text-blue-400" />
+            Submit Leave Request
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Employee name with datalist */}
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Employee Name <span className="text-rose-500">*</span></label>
+              <input
+                list="leave-emp-list"
+                value={formState.employee_name}
+                onChange={e => {
+                  const val = e.target.value
+                  const match = records.find(r => r.employee_name === val)
+                  setFormState(s => ({
+                    ...s, employee_name: val,
+                    employee_code: match?.employee_code ?? s.employee_code,
+                    department:    match?.department    ?? s.department,
+                  }))
+                }}
+                placeholder="Search or type employee name…"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="leave-emp-list">
+                {records.map(r => <option key={r.id} value={r.employee_name} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Employee Code</label>
+              <input value={formState.employee_code}
+                onChange={e => setFormState(s => ({ ...s, employee_code: e.target.value }))}
+                placeholder="e.g. EMP-001"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
+              <input value={formState.department}
+                onChange={e => setFormState(s => ({ ...s, department: e.target.value }))}
+                placeholder="e.g. Engineering"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Leave Type <span className="text-rose-500">*</span></label>
+              <select value={formState.leave_type}
+                onChange={e => setFormState(s => ({ ...s, leave_type: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="">— Select leave type —</option>
+                {leaveTypes.map(lt => (
+                  <option key={lt.id} value={lt.id}>{lt.code} — {lt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col justify-end">
+              {formWorkDays !== null && (
+                <div className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">
+                  <span className="font-bold">{formWorkDays}</span> working day{formWorkDays !== 1 ? 's' : ''} requested
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Start Date <span className="text-rose-500">*</span></label>
+              <input type="date" value={formState.start_date}
+                onChange={e => setFormState(s => ({ ...s, start_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">End Date <span className="text-rose-500">*</span></label>
+              <input type="date" value={formState.end_date} min={formState.start_date}
+                onChange={e => setFormState(s => ({ ...s, end_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-600 mb-1">Reason</label>
+              <textarea rows={3} value={formState.reason}
+                onChange={e => setFormState(s => ({ ...s, reason: e.target.value }))}
+                placeholder="Optional reason / notes…"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          {formMsg && (
+            <div className={`mt-3 px-4 py-2.5 rounded-lg text-sm ${formMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+              {formMsg.text}
+            </div>
+          )}
+          <div className="mt-4 flex gap-2">
+            <button type="button" onClick={submitRequest} disabled={formBusy}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition">
+              {formBusy ? <Spinner /> : <HeroIcons.PaperAirplaneIcon className="w-4 h-4" />}
+              {formBusy ? 'Submitting…' : 'Submit Request'}
+            </button>
+            <button type="button" onClick={() => { setFormState({ employee_name: '', employee_code: '', department: '', leave_type: '', start_date: '', end_date: '', reason: '' }); setFormMsg(null) }}
+              className="px-4 py-2 text-slate-600 rounded-lg text-sm hover:bg-slate-100 transition">
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── PENDING / HISTORY table ─────────────────────────────────────── */}
+      {(reqTab === 'pending' || reqTab === 'history') && (
+        reqLoading ? (
+          <div className="flex items-center justify-center h-28 gap-2 text-slate-400 text-sm"><Spinner /> Loading…</div>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {['Employee','Code','Dept','Leave Type','From','To','Days','Reason','Status',
+                      reqTab === 'pending' ? 'Actions' : 'Reviewer',
+                    ].map(h => (
+                      <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {requests.length === 0 ? (
+                    <tr><td colSpan={10} className="text-center py-10 text-slate-400 text-sm">
+                      {reqTab === 'pending' ? 'No pending requests' : 'No leave history'}
+                    </td></tr>
+                  ) : requests.map(r => {
+                    const lt   = r.leave_type_detail
+                    const isBusy = reviewBusy === r.id
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{r.employee_name}</td>
+                        <td className="px-3 py-2.5 text-slate-500">{r.employee_code || '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.department || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {lt ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${lt.badge_bg} ${lt.badge_text} ${lt.badge_border}`}>
+                              {lt.code}
+                            </span>
+                          ) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.start_date}</td>
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.end_date}</td>
+                        <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{Number(r.days_requested).toFixed(0)}</td>
+                        <td className="px-3 py-2.5 text-slate-500 max-w-xs truncate">{r.reason || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${STATUS_STYLES[r.status] || 'bg-slate-100 text-slate-600 border-slate-300'}`}>
+                            {r.status_display || r.status}
+                          </span>
+                        </td>
+                        {reqTab === 'pending' ? (
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'approve')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition">
+                                {isBusy ? <Spinner /> : <HeroIcons.CheckIcon className="w-3.5 h-3.5" />}
+                                Approve
+                              </button>
+                              <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'reject')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition">
+                                <HeroIcons.XMarkIcon className="w-3.5 h-3.5" />
+                                Reject
+                              </button>
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="px-3 py-2.5 text-slate-500 text-xs">
+                            {r.reviewed_by_name || '—'}
+                            {r.reviewed_at && <div className="text-slate-400">{r.reviewed_at.slice(0, 10)}</div>}
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  )
+
+  // ─────────────────────────────────────────────────────────────────────────
   // MAIN RENDER
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -538,9 +846,10 @@ export default function LeaveDashboard() {
         </div>
       </div>
 
-      {view === 'overview' && renderOverview()}
-      {view === 'list'     && renderList()}
-      {view === 'detail'   && renderDetail()}
+      {view === 'overview'  && renderOverview()}
+      {view === 'list'      && renderList()}
+      {view === 'detail'    && renderDetail()}
+      {view === 'requests'  && renderRequests()}
     </div>
   )
 }

@@ -13,6 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import ts from '../../../services/timesheet.service'
+import payrollService from '../../../services/payroll.service'
 import {
   ATTENDANCE_VIEWS, ATTENDANCE_DEFAULT_VIEW,
   ATTENDANCE_STATUS, ATTENDANCE_KPIS,
@@ -23,6 +24,7 @@ import {
   classifyDay, workingDaysInMonth, rateColor, empName, empDept,
   fmtTime, ATT_COPY, filterEmployeeRow,
 } from '../../../config/hrAttendance.config'
+import { getLeaveType, ABSENT_SYMBOL } from '../../../config/hrLeave.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components  (defined outside main component — stable references)
@@ -81,13 +83,15 @@ const EmptyState = ({ icon: IconName = 'InboxIcon', msg, loading, loadingMsg }) 
 // ─────────────────────────────────────────────────────────────────────────────
 function SummaryTab() {
   const initNow = new Date()
-  const [year,   setYear]   = useState(initNow.getFullYear())
-  const [month,  setMonth]  = useState(initNow.getMonth() + 1)
-  const [search, setSearch] = useState('')
-  const [resp,   setResp]   = useState(null)
-  const [busy,   setBusy]   = useState(false)
-  const [err,    setErr]    = useState('')
+  const [year,          setYear]          = useState(initNow.getFullYear())
+  const [month,         setMonth]         = useState(initNow.getMonth() + 1)
+  const [search,        setSearch]        = useState('')
+  const [resp,          setResp]          = useState(null)
+  const [busy,          setBusy]          = useState(false)
+  const [err,           setErr]           = useState('')
+  const [leaveCalendar, setLeaveCalendar] = useState({})  // { employee_code: { 'YYYY-MM-DD': {code,name,...} } }
 
+  // Fetch biometric attendance
   useEffect(() => {
     setBusy(true)
     setErr('')
@@ -95,6 +99,13 @@ function SummaryTab() {
       .then(d => setResp(d))
       .catch(e => setErr(e?.message || 'Failed to load attendance data'))
       .finally(() => setBusy(false))
+  }, [year, month])
+
+  // Fetch approved leave calendar — overlay on top of attendance
+  useEffect(() => {
+    payrollService.getLeaveCalendar(year, month)
+      .then(d => setLeaveCalendar(d?.calendar || {}))
+      .catch(() => setLeaveCalendar({}))
   }, [year, month])
 
   const rows        = resp?.rows || []
@@ -115,7 +126,7 @@ function SummaryTab() {
   const isSunday    = (d) => dayOfWeek(d) === 0
   const isWeekend   = (d) => isSaturday(d) || isSunday(d)
 
-  // Build pivot: employee × day → hours
+  // Build pivot: employee × day → slot object { type:'worked'|'leave', hours?, code?, ... }
   const pivotRows = useMemo(() => {
     const q = search.toLowerCase().trim()
     return rows
@@ -128,31 +139,41 @@ function SummaryTab() {
         const dayMap = {}
         ;(r.days_detail || []).forEach(d => {
           const day = parseInt(d.date ? d.date.split('-')[2] : '0', 10)
-          if (day > 0) dayMap[day] = d.hours || 0
+          if (day > 0) dayMap[day] = { type: 'worked', hours: d.hours || 0 }
+        })
+        // Overlay approved leave — only on days WITHOUT biometric data
+        const empCode  = r.employee_code || ''
+        const empLeave = leaveCalendar[empCode] || {}
+        Object.entries(empLeave).forEach(([dateStr, lv]) => {
+          const day = parseInt(dateStr.split('-')[2], 10)
+          if (day > 0 && !dayMap[day]) {
+            dayMap[day] = { type: 'leave', code: lv.code, name: lv.name, badge_bg: lv.badge_bg, badge_text: lv.badge_text }
+          }
         })
         const totalHrs  = round2(r.total_hours || 0)
         const normalHrs = workingDays * ATT_STANDARD_DAILY_HOURS
         return {
-          name:       empName(r),
-          dept:       empDept(r),
-          code:       r.employee_code || '',
+          name:        empName(r),
+          dept:        empDept(r),
+          code:        empCode,
           dayMap,
           totalHrs,
           daysPresent: r.days_present || 0,
           normalHrs,
-          diff:       round2(totalHrs - normalHrs),
+          diff:        round2(totalHrs - normalHrs),
         }
       })
-  }, [rows, search, workingDays])
+  }, [rows, search, workingDays, leaveCalendar])
 
   // Column totals row
   const totals = useMemo(() => {
     const dayMap = {}
     let totalHrs = 0, normalHrs = 0, daysPresent = 0
     pivotRows.forEach(r => {
-      Object.entries(r.dayMap).forEach(([d, h]) => {
-        const day = parseInt(d, 10)
-        dayMap[day] = round2((dayMap[day] || 0) + (h || 0))
+      Object.entries(r.dayMap).forEach(([d, slot]) => {
+        const day  = parseInt(d, 10)
+        const hrs  = slot?.type === 'worked' ? (slot.hours || 0) : 0
+        dayMap[day] = round2((dayMap[day] || 0) + hrs)
       })
       totalHrs    += r.totalHrs
       normalHrs   += r.normalHrs
@@ -315,10 +336,38 @@ function SummaryTab() {
                     </td>
                     {/* Day cells */}
                     {days.map(d => {
-                      const h   = r.dayMap[d]
-                      const sat = isSaturday(d)
-                      const sun = isSunday(d)
-                      const wkd = sat || sun
+                      const slot   = r.dayMap[d]
+                      const sat    = isSaturday(d)
+                      const sun    = isSunday(d)
+                      const wkd    = sat || sun
+                      const today  = new Date()
+                      const isFuture = new Date(year, month - 1, d) > today
+
+                      let cellContent
+                      if (slot?.type === 'worked') {
+                        cellContent = (
+                          <span className={`font-medium tabular-nums ${
+                            wkd ? (sat ? 'text-amber-700' : 'text-rose-700') : 'text-slate-700'
+                          }`}>{slot.hours.toFixed(2)}</span>
+                        )
+                      } else if (slot?.type === 'leave') {
+                        const lt = getLeaveType(slot.code)
+                        cellContent = (
+                          <span
+                            className={`text-[9px] font-bold px-0.5 py-0.5 rounded ${lt.cellBg} ${lt.cellText}`}
+                            title={slot.name}
+                          >{slot.code}</span>
+                        )
+                      } else if (!wkd && !isFuture) {
+                        cellContent = (
+                          <span className="font-bold text-rose-600" style={{ fontSize: 9 }}>{ABSENT_SYMBOL}</span>
+                        )
+                      } else {
+                        cellContent = (
+                          <span className={wkd ? (sat ? 'text-amber-200' : 'text-rose-200') : 'text-slate-300'} style={{ fontSize: 9 }}>—</span>
+                        )
+                      }
+
                       return (
                         <td key={d}
                           className={[
@@ -328,12 +377,7 @@ function SummaryTab() {
                             !wkd ? 'border-slate-100' : '',
                           ].join(' ')}
                           style={{ minWidth: '2.6rem' }}>
-                          {h !== undefined
-                            ? <span className={`font-medium tabular-nums ${
-                                wkd ? (sat ? 'text-amber-700' : 'text-rose-700') : 'text-slate-700'
-                              }`}>{h.toFixed(2)}</span>
-                            : <span className={wkd ? (sat ? 'text-amber-200' : 'text-rose-200') : 'text-slate-300'} style={{ fontSize: 9 }}>—</span>
-                          }
+                          {cellContent}
                         </td>
                       )
                     })}

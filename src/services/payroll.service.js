@@ -69,6 +69,33 @@ const payrollService = {
   getLeaveRecord: (id) =>
     unwrap(apiClient.get(`${BASE}/leave-records/${id}/`)),
 
+  // ── Leave Types (master list) ──────────────────────────────────────────────
+  getLeaveTypes: () =>
+    unwrap(apiClient.get(`${BASE}/leave-types/`)),
+
+  // ── Leave Requests (CRUD + workflow) ──────────────────────────────────────
+  getLeaveRequests: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/leave-requests/`, { params })),
+
+  getLeaveRequest: (id) =>
+    unwrap(apiClient.get(`${BASE}/leave-requests/${id}/`)),
+
+  createLeaveRequest: (data) =>
+    unwrap(apiClient.post(`${BASE}/leave-requests/`, data)),
+
+  approveLeaveRequest: (id, note = '') =>
+    unwrap(apiClient.post(`${BASE}/leave-requests/${id}/approve/`, { note })),
+
+  rejectLeaveRequest: (id, note = '') =>
+    unwrap(apiClient.post(`${BASE}/leave-requests/${id}/reject/`, { note })),
+
+  cancelLeaveRequest: (id) =>
+    unwrap(apiClient.post(`${BASE}/leave-requests/${id}/cancel/`)),
+
+  // ── Leave Calendar (approved leave per employee per day) ──────────────────
+  getLeaveCalendar: (year, month) =>
+    unwrap(apiClient.get(`${BASE}/leave-calendar/`, { params: { year, month } })),
+
   // ── Finance payroll endpoints (reused from finance.service) ────────────────
   getPayrollRuns: (params = {}) =>
     unwrap(apiClient.get(`${FINANCE}/payroll-runs/`, { params })),
