@@ -54,6 +54,7 @@ import InvoiceTracker from './pages/Finance/InvoiceTracker'
 import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
+import Payroll from './pages/HR/Payroll'
 // import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import FinanceHub from './pages/Finance/FinanceHub'
@@ -630,6 +631,14 @@ function App() {
           element={
             <ProtectedRoute>
               <HREmployees />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="hr/payroll"
+          element={
+            <ProtectedRoute>
+              <Payroll />
             </ProtectedRoute>
           }
         />
