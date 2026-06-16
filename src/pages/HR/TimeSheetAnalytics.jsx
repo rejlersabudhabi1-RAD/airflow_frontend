@@ -50,28 +50,126 @@ const now = () => new Date().getFullYear()
 const thisMonth = () => new Date().getMonth() + 1
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded row search — fields checked when filtering timesheet rows by text.
+// Add/remove field names here to change what the search covers without
+// touching any tab component.
+// ─────────────────────────────────────────────────────────────────────────────
+const ROW_SEARCH_FIELDS = [
+  'radai_full_name', 'name', 'employee_name', 'employee_code',
+  'radai_email', 'employee_email', 'email',
+  'department', 'radai_department',
+]
+
+/** Return true when `row` matches the trimmed lowercase query `q`. */
+const rowMatchesQuery = (row, q) => {
+  if (!q) return true
+  return ROW_SEARCH_FIELDS.some(f => {
+    const v = (row[f] ?? '').toString().toLowerCase()
+    return v && v.includes(q)
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: RowSearchBar — inline search for timesheet data tables.
+// Used by Live, Daily and Monthly tabs.
+// ─────────────────────────────────────────────────────────────────────────────
+const RowSearchBar = ({ value, onChange, totalCount, matchCount }) => (
+  <div className="flex items-center gap-3">
+    <div className="relative flex-1 max-w-sm">
+      <HeroIcons.MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search name, code, email, dept…"
+        autoComplete="off"
+        className="w-full pl-9 pr-8 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+          aria-label="Clear search"
+        >
+          <HeroIcons.XMarkIcon className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+    {value && (
+      <span className="text-xs text-slate-500">
+        {matchCount} of {totalCount} rows
+      </span>
+    )}
+  </div>
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live-tab filter predicates (soft-coded)
+// Backend stamps `is_in` (bool) and `is_late` (bool) on every live row.
+// `null` value means "show all rows" (no filter applied).
+// ─────────────────────────────────────────────────────────────────────────────
+const LIVE_FILTER_FNS = {
+  in:      (r) => r.is_in === true,
+  out:     (r) => r.is_in === false,
+  late:    (r) => r.is_late === true,
+  total:   null,
+  matched: (r) => Boolean(r.radai_user_id),
+}
+
+const LIVE_FILTER_LABELS = {
+  in:      'Currently IN',
+  out:     'Currently OUT',
+  late:    'Late Today',
+  total:   'All Seen Today',
+  matched: 'Matched to RAD AI',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: KPI cards (Live tab)
 // ─────────────────────────────────────────────────────────────────────────────
-const LiveKpis = ({ summary, asOf }) => {
+const LiveKpis = ({ summary, asOf, activeFilter, onFilterChange }) => {
   const tiles = [
-    { id: 'in',    label: 'Currently IN',  value: summary?.currently_in    ?? 0, accent: 'from-emerald-500 to-teal-600', icon: 'ArrowRightOnRectangleIcon' },
-    { id: 'out',   label: 'Currently OUT', value: summary?.currently_out   ?? 0, accent: 'from-slate-500 to-slate-700',   icon: 'ArrowLeftOnRectangleIcon' },
-    { id: 'late',  label: 'Late Today',    value: summary?.late_today      ?? 0, accent: 'from-amber-500 to-orange-600',  icon: 'ClockIcon' },
-    { id: 'total', label: 'Seen Today',    value: summary?.total_seen_today ?? 0, accent: 'from-blue-500 to-indigo-600',   icon: 'UsersIcon' },
+    { id: 'in',      label: 'Currently IN',      value: summary?.currently_in    ?? 0, accent: 'from-emerald-500 to-teal-600',   icon: 'ArrowRightOnRectangleIcon' },
+    { id: 'out',     label: 'Currently OUT',     value: summary?.currently_out   ?? 0, accent: 'from-slate-500 to-slate-700',    icon: 'ArrowLeftOnRectangleIcon' },
+    { id: 'late',    label: 'Late Today',        value: summary?.late_today      ?? 0, accent: 'from-amber-500 to-orange-600',   icon: 'ClockIcon' },
+    { id: 'total',   label: 'Seen Today',        value: summary?.total_seen_today ?? 0, accent: 'from-blue-500 to-indigo-600',    icon: 'UsersIcon' },
     { id: 'matched', label: 'Matched to RAD AI', value: summary?.matched_to_radai ?? 0, accent: 'from-purple-500 to-fuchsia-600', icon: 'LinkIcon' },
   ]
   return (
     <div className="space-y-1">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {tiles.map(t => (
-          <div key={t.id} className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${t.accent} text-white p-4 shadow-md`}>
-            <div className="flex items-start justify-between">
-              <Icon name={t.icon} className="w-6 h-6 opacity-80" />
-              <span className="text-[10px] uppercase tracking-wider opacity-80">{t.label}</span>
-            </div>
-            <div className="mt-2 text-3xl font-bold leading-tight">{t.value}</div>
-          </div>
-        ))}
+        {tiles.map(t => {
+          const isActive = activeFilter === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onFilterChange(isActive ? null : t.id)}
+              title={isActive ? `Clear "${t.label}" filter` : `Filter by ${t.label}`}
+              className={[
+                'relative overflow-hidden rounded-xl bg-gradient-to-br text-white p-4 shadow-md text-left w-full',
+                t.accent,
+                'transition-all duration-150',
+                isActive
+                  ? 'ring-4 ring-white/60 scale-[1.04] shadow-xl'
+                  : 'hover:scale-[1.02] hover:shadow-lg',
+                activeFilter && !isActive ? 'opacity-40' : 'opacity-100',
+              ].join(' ')}
+            >
+              <div className="flex items-start justify-between gap-1">
+                <Icon name={t.icon} className="w-6 h-6 opacity-80 flex-shrink-0" />
+                <span className="text-[10px] uppercase tracking-wider opacity-80 text-right leading-tight">{t.label}</span>
+              </div>
+              <div className="mt-2 text-3xl font-bold leading-tight">{t.value}</div>
+              {isActive && (
+                <div className="absolute bottom-1.5 right-2 text-[9px] font-semibold uppercase tracking-widest opacity-90 flex items-center gap-0.5">
+                  <HeroIcons.FunnelIcon className="w-3 h-3" /> active
+                </div>
+              )}
+            </button>
+          )
+        })}
       </div>
       {asOf && (
         <div className="text-xs text-slate-500 text-right">
@@ -202,6 +300,8 @@ const LiveTab = ({ refreshTick }) => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [activeFilter, setActiveFilter] = useState(null)
+  const [rowSearch, setRowSearch] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -212,6 +312,13 @@ const LiveTab = ({ refreshTick }) => {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [refreshTick])
+
+  const allRows = data?.rows || []
+  const filterFn = activeFilter ? LIVE_FILTER_FNS[activeFilter] : null
+  const q = rowSearch.trim().toLowerCase()
+  const filteredRows = allRows
+    .filter(r => filterFn ? filterFn(r) : true)
+    .filter(r => rowMatchesQuery(r, q))
 
   if (loading && !data) {
     return <div className="text-center text-slate-500 py-10">Loading live status…</div>
@@ -224,11 +331,42 @@ const LiveTab = ({ refreshTick }) => {
   }
   return (
     <div className="space-y-4">
-      <LiveKpis summary={data?.summary} asOf={data?.as_of} />
+      <LiveKpis
+        summary={data?.summary}
+        asOf={data?.as_of}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+      />
+      <RowSearchBar
+        value={rowSearch}
+        onChange={setRowSearch}
+        totalCount={allRows.filter(r => filterFn ? filterFn(r) : true).length}
+        matchCount={filteredRows.length}
+      />
+      {activeFilter && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+          <div className="text-sm text-blue-800 font-medium flex items-center gap-2">
+            <HeroIcons.FunnelIcon className="w-4 h-4" />
+            Showing{' '}
+            <span className="font-bold">{filteredRows.length}</span>
+            {' '}of{' '}
+            <span className="font-bold">{allRows.length}</span>
+            {' '}employees — Filter: <span className="font-bold">{LIVE_FILTER_LABELS[activeFilter]}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter(null)}
+            className="text-xs text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1"
+          >
+            <HeroIcons.XMarkIcon className="w-4 h-4" />
+            Clear filter
+          </button>
+        </div>
+      )}
       <DataTable
-        rows={data?.rows || []}
+        rows={filteredRows}
         columns={TIMESHEET_LIVE_COLUMNS}
-        emptyMessage="No punches recorded today yet."
+        emptyMessage={q ? `No rows match "${rowSearch}".` : activeFilter ? `No employees match "${LIVE_FILTER_LABELS[activeFilter]}".` : 'No punches recorded today yet.'}
       />
     </div>
   )
@@ -242,6 +380,7 @@ const DailyTab = () => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [rowSearch, setRowSearch] = useState('')
 
   const load = useCallback(() => {
     setLoading(true); setError(null)
@@ -253,9 +392,13 @@ const DailyTab = () => {
 
   useEffect(load, [load])
 
+  const allRows = data?.rows || []
+  const q = rowSearch.trim().toLowerCase()
+  const filteredRows = allRows.filter(r => rowMatchesQuery(r, q))
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium text-slate-700">Date</label>
         <input
           type="date"
@@ -272,11 +415,12 @@ const DailyTab = () => {
           Refresh
         </button>
       </div>
+      <RowSearchBar value={rowSearch} onChange={setRowSearch} totalCount={allRows.length} matchCount={filteredRows.length} />
       {error && <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-lg text-sm">{error}</div>}
       {loading ? (
         <div className="text-center text-slate-500 py-6">Loading…</div>
       ) : data?.configured === false ? null : (
-        <DataTable rows={data?.rows || []} columns={TIMESHEET_DAILY_COLUMNS} emptyMessage={`No attendance for ${date}.`} />
+        <DataTable rows={filteredRows} columns={TIMESHEET_DAILY_COLUMNS} emptyMessage={q ? `No rows match "${rowSearch}".` : `No attendance for ${date}.`} />
       )}
     </div>
   )
@@ -291,6 +435,7 @@ const MonthlyTab = () => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [rowSearch, setRowSearch] = useState('')
 
   const load = useCallback(() => {
     setLoading(true); setError(null)
@@ -304,6 +449,10 @@ const MonthlyTab = () => {
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const years  = Array.from({ length: 5 }, (_, i) => now() - 2 + i)
+
+  const allRows = data?.rows || []
+  const q = rowSearch.trim().toLowerCase()
+  const filteredRows = allRows.filter(r => rowMatchesQuery(r, q))
 
   return (
     <div className="space-y-3">
@@ -324,11 +473,12 @@ const MonthlyTab = () => {
           </span>
         )}
       </div>
+      <RowSearchBar value={rowSearch} onChange={setRowSearch} totalCount={allRows.length} matchCount={filteredRows.length} />
       {error && <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-lg text-sm">{error}</div>}
       {loading ? (
         <div className="text-center text-slate-500 py-6">Loading…</div>
       ) : data?.configured === false ? null : (
-        <DataTable rows={data?.rows || []} columns={TIMESHEET_MONTHLY_COLUMNS} emptyMessage="No attendance in this month." />
+        <DataTable rows={filteredRows} columns={TIMESHEET_MONTHLY_COLUMNS} emptyMessage={q ? `No rows match "${rowSearch}".` : 'No attendance in this month.'} />
       )}
     </div>
   )

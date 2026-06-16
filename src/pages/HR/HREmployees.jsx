@@ -156,12 +156,6 @@ const KpiStrip = ({ employees, loading }) => {
 // Sub-component: Filters Bar
 // ─────────────────────────────────────────────────────────────────────────────
 const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSearchTerm, viewMode, setViewMode, onReset, onSubmitSearch, searching }) => {
-  // Local draft so users can type freely and commit on Enter / Search button
-  // click. Mirrors `searchTerm` so external resets (Reset button) still flow
-  // back into the input. Filtering remains driven by the committed
-  // `searchTerm` prop — no change to core filter logic in the parent.
-  const [draft, setDraft] = useState(searchTerm)
-  useEffect(() => { setDraft(searchTerm) }, [searchTerm])
   // Collapse the filter dropdowns by default — soft-coded in HR_UI. Active
   // filters bubble up as a count badge so nothing is hidden silently.
   const [filtersOpen, setFiltersOpen] = useState(!HR_UI.filtersCollapsedByDefault)
@@ -170,13 +164,16 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
     [filterValues]
   )
 
-  const commitSearch = (e) => {
-    e?.preventDefault?.()
-    const term = draft.trim()
-    setSearchTerm(term)
+  // Commit: trim whitespace and trigger biometric reverse-lookup if applicable.
+  // Filtering is already live (driven by searchTerm via onChange), so this
+  // only provides the extra numeric-code lookup and trims trailing spaces.
+  const commitSearch = () => {
+    const term = searchTerm.trim()
+    if (term !== searchTerm) setSearchTerm(term)
     onSubmitSearch?.(term)
   }
-  const clearSearch  = () => { setDraft(''); setSearchTerm('') }
+
+  const clearSearch = () => setSearchTerm('')
 
   // Derive dynamic filter options from the loaded employees list.
   const dynamicOptions = useMemo(() => {
@@ -201,41 +198,48 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
       {/* Top row: search + view mode toggle + reset */}
       <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
-        <form onSubmit={commitSearch} className="relative flex-1 flex gap-2" role="search">
-          <div className="relative flex-1">
-            <HeroIcons.MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={HR_COPY.searchPlaceholder}
-              aria-label={HR_COPY.searchPlaceholder}
-              className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-            {draft && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                aria-label={HR_COPY.searchClearLabel}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 ${anim('transition')}`}
-              >
-                <HeroIcons.XMarkIcon className="w-4 h-4" />
-              </button>
-            )}
+        {/* Search — only relevant for card/table/dept views, hidden in timesheet mode */}
+        {viewMode !== 'timesheet' && (
+          <div className="relative flex-1 flex gap-2">
+            <div className="relative flex-1">
+              <HeroIcons.MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitSearch() } }}
+                placeholder={HR_COPY.searchPlaceholder}
+                aria-label={HR_COPY.searchPlaceholder}
+                autoComplete="off"
+                className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label={HR_COPY.searchClearLabel}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 ${anim('transition')}`}
+                >
+                  <HeroIcons.XMarkIcon className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={commitSearch}
+              disabled={searching}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${anim('transition')}`}
+            >
+              {searching
+                ? <Spinner className="w-4 h-4" />
+                : <HeroIcons.MagnifyingGlassIcon className="w-4 h-4" />}
+              <span className="hidden sm:inline">{HR_COPY.searchButtonLabel}</span>
+            </button>
           </div>
-          <button
-            type="submit"
-            disabled={searching}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-wait text-white text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${anim('transition')}`}
-          >
-            {searching
-              ? <Spinner className="w-4 h-4" />
-              : <HeroIcons.MagnifyingGlassIcon className="w-4 h-4" />}
-            <span className="hidden sm:inline">{HR_COPY.searchButtonLabel}</span>
-          </button>
-        </form>
+        )}
 
         <div className="flex items-center gap-2">
+          {viewMode !== 'timesheet' && (
           <button
             type="button"
             onClick={() => setFiltersOpen(o => !o)}
@@ -256,6 +260,7 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
             )}
             <HeroIcons.ChevronDownIcon className={`w-3 h-3 ${anim('transition-transform')} ${filtersOpen ? 'rotate-180' : ''}`} />
           </button>
+          )}
           <div className="inline-flex bg-slate-100 rounded-lg p-1">
             {HR_VIEW_MODES.map(vm => (
               <button
@@ -272,7 +277,7 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
               </button>
             ))}
           </div>
-          {(activeFilterCount > 0 || searchTerm) && (
+          {viewMode !== 'timesheet' && (activeFilterCount > 0 || searchTerm) && (
             <button
               type="button"
               onClick={onReset}
@@ -284,8 +289,8 @@ const FiltersBar = ({ employees, filterValues, setFilterValue, searchTerm, setSe
         </div>
       </div>
 
-      {/* Filter selects — collapsible to keep the toolbar clean */}
-      {filtersOpen && (
+      {/* Filter selects — collapsible; hidden entirely in timesheet mode */}
+      {filtersOpen && viewMode !== 'timesheet' && (
         <div id="hr-filters-panel" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 pt-1 border-t border-slate-100">
           {HR_FILTERS.map(f => {
             const opts = f.optionsFrom === 'static' ? f.options : (dynamicOptions[f.id] || [{ value: 'all', label: f.placeholder || 'All' }])
