@@ -24,7 +24,7 @@ import {
   classifyDay, workingDaysInMonth, rateColor, empName, empDept,
   fmtTime, ATT_COPY, filterEmployeeRow,
 } from '../../../config/hrAttendance.config'
-import { getLeaveType, ABSENT_SYMBOL } from '../../../config/hrLeave.config'
+import { getLeaveType, ABSENT_SYMBOL, BRANCHES, getBranch } from '../../../config/hrLeave.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-components  (defined outside main component — stable references)
@@ -90,6 +90,7 @@ function SummaryTab() {
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
   const [leaveCalendar, setLeaveCalendar] = useState({})  // { employee_code: { 'YYYY-MM-DD': {code,name,...} } }
+  const [summaryBranch, setSummaryBranch] = useState(null)  // null = All | 'RAD' | 'RIN'
 
   // Fetch biometric attendance
   useEffect(() => {
@@ -192,12 +193,33 @@ function SummaryTab() {
           <div>
             <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
               <HeroIcons.TableCellsIcon className="w-5 h-5 text-blue-500" />
-              Time Sheet Summary — {ATT_COMPANY_NAME}
+              Time Sheet Summary — {summaryBranch ? getBranch(summaryBranch)?.fullName : 'All Branches (RAD + RIN)'}
             </h2>
             <p className="text-sm text-slate-500 mt-0.5">{periodLabel}</p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            {/* Month */}
+            {/* Branch selector */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Branch</label>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setSummaryBranch(null)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  summaryBranch === null
+                    ? 'bg-slate-700 text-white border-slate-700'
+                    : 'bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100'
+                }`}>All</button>
+              {BRANCHES.map(b => (
+                <button key={b.id} type="button" onClick={() => setSummaryBranch(b.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    summaryBranch === b.id
+                      ? `${b.activeBg} ${b.activeText} border-transparent`
+                      : `${b.badgeBg} ${b.badgeText} ${b.badgeBorder} hover:opacity-80`
+                  }`}>{b.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Month */}
             <div>
               <label className="block text-xs text-slate-500 mb-1">Month</label>
               <select value={month} onChange={e => setMonth(Number(e.target.value))}

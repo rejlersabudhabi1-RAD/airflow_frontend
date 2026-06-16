@@ -127,6 +127,46 @@ export const countWorkingDays = (from, to) => {
   return count
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. BRANCH / LEGAL ENTITY DEFINITIONS
+//    RAD = Rejlers International Engineering Solutions AB (UAE)
+//    RIN = Rejlers International Engineering Solutions IN (India)
+// ─────────────────────────────────────────────────────────────────────────────
+export const BRANCHES = [
+  {
+    id:          'RAD',
+    label:       'Rejlers AB',
+    fullName:    'Rejlers International Engineering Solutions AB',
+    color:       '#3b82f6',
+    // Tailwind classes for pill/badge
+    bg:          'bg-blue-50',
+    text:        'text-blue-700',
+    border:      'border-blue-200',
+    activeBg:    'bg-blue-600',
+    activeText:  'text-white',
+    badgeBg:     'bg-blue-100',
+    badgeText:   'text-blue-800',
+    badgeBorder: 'border-blue-300',
+  },
+  {
+    id:          'RIN',
+    label:       'Rejlers IN',
+    fullName:    'Rejlers International Engineering Solutions IN',
+    color:       '#8b5cf6',
+    bg:          'bg-purple-50',
+    text:        'text-purple-700',
+    border:      'border-purple-200',
+    activeBg:    'bg-purple-600',
+    activeText:  'text-white',
+    badgeBg:     'bg-purple-100',
+    badgeText:   'text-purple-800',
+    badgeBorder: 'border-purple-300',
+  },
+]
+
+/** Look up a branch by id (e.g. 'RAD') — returns null if not found. */
+export const getBranch = (id) => BRANCHES.find(b => b.id === id) || null
+
 /** Return today as ISO YYYY-MM-DD */
 export const todayISO = () => new Date().toISOString().slice(0, 10)
 

@@ -14,6 +14,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import payrollService from '../../../services/payroll.service'
+import { BRANCHES, getBranch } from '../../../config/hrLeave.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG — all soft-coded constants
@@ -82,8 +83,9 @@ const VIEWS = [
 
 export default function LeaveDashboard() {
   const [view,        setView]        = useState('overview')
-  const [records,     setRecords]     = useState([])
+  const [records,     setRecords]     = useState([])    // full unfiltered list for counts
   const [loading,     setLoading]     = useState(false)
+  const [branch,      setBranch]      = useState(null)  // null = All | 'RAD' | 'RIN'
   const [search,      setSearch]      = useState('')
   const [deptFilter,  setDeptFilter]  = useState(ALL_DEPTS)
   const [selected,    setSelected]    = useState(null)  // full record with monthly breakdown
@@ -110,11 +112,13 @@ export default function LeaveDashboard() {
   // ── Fetch all records ──────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true)
-    payrollService.getLeaveRecords({ year: YEAR, page_size: 500 })
+    const params = { year: YEAR, page_size: 500 }
+    if (branch) params.branch = branch
+    payrollService.getLeaveRecords(params)
       .then(d => setRecords(Array.isArray(d) ? d : (d?.results ?? [])))
       .catch(() => setRecords([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [branch])
 
   // ── Departments list ───────────────────────────────────────────────────────
   const departments = useMemo(() =>
@@ -436,16 +440,15 @@ export default function LeaveDashboard() {
                         )}
                       </div>
                     </th>
-                  ))}
-                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-600 uppercase tracking-wider"></th>
+                  ))}                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-600 uppercase tracking-wider">Branch</th>                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-600 uppercase tracking-wider"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={LIST_COLS.length + 1} className="text-center py-10 text-slate-400 text-sm">No records found</td></tr>
+                  <tr><td colSpan={LIST_COLS.length + 2} className="text-center py-10 text-slate-400 text-sm">No records found</td></tr>
                 ) : paginated.map((r) => {
-                  const balance = Number(r.leave_balance)
-                  const tier    = balanceTier(balance)
+                  const balance   = Number(r.leave_balance)
+                  const branchMeta = getBranch(r.branch)
                   return (
                     <tr key={r.id} className={`hover:bg-slate-50 transition-colors ${balance < 0 ? 'bg-rose-50/30' : ''}`}>
                       {LIST_COLS.map(c => {
@@ -458,6 +461,16 @@ export default function LeaveDashboard() {
                         }
                         return <td key={c.id} className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{v}</td>
                       })}
+                      {/* Branch badge */}
+                      <td className="px-3 py-2.5">
+                        {branchMeta ? (
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${branchMeta.badgeBg} ${branchMeta.badgeText} ${branchMeta.badgeBorder}`}>
+                            {branchMeta.label}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 text-xs">{r.branch || '—'}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5">
                         <button type="button" onClick={() => loadDetail(r)}
                           className="text-xs text-blue-600 hover:underline flex items-center gap-1">
@@ -823,8 +836,58 @@ export default function LeaveDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // MAIN RENDER
   // ─────────────────────────────────────────────────────────────────────────
+  // Per-branch employee counts for the selector badges
+  const branchCounts = useMemo(() => {
+    const m = { ALL: records.length }
+    BRANCHES.forEach(b => { m[b.id] = records.filter(r => r.branch === b.id).length })
+    return m
+  }, [records])
+
+  const activeBranchMeta  = branch ? getBranch(branch) : null
+  const activeBranchLabel = activeBranchMeta ? activeBranchMeta.fullName : 'All Branches (RAD + RIN)'
+
   return (
     <div className="space-y-4">
+      {/* Branch selector toolbar */}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex flex-wrap gap-2 items-center">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1">Branch</span>
+
+        {/* All pill */}
+        <button type="button" onClick={() => { setBranch(null); setPage(1) }}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            branch === null
+              ? 'bg-slate-700 text-white border-slate-700'
+              : 'bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100'
+          }`}>
+          All
+          <span className={`text-[10px] font-bold ${branch === null ? 'text-slate-300' : 'text-slate-400'}`}>
+            {loading ? '' : branchCounts.ALL}
+          </span>
+        </button>
+
+        {/* Per-branch pills */}
+        {BRANCHES.map(b => (
+          <button key={b.id} type="button" onClick={() => { setBranch(b.id); setPage(1) }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              branch === b.id
+                ? `${b.activeBg} ${b.activeText} border-transparent shadow-sm`
+                : `${b.badgeBg} ${b.badgeText} ${b.badgeBorder} hover:opacity-80`
+            }`}>
+            {b.label}
+            <span className="text-[10px] font-bold opacity-60">
+              {loading ? '' : (branchCounts[b.id] ?? 0)}
+            </span>
+          </button>
+        ))}
+
+        <div className="ml-auto text-xs text-slate-500 font-medium">
+          {loading
+            ? <span className="animate-pulse text-slate-400">Loading…</span>
+            : activeBranchLabel
+          }
+        </div>
+      </div>
+
       {/* View tabs */}
       <div className="bg-white rounded-xl border border-slate-200 px-4 py-2 flex gap-1 items-center flex-wrap">
         {VIEWS.map(v => {
@@ -842,7 +905,7 @@ export default function LeaveDashboard() {
         })}
         <div className="ml-auto flex items-center gap-2 text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-          {records.length} employees · {YEAR} · Imported from HR Excel
+          {records.length} employees · {YEAR} · {activeBranchLabel}
         </div>
       </div>
 
