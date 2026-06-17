@@ -46,17 +46,22 @@ export const PROJECT_CONTROL_ENDPOINTS = {
 
 // ───────────────────────────────────────────────────────────────────────────
 // 2. View modes — tab definitions. Add a new tab by appending here only.
+//    `icon` keys must map to an entry in ICONS inside ProjectsPage.jsx.
 // ───────────────────────────────────────────────────────────────────────────
 export const PROJECT_VIEW_MODES = [
-  { key: 'cost-dashboard', label: 'Cost Dashboard', phaseFlag: 'phase_1_cost_dashboard',    icon: 'chart' },
-  { key: 'estimates',      label: 'Estimates',      phaseFlag: 'phase_1_estimate_variance', icon: 'document' },
-  { key: 'documents',      label: 'Documents',      phaseFlag: 'phase_1_documents',         icon: 'folder' },
-  { key: 'ai-takeoff',     label: 'AI Take-Off',    phaseFlag: 'phase_2_ai_takeoff',        icon: 'sparkles', phaseLabel: 'Phase 2' },
-  { key: 'evm',            label: 'EVM Forecast',   phaseFlag: 'phase_3_evm_forecast',      icon: 'trending', phaseLabel: 'Phase 3' },
-  { key: 'risk',           label: 'Risk Analytics', phaseFlag: 'phase_4_risk_analytics',    icon: 'shield',   phaseLabel: 'Phase 4' },
+  // Project Dashboard — first tab; shows key commercial & scheduling facts.
+  { key: 'project-dashboard', label: 'Project Dashboard', phaseFlag: 'phase_1_project_dashboard', icon: 'squares' },
+  { key: 'cost-dashboard',    label: 'Cost Dashboard',    phaseFlag: 'phase_1_cost_dashboard',    icon: 'chart' },
+  { key: 'estimates',         label: 'Estimates',         phaseFlag: 'phase_1_estimate_variance', icon: 'document' },
+  { key: 'documents',         label: 'Documents',         phaseFlag: 'phase_1_documents',         icon: 'folder' },
+  { key: 'ai-takeoff',        label: 'AI Take-Off',       phaseFlag: 'phase_2_ai_takeoff',        icon: 'sparkles', phaseLabel: 'Phase 2' },
+  { key: 'evm',               label: 'EVM Forecast',      phaseFlag: 'phase_3_evm_forecast',      icon: 'trending', phaseLabel: 'Phase 3' },
+  { key: 'risk',              label: 'Risk Analytics',    phaseFlag: 'phase_4_risk_analytics',    icon: 'shield',   phaseLabel: 'Phase 4' },
 ]
 
-export const PROJECT_DEFAULT_VIEW = 'cost-dashboard'
+// Default tab for first-time visitors — Project Dashboard surfaces key facts
+// immediately without requiring any cost/estimate data to be entered first.
+export const PROJECT_DEFAULT_VIEW = 'project-dashboard'
 
 // ───────────────────────────────────────────────────────────────────────────
 // 3. Cost dashboard KPI cards — definitions drive the dashboard renderer
@@ -112,7 +117,44 @@ export const DOCUMENT_KIND_OPTIONS = [
 ]
 
 // ───────────────────────────────────────────────────────────────────────────
-// 7. Project status / priority option lists (mirror apps.core.Project choices)
+// 7a. Scope type options (mirror apps.core.project_models.SCOPE_TYPE_CHOICES)
+//     Values must match the DB choices exactly; only labels may change freely.
+// ───────────────────────────────────────────────────────────────────────────
+export const PROJECT_SCOPE_TYPE_OPTIONS = [
+  { value: 'conceptual',           label: 'Conceptual Study' },
+  { value: 'pre_feed',             label: 'Pre-FEED' },
+  { value: 'feed',                 label: 'FEED' },
+  { value: 'basic_engineering',    label: 'Basic Engineering' },
+  { value: 'detailed_engineering', label: 'Detailed Engineering' },
+  { value: 'epcm',                 label: 'EPCM' },
+  { value: 'epc',                  label: 'EPC (Lump Sum)' },
+  { value: 'pmc',                  label: 'PMC (Project Management Consultancy)' },
+  { value: 'owner_engineer',       label: "Owner's Engineer" },
+  { value: 'procurement',          label: 'Procurement Only' },
+  { value: 'construction',         label: 'Construction Management' },
+  { value: 'commissioning',        label: 'Commissioning & Start-Up' },
+  { value: 'feasibility',          label: 'Feasibility Study' },
+  { value: 'other',                label: 'Other / Mixed Scope' },
+]
+
+// ───────────────────────────────────────────────────────────────────────────
+// 7b. Currency options (mirror apps.core.project_models.CURRENCY_CHOICES)
+//     ISO 4217 codes used in Oil & Gas project regions.
+// ───────────────────────────────────────────────────────────────────────────
+export const PROJECT_CURRENCY_OPTIONS = [
+  { value: 'AED', label: 'AED — UAE Dirham' },
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'SAR', label: 'SAR — Saudi Riyal' },
+  { value: 'QAR', label: 'QAR — Qatari Riyal' },
+  { value: 'KWD', label: 'KWD — Kuwaiti Dinar' },
+  { value: 'BHD', label: 'BHD — Bahraini Dinar' },
+  { value: 'OMR', label: 'OMR — Omani Rial' },
+]
+
+// ───────────────────────────────────────────────────────────────────────────
+// 7c. Project status / priority option lists (mirror apps.core.Project choices)
 // ───────────────────────────────────────────────────────────────────────────
 export const PROJECT_STATUS_OPTIONS = [
   { value: 'planning',  label: 'Planning'  },
@@ -158,7 +200,41 @@ export const PROJECT_FORM_SECTIONS = [
     fields: [
       { name: 'start_date',  label: 'Start Date', type: 'date'     },
       { name: 'end_date',    label: 'End Date',   type: 'date'     },
-      { name: 'budget',      label: 'Budget',     type: 'currency' },
+      { name: 'budget',      label: 'Internal Budget', type: 'currency', help: 'Internal cost estimate (not the client-facing contract value)' },
+    ],
+  },
+  {
+    id: 'contract',
+    title: 'Contract',
+    fields: [
+      // Soft-coded: currency before contract_value so the dropdown appears inline.
+      // colSpan controls the 3-column grid defined in ProjectFormModal.
+      {
+        name: 'currency',
+        label: 'Contract Currency',
+        type: 'select',
+        options: PROJECT_CURRENCY_OPTIONS,
+        defaultValue: 'AED',
+        colSpan: 1,
+        help: 'ISO 4217 currency code for the contract value',
+      },
+      {
+        name: 'contract_value',
+        label: 'Contract Value',
+        type: 'currency',
+        colSpan: 2,
+        placeholder: '0.00',
+        help: 'Awarded contract value (commercial amount signed with the client)',
+      },
+      {
+        name: 'scope_type',
+        label: 'Scope Type',
+        type: 'select',
+        options: PROJECT_SCOPE_TYPE_OPTIONS,
+        defaultValue: '',
+        colSpan: 3,
+        help: 'Engineering engagement type — FEED, Detailed Engineering, EPC, …',
+      },
     ],
   },
   {
@@ -172,9 +248,12 @@ export const PROJECT_FORM_SECTIONS = [
 ]
 
 // Fields the API accepts on create/update — used by the modal to strip blanks.
+// Mirrors apps.core.project_serializers.ProjectSerializer.Meta.fields.
 export const PROJECT_FORM_API_FIELDS = [
   'code', 'name', 'description', 'status', 'priority', 'progress',
   'start_date', 'end_date', 'budget', 'client_name', 'location',
+  // Contract / scope fields — added in migration 0002
+  'contract_value', 'currency', 'scope_type',
 ]
 
 // ───────────────────────────────────────────────────────────────────────────

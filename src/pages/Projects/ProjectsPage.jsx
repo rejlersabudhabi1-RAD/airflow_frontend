@@ -4,7 +4,7 @@ import {
   ArrowTrendingUpIcon, ShieldCheckIcon,
   PlusIcon, PencilSquareIcon, TrashIcon,
   ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  CloudArrowDownIcon,
+  CloudArrowDownIcon, Squares2X2Icon,
 } from '@heroicons/react/24/outline'
 
 import {
@@ -17,6 +17,7 @@ import ProjectHeaderStrip from './components/ProjectHeaderStrip'
 import PhaseStubCard from './components/PhaseStubCard'
 import ProjectFormModal from './components/ProjectFormModal'
 import QhseImportModal from './components/QhseImportModal'
+import ProjectDashboardTab from './tabs/ProjectDashboardTab'
 import CostDashboardTab from './tabs/CostDashboardTab'
 import EstimatesTab from './tabs/EstimatesTab'
 import DocumentsTab from './tabs/DocumentsTab'
@@ -25,21 +26,23 @@ import EVMTab from './tabs/EVMTab'
 import RiskTab from './tabs/RiskTab'
 
 const ICONS = {
-  chart: ChartBarIcon,
+  squares:  Squares2X2Icon,
+  chart:    ChartBarIcon,
   document: DocumentTextIcon,
-  folder: FolderIcon,
+  folder:   FolderIcon,
   sparkles: SparklesIcon,
   trending: ArrowTrendingUpIcon,
-  shield: ShieldCheckIcon,
+  shield:   ShieldCheckIcon,
 }
 
 const TAB_COMPONENTS = {
-  'cost-dashboard': CostDashboardTab,
-  'estimates':      EstimatesTab,
-  'documents':      DocumentsTab,
-  'ai-takeoff':     TakeoffTab,
-  'evm':            EVMTab,
-  'risk':           RiskTab,
+  'project-dashboard': ProjectDashboardTab,
+  'cost-dashboard':    CostDashboardTab,
+  'estimates':         EstimatesTab,
+  'documents':         DocumentsTab,
+  'ai-takeoff':        TakeoffTab,
+  'evm':               EVMTab,
+  'risk':              RiskTab,
 }
 
 export default function ProjectsPage() {
