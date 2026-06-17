@@ -28,6 +28,7 @@ import {
   ATT_HOLIDAY_CELL_BG, ATT_HOLIDAY_CELL_BORDER,
   ATT_HOLIDAY_HEADER_BG, ATT_HOLIDAY_HEADER_TEXT, ATT_HOLIDAY_SYMBOL,
   OVERRIDE_REASON_OPTIONS, canEditAttendance, ATT_EDIT_COPY,
+  OPEN_SHIFT_INDICATOR,
   // ── Reports catalogue
   ATT_REPORT_TYPES, ATT_DOWNLOAD_METHOD_MAP,
 } from '../../../config/hrAttendance.config'
@@ -1451,6 +1452,26 @@ export default function AttendanceDashboard() {
                         const v = c.accessor(r)
                         if (c.cellType === 'att_status') {
                           return <td key={c.id} className="px-3 py-2.5"><StatusBadge status={v} /></td>
+                        }
+                        if (c.cellType === 'hours_worked') {
+                          if (r.open_shift) {
+                            return (
+                              <td key={c.id} className="px-3 py-2.5 whitespace-nowrap">
+                                <span className={OPEN_SHIFT_INDICATOR.badgeCls} title={OPEN_SHIFT_INDICATOR.tooltip}>
+                                  <span className={OPEN_SHIFT_INDICATOR.dotCls} />
+                                  {OPEN_SHIFT_INDICATOR.label}
+                                  {OPEN_SHIFT_INDICATOR.maxCreditedH > 0 && Number(v) > 0 && (
+                                    <span className="ml-1 opacity-75">({Number(v).toFixed(1)}h)</span>
+                                  )}
+                                </span>
+                              </td>
+                            )
+                          }
+                          return (
+                            <td key={c.id} className="px-3 py-2.5 text-slate-700 whitespace-nowrap">
+                              {Number(v) > 0 ? `${Number(v).toFixed(1)}h` : '\u2014'}
+                            </td>
+                          )
                         }
                         return <td key={c.id} className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{v}</td>
                       })}

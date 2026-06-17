@@ -184,15 +184,35 @@ export const ATTENDANCE_KPIS = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 5b. OPEN-SHIFT INDICATOR — shown when an employee has an unclosed IN punch.
+//     All display strings and styles are soft-coded here.
+//     Backend sends `open_shift: true` and `open_shift_since` on the row.
+// ─────────────────────────────────────────────────────────────────────────────
+export const OPEN_SHIFT_INDICATOR = {
+  // Label shown in the Hours cell when an employee is still "IN" with no OUT.
+  label:        import.meta.env?.VITE_OPEN_SHIFT_LABEL        || 'In progress',
+  // Tooltip text explaining the open-shift state.
+  tooltip:      import.meta.env?.VITE_OPEN_SHIFT_TOOLTIP      || 'Employee is currently IN \u2014 hours will update once they check out.',
+  // Badge styling (Tailwind classes)
+  badgeCls:     'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300',
+  dotCls:       'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse',
+  // How many hours the backend credits for an open shift (mirrors TIMESHEET_OPEN_SHIFT_MAX_HOURS).
+  // When 0 the cell shows the label only; when > 0 it also shows the credited amount.
+  maxCreditedH: Number(import.meta.env?.VITE_OPEN_SHIFT_MAX_H || 0),
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 6. DAILY TABLE COLUMNS
 // ─────────────────────────────────────────────────────────────────────────────
 export const ATTENDANCE_DAILY_COLS = [
-  { id: 'name',    label: 'Employee',   accessor: r => r.radai_full_name || r.name || r.employee_code || '—' },
-  { id: 'code',    label: 'Code',       accessor: r => r.employee_code || '—' },
-  { id: 'dept',    label: 'Department', accessor: r => r.radai_department || r.department || '—' },
+  { id: 'name',    label: 'Employee',   accessor: r => r.radai_full_name || r.name || r.employee_code || '\u2014' },
+  { id: 'code',    label: 'Code',       accessor: r => r.employee_code || '\u2014' },
+  { id: 'dept',    label: 'Department', accessor: r => r.radai_department || r.department || '\u2014' },
   { id: 'in',      label: 'Check In',   accessor: r => fmtTime(r.first_in) },
   { id: 'out',     label: 'Check Out',  accessor: r => fmtTime(r.last_out) },
-  { id: 'hours',   label: 'Hours',      accessor: r => (r.hours_worked ?? 0) > 0 ? `${r.hours_worked.toFixed(1)}h` : '—' },
+  // hours column uses cellType 'hours_worked' so AttendanceDashboard can render
+  // the open-shift badge when `r.open_shift === true`.
+  { id: 'hours',   label: 'Hours',      accessor: r => r.hours_worked ?? 0, cellType: 'hours_worked' },
   { id: 'status',  label: 'Status',     accessor: r => classifyDay(r), cellType: 'att_status' },
 ]
 
