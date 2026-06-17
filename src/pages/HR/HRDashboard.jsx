@@ -14,25 +14,30 @@
  * a thin renderer over that config so HR can re-tune the dashboard without
  * any JSX edits.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 
 import rbacService from '../../services/rbac.service'
 import timesheetService from '../../services/timesheet.service'
 import analyticsService from '../../services/analyticsService'
+import payrollService from '../../services/payroll.service'
+import { fmtCurrency } from '../../config/hrPayroll.config'
 
 import {
   HR_DASHBOARD_POLL_MS,
   HR_DASHBOARD_FETCH_PAGE_SIZE,
   HR_DASHBOARD_COPY,
   HR_DASHBOARD_KPIS,
+  HR_DASHBOARD_PAYROLL_KPIS,
   HR_DASHBOARD_SECTIONS,
   HR_DASHBOARD_QUICK_LINKS,
   HR_DASHBOARD_AI_CHAMPION,
+  HR_DASHBOARD_PENDING_TYPES,
   getAIChampionTierStyle,
   buildAIChampionPodium,
+  buildTotalPending,
   formatAICost,
   buildDepartmentBreakdown,
   buildDisciplineBreakdown,
@@ -83,6 +88,36 @@ const KpiTile = ({ kpi, value }) => (
     <div className="mt-1 text-sm font-medium opacity-95">{kpi.label}</div>
   </div>
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: payroll / pending KPI tile (compact secondary strip)
+// ─────────────────────────────────────────────────────────────────────────────
+const PayrollKpiTile = ({ kpi, value, onClick }) => {
+  const isUrgent = kpi.urgent && value > 0
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative overflow-hidden rounded-xl p-4 text-left w-full transition-all shadow-sm hover:shadow-md
+        ${isUrgent
+          ? `bg-gradient-to-br ${kpi.accent} text-white`
+          : 'bg-white border border-slate-200 text-slate-800'}`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <Icon name={kpi.icon} className={`w-5 h-5 ${isUrgent ? 'text-white/90' : 'text-slate-500'}`} />
+        {isUrgent && (
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+        )}
+      </div>
+      <div className={`text-2xl font-bold ${isUrgent ? 'text-white' : 'text-slate-900'}`}>
+        {value === null || value === undefined ? '—' : value}
+      </div>
+      <div className={`text-xs mt-0.5 font-medium ${isUrgent ? 'text-white/80' : 'text-slate-500'}`}>
+        {kpi.label}
+      </div>
+    </button>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: section card wrapper
@@ -262,6 +297,122 @@ const QuickLink = ({ link }) => (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: pending action card (one per category)
+// ─────────────────────────────────────────────────────────────────────────────
+const PendingActionCard = ({ type, pending, navigate }) => {
+  const count   = type.getCount(pending)
+  const items   = type.getItems(pending)
+  const hasItems = count > 0
+  return (
+    <div className={`rounded-xl border p-4 flex flex-col gap-3 transition-all ${hasItems ? `${type.bg} ${type.border}` : 'bg-white border-slate-200'}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${hasItems ? 'bg-white/70' : 'bg-slate-100'}`}>
+            <Icon name={type.icon} className={`w-4 h-4 ${hasItems ? type.text : 'text-slate-400'}`} />
+          </div>
+          <span className={`text-sm font-semibold ${hasItems ? type.text : 'text-slate-500'}`}>{type.label}</span>
+        </div>
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${hasItems ? type.badge : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+          {count}
+        </span>
+      </div>
+      {/* Item list (top 3) */}
+      {hasItems ? (
+        <div className="space-y-2">
+          {items.map((r, i) => (
+            <div key={r.id || i} className="flex items-start gap-2 text-sm">
+              <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${type.dot}`} />
+              <div className="min-w-0">
+                <div className={`font-medium truncate ${type.text}`}>{type.getRowLabel(r)}</div>
+                <div className="text-xs text-slate-500 truncate">{type.getRowSub(r)}</div>
+              </div>
+            </div>
+          ))}
+          {count > items.length && (
+            <div className={`text-xs ${type.text} opacity-70`}>+ {count - items.length} more</div>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">{type.zeroMsg}</p>
+      )}
+      {/* CTA */}
+      <button
+        type="button"
+        onClick={() => navigate(type.route)}
+        className={`mt-auto text-xs font-semibold py-1.5 px-3 rounded-lg border transition-colors
+          ${hasItems
+            ? 'bg-white/80 border-white/50 hover:bg-white ' + type.text
+            : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+      >
+        {type.actionLabel} →
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: notification dropdown (bell click)
+// ─────────────────────────────────────────────────────────────────────────────
+const NotifDropdown = ({ pending, total, navigate, onClose }) => (
+  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+      <div className="flex items-center gap-2">
+        <Icon name="BellIcon" className="w-4 h-4 text-slate-600" />
+        <span className="text-sm font-semibold text-slate-800">{HR_DASHBOARD_COPY.notifTitle}</span>
+      </div>
+      {total > 0 && (
+        <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[11px] font-bold">{total}</span>
+      )}
+      <button onClick={onClose} className="ml-auto text-slate-400 hover:text-slate-700">
+        <Icon name="XMarkIcon" className="w-4 h-4" />
+      </button>
+    </div>
+    <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+      {total === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-400">
+          <Icon name="CheckCircleIcon" className="w-8 h-8 text-emerald-400" />
+          <span className="text-sm">{HR_DASHBOARD_COPY.notifClear}</span>
+        </div>
+      ) : (
+        HR_DASHBOARD_PENDING_TYPES.map((type) => {
+          const count = type.getCount(pending)
+          if (count === 0) return null
+          return (
+            <button
+              key={type.id}
+              type="button"
+              onClick={() => { navigate(type.route); onClose() }}
+              className={`w-full flex items-center gap-3 px-4 py-3 hover:${type.bg} transition-colors text-left`}
+            >
+              <div className={`w-8 h-8 rounded-lg ${type.bg} ${type.border} border flex items-center justify-center flex-shrink-0`}>
+                <Icon name={type.icon} className={`w-4 h-4 ${type.text}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={`text-sm font-medium ${type.text}`}>{type.label}</div>
+                <div className="text-xs text-slate-500">
+                  {count} {count === 1 ? type.singularMsg : type.pluralMsg}
+                </div>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${type.badge}`}>{count}</span>
+            </button>
+          )
+        })
+      )}
+    </div>
+    <div className="px-4 py-3 border-t border-slate-100">
+      <button
+        type="button"
+        onClick={() => { navigate('/hr/payroll'); onClose() }}
+        className="w-full text-center text-xs font-semibold text-blue-600 hover:text-blue-800"
+      >
+        Open Payroll & Salary →
+      </button>
+    </div>
+  </div>
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: AI Champion podium card
 // Pure presentational — receives already-shaped rows from buildAIChampionPodium
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,10 +491,24 @@ const PodiumCard = ({ row, highlight }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HRDashboard() {
   const currentUser = useSelector((state) => state.auth?.user)
+  const navigate = useNavigate()
+  const notifRef = useRef(null)
+
   const [workforce, setWorkforce] = useState([])
   const [live, setLive] = useState(null)
   const [daily, setDaily] = useState(null)
   const [monthly, setMonthly] = useState(null)
+
+  // Payroll / leave / salary pending data (from 4.2 + 4.3)
+  const [pending, setPending] = useState({
+    pendingLeave: [], pendingLeaveCount: 0,
+    pendingAlerts: [], pendingAlertsCount: 0,
+    pendingSalary: [], pendingSalaryCount: 0,
+    pendingSlips: [], pendingSlipsCount: 0,
+    payrollSummary: null,
+  })
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [loadingPayroll, setLoadingPayroll] = useState(false)
 
   const [loadingWorkforce, setLoadingWorkforce] = useState(true)
   const [loadingLive, setLoadingLive] = useState(true)
@@ -359,6 +524,16 @@ export default function HRDashboard() {
   const [aiCost, setAiCost] = useState(null)
   const [aiForbidden, setAiForbidden] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+
+  // Close notif dropdown when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [notifOpen])
 
   // ── Fetch workforce (one-time on mount; doesn't need to poll every 30s)
   const loadWorkforce = useCallback(async () => {
@@ -412,18 +587,59 @@ export default function HRDashboard() {
     }
   }, [])
 
+  // ── Fetch pending actions from 4.2 Payroll + 4.3 Leave/Salary (polled)
+  const loadPayrollData = useCallback(async () => {
+    if (!HR_DASHBOARD_SECTIONS.pendingActions && !HR_DASHBOARD_SECTIONS.payrollSnapshot) return
+    setLoadingPayroll(true)
+    try {
+      const [leaveRes, alertsRes, salaryRes, slipsRes, summaryRes] = await Promise.allSettled([
+        payrollService.getLeaveRequests({ status: 'PENDING', page_size: 10 }),
+        payrollService.getAuditAlerts({ status: 'open', page_size: 10 }),
+        payrollService.getPendingSalaryStructures(),
+        payrollService.getSalarySlips({ status: 'pending_approval', page_size: 10 }),
+        payrollService.getDashboardSummary(),
+      ])
+
+      const leaveList   = leaveRes.status   === 'fulfilled' ? (leaveRes.value?.results   ?? leaveRes.value   ?? []) : []
+      const alertsList  = alertsRes.status  === 'fulfilled' ? (alertsRes.value?.results  ?? alertsRes.value  ?? []) : []
+      const salaryList  = salaryRes.status  === 'fulfilled' ? (salaryRes.value?.results  ?? Array.isArray(salaryRes.value) ? salaryRes.value : []) : []
+      const slipsList   = slipsRes.status   === 'fulfilled' ? (slipsRes.value?.results   ?? slipsRes.value   ?? []) : []
+      const summary     = summaryRes.status === 'fulfilled' ? summaryRes.value : null
+
+      setPending({
+        pendingLeave:        Array.isArray(leaveList)  ? leaveList  : [],
+        pendingLeaveCount:   leaveRes.status  === 'fulfilled' ? (leaveRes.value?.count  ?? leaveList.length)  : 0,
+        pendingAlerts:       Array.isArray(alertsList) ? alertsList : [],
+        pendingAlertsCount:  alertsRes.status === 'fulfilled' ? (alertsRes.value?.count ?? alertsList.length) : 0,
+        pendingSalary:       Array.isArray(salaryList) ? salaryList : [],
+        pendingSalaryCount:  Array.isArray(salaryList) ? salaryList.length : 0,
+        pendingSlips:        Array.isArray(slipsList)  ? slipsList  : [],
+        pendingSlipsCount:   slipsRes.status  === 'fulfilled' ? (slipsRes.value?.count  ?? slipsList.length)  : 0,
+        payrollSummary:      summary,
+      })
+    } catch (err) {
+      console.warn('[HRDashboard] payroll data load failed', err)
+    } finally {
+      setLoadingPayroll(false)
+    }
+  }, [])
+
   // ── Initial mount
   useEffect(() => {
     loadWorkforce()
     loadTimesheets()
-  }, [loadWorkforce, loadTimesheets])
+    loadPayrollData()
+  }, [loadWorkforce, loadTimesheets, loadPayrollData])
 
   // ── Auto-refresh timer
   useEffect(() => {
     if (!autoRefresh) return undefined
-    const id = setInterval(loadTimesheets, HR_DASHBOARD_POLL_MS)
+    const id = setInterval(() => {
+      loadTimesheets()
+      loadPayrollData()
+    }, HR_DASHBOARD_POLL_MS)
     return () => clearInterval(id)
-  }, [autoRefresh, loadTimesheets])
+  }, [autoRefresh, loadTimesheets, loadPayrollData])
 
   // ── Live clock for the header
   useEffect(() => {
@@ -486,6 +702,22 @@ export default function HRDashboard() {
   const monthRollup = useMemo(() => buildMonthRollup(monthly?.rows), [monthly])
   const joiners = useMemo(() => buildRecentJoiners(workforce), [workforce])
 
+  // Derived pending counts (update with each `pending` state change)
+  const totalPending = useMemo(() => buildTotalPending(pending), [pending])
+  const payrollKpiValues = useMemo(
+    () =>
+      HR_DASHBOARD_PAYROLL_KPIS.map((kpi) =>
+        kpi.compute({
+          pendingLeaveCount:  pending.pendingLeaveCount,
+          pendingAlertsCount: pending.pendingAlertsCount,
+          pendingSalaryCount: pending.pendingSalaryCount,
+          pendingSlipsCount:  pending.pendingSlipsCount,
+          payrollSummary:     pending.payrollSummary,
+        })
+      ),
+    [pending]
+  )
+
   const greeting = getGreeting()
   const userFirstName =
     currentUser?.first_name ||
@@ -493,8 +725,8 @@ export default function HRDashboard() {
     'there'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 sm:p-6 lg:p-8 xl:px-10 2xl:px-12">
+      <div className="max-w-screen-2xl mx-auto space-y-6">
 
         {/* ── Header ───────────────────────────────────────────────────── */}
         <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
@@ -519,6 +751,34 @@ export default function HRDashboard() {
             <div className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm text-slate-700 font-mono">
               {formatTime(now)}
             </div>
+
+            {/* ── Notification Bell ─────────────────────────────────── */}
+            {HR_DASHBOARD_SECTIONS.pendingActions && (
+              <div ref={notifRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen((v) => !v)}
+                  className="relative px-3 py-1.5 rounded-lg border bg-white border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
+                  title="Pending actions"
+                >
+                  <Icon name="BellIcon" className="w-4 h-4" />
+                  {totalPending > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white px-1 shadow">
+                      {totalPending > 99 ? '99+' : totalPending}
+                    </span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <NotifDropdown
+                    pending={pending}
+                    total={totalPending}
+                    navigate={navigate}
+                    onClose={() => setNotifOpen(false)}
+                  />
+                )}
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setAutoRefresh((v) => !v)}
@@ -538,12 +798,12 @@ export default function HRDashboard() {
             </button>
             <button
               type="button"
-              onClick={loadTimesheets}
-              disabled={loadingLive}
+              onClick={() => { loadTimesheets(); loadPayrollData() }}
+              disabled={loadingLive || loadingPayroll}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold border bg-white border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
-              <Icon name="ArrowPathIcon" className={`w-3.5 h-3.5 inline mr-1 ${loadingLive ? 'animate-spin' : ''}`} />
-              {loadingLive ? HR_DASHBOARD_COPY.refreshing : HR_DASHBOARD_COPY.manualRefresh}
+              <Icon name="ArrowPathIcon" className={`w-3.5 h-3.5 inline mr-1 ${loadingLive || loadingPayroll ? 'animate-spin' : ''}`} />
+              {loadingLive || loadingPayroll ? HR_DASHBOARD_COPY.refreshing : HR_DASHBOARD_COPY.manualRefresh}
             </button>
             {lastUpdated && (
               <div className="text-[11px] text-slate-500 ml-1">
@@ -577,6 +837,53 @@ export default function HRDashboard() {
             <KpiTile key={kpi.id} kpi={kpi} value={kpi.compute(ctx)} />
           ))}
         </div>
+
+        {/* ── Payroll Snapshot KPI strip (secondary row) ───────────────── */}
+        {HR_DASHBOARD_SECTIONS.payrollSnapshot && (
+          <div>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                {HR_DASHBOARD_COPY.sectionPayrollSnapshot}
+              </span>
+              {loadingPayroll && (
+                <Icon name="ArrowPathIcon" className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {HR_DASHBOARD_PAYROLL_KPIS.map((kpi, idx) => (
+                <PayrollKpiTile
+                  key={kpi.id}
+                  kpi={kpi}
+                  value={payrollKpiValues[idx]}
+                  onClick={() => navigate('/hr/payroll')}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Pending Actions inbox ────────────────────────────────────── */}
+        {HR_DASHBOARD_SECTIONS.pendingActions && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">{HR_DASHBOARD_COPY.sectionPending}</h2>
+                <p className="text-xs text-slate-500">{HR_DASHBOARD_COPY.sectionPendingHint}</p>
+              </div>
+              {totalPending === 0 && (
+                <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
+                  <Icon name="CheckCircleIcon" className="w-4 h-4" />
+                  {HR_DASHBOARD_COPY.emptyPending}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              {HR_DASHBOARD_PENDING_TYPES.map((type) => (
+                <PendingActionCard key={type.id} type={type} pending={pending} navigate={navigate} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Main grid ────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

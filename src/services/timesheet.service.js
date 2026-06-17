@@ -38,12 +38,18 @@ const downloadBlob = (url, params, filename) =>
     URL.revokeObjectURL(href)
   })
 
-export const downloadDailyExcel    = (date)        => downloadBlob(TIMESHEET_ENDPOINTS.exportDaily,      date ? { date } : {}, `timesheet_daily_${date || 'today'}.xlsx`)
-export const downloadMonthlyExcel  = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportMonthly,    { year, month },      `timesheet_monthly_${year}_${month}.xlsx`)
-export const downloadMonthlyPdf    = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportMonthlyPdf, { year, month },      `timesheet_monthly_${year}_${month}.pdf`)
+export const downloadDailyExcel    = (date)        => downloadBlob(TIMESHEET_ENDPOINTS.exportDaily,       date ? { date } : {},   `timesheet_daily_${date || 'today'}.xlsx`)
+export const downloadMonthlyExcel  = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportMonthly,     { year, month },        `timesheet_monthly_${year}_${String(month).padStart(2,'0')}.xlsx`)
+export const downloadMonthlyPdf    = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportMonthlyPdf,  { year, month },        `timesheet_monthly_${year}_${String(month).padStart(2,'0')}.pdf`)
+export const downloadSummaryExcel  = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportSummary,     { year, month },        `timesheet_summary_${year}_${String(month).padStart(2,'0')}.xlsx`)
+export const downloadSummaryPdf    = (year, month) => downloadBlob(TIMESHEET_ENDPOINTS.exportSummaryPdf,  { year, month },        `timesheet_summary_${year}_${String(month).padStart(2,'0')}.pdf`)
+export const downloadYearlyExcel   = (year)        => downloadBlob(TIMESHEET_ENDPOINTS.exportYearly,      { year },               `timesheet_yearly_${year}.xlsx`)
+export const downloadYearlyPdf     = (year)        => downloadBlob(TIMESHEET_ENDPOINTS.exportYearlyPdf,   { year },               `timesheet_yearly_${year}.pdf`)
 
 export default {
   fetchHealth, listDatabases, listTables, listColumns, previewTable,
   fetchLive, fetchDaily, fetchMonthly, fetchUserHistory, lookupByCode,
   downloadDailyExcel, downloadMonthlyExcel, downloadMonthlyPdf,
+  downloadSummaryExcel, downloadSummaryPdf,
+  downloadYearlyExcel, downloadYearlyPdf,
 }

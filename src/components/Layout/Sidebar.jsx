@@ -292,10 +292,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           },
           {
             id: 'hrLeave',
-            title: '4.3 Leave Management',
-            icon: DocumentTextIcon,
+            title: '4.3 Self-Service',
+            icon: SparklesIcon,
             path: '/hr/leave',
-            description: 'Leave requests and approvals',
+            description: 'My leave, attendance, timesheet & payroll',
             moduleCode: 'human_resource'
           }
         ]

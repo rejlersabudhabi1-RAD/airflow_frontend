@@ -13,19 +13,23 @@
 // 1. ENDPOINTS — paths are appended to API_BASE_URL by the service layer
 // ─────────────────────────────────────────────────────────────────────────────
 export const TIMESHEET_ENDPOINTS = {
-  health:           '/timesheet/health/',
-  databases:        '/timesheet/discovery/databases/',
-  tables:           '/timesheet/discovery/tables/',
-  columns:          '/timesheet/discovery/columns/',
-  preview:          '/timesheet/discovery/preview/',
-  live:             '/timesheet/live/',
-  daily:            '/timesheet/daily/',
-  monthly:          '/timesheet/monthly/',
-  user:             '/timesheet/user/',
-  lookupByCode:     '/timesheet/lookup-by-code/',
-  exportDaily:      '/timesheet/export/daily/',
-  exportMonthly:    '/timesheet/export/monthly/',
-  exportMonthlyPdf: '/timesheet/export/monthly/pdf/',
+  health:            '/timesheet/health/',
+  databases:         '/timesheet/discovery/databases/',
+  tables:            '/timesheet/discovery/tables/',
+  columns:           '/timesheet/discovery/columns/',
+  preview:           '/timesheet/discovery/preview/',
+  live:              '/timesheet/live/',
+  daily:             '/timesheet/daily/',
+  monthly:           '/timesheet/monthly/',
+  user:              '/timesheet/user/',
+  lookupByCode:      '/timesheet/lookup-by-code/',
+  exportDaily:       '/timesheet/export/daily/',
+  exportMonthly:     '/timesheet/export/monthly/',
+  exportMonthlyPdf:  '/timesheet/export/monthly/pdf/',
+  exportSummary:     '/timesheet/export/summary/',
+  exportSummaryPdf:  '/timesheet/export/summary/pdf/',
+  exportYearly:      '/timesheet/export/yearly/',
+  exportYearlyPdf:   '/timesheet/export/yearly/pdf/',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

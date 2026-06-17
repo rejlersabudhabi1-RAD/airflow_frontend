@@ -46,11 +46,20 @@ export const PEOPLE_NAV_TABS = [
   {
     id: 'ess',
     label: 'My Workspace',
-    description: 'Leave, attendance, payroll & personal analytics',
+    description: 'Leave, attendance, timesheet & payroll',
     to: '/hr/leave',
     icon: 'SparklesIcon',
     visibility: 'always',
     accent: 'from-blue-500 to-cyan-500',
+  },
+  {
+    id: 'payroll',
+    label: 'Payroll & Salary',
+    description: 'Attendance, leave management, payroll engine & salary structures',
+    to: '/hr/payroll',
+    icon: 'BanknotesIcon',
+    visibility: 'always',
+    accent: 'from-violet-500 to-purple-500',
   },
   {
     id: 'admin',

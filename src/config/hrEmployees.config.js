@@ -450,6 +450,87 @@ export const HR_ADMIN_USER_LINK = (id) => `/admin/users/${id}`
 export const HR_ADMIN_USERS_LIST_LINK = '/admin/users'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 12b. DEPARTMENT VIEW — table columns + copy
+//      Add / remove columns here; no component code changes needed.
+//      `type` drives special rendering: 'status' | 'datetime' | 'date' | 'text'
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DEPT_TABLE_COLUMNS = [
+  { id: 'name',        label: 'Employee',    type: 'employee', minWidth: 'min-w-[200px]', accessor: (e) => fullName(e) || getEmail(e) || '—' },
+  { id: '_actions',   label: '',            type: 'actions',  minWidth: 'min-w-[72px]',  accessor: () => null },
+  { id: 'employee_id', label: 'Emp ID',      type: 'text',     minWidth: 'min-w-[96px]',  accessor: (e) => e.employee_id || '—' },
+  { id: 'job_title',   label: 'Designation', type: 'text',     minWidth: 'min-w-[160px]', accessor: (e) => e.job_title || '—' },
+  { id: 'email',       label: 'Email',       type: 'email',    minWidth: 'min-w-[200px]', accessor: (e) => getEmail(e) || '—' },
+  { id: 'phone',       label: 'Phone',       type: 'text',     minWidth: 'min-w-[120px]', accessor: (e) => e.phone || '—' },
+  { id: 'location',    label: 'Location',    type: 'text',     minWidth: 'min-w-[120px]', accessor: (e) => e.location || '—' },
+  { id: 'discipline',  label: 'Discipline',  type: 'text',     minWidth: 'min-w-[120px]', accessor: (e) => matchDiscipline(e.engineer_profile?.discipline || e.department)?.label || '—' },
+  { id: 'status',      label: 'Status',      type: 'status',   minWidth: 'min-w-[100px]', accessor: (e) => e.status },
+  { id: 'tenure',      label: 'Tenure',      type: 'text',     minWidth: 'min-w-[96px]',  accessor: (e) => formatYearsOfService(e.date_joined || e.user?.date_joined) },
+  { id: 'last_login',  label: 'Last Login',  type: 'datetime', minWidth: 'min-w-[140px]', accessor: (e) => e.last_login_at || e.user?.last_login },
+]
+
+// Accent palette for department header rows (cycles through the list).
+export const HR_DEPT_ACCENT_PALETTE = [
+  { bg: 'from-blue-600 to-indigo-700',      pill: 'bg-blue-100 text-blue-800' },
+  { bg: 'from-violet-600 to-purple-700',    pill: 'bg-violet-100 text-violet-800' },
+  { bg: 'from-emerald-600 to-teal-700',     pill: 'bg-emerald-100 text-emerald-800' },
+  { bg: 'from-rose-600 to-pink-700',        pill: 'bg-rose-100 text-rose-800' },
+  { bg: 'from-amber-500 to-orange-600',     pill: 'bg-amber-100 text-amber-800' },
+  { bg: 'from-sky-600 to-cyan-700',         pill: 'bg-sky-100 text-sky-800' },
+  { bg: 'from-slate-600 to-gray-700',       pill: 'bg-slate-100 text-slate-800' },
+]
+
+export const HR_DEPT_COPY = {
+  expandAll:          'Expand all',
+  collapseAll:        'Collapse all',
+  employees:          'employees',
+  designations:       'distinct designations',
+  emptyDept:          'No departments found',
+  noEmployees:        'No employees in this department',
+  searchPlaceholder:  'Filter within departments…',
+  addEmployee:        'Add Employee',
+  addToDept:          'Add to dept',
+  editEmployee:       'Edit',
+  viewProfile:        'View profile',
+  addEmployeeHint:    'Opens the admin user creation form.',
+  editEmployeeHint:   'Opens the admin edit form for this employee.',
+}
+
+// Actions available in the department view toolbar and per-row.
+// `scope` controls where they appear: 'toolbar' = top bar, 'row' = per-employee.
+// `variant` drives button styling: 'primary' | 'secondary' | 'ghost'.
+// `icon` is a heroicon name.
+// `getHref` receives (emp?, dept?) and returns the navigation target.
+export const HR_DEPT_ACTIONS = [
+  {
+    id:       'add_employee',
+    label:    HR_DEPT_COPY.addEmployee,
+    icon:     'UserPlusIcon',
+    scope:    'toolbar',
+    variant:  'primary',
+    getHref:  (_emp, _dept) => HR_ADMIN_USERS_LIST_LINK + '?action=create',
+    tooltip:  HR_DEPT_COPY.addEmployeeHint,
+  },
+  {
+    id:       'add_to_dept',
+    label:    HR_DEPT_COPY.addToDept,
+    icon:     'PlusCircleIcon',
+    scope:    'dept_header',
+    variant:  'secondary',
+    getHref:  (_emp, dept) => HR_ADMIN_USERS_LIST_LINK + `?action=create&department=${encodeURIComponent(dept || '')}`,
+    tooltip:  HR_DEPT_COPY.addEmployeeHint,
+  },
+  {
+    id:       'edit_employee',
+    label:    HR_DEPT_COPY.editEmployee,
+    icon:     'PencilSquareIcon',
+    scope:    'row',
+    variant:  'ghost',
+    getHref:  (emp, _dept) => HR_ADMIN_USER_LINK(emp?.id || emp?.user?.id || ''),
+    tooltip:  HR_DEPT_COPY.editEmployeeHint,
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 13. UI COPY — single point of edit for headlines / empty states
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_COPY = {
@@ -606,6 +687,10 @@ export default {
   HR_COPY,
   HR_ADMIN_USER_LINK,
   HR_ADMIN_USERS_LIST_LINK,
+  HR_DEPT_TABLE_COLUMNS,
+  HR_DEPT_ACCENT_PALETTE,
+  HR_DEPT_COPY,
+  HR_DEPT_ACTIONS,
   formatYearsOfService,
   formatDateTime,
   formatDate,

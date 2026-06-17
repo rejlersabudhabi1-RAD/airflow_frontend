@@ -101,6 +101,33 @@ const payrollService = {
   getBranchEmployeeCodes: (branch, year) =>
     unwrap(apiClient.get(`${BASE}/branch-employee-codes/`, { params: { branch, year } })),
 
+  // ── Public Holidays (Abu Dhabi / UAE official calendar + HR-added) ────────
+  // List: any authenticated user may read.
+  // Create/update/deactivate: HR Manager only (enforced by backend).
+  getPublicHolidays: (year, params = {}) =>
+    unwrap(apiClient.get(`${BASE}/public-holidays/`, { params: { year, ...params } })),
+
+  createPublicHoliday: (data) =>
+    unwrap(apiClient.post(`${BASE}/public-holidays/`, data)),
+
+  updatePublicHoliday: (id, data) =>
+    unwrap(apiClient.patch(`${BASE}/public-holidays/${id}/`, data)),
+
+  deactivatePublicHoliday: (id) =>
+    unwrap(apiClient.delete(`${BASE}/public-holidays/${id}/`)),
+
+  // ── Attendance Overrides (HR Manager manual cell corrections) ─────────────
+  // Returns active overrides for a given year+month.
+  // Backend enforces HR Manager permission for write operations.
+  getAttendanceOverrides: (year, month, params = {}) =>
+    unwrap(apiClient.get(`${BASE}/attendance-overrides/`, { params: { year, month, ...params } })),
+
+  createAttendanceOverride: (data) =>
+    unwrap(apiClient.post(`${BASE}/attendance-overrides/`, data)),
+
+  updateAttendanceOverride: (id, data) =>
+    unwrap(apiClient.patch(`${BASE}/attendance-overrides/${id}/`, data)),
+
   // ── Finance payroll endpoints (reused from finance.service) ────────────────
   getPayrollRuns: (params = {}) =>
     unwrap(apiClient.get(`${FINANCE}/payroll-runs/`, { params })),
@@ -128,6 +155,54 @@ const payrollService = {
 
   processPayrollRun: (id) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/${id}/process/`)),
+
+  // ── Salary Components ──────────────────────────────────────────────────────
+  getSalaryComponents: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/salary-components/`, { params })),
+
+  createSalaryComponent: (data) =>
+    unwrap(apiClient.post(`${BASE}/salary-components/`, data)),
+
+  updateSalaryComponent: (id, data) =>
+    unwrap(apiClient.patch(`${BASE}/salary-components/${id}/`, data)),
+
+  deactivateSalaryComponent: (id) =>
+    unwrap(apiClient.delete(`${BASE}/salary-components/${id}/`)),
+
+  // ── Salary Structures ──────────────────────────────────────────────────────
+  getSalaryStructures: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/salary-structures/`, { params })),
+
+  getSalaryStructure: (id) =>
+    unwrap(apiClient.get(`${BASE}/salary-structures/${id}/`)),
+
+  createSalaryStructure: (data) =>
+    unwrap(apiClient.post(`${BASE}/salary-structures/`, data)),
+
+  updateSalaryStructure: (id, data) =>
+    unwrap(apiClient.patch(`${BASE}/salary-structures/${id}/`, data)),
+
+  deactivateSalaryStructure: (id) =>
+    unwrap(apiClient.delete(`${BASE}/salary-structures/${id}/`)),
+
+  submitSalaryStructure: (id) =>
+    unwrap(apiClient.post(`${BASE}/salary-structures/${id}/submit/`)),
+
+  approveSalaryStructure: (id, data = {}) =>
+    unwrap(apiClient.post(`${BASE}/salary-structures/${id}/approve/`, data)),
+
+  rejectSalaryStructure: (id, data = {}) =>
+    unwrap(apiClient.post(`${BASE}/salary-structures/${id}/reject/`, data)),
+
+  getPendingSalaryStructures: () =>
+    unwrap(apiClient.get(`${BASE}/salary-structures/pending/`)),
+
+  getSalarySummary: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/salary-structures/summary/`, { params })),
+
+  // ── Salary History ─────────────────────────────────────────────────────────
+  getSalaryHistory: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/salary-history/`, { params })),
 }
 
 export default payrollService

@@ -296,3 +296,191 @@ export const fmtDiff = (hours) => {
   const m    = Math.round((abs - h) * 60)
   return `${sign}${h} h ${m} min`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. REPORT TYPES — soft-coded export catalogue for the Reports tab
+//     Each entry drives one card in the UI; add/remove entries here without
+//     touching component code.
+//
+//     Fields:
+//       id          unique key used in the download dispatcher
+//       label       card heading
+//       icon        HeroIcon name (24/outline)
+//       description short hint text shown in the card
+//       scope       'date' | 'month' | 'year'  — which date picker to show
+//       formats     array of { key, label, color, icon } — download buttons
+//       note        optional amber info note (e.g. "may take a moment")
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATT_REPORT_TYPES = [
+  {
+    id:          'daily',
+    label:       'Daily Report',
+    icon:        'CalendarDaysIcon',
+    description: 'All employee punches for a single day — first-in, last-out, hours worked.',
+    scope:       'date',
+    formats: [
+      { key: 'daily-excel', label: 'Excel', color: 'emerald', icon: 'ArrowDownTrayIcon' },
+    ],
+  },
+  {
+    id:          'monthly',
+    label:       'Monthly Report',
+    icon:        'CalendarIcon',
+    description: 'Month-level roll-up with days present, full/half days, late arrivals and total hours.',
+    scope:       'month',
+    formats: [
+      { key: 'monthly-excel', label: 'Excel', color: 'emerald', icon: 'ArrowDownTrayIcon' },
+      { key: 'monthly-pdf',   label: 'PDF',   color: 'rose',    icon: 'DocumentArrowDownIcon' },
+    ],
+  },
+  {
+    id:          'summary',
+    label:       'Summary Report',
+    icon:        'TableCellsIcon',
+    description: 'Pivot grid — one row per employee, one column per day. Mirrors the HR Summary tab view.',
+    scope:       'month',
+    note:        'Excel includes the full day-by-day grid with weekend highlights.',
+    formats: [
+      { key: 'summary-excel', label: 'Excel (Pivot)', color: 'violet', icon: 'ArrowDownTrayIcon' },
+      { key: 'summary-pdf',   label: 'PDF (Roll-up)', color: 'rose',   icon: 'DocumentArrowDownIcon' },
+    ],
+  },
+  {
+    id:          'yearly',
+    label:       'Yearly Report',
+    icon:        'ChartBarIcon',
+    description: '12-month trend — one sheet per month plus a full-year summary. May take a moment to generate.',
+    scope:       'year',
+    note:        'Yearly exports aggregate all 12 months and may take up to 30 seconds.',
+    formats: [
+      { key: 'yearly-excel', label: 'Excel (All months)', color: 'blue',   icon: 'ArrowDownTrayIcon' },
+      { key: 'yearly-pdf',   label: 'PDF (Summary)',      color: 'indigo', icon: 'DocumentArrowDownIcon' },
+    ],
+  },
+]
+
+// Map download key → service method name (used in dispatcher)
+// Soft-coded: adding a new format only requires a new entry here + in ATT_REPORT_TYPES.
+export const ATT_DOWNLOAD_METHOD_MAP = {
+  'daily-excel':   'downloadDailyExcel',
+  'monthly-excel': 'downloadMonthlyExcel',
+  'monthly-pdf':   'downloadMonthlyPdf',
+  'summary-excel': 'downloadSummaryExcel',
+  'summary-pdf':   'downloadSummaryPdf',
+  'yearly-excel':  'downloadYearlyExcel',
+  'yearly-pdf':    'downloadYearlyPdf',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. PUBLIC HOLIDAY — display config for Summary tab
+// ─────────────────────────────────────────────────────────────────────────────
+// Column header accent colour for public-holiday days in the pivot table.
+// Soft-coded: change colours here; no component edits needed.
+export const ATT_HOLIDAY_CELL_BG    = 'bg-violet-100'
+export const ATT_HOLIDAY_CELL_BORDER = 'border-violet-300'
+export const ATT_HOLIDAY_HEADER_BG  = 'bg-violet-700'
+export const ATT_HOLIDAY_HEADER_TEXT = 'text-white'
+// Abbreviation shown inside the cell when a day is a public holiday
+export const ATT_HOLIDAY_SYMBOL     = 'PH'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. ATTENDANCE OVERRIDE — reason option list (mirrors backend choices)
+//     Values must match OVERRIDE_REASON_CHOICES in apps.payroll.models.py.
+// ─────────────────────────────────────────────────────────────────────────────
+export const OVERRIDE_REASON_OPTIONS = [
+  { value: 'biometric_error', label: 'Biometric device error' },
+  { value: 'system_outage',   label: 'System / network outage' },
+  { value: 'forgot_punch',    label: 'Employee forgot to punch' },
+  { value: 'site_visit',      label: 'On-site client visit (no biometric access)' },
+  { value: 'wfh',             label: 'Work from home (WFH approved)' },
+  { value: 'travel',          label: 'Business travel' },
+  { value: 'training',        label: 'Approved external training' },
+  { value: 'hr_correction',   label: 'HR administrative correction' },
+  { value: 'other',           label: 'Other (see note)' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. HR MANAGER PERMISSION — soft-coded role codes that grant edit access
+//     Add / remove role codes without touching components.
+//     Checked client-side only as a UX guard; the real enforcement is in the
+//     backend _is_hr_manager() helper (apps.payroll.views).
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_MANAGER_ROLE_CODES = (
+  import.meta.env?.VITE_HR_MANAGER_ROLES || 'hr,hr_manager,hr_admin,admin,superadmin,manager'
+).split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+
+/**
+ * Returns true if the given user/profile should see HR edit controls.
+ *
+ * Supports two call shapes:
+ *   canEditAttendance(rbacProfile, authUser)
+ *     - rbacProfile  = s.rbac.currentUser  (UserProfileSerializer, may be null)
+ *     - authUser     = s.auth.user          (UserProfileSerializer stored at login)
+ *
+ * UserProfileSerializer shape:
+ *   { user: { is_superuser, is_staff, ... }, roles: [{ id, name, code, level }], ... }
+ *
+ * Checked client-side only as a UX guard; the backend enforces the same rule
+ * via _is_hr_manager() in apps.payroll.views.
+ */
+export const canEditAttendance = (profile, authUser) => {
+  if (!profile && !authUser) return false
+
+  // ── 1. Superuser / staff check ─────────────────────────────────────────────
+  // UserProfileSerializer nests Django user fields under `.user`; handle both
+  // the nested shape and a flat shape (for safety/backward-compat).
+  const djangoUser = authUser?.user ?? authUser
+  if (djangoUser?.is_superuser || djangoUser?.is_staff) return true
+
+  const djangoUserFromProfile = profile?.user ?? profile
+  if (djangoUserFromProfile?.is_superuser || djangoUserFromProfile?.is_staff) return true
+
+  // ── 2. Role code check ─────────────────────────────────────────────────────
+  // Collect role codes from all available sources (roles array on both objects).
+  // UserProfileSerializer exposes `roles: [{ id, name, code, level }]`.
+  const roleCodes = [
+    ...(profile?.roles  || []),
+    ...(authUser?.roles || []),
+  ]
+    .map(r => (r?.code || '').toLowerCase().trim())
+    .filter(Boolean)
+
+  if (roleCodes.length === 0) return false
+
+  return roleCodes.some(code =>
+    HR_MANAGER_ROLE_CODES.some(c => code === c || code.startsWith(c))
+  )
+}
+
+// Copy strings for new edit / holiday UI elements
+export const ATT_EDIT_COPY = {
+  editTitle:          'Edit Attendance',
+  editHint:           'Correct the biometric hours for this employee on this date.',
+  overrideHoursLabel: 'Corrected Hours',
+  originalHoursLabel: 'Original (Biometric)',
+  reasonLabel:        'Reason',
+  noteLabel:          'HR Note (optional)',
+  saveBtn:            'Save Correction',
+  cancelBtn:          'Cancel',
+  savingBtn:          'Saving…',
+  saveOk:             'Correction saved successfully.',
+  saveErr:            'Failed to save correction. Please try again.',
+  overrideIndicator:  'Manually corrected by HR',
+  holidayTitle:       'Public Holidays',
+  holidayAddBtn:      'Add Holiday',
+  holidayEditBtn:     'Edit',
+  holidayDeactivateBtn: 'Deactivate',
+  holidayName:        'Holiday Name',
+  holidayDate:        'Date',
+  holidayRegion:      'Region',
+  holidayNote:        'Note (optional)',
+  holidaySource:      'Source',
+  holidaySaveBtn:     'Save Holiday',
+  holidaySavingBtn:   'Saving…',
+  holidayDeleteConfirm: (name) => `Deactivate "${name}"? It will no longer appear in the calendar but the record is kept for audit.`,
+  holidaySeeded:      'Abu Dhabi / UAE Official (Abu Dhabi Govt.)',
+  holidayHrAdded:     'Added by HR Manager',
+  noHolidays:         'No public holidays defined for this year.',
+  holidaySaveOk:      'Holiday saved.',
+  holidaySaveErr:     'Failed to save holiday.',
+}

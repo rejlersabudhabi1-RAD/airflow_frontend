@@ -14,13 +14,13 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import payrollService from '../../../services/payroll.service'
-import { BRANCHES, getBranch } from '../../../config/hrLeave.config'
+import { BRANCHES, getBranch, LEAVE_YEAR, DEFAULT_ANNUAL_ENTITLEMENT } from '../../../config/hrLeave.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG — all soft-coded constants
 // ─────────────────────────────────────────────────────────────────────────────
-const YEAR = 2026
-const ANNUAL_ENTITLEMENT = 22   // default if not returned by API
+const YEAR = LEAVE_YEAR
+const ANNUAL_ENTITLEMENT = DEFAULT_ANNUAL_ENTITLEMENT
 
 const BALANCE_TIERS = [
   { label: 'Surplus (> 5)',   min: 5,   max: Infinity, color: '#10b981', bg: 'bg-emerald-50',  text: 'text-emerald-700',  border: 'border-emerald-200' },

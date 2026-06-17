@@ -7,6 +7,7 @@
  * All config, thresholds, colours and labels live in hrAttendance.config.js.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -23,6 +24,12 @@ import {
   ATT_STANDARD_DAILY_HOURS, ATT_COMPANY_NAME, fmtDiff,
   classifyDay, workingDaysInMonth, rateColor, empName, empDept,
   fmtTime, ATT_COPY, filterEmployeeRow,
+  // ── New: edit + holiday
+  ATT_HOLIDAY_CELL_BG, ATT_HOLIDAY_CELL_BORDER,
+  ATT_HOLIDAY_HEADER_BG, ATT_HOLIDAY_HEADER_TEXT, ATT_HOLIDAY_SYMBOL,
+  OVERRIDE_REASON_OPTIONS, canEditAttendance, ATT_EDIT_COPY,
+  // ── Reports catalogue
+  ATT_REPORT_TYPES, ATT_DOWNLOAD_METHOD_MAP,
 } from '../../../config/hrAttendance.config'
 import { getLeaveType, ABSENT_SYMBOL, BRANCHES, getBranch } from '../../../config/hrLeave.config'
 
@@ -95,6 +102,34 @@ function SummaryTab() {
   const [branchCodes,           setBranchCodes]           = useState(null)
   const [branchCodesLoading,    setBranchCodesLoading]    = useState(false)
 
+  // ── RBAC / permission ──────────────────────────────────────────────────────
+  // canEdit = true when the logged-in user holds an HR Manager or admin role.
+  // The check is client-side for UX only; the backend enforces the same rule.
+  const authUser    = useSelector((s) => s.auth?.user)
+  const rbacProfile = useSelector((s) => s.rbac?.currentUser)
+  const canEdit     = canEditAttendance(rbacProfile, authUser)
+
+  // ── Attendance Overrides ───────────────────────────────────────────────────
+  // overrideMap: { employeeCode: { 'YYYY-MM-DD': { override_hours, reason, note, id } } }
+  const [overrideMap,   setOverrideMap]   = useState({})
+  // Edit modal state
+  const [editTarget,    setEditTarget]    = useState(null)  // { employeeCode, employeeName, date, currentHours }
+  const [editHours,     setEditHours]     = useState('')
+  const [editReason,    setEditReason]    = useState('hr_correction')
+  const [editNote,      setEditNote]      = useState('')
+  const [editSaving,    setEditSaving]    = useState(false)
+  const [editMsg,       setEditMsg]       = useState('')
+
+  // ── Public Holidays ────────────────────────────────────────────────────────
+  // Set of date strings 'YYYY-MM-DD' that are public holidays in this month.
+  const [holidays,       setHolidays]      = useState([])  // full holiday objects
+  const [showHolidayPanel, setShowHolidayPanel] = useState(false)
+  // Holiday form state
+  const [hForm,          setHForm]         = useState({ date: '', name: '', name_ar: '', region: 'AE-AZ', note: '' })
+  const [hEditing,       setHEditing]      = useState(null)  // holiday id being edited
+  const [hSaving,        setHSaving]       = useState(false)
+  const [hMsg,           setHMsg]          = useState('')
+
   // When branch selection changes, fetch the employee codes for that branch
   // so we can cross-reference against biometric attendance rows (which have no branch tag)
   useEffect(() => {
@@ -126,6 +161,44 @@ function SummaryTab() {
       .catch(() => setLeaveCalendar({}))
   }, [year, month])
 
+  // Fetch HR attendance overrides for this month
+  useEffect(() => {
+    payrollService.getAttendanceOverrides(year, month)
+      .then(rows => {
+        // Build a nested lookup: { employeeCode: { 'YYYY-MM-DD': override } }
+        const map = {}
+        ;(rows || []).forEach(ov => {
+          if (!map[ov.employee_code]) map[ov.employee_code] = {}
+          map[ov.employee_code][ov.date] = ov
+        })
+        setOverrideMap(map)
+      })
+      .catch(() => setOverrideMap({}))
+  }, [year, month])
+
+  // Fetch public holidays for this year (shown as column accents + side panel)
+  useEffect(() => {
+    payrollService.getPublicHolidays(year, { active_only: 'true' })
+      .then(rows => setHolidays(Array.isArray(rows) ? rows : (rows?.results || [])))
+      .catch(() => setHolidays([]))
+  }, [year])
+
+  // Build a Set of 'YYYY-MM-DD' strings for quick O(1) holiday lookup
+  const holidayDateSet = useMemo(() => {
+    const s = new Set()
+    holidays.forEach(h => {
+      if (h.date) s.add(h.date)
+    })
+    return s
+  }, [holidays])
+
+  // Build a holiday name lookup: { 'YYYY-MM-DD': holidayName }
+  const holidayNameMap = useMemo(() => {
+    const m = {}
+    holidays.forEach(h => { if (h.date) m[h.date] = h.name })
+    return m
+  }, [holidays])
+
   const rows        = resp?.rows || []
   const workingDays = resp?.working_days_in_month || workingDaysInMonth(year, month)
   const daysInMonth = new Date(year, month, 0).getDate()         // last day of month
@@ -133,9 +206,90 @@ function SummaryTab() {
     () => Array.from({ length: daysInMonth }, (_, i) => i + 1),
     [daysInMonth]
   )
-  const periodLabel = `1.${month}.${year} – ${daysInMonth}.${month}.${year}`
+  // Soft-coded helper: build ISO date string for any cell in the selected month
+  const cellDateStr = (d) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const isHoliday   = (d) => holidayDateSet.has(cellDateStr(d))
+
+  // Open the edit modal for a cell
+  const openEdit = (row, d) => {
+    if (!canEdit) return
+    const dateStr = cellDateStr(d)
+    const existing = overrideMap[row.code]?.[dateStr]
+    const currentBio = row.dayMap[d]?.type === 'worked' ? row.dayMap[d].hours : 0
+    setEditTarget({ employeeCode: row.code, employeeName: row.name, date: dateStr, currentHours: currentBio })
+    setEditHours(existing ? String(existing.override_hours) : String(currentBio))
+    setEditReason(existing?.reason || 'hr_correction')
+    setEditNote(existing?.note || '')
+    setEditMsg('')
+  }
+
+  // Save override via API
+  const saveOverride = async () => {
+    if (!editTarget) return
+    setEditSaving(true); setEditMsg('')
+    try {
+      const payload = {
+        employee_code:  editTarget.employeeCode,
+        employee_name:  editTarget.employeeName,
+        date:           editTarget.date,
+        original_hours: editTarget.currentHours,
+        override_hours: parseFloat(editHours) || 0,
+        reason:         editReason,
+        note:           editNote,
+      }
+      const saved = await payrollService.createAttendanceOverride(payload)
+      // Update local override map
+      setOverrideMap(prev => ({
+        ...prev,
+        [editTarget.employeeCode]: {
+          ...(prev[editTarget.employeeCode] || {}),
+          [editTarget.date]: saved,
+        },
+      }))
+      setEditMsg(ATT_EDIT_COPY.saveOk)
+      setTimeout(() => setEditTarget(null), 1000)
+    } catch {
+      setEditMsg(ATT_EDIT_COPY.saveErr)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  // Save / update public holiday
+  const saveHoliday = async () => {
+    setHSaving(true); setHMsg('')
+    try {
+      if (hEditing) {
+        await payrollService.updatePublicHoliday(hEditing, hForm)
+      } else {
+        await payrollService.createPublicHoliday({ ...hForm, source: 'hr_added' })
+      }
+      // Re-fetch holidays
+      const rows = await payrollService.getPublicHolidays(year, { active_only: 'true' })
+      setHolidays(Array.isArray(rows) ? rows : (rows?.results || []))
+      setHMsg(ATT_EDIT_COPY.holidaySaveOk)
+      setHForm({ date: '', name: '', name_ar: '', region: 'AE-AZ', note: '' })
+      setHEditing(null)
+    } catch {
+      setHMsg(ATT_EDIT_COPY.holidaySaveErr)
+    } finally {
+      setHSaving(false)
+    }
+  }
+
+  const deactivateHoliday = async (h) => {
+    if (!window.confirm(ATT_EDIT_COPY.holidayDeleteConfirm(h.name))) return
+    try {
+      await payrollService.deactivatePublicHoliday(h.id)
+      setHolidays(prev => prev.filter(x => x.id !== h.id))
+    } catch { /* silent — user sees no change */ }
+  }
   const yearOpts    = useMemo(() => [year - 2, year - 1, year].filter(y => y > 2020), [year])
   const round2      = (v) => Math.round(v * 100) / 100
+
+  // Human-readable period string shown in the report header, e.g. "June 2026"
+  // Soft-coded: label text comes from MONTH_FULL in hrAttendance.config.js
+  const periodLabel = `${MONTH_FULL[month - 1]} ${year}`
 
   // Soft-coded: compute day-of-week for any date in the selected month.
   // 0 = Sunday, 6 = Saturday (standard JS)
@@ -144,14 +298,13 @@ function SummaryTab() {
   const isSunday    = (d) => dayOfWeek(d) === 0
   const isWeekend   = (d) => isSaturday(d) || isSunday(d)
 
-  // Build pivot: employee × day → slot object { type:'worked'|'leave', hours?, code?, ... }
+  // Build pivot: employee × day → slot object { type:'worked'|'leave'|'override', hours?, ... }
   const pivotRows = useMemo(() => {
     const q = search.toLowerCase().trim()
     return rows
       // Remove non-employee biometric records (facility names, visitor badges, etc.)
       .filter(filterEmployeeRow)
-      // Branch filter: when a branch is selected, only show employees whose code
-      // is in the branchCodes Set (sourced from EmployeeLeaveRecord.branch via API)
+      // Branch filter
       .filter(r => !branchCodes || branchCodes.has(r.employee_code || ''))
       .filter(r => !q ||
         empName(r).toLowerCase().includes(q) ||
@@ -171,7 +324,25 @@ function SummaryTab() {
             dayMap[day] = { type: 'leave', code: lv.code, name: lv.name, badge_bg: lv.badge_bg, badge_text: lv.badge_text }
           }
         })
-        const totalHrs  = round2(r.total_hours || 0)
+        // Apply HR attendance overrides — replaces biometric value for the cell.
+        // Shown as type:'override' so the cell can render a pencil indicator.
+        const empOverrides = overrideMap[empCode] || {}
+        Object.entries(empOverrides).forEach(([dateStr, ov]) => {
+          const day = parseInt(dateStr.split('-')[2], 10)
+          if (day > 0) {
+            dayMap[day] = {
+              type:    'override',
+              hours:   parseFloat(ov.override_hours) || 0,
+              reason:  ov.reason,
+              note:    ov.note,
+              overrideId: ov.id,
+            }
+          }
+        })
+        const totalHrs  = round2(
+          Object.values(dayMap).reduce((s, slot) =>
+            s + ((slot?.type === 'worked' || slot?.type === 'override') ? (slot.hours || 0) : 0), 0)
+        )
         const normalHrs = workingDays * ATT_STANDARD_DAILY_HOURS
         return {
           name:        empName(r),
@@ -184,7 +355,7 @@ function SummaryTab() {
           diff:        round2(totalHrs - normalHrs),
         }
       })
-  }, [rows, search, workingDays, leaveCalendar, branchCodes])
+  }, [rows, search, workingDays, leaveCalendar, branchCodes, overrideMap])
 
   // Column totals row
   const totals = useMemo(() => {
@@ -193,7 +364,7 @@ function SummaryTab() {
     pivotRows.forEach(r => {
       Object.entries(r.dayMap).forEach(([d, slot]) => {
         const day  = parseInt(d, 10)
-        const hrs  = slot?.type === 'worked' ? (slot.hours || 0) : 0
+        const hrs  = (slot?.type === 'worked' || slot?.type === 'override') ? (slot.hours || 0) : 0
         dayMap[day] = round2((dayMap[day] || 0) + hrs)
       })
       totalHrs    += r.totalHrs
@@ -285,6 +456,25 @@ function SummaryTab() {
               className="flex items-center gap-1.5 px-3 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 transition">
               <HeroIcons.DocumentArrowDownIcon className="w-4 h-4" /> PDF
             </button>
+            {/* Public Holidays button — visible to everyone; edit controls appear only for HR */}
+            <button type="button"
+              onClick={() => setShowHolidayPanel(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition ${
+                showHolidayPanel
+                  ? 'bg-violet-600 text-white border-violet-700'
+                  : 'bg-violet-50 text-violet-700 border-violet-300 hover:bg-violet-100'
+              }`}>
+              <HeroIcons.CalendarDaysIcon className="w-4 h-4" />
+              {ATT_EDIT_COPY.holidayTitle}
+              {holidays.length > 0 && (
+                <span className="ml-1 bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {holidays.filter(h => {
+                    const d = h.date?.slice(0, 7)
+                    return d === `${year}-${String(month).padStart(2, '0')}`
+                  }).length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
         {/* Stats strip */}
@@ -292,12 +482,132 @@ function SummaryTab() {
           <span><span className="font-semibold text-slate-700">{busy ? '…' : pivotRows.length}</span> employees</span>
           <span><span className="font-semibold text-slate-700">{workingDays}</span> working days in period</span>
           <span>Standard <span className="font-semibold text-slate-700">{ATT_STANDARD_DAILY_HOURS} h/day</span></span>
+          {/* Legend for new cell types */}
+          {canEdit && (
+            <span className="flex items-center gap-1">
+              <HeroIcons.PencilSquareIcon className="w-3 h-3 text-violet-500" />
+              <span className="text-violet-600 font-semibold">HR corrected</span>
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded bg-violet-300 inline-block" />
+            <span className="text-violet-600 font-semibold">Public holiday</span>
+          </span>
           <span className="ml-auto flex items-center gap-1 text-[10px]">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
             {ATT_COPY.sourceTag}
           </span>
         </div>
       </div>
+
+      {/* ── Public Holiday Panel (collapsible) ── */}
+      {showHolidayPanel && (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-violet-800 flex items-center gap-2">
+              <HeroIcons.CalendarDaysIcon className="w-4 h-4" />
+              {ATT_EDIT_COPY.holidayTitle} — {year}
+            </h3>
+            {canEdit && (
+              <button type="button"
+                onClick={() => { setHEditing(null); setHForm({ date: '', name: '', name_ar: '', region: 'AE-AZ', note: '' }); setHMsg('') }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700">
+                <HeroIcons.PlusIcon className="w-3.5 h-3.5" />
+                {ATT_EDIT_COPY.holidayAddBtn}
+              </button>
+            )}
+          </div>
+
+          {/* Holiday add/edit form (HR only) */}
+          {canEdit && (hEditing !== undefined || hForm.date !== undefined) && (
+            <div className="bg-white border border-violet-200 rounded-lg p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{ATT_EDIT_COPY.holidayDate} *</label>
+                <input type="date" value={hForm.date}
+                  onChange={e => setHForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{ATT_EDIT_COPY.holidayName} *</label>
+                <input type="text" value={hForm.name} placeholder="UAE National Day"
+                  onChange={e => setHForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Arabic Name (optional)</label>
+                <input type="text" value={hForm.name_ar} placeholder="اليوم الوطني"
+                  onChange={e => setHForm(f => ({ ...f, name_ar: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{ATT_EDIT_COPY.holidayRegion}</label>
+                <select value={hForm.region} onChange={e => setHForm(f => ({ ...f, region: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500">
+                  <option value="AE-AZ">Abu Dhabi (UAE)</option>
+                  <option value="AE">UAE-wide</option>
+                  <option value="COMPANY">Company-specific</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-slate-600 mb-1">{ATT_EDIT_COPY.holidayNote}</label>
+                <input type="text" value={hForm.note} placeholder="Subject to moon sighting, etc."
+                  onChange={e => setHForm(f => ({ ...f, note: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500" />
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-3">
+                <button type="button" onClick={saveHoliday} disabled={hSaving || !hForm.date || !hForm.name}
+                  className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50">
+                  {hSaving ? ATT_EDIT_COPY.holidaySavingBtn : ATT_EDIT_COPY.holidaySaveBtn}
+                </button>
+                <button type="button" onClick={() => { setHEditing(undefined); setHForm({ date: '', name: '', name_ar: '', region: 'AE-AZ', note: '' }) }}
+                  className="px-4 py-2 text-slate-600 text-sm rounded-lg hover:bg-slate-100">
+                  {ATT_EDIT_COPY.cancelBtn}
+                </button>
+                {hMsg && <span className={`text-xs ${hMsg.includes('Failed') ? 'text-rose-600' : 'text-emerald-600'}`}>{hMsg}</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Holiday list */}
+          {holidays.length === 0 ? (
+            <p className="text-sm text-violet-500 italic">{ATT_EDIT_COPY.noHolidays}</p>
+          ) : (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {holidays.map(h => (
+                <div key={h.id} className="flex items-center justify-between bg-white border border-violet-100 rounded-lg px-3 py-2 text-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-violet-700 text-xs whitespace-nowrap">{h.date}</span>
+                    <span className="font-semibold text-slate-800 truncate">{h.name}</span>
+                    {h.name_ar && <span className="text-slate-400 text-xs truncate" dir="rtl">{h.name_ar}</span>}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                      h.source === 'government' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                    }`}>
+                      {h.source === 'government' ? ATT_EDIT_COPY.holidaySeeded : ATT_EDIT_COPY.holidayHrAdded}
+                    </span>
+                    {h.note && <span className="text-slate-400 text-xs italic truncate">{h.note}</span>}
+                  </div>
+                  {canEdit && (
+                    <div className="flex gap-1 ml-2 flex-shrink-0">
+                      <button type="button"
+                        onClick={() => { setHEditing(h.id); setHForm({ date: h.date, name: h.name, name_ar: h.name_ar || '', region: h.region || 'AE-AZ', note: h.note || '' }); setHMsg('') }}
+                        className="p-1.5 text-violet-600 hover:bg-violet-50 rounded" title={ATT_EDIT_COPY.holidayEditBtn}>
+                        <HeroIcons.PencilSquareIcon className="w-3.5 h-3.5" />
+                      </button>
+                      {h.source === 'hr_added' && (
+                        <button type="button"
+                          onClick={() => deactivateHoliday(h)}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded" title={ATT_EDIT_COPY.holidayDeactivateBtn}>
+                          <HeroIcons.TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error */}
       {err && (
@@ -330,14 +640,16 @@ function SummaryTab() {
                   {days.map(d => {
                     const sat = isSaturday(d)
                     const sun = isSunday(d)
+                    const ph  = !sat && !sun && isHoliday(d)
                     return (
                       <th key={d}
-                        title={sat ? 'Saturday' : sun ? 'Sunday' : ''}
+                        title={sat ? 'Saturday' : sun ? 'Sunday' : ph ? (holidayNameMap[cellDateStr(d)] || 'Public Holiday') : ''}
                         className={[
                           'py-2 text-center font-semibold border-r',
                           sat ? 'bg-amber-600 border-amber-700' : '',
                           sun ? 'bg-rose-700  border-rose-800'  : '',
-                          !sat && !sun ? 'border-slate-600' : '',
+                          ph  ? `${ATT_HOLIDAY_HEADER_BG} border-violet-800 ${ATT_HOLIDAY_HEADER_TEXT}` : '',
+                          !sat && !sun && !ph ? 'border-slate-600' : '',
                         ].join(' ')}
                         style={{ minWidth: '2.6rem' }}>
                         {d}
@@ -351,21 +663,23 @@ function SummaryTab() {
                   </th>
                   <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap bg-slate-800">Difference</th>
                 </tr>
-                {/* Row 2: Sa / Su labels */}
+                {/* Row 2: Sa / Su / PH labels */}
                 <tr className="bg-slate-600 text-[9px] uppercase tracking-wide">
                   <td className="sticky left-0 z-20 bg-slate-600 border-r border-slate-500" />
                   {days.map(d => {
                     const sat = isSaturday(d)
                     const sun = isSunday(d)
+                    const ph  = !sat && !sun && isHoliday(d)
                     return (
                       <td key={d}
                         className={[
                           'text-center border-r font-bold leading-none py-0.5',
                           sat ? 'bg-amber-500 text-white border-amber-600' : '',
                           sun ? 'bg-rose-600  text-white border-rose-700'  : '',
-                          !sat && !sun ? 'text-transparent border-slate-500' : '',
+                          ph  ? 'bg-violet-600 text-white border-violet-700' : '',
+                          !sat && !sun && !ph ? 'text-transparent border-slate-500' : '',
                         ].join(' ')}>
-                        {sat ? 'Sa' : sun ? 'Su' : '·'}
+                        {sat ? 'Sa' : sun ? 'Su' : ph ? ATT_HOLIDAY_SYMBOL : '·'}
                       </td>
                     )
                   })}
@@ -391,6 +705,7 @@ function SummaryTab() {
                       const sat    = isSaturday(d)
                       const sun    = isSunday(d)
                       const wkd    = sat || sun
+                      const ph     = !wkd && isHoliday(d)
                       const today  = new Date()
                       const isFuture = new Date(year, month - 1, d) > today
 
@@ -401,6 +716,17 @@ function SummaryTab() {
                             wkd ? (sat ? 'text-amber-700' : 'text-rose-700') : 'text-slate-700'
                           }`}>{slot.hours.toFixed(2)}</span>
                         )
+                      } else if (slot?.type === 'override') {
+                        // HR-corrected cell — show override_hours with pencil icon
+                        cellContent = (
+                          <span className="flex items-center justify-center gap-0.5">
+                            <span className="font-medium tabular-nums text-violet-700">{(slot.hours).toFixed(2)}</span>
+                            <HeroIcons.PencilSquareIcon
+                              className="w-2.5 h-2.5 text-violet-400 flex-shrink-0"
+                              title={`${ATT_EDIT_COPY.overrideIndicator}: ${slot.note || slot.reason || ''}`}
+                            />
+                          </span>
+                        )
                       } else if (slot?.type === 'leave') {
                         const lt = getLeaveType(slot.code)
                         cellContent = (
@@ -408,6 +734,13 @@ function SummaryTab() {
                             className={`text-[9px] font-bold px-0.5 py-0.5 rounded ${lt.cellBg} ${lt.cellText}`}
                             title={slot.name}
                           >{slot.code}</span>
+                        )
+                      } else if (ph) {
+                        cellContent = (
+                          <span
+                            className="text-[9px] font-bold text-violet-700 px-0.5"
+                            title={holidayNameMap[cellDateStr(d)] || 'Public Holiday'}
+                          >{ATT_HOLIDAY_SYMBOL}</span>
                         )
                       } else if (!wkd && !isFuture) {
                         cellContent = (
@@ -421,14 +754,22 @@ function SummaryTab() {
 
                       return (
                         <td key={d}
+                          onClick={canEdit && !wkd && !isFuture && slot?.type !== 'leave' ? () => openEdit(r, d) : undefined}
+                          title={canEdit && !wkd && !isFuture && slot?.type !== 'leave' ? 'Click to edit' : undefined}
                           className={[
-                            'py-1.5 text-center border-r',
+                            'py-1.5 text-center border-r relative',
                             sat ? 'bg-amber-50 border-amber-200' : '',
                             sun ? 'bg-rose-50  border-rose-200'  : '',
-                            !wkd ? 'border-slate-100' : '',
+                            ph  ? `${ATT_HOLIDAY_CELL_BG} ${ATT_HOLIDAY_CELL_BORDER}` : '',
+                            !wkd && !ph ? 'border-slate-100' : '',
+                            canEdit && !wkd && !isFuture && slot?.type !== 'leave' ? 'cursor-pointer hover:bg-violet-50/70 group' : '',
                           ].join(' ')}
                           style={{ minWidth: '2.6rem' }}>
                           {cellContent}
+                          {/* Hover pencil indicator for editable cells */}
+                          {canEdit && !wkd && !isFuture && slot?.type !== 'leave' && (
+                            <HeroIcons.PencilSquareIcon className="absolute top-0.5 right-0.5 w-2 h-2 text-violet-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
                         </td>
                       )
                     })}
@@ -501,102 +842,231 @@ function SummaryTab() {
           </div>
         </div>
       )}
+
+      {/* ── Attendance Override Edit Modal ── */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <HeroIcons.PencilSquareIcon className="w-4 h-4 text-violet-600" />
+                {ATT_EDIT_COPY.editTitle}
+              </h3>
+              <button type="button" onClick={() => setEditTarget(null)}
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-500">
+                <HeroIcons.XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {/* Context info */}
+              <div className="bg-violet-50 rounded-lg px-3 py-2 text-xs text-violet-700 flex items-start gap-2">
+                <HeroIcons.InformationCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                {ATT_EDIT_COPY.editHint}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs text-slate-500">
+                <div><span className="font-semibold text-slate-700">Employee:</span> {editTarget.employeeName}</div>
+                <div><span className="font-semibold text-slate-700">Date:</span> {editTarget.date}</div>
+              </div>
+              {/* Original hours (read-only) */}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{ATT_EDIT_COPY.originalHoursLabel}</label>
+                <input type="number" disabled value={editTarget.currentHours}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500" />
+              </div>
+              {/* Override hours */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{ATT_EDIT_COPY.overrideHoursLabel} *</label>
+                <input type="number" min={0} max={24} step={0.5}
+                  value={editHours} onChange={e => setEditHours(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500" />
+              </div>
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{ATT_EDIT_COPY.reasonLabel} *</label>
+                <select value={editReason} onChange={e => setEditReason(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500">
+                  {OVERRIDE_REASON_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Note */}
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{ATT_EDIT_COPY.noteLabel}</label>
+                <textarea rows={2} value={editNote} onChange={e => setEditNote(e.target.value)}
+                  placeholder="Explain the correction…"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 resize-none" />
+              </div>
+              {editMsg && (
+                <p className={`text-xs px-3 py-2 rounded-lg ${editMsg === ATT_EDIT_COPY.saveOk ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                  {editMsg}
+                </p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditTarget(null)}
+                disabled={editSaving}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">
+                {ATT_EDIT_COPY.cancelBtn}
+              </button>
+              <button type="button" onClick={saveOverride}
+                disabled={editSaving || editHours === ''}
+                className="px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg disabled:opacity-50">
+                {editSaving ? ATT_EDIT_COPY.savingBtn : ATT_EDIT_COPY.saveBtn}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ReportsTab — has local form state so defined as standalone component
+// ReportsTab — config-driven export catalogue
+// All report types, formats, and date scopes come from ATT_REPORT_TYPES in
+// hrAttendance.config.js — no changes needed here to add a new report type.
 // ─────────────────────────────────────────────────────────────────────────────
 function ReportsTab({ todayStr }) {
   const now = new Date()
-  const [dlDate,    setDlDate]    = useState(todayStr)
-  const [dlYear,    setDlYear]    = useState(now.getFullYear())
-  const [dlMonth,   setDlMonth]   = useState(now.getMonth() + 1)
-  const [busy,      setBusy]      = useState('')
-  const [exportMsg, setExportMsg] = useState('')
+  const [dlDate,  setDlDate]  = useState(todayStr)
+  const [dlYear,  setDlYear]  = useState(now.getFullYear())
+  const [dlMonth, setDlMonth] = useState(now.getMonth() + 1)
+  const [busy,    setBusy]    = useState('')   // key of currently exporting format
+  const [msgs,    setMsgs]    = useState({})   // { [formatKey]: 'ok' | 'err: ...' }
 
-  const download = useCallback(async (type) => {
-    setBusy(type); setExportMsg('')
+  // Soft-coded year options: current year + previous 2 years
+  const yearOpts = [dlYear - 2, dlYear - 1, dlYear].filter(y => y > 2020)
+
+  // Unified download dispatcher — reads method name from ATT_DOWNLOAD_METHOD_MAP
+  const download = useCallback(async (formatKey, scope) => {
+    const method = ATT_DOWNLOAD_METHOD_MAP[formatKey]
+    if (!method || !ts[method]) return
+    setBusy(formatKey)
+    setMsgs(prev => ({ ...prev, [formatKey]: '' }))
     try {
-      if (type === 'daily-excel')   await ts.downloadDailyExcel(dlDate)
-      if (type === 'monthly-excel') await ts.downloadMonthlyExcel(dlYear, dlMonth)
-      if (type === 'monthly-pdf')   await ts.downloadMonthlyPdf(dlYear, dlMonth)
-      setExportMsg(ATT_COPY.exportOk)
+      if (scope === 'date')  await ts[method](dlDate)
+      if (scope === 'month') await ts[method](dlYear, dlMonth)
+      if (scope === 'year')  await ts[method](dlYear)
+      setMsgs(prev => ({ ...prev, [formatKey]: 'ok' }))
     } catch (e) {
-      setExportMsg(`Export failed: ${e.message}`)
+      setMsgs(prev => ({ ...prev, [formatKey]: `err: ${e.message}` }))
     } finally {
       setBusy('')
     }
   }, [dlDate, dlYear, dlMonth])
 
+  // Colour palette for download buttons (soft-coded, maps to Tailwind classes)
+  const BTN_COLORS = {
+    emerald: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    rose:    'bg-rose-600    hover:bg-rose-700    text-white',
+    violet:  'bg-violet-600  hover:bg-violet-700  text-white',
+    blue:    'bg-blue-600    hover:bg-blue-700    text-white',
+    indigo:  'bg-indigo-600  hover:bg-indigo-700  text-white',
+  }
+
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 max-w-3xl">
+      {/* Info banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 flex items-start gap-2">
         <HeroIcons.InformationCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
         {ATT_COPY.exportHint}
       </div>
 
-      {exportMsg && (
-        <div className={`px-4 py-2.5 rounded-lg text-sm ${
-          exportMsg.startsWith('Export failed')
-            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-        }`}>{exportMsg}</div>
-      )}
+      {/* One card per report type — driven entirely by ATT_REPORT_TYPES config */}
+      {ATT_REPORT_TYPES.map(report => {
+        const Icon = HeroIcons[report.icon] || HeroIcons.ArrowDownTrayIcon
+        return (
+          <div key={report.id} className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+              <Icon className="w-4 h-4 text-slate-400" />
+              {report.label}
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">{report.description}</p>
 
-      {/* Daily */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-          <HeroIcons.CalendarDaysIcon className="w-4 h-4 text-slate-400" /> Daily Report
-        </h3>
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Date</label>
-            <input type="date" value={dlDate} max={todayStr}
-              onChange={e => setDlDate(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <button type="button" onClick={() => download('daily-excel')} disabled={!!busy}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-60 transition">
-            <HeroIcons.ArrowDownTrayIcon className="w-4 h-4" />
-            {busy === 'daily-excel' ? 'Exporting…' : 'Download Excel'}
-          </button>
-        </div>
-      </div>
+            {/* Optional amber note (e.g. "yearly may take a moment") */}
+            {report.note && (
+              <div className="mb-3 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <HeroIcons.ExclamationTriangleIcon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                {report.note}
+              </div>
+            )}
 
-      {/* Monthly */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-          <HeroIcons.CalendarIcon className="w-4 h-4 text-slate-400" /> Monthly Report
-        </h3>
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Month</label>
-            <select value={dlMonth} onChange={e => setDlMonth(Number(e.target.value))}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-              {MONTH_FULL.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-            </select>
+            <div className="flex flex-wrap items-end gap-3">
+              {/* Date picker — scope determines which control is shown */}
+              {report.scope === 'date' && (
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Date</label>
+                  <input type="date" value={dlDate} max={todayStr}
+                    onChange={e => setDlDate(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
+              )}
+              {report.scope === 'month' && (
+                <>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Month</label>
+                    <select value={dlMonth} onChange={e => setDlMonth(Number(e.target.value))}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      {MONTH_FULL.map((name, i) => (
+                        <option key={i + 1} value={i + 1}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Year</label>
+                    <select value={dlYear} onChange={e => setDlYear(Number(e.target.value))}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                      {yearOpts.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+              {report.scope === 'year' && (
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Year</label>
+                  <select value={dlYear} onChange={e => setDlYear(Number(e.target.value))}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    {yearOpts.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Download buttons — one per format in ATT_REPORT_TYPES[n].formats */}
+              {report.formats.map(fmt => {
+                const BtnIcon = HeroIcons[fmt.icon] || HeroIcons.ArrowDownTrayIcon
+                const isThis  = busy === fmt.key
+                const msg     = msgs[fmt.key]
+                return (
+                  <div key={fmt.key} className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => download(fmt.key, report.scope)}
+                      disabled={!!busy}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg disabled:opacity-60 transition ${BTN_COLORS[fmt.color] || BTN_COLORS.emerald}`}
+                    >
+                      {isThis
+                        ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                        : <BtnIcon className="w-4 h-4" />
+                      }
+                      {isThis ? 'Exporting…' : fmt.label}
+                    </button>
+                    {/* Per-button status message */}
+                    {msg && (
+                      <span className={`text-xs px-1 ${msg === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {msg === 'ok' ? ATT_COPY.exportOk : msg.replace('err: ', '')}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Year</label>
-            <select value={dlYear} onChange={e => setDlYear(Number(e.target.value))}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-              {[dlYear - 1, dlYear].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          <button type="button" onClick={() => download('monthly-excel')} disabled={!!busy}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-60 transition">
-            <HeroIcons.ArrowDownTrayIcon className="w-4 h-4" />
-            {busy === 'monthly-excel' ? 'Exporting…' : 'Download Excel'}
-          </button>
-          <button type="button" onClick={() => download('monthly-pdf')} disabled={!!busy}
-            className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 disabled:opacity-60 transition">
-            <HeroIcons.DocumentArrowDownIcon className="w-4 h-4" />
-            {busy === 'monthly-pdf' ? 'Exporting…' : 'Download PDF'}
-          </button>
-        </div>
-      </div>
+        )
+      })}
     </div>
   )
 }

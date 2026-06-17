@@ -15,7 +15,7 @@
  * `/admin/users` so we keep one authoritative write surface.
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
 import PeopleNav from '../../components/PeopleNav/PeopleNav'
@@ -52,6 +52,10 @@ import {
   HR_TIMESHEET_ACTIVITY_SORT,
   HR_TIMESHEET_MONTHLY_COLUMNS,
   HR_TIMESHEET_VISUALS,
+  HR_DEPT_TABLE_COLUMNS,
+  HR_DEPT_ACCENT_PALETTE,
+  HR_DEPT_COPY,
+  HR_DEPT_ACTIONS,
   formatYearsOfService,
   formatDateTime,
   formatDate,
@@ -480,9 +484,99 @@ const EmployeesTable = ({ employees, onSelect }) => (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-component: Departments Breakdown view
+// ─── Derive action subsets once (not per-render) ────────────────────────────
+const _TOOLBAR_ACTIONS    = HR_DEPT_ACTIONS.filter((a) => a.scope === 'toolbar')
+const _DEPT_HDR_ACTIONS   = HR_DEPT_ACTIONS.filter((a) => a.scope === 'dept_header')
+const _ROW_ACTIONS        = HR_DEPT_ACTIONS.filter((a) => a.scope === 'row')
+
+// Shared action button renderer — variant drives the visual style.
+const ActionBtn = ({ action, emp, dept, navigate }) => {
+  const href   = action.getHref(emp, dept)
+  const base   = 'inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold px-2.5 py-1.5 transition-colors'
+  const styles = {
+    primary:   `${base} bg-blue-600 text-white hover:bg-blue-700`,
+    secondary: `${base} bg-white border border-slate-200 text-slate-700 hover:border-blue-400 hover:text-blue-700`,
+    ghost:     `${base} text-slate-500 hover:text-blue-700 hover:bg-blue-50`,
+  }
+  const cls = styles[action.variant] || styles.secondary
+  return (
+    <button
+      type="button"
+      title={action.tooltip || action.label}
+      onClick={(e) => { e.stopPropagation(); navigate(href) }}
+      className={cls}
+    >
+      <Icon name={action.icon} className="w-3.5 h-3.5" />
+      {action.variant !== 'ghost' && <span>{action.label}</span>}
+    </button>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-const DepartmentsView = ({ employees, onSelect }) => {
+// Sub-component: Departments Breakdown view — rich tabular layout
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Render a single cell value based on its column type.
+const DeptCell = ({ col, emp, dept, onSelect, navigate }) => {
+  const raw = col.accessor(emp)
+
+  if (col.type === 'employee') {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(emp)}
+        className="flex items-center gap-2.5 text-left group"
+      >
+        <Avatar emp={emp} size="sm" />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-900 group-hover:text-blue-700 truncate leading-tight">
+            {fullName(emp)}
+          </div>
+          {emp.employee_id && (
+            <div className="text-[10px] text-slate-400 font-mono">{emp.employee_id}</div>
+          )}
+        </div>
+      </button>
+    )
+  }
+
+  if (col.type === 'actions') {
+    return (
+      <div className="flex items-center gap-1">
+        {_ROW_ACTIONS.map((action) => (
+          <ActionBtn key={action.id} action={action} emp={emp} dept={dept} navigate={navigate} />
+        ))}
+      </div>
+    )
+  }
+
+  if (col.type === 'status') {
+    const meta = getStatusMeta(raw)
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta?.className || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+        {meta?.label || raw || '—'}
+      </span>
+    )
+  }
+
+  if (col.type === 'datetime') {
+    return <span className="text-xs text-slate-500 whitespace-nowrap">{formatDateTime(raw)}</span>
+  }
+
+  if (col.type === 'email') {
+    return raw && raw !== '—'
+      ? <a href={`mailto:${raw}`} className="text-xs text-blue-600 hover:underline truncate block max-w-[180px]">{raw}</a>
+      : <span className="text-xs text-slate-400">—</span>
+  }
+
+  return <span className="text-xs text-slate-700 whitespace-nowrap">{raw ?? '—'}</span>
+}
+
+const DepartmentsView = ({ employees, onSelect, navigate }) => {
+  const [expandedDepts, setExpandedDepts] = useState(new Set())
+  const [deptSearch, setDeptSearch] = useState('')
+  const [sortKey, setSortKey] = useState('name')   // 'name' | 'count'
+
   const grouped = useMemo(() => {
     const map = new Map()
     for (const e of employees) {
@@ -490,43 +584,203 @@ const DepartmentsView = ({ employees, onSelect }) => {
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(e)
     }
-    return [...map.entries()].sort((a, b) => b[1].length - a[1].length)
-  }, [employees])
+    const entries = [...map.entries()]
+    if (sortKey === 'count') entries.sort((a, b) => b[1].length - a[1].length)
+    else entries.sort((a, b) => a[0].localeCompare(b[0]))
+    return entries
+  }, [employees, sortKey])
 
-  const maxCount = grouped.reduce((m, [, list]) => Math.max(m, list.length), 1)
+  const maxCount = useMemo(
+    () => grouped.reduce((m, [, list]) => Math.max(m, list.length), 1),
+    [grouped]
+  )
+
+  const allKeys = useMemo(() => grouped.map(([k]) => k), [grouped])
+  const allExpanded = expandedDepts.size === allKeys.length
+
+  const toggle = (dept) =>
+    setExpandedDepts((prev) => {
+      const next = new Set(prev)
+      next.has(dept) ? next.delete(dept) : next.add(dept)
+      return next
+    })
+
+  const toggleAll = () =>
+    setExpandedDepts(allExpanded ? new Set() : new Set(allKeys))
+
+  // Filtered per-dept search (applied when a dept is expanded)
+  const filterList = (list) => {
+    if (!deptSearch.trim()) return list
+    const q = deptSearch.toLowerCase()
+    return list.filter(
+      (e) =>
+        fullName(e).toLowerCase().includes(q) ||
+        (e.employee_id || '').toLowerCase().includes(q) ||
+        (e.job_title || '').toLowerCase().includes(q) ||
+        (getEmail(e) || '').toLowerCase().includes(q)
+    )
+  }
+
+  if (grouped.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+        <Icon name="BuildingOffice2Icon" className="w-10 h-10" />
+        <p className="text-sm">{HR_DEPT_COPY.emptyDept}</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      {grouped.map(([dept, list]) => (
-        <div key={dept} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="font-semibold text-slate-900">{dept}</div>
-              <div className="text-xs text-slate-500">{list.length} employees · {new Set(list.map(e => e.job_title).filter(Boolean)).size} distinct designations</div>
-            </div>
-            <div className="w-48 bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full" style={{ width: `${(list.length / maxCount) * 100}%` }} />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {list.slice(0, 30).map(emp => (
+    <div className="space-y-4">
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Inline dept search */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Icon name="MagnifyingGlassIcon" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={deptSearch}
+            onChange={(e) => setDeptSearch(e.target.value)}
+            placeholder={HR_DEPT_COPY.searchPlaceholder}
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* Sort toggle */}
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden text-xs">
+          {[{ id: 'name', label: 'A–Z' }, { id: 'count', label: 'By size' }].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setSortKey(opt.id)}
+              className={`px-3 py-1.5 font-medium transition-colors ${sortKey === opt.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Expand / Collapse all */}
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+        >
+          <Icon name={allExpanded ? 'ChevronUpIcon' : 'ChevronDownIcon'} className="w-3.5 h-3.5" />
+          {allExpanded ? HR_DEPT_COPY.collapseAll : HR_DEPT_COPY.expandAll}
+        </button>
+
+        <span className="text-xs text-slate-500 mr-auto">
+          {grouped.length} departments · {employees.length} {HR_DEPT_COPY.employees}
+        </span>
+
+        {/* Toolbar-scoped actions (e.g. global Add Employee) */}
+        {_TOOLBAR_ACTIONS.map((action) => (
+          <ActionBtn key={action.id} action={action} emp={null} dept={null} navigate={navigate} />
+        ))}
+      </div>
+
+      {/* ── Department cards ── */}
+      {grouped.map(([dept, list], idx) => {
+        const accent = HR_DEPT_ACCENT_PALETTE[idx % HR_DEPT_ACCENT_PALETTE.length]
+        const isOpen = expandedDepts.has(dept)
+        const filtered = filterList(list)
+        const distinctTitles = new Set(list.map((e) => e.job_title).filter(Boolean)).size
+        const pct = Math.round((list.length / maxCount) * 100)
+
+        return (
+          <div
+            key={dept}
+            className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+          >
+            {/* ─ Department header row ─ */}
+            <div className="w-full flex items-center gap-4 px-5 py-4">
+              {/* Clickable left section (toggle expand) */}
               <button
-                key={emp.id}
                 type="button"
-                onClick={() => onSelect(emp)}
-                title={`${fullName(emp)} · ${emp.job_title || '—'}`}
-                className={`flex items-center gap-2 px-2 py-1 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-full text-xs ${anim('transition')}`}
+                onClick={() => toggle(dept)}
+                className="flex items-center gap-4 flex-1 min-w-0 text-left hover:bg-slate-50 rounded-lg -m-1 p-1 transition-colors"
               >
-                <Avatar emp={emp} size="sm" />
-                <span className="font-medium text-slate-700">{fullName(emp)}</span>
+                {/* Colour swatch */}
+                <div className={`w-1 self-stretch rounded-full bg-gradient-to-b ${accent.bg} flex-shrink-0`} style={{ minHeight: '2.5rem' }} />
+
+                {/* Name + meta */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-bold text-slate-900">{dept}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${accent.pill}`}>
+                      {list.length} {HR_DEPT_COPY.employees}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {distinctTitles} {HR_DEPT_COPY.designations}
+                    </span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="mt-2 w-full max-w-xs h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${accent.bg}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Chevron */}
+                <Icon
+                  name={isOpen ? 'ChevronUpIcon' : 'ChevronDownIcon'}
+                  className="w-4 h-4 text-slate-400 flex-shrink-0"
+                />
               </button>
-            ))}
-            {list.length > 30 && (
-              <span className="px-2 py-1 text-xs text-slate-500">+{list.length - 30} more</span>
+
+              {/* Dept-header-scoped actions (e.g. Add to dept) */}
+              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                {_DEPT_HDR_ACTIONS.map((action) => (
+                  <ActionBtn key={action.id} action={action} emp={null} dept={dept} navigate={navigate} />
+                ))}
+              </div>
+            </div>
+
+            {/* ─ Employee table (expanded) ─ */}
+            {isOpen && (
+              <div className="border-t border-slate-100 overflow-x-auto">
+                {filtered.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-slate-400">
+                    {deptSearch ? `No match for "${deptSearch}"` : HR_DEPT_COPY.noEmployees}
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        {HR_DEPT_TABLE_COLUMNS.map((col) => (
+                          <th
+                            key={col.id}
+                            className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap ${col.minWidth}`}
+                          >
+                            {col.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filtered.map((emp, ri) => (
+                        <tr
+                          key={emp.id || ri}
+                          className="hover:bg-blue-50/40 transition-colors"
+                        >
+                          {HR_DEPT_TABLE_COLUMNS.map((col) => (
+                            <td key={col.id} className="px-4 py-2.5 align-middle">
+                              <DeptCell col={col} emp={emp} dept={dept} onSelect={onSelect} navigate={navigate} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -1264,6 +1518,7 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
 // Main page component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HREmployees() {
+  const navigate = useNavigate()
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1630,7 +1885,7 @@ export default function HREmployees() {
               <EmployeesTable employees={paginated} onSelect={openEmp} />
             )}
             {viewMode === 'dept' && (
-              <DepartmentsView employees={filteredEmployees} onSelect={openEmp} />
+              <DepartmentsView employees={filteredEmployees} onSelect={openEmp} navigate={navigate} />
             )}
 
             {/* Pagination */}

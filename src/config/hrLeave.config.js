@@ -176,3 +176,31 @@ export const tomorrowISO = () => {
   d.setDate(d.getDate() + 1)
   return d.toISOString().slice(0, 10)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. LEAVE YEAR — always the current calendar year. Single source of truth.
+//    Overridable via env var for testing a specific year without code changes.
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEAVE_YEAR = Number(import.meta.env?.VITE_LEAVE_YEAR || new Date().getFullYear())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. DEFAULT ANNUAL ENTITLEMENT — fallback when the API doesn't return one.
+//    Overridable via env var for different entities.
+// ─────────────────────────────────────────────────────────────────────────────
+export const DEFAULT_ANNUAL_ENTITLEMENT = Number(
+  import.meta.env?.VITE_DEFAULT_ANNUAL_ENTITLEMENT || 22
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. ESS LEAVE TYPE CONFIG — soft-coded entitlements for the Self-Service
+//     portal. Keyed by canonical leave category (matches API category field).
+//     Colours here use a distinct palette from DEFAULT_LEAVE_TYPES so that
+//     the bar-chart view stays visually separate from the badge/table views.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ESS_LEAVE_TYPE_CONFIG = {
+  annual:       { label: 'Annual Leave',       color: '#3b82f6', bg: 'bg-blue-50',    text: 'text-blue-700',    bar: 'bg-blue-500',    entitlement: DEFAULT_ANNUAL_ENTITLEMENT },
+  sick:         { label: 'Sick Leave',         color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', entitlement: 15 },
+  emergency:    { label: 'Emergency Leave',    color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500',   entitlement: 3  },
+  compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5  },
+  unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0  },
+}

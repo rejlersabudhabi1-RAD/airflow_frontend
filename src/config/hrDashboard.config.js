@@ -87,6 +87,17 @@ export const HR_DASHBOARD_COPY = {
   emptyAIChampion: 'No AI Champion data available yet. Activity needs to accumulate over the period.',
   aiChampionForbidden: 'AI Champion analytics are restricted to administrators. Open the full console for details.',
   aiChampionLinkLabel: 'Open full AI Champion console',
+  // Pending actions inbox
+  sectionPending: 'Pending Actions',
+  sectionPendingHint: 'Items from Payroll, Leave & Salary requiring your attention right now.',
+  emptyPending: 'All clear — no pending actions at this time.',
+  notifTitle: 'Pending Notifications',
+  notifEmpty: 'No pending notifications.',
+  notifClear: 'All clear',
+  // Payroll snapshot
+  sectionPayrollSnapshot: 'Payroll & Leave Snapshot',
+  sectionPayrollSnapshotHint: 'Live summary from the Payroll Engine (4.2) and Self-Service Portal (4.3).',
+  payrollSnapshotError: 'Payroll snapshot unavailable — check /hr/payroll.',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +194,144 @@ export const HR_DASHBOARD_SECTIONS = {
   recentJoiners: true,
   quickLinks: true,
   aiChampion: true,
+  pendingActions: true,    // Inbox: leave + alerts + salary + slips
+  payrollSnapshot: true,   // Second KPI row from 4.2 + 4.3 data
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4c. PENDING ACTION TYPES  — defines each notification category.
+//     `route` is the /hr/payroll URL (tab driven via query param).
+//     `priority` controls sort order in the inbox (lower = more urgent).
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DASHBOARD_PENDING_TYPES = [
+  {
+    id:       'alerts',
+    label:    'Audit Alerts',
+    icon:     'ExclamationTriangleIcon',
+    route:    '/hr/payroll?tab=auditor',
+    priority: 1,
+    bg:    'bg-rose-50',
+    border:'border-rose-200',
+    text:  'text-rose-700',
+    dot:   'bg-rose-500',
+    badge: 'bg-rose-100 text-rose-800 border-rose-200',
+    actionLabel: 'View alerts',
+    zeroMsg:     'No open alerts',
+    singularMsg: 'audit alert needs attention',
+    pluralMsg:   'audit alerts need attention',
+    getItems:    (d) => Array.isArray(d?.pendingAlerts)     ? d.pendingAlerts.slice(0, 3)     : [],
+    getCount:    (d) => Number(d?.pendingAlertsCount  ?? d?.pendingAlerts?.length  ?? 0),
+    getRowLabel: (r) => r.description || r.alert_type || 'Audit alert',
+    getRowSub:   (r) => r.employee_name || r.created_at?.slice(0, 10) || '',
+  },
+  {
+    id:       'leave',
+    label:    'Leave Requests',
+    icon:     'CalendarDaysIcon',
+    route:    '/hr/payroll?tab=leave',
+    priority: 2,
+    bg:    'bg-amber-50',
+    border:'border-amber-200',
+    text:  'text-amber-700',
+    dot:   'bg-amber-500',
+    badge: 'bg-amber-100 text-amber-800 border-amber-200',
+    actionLabel: 'Review requests',
+    zeroMsg:     'No pending leave requests',
+    singularMsg: 'leave request awaiting approval',
+    pluralMsg:   'leave requests awaiting approval',
+    getItems:    (d) => Array.isArray(d?.pendingLeave)       ? d.pendingLeave.slice(0, 3)       : [],
+    getCount:    (d) => Number(d?.pendingLeaveCount   ?? d?.pendingLeave?.length   ?? 0),
+    getRowLabel: (r) => r.employee_name || 'Employee',
+    getRowSub:   (r) => `${r.leave_type_detail?.code || r.leave_type || ''} · ${r.start_date || ''}${r.end_date && r.end_date !== r.start_date ? ` – ${r.end_date}` : ''}`.trim(),
+  },
+  {
+    id:       'salary',
+    label:    'Salary Approvals',
+    icon:     'BanknotesIcon',
+    route:    '/hr/payroll?tab=salary',
+    priority: 3,
+    bg:    'bg-purple-50',
+    border:'border-purple-200',
+    text:  'text-purple-700',
+    dot:   'bg-purple-500',
+    badge: 'bg-purple-100 text-purple-800 border-purple-200',
+    actionLabel: 'Review structures',
+    zeroMsg:     'No pending salary approvals',
+    singularMsg: 'salary structure awaiting approval',
+    pluralMsg:   'salary structures awaiting approval',
+    getItems:    (d) => Array.isArray(d?.pendingSalary)      ? d.pendingSalary.slice(0, 3)      : [],
+    getCount:    (d) => Number(d?.pendingSalaryCount  ?? d?.pendingSalary?.length  ?? 0),
+    getRowLabel: (r) => r.employee_name || r.employee_code || 'Employee',
+    getRowSub:   (r) => `Effective ${r.effective_date || '—'} · ${r.currency || 'AED'} ${Number(r.net_salary || 0).toLocaleString()}`,
+  },
+  {
+    id:       'slips',
+    label:    'Salary Slip Approvals',
+    icon:     'DocumentTextIcon',
+    route:    '/hr/payroll?tab=engine',
+    priority: 4,
+    bg:    'bg-indigo-50',
+    border:'border-indigo-200',
+    text:  'text-indigo-700',
+    dot:   'bg-indigo-500',
+    badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    actionLabel: 'Review slips',
+    zeroMsg:     'No pending salary slips',
+    singularMsg: 'salary slip pending approval',
+    pluralMsg:   'salary slips pending approval',
+    getItems:    (d) => Array.isArray(d?.pendingSlips)       ? d.pendingSlips.slice(0, 3)       : [],
+    getCount:    (d) => Number(d?.pendingSlipsCount   ?? d?.pendingSlips?.length   ?? 0),
+    getRowLabel: (r) => r.employee_name || r.employee_code || 'Employee',
+    getRowSub:   (r) => `${r.month_name || ''} ${r.year || ''}`.trim() || r.period || '—',
+  },
+]
+
+// Total pending count across all types (used for the bell badge).
+export const buildTotalPending = (pending) =>
+  HR_DASHBOARD_PENDING_TYPES.reduce((sum, t) => sum + t.getCount(pending), 0)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4d. PAYROLL SNAPSHOT KPIs — second row derived from payroll/leave/salary APIs
+//     Each `compute` receives { payrollSummary, pendingLeaveCount, pendingAlertsCount, pendingSalaryCount, pendingSlipsCount, salarySummary }
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DASHBOARD_PAYROLL_KPIS = [
+  {
+    id:      'leave_pending',
+    label:   'Pending Leave',
+    sub:     'Awaiting HR approval',
+    icon:    'CalendarDaysIcon',
+    accent:  'from-amber-400 to-orange-500',
+    urgent:  true,
+    compute: (d) => d.pendingLeaveCount ?? null,
+  },
+  {
+    id:      'audit_alerts',
+    label:   'Open Alerts',
+    sub:     'Payroll audit flags',
+    icon:    'ExclamationTriangleIcon',
+    accent:  'from-rose-500 to-red-600',
+    urgent:  true,
+    compute: (d) => d.pendingAlertsCount ?? null,
+  },
+  {
+    id:      'salary_pending',
+    label:   'Salary Approvals',
+    sub:     'Structures & slips',
+    icon:    'BanknotesIcon',
+    accent:  'from-purple-500 to-violet-600',
+    urgent:  true,
+    compute: (d) => (d.pendingSalaryCount ?? 0) + (d.pendingSlipsCount ?? 0) || null,
+  },
+  {
+    id:      'payroll_runs',
+    label:   'Payroll Runs',
+    sub:     'This month (from engine)',
+    icon:    'CpuChipIcon',
+    accent:  'from-teal-500 to-cyan-600',
+    urgent:  false,
+    compute: (d) => d.payrollSummary?.total_runs ?? d.payrollSummary?.payroll_runs ?? null,
+  },
+]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4b. AI CHAMPION SPOTLIGHT — configuration for the embedded AI Champion card.
@@ -421,12 +569,28 @@ export const HR_DASHBOARD_QUICK_LINKS = [
     tone: 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100',
   },
   {
+    id: 'payroll',
+    label: 'Payroll & Salary',
+    description: 'Attendance, leave, payroll engine & salary management',
+    to: '/hr/payroll',
+    icon: 'BanknotesIcon',
+    tone: 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100',
+  },
+  {
+    id: 'selfservice',
+    label: 'Self-Service Portal',
+    description: 'Personal leave, attendance, timesheet & payroll',
+    to: '/hr/leave',
+    icon: 'SparklesIcon',
+    tone: 'bg-violet-50 text-violet-700 border-violet-100 hover:bg-violet-100',
+  },
+  {
     id: 'timesheet',
     label: 'Time Sheet Analytics',
     description: 'Live, daily and monthly biometric reports',
     to: '/hr/employees?tab=timesheet',
     icon: 'ClockIcon',
-    tone: 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100',
+    tone: 'bg-cyan-50 text-cyan-700 border-cyan-100 hover:bg-cyan-100',
   },
   {
     id: 'admin',
@@ -506,12 +670,15 @@ export default {
   HR_DASHBOARD_STALE_PUNCH_MIN,
   HR_DASHBOARD_COPY,
   HR_DASHBOARD_KPIS,
+  HR_DASHBOARD_PAYROLL_KPIS,
   HR_DASHBOARD_SECTIONS,
   HR_DASHBOARD_AI_CHAMPION,
   HR_DASHBOARD_QUICK_LINKS,
   HR_DASHBOARD_STATUS_PALETTE,
+  HR_DASHBOARD_PENDING_TYPES,
   getAIChampionTierStyle,
   buildAIChampionPodium,
+  buildTotalPending,
   formatAICost,
   HR_DISCIPLINES,
   buildDepartmentBreakdown,

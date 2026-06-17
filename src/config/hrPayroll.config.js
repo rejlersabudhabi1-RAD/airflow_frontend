@@ -12,12 +12,13 @@
 // 1. TABS
 // ─────────────────────────────────────────────────────────────────────────────
 export const PAYROLL_TABS = [
-  { id: 'dashboard',   label: 'Dashboard',      icon: 'ChartBarIcon',               description: 'Executive KPI overview' },
-  { id: 'attendance',  label: 'Attendance',     icon: 'ClipboardDocumentCheckIcon', description: 'HR Attendance — Daily · Monthly · Yearly' },
-  { id: 'leave',       label: 'Leave',          icon: 'CalendarDaysIcon',           description: 'Leave balances imported from HR Excel' },
-  { id: 'engine',      label: 'Payroll Engine', icon: 'CpuChipIcon',                description: 'Salary slips & approvals' },
-  { id: 'auditor',     label: 'AI Auditor',     icon: 'MagnifyingGlassIcon',        description: 'Anomaly detection' },
-  { id: 'assistant',   label: 'AI Assistant',   icon: 'ChatBubbleLeftIcon',         description: 'Payroll chatbot' },
+  { id: 'dashboard',  label: 'Dashboard',         icon: 'ChartBarIcon',               description: 'Executive KPI overview' },
+  { id: 'attendance', label: 'Attendance',         icon: 'ClipboardDocumentCheckIcon', description: 'HR Attendance — Daily · Monthly · Yearly' },
+  { id: 'leave',      label: 'Leave',              icon: 'CalendarDaysIcon',           description: 'Leave balances imported from HR Excel' },
+  { id: 'engine',     label: 'Payroll Engine',     icon: 'CpuChipIcon',                description: 'Salary slips & approvals' },
+  { id: 'salary',     label: 'Salary Management', icon: 'BanknotesIcon',              description: 'Employee salary structures & history' },
+  { id: 'auditor',    label: 'AI Auditor',         icon: 'MagnifyingGlassIcon',        description: 'Anomaly detection' },
+  { id: 'assistant',  label: 'AI Assistant',       icon: 'ChatBubbleLeftIcon',         description: 'Payroll chatbot' },
 ]
 export const PAYROLL_DEFAULT_TAB = 'dashboard'
 
@@ -460,3 +461,120 @@ export const severityTone = (s) =>
 
 export const slipStatusMeta = (s) => PAYROLL_SLIP_STATUS[s] ?? { label: s, tone: 'bg-slate-100 text-slate-600 border-slate-200' }
 export const runStatusMeta  = (s) => PAYROLL_RUN_STATUS[s]  ?? { label: s, tone: 'bg-slate-100 text-slate-600' }
+
+
+// =============================================================================
+// Salary Management
+// =============================================================================
+
+// ── Status map ──────────────────────────────────────────────────────────────
+export const SALARY_STATUS = {
+  DRAFT:            { label: 'Draft',            tone: 'bg-slate-100 text-slate-600 border-slate-200',   dot: 'bg-slate-400'   },
+  PENDING_APPROVAL: { label: 'Pending Approval', tone: 'bg-amber-100 text-amber-700 border-amber-200',   dot: 'bg-amber-400'   },
+  APPROVED:         { label: 'Approved',         tone: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  REJECTED:         { label: 'Rejected',         tone: 'bg-rose-100 text-rose-700 border-rose-200',     dot: 'bg-rose-500'    },
+}
+export const salaryStatusMeta = (s) => SALARY_STATUS[s] ?? { label: s, tone: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' }
+
+// ── Component categories ─────────────────────────────────────────────────────
+export const SALARY_COMPONENT_CATEGORIES = [
+  { value: 'allowance', label: 'Allowance',       description: 'Added to gross salary' },
+  { value: 'deduction', label: 'Deduction',       description: 'Subtracted from gross salary' },
+  { value: 'gross',     label: 'Gross Component', description: 'Counted as part of gross salary' },
+]
+
+// ── Table column definitions ─────────────────────────────────────────────────
+export const SALARY_STRUCTURE_COLUMNS = [
+  { key: 'employee_code', label: 'Employee Code', sortable: true },
+  { key: 'employee_name', label: 'Name',          sortable: true },
+  { key: 'department',    label: 'Department',    sortable: true },
+  { key: 'effective_date',label: 'Effective',     sortable: true },
+  { key: 'currency',      label: 'CCY',           sortable: false },
+  { key: 'basic_salary',  label: 'Basic',         sortable: true, numeric: true },
+  { key: 'total_gross',   label: 'Gross',         sortable: true, numeric: true },
+  { key: 'total_deductions', label: 'Deductions', sortable: false, numeric: true },
+  { key: 'net_salary',    label: 'Net',           sortable: true, numeric: true },
+  { key: 'status',        label: 'Status',        sortable: true },
+]
+
+export const SALARY_HISTORY_COLUMNS = [
+  { key: 'employee_code',  label: 'Code',           sortable: true },
+  { key: 'employee_name',  label: 'Name',           sortable: true },
+  { key: 'change_date',    label: 'Effective Date', sortable: true },
+  { key: 'previous_net',   label: 'Previous Net',   sortable: false, numeric: true },
+  { key: 'new_net',        label: 'New Net',        sortable: false, numeric: true },
+  { key: 'change_percent', label: 'Change %',       sortable: true,  numeric: true },
+  { key: 'change_reason',  label: 'Reason',         sortable: false },
+  { key: 'approved_by_name', label: 'Approved By',  sortable: false },
+  { key: 'created_at',     label: 'Recorded',       sortable: true },
+]
+
+// ── KPI tiles ────────────────────────────────────────────────────────────────
+export const SALARY_SUMMARY_KPIS = [
+  { id: 'total_employees',    label: 'Employees on Record',  icon: 'UsersIcon',        color: 'text-blue-600',    bg: 'bg-blue-50'    },
+  { id: 'total_payroll',      label: 'Total Net Payroll',    icon: 'BanknotesIcon',    color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  { id: 'avg_salary',         label: 'Avg Net Salary',       icon: 'ChartBarIcon',     color: 'text-purple-600',  bg: 'bg-purple-50'  },
+  { id: 'pending_approvals',  label: 'Pending Approvals',    icon: 'ClockIcon',        color: 'text-amber-600',   bg: 'bg-amber-50'   },
+]
+
+// ── RBAC ─────────────────────────────────────────────────────────────────────
+export const SALARY_APPROVAL_ROLE_CODES = ['senior_hr', 'admin', 'superadmin', 'manager']
+
+/**
+ * Returns true if the user may approve/reject salary structures.
+ * Mirrors canEditAttendance — checks nested .user.is_superuser and roles[].
+ */
+export function canApproveSalary(profile, authUser) {
+  const djangoUser           = authUser?.user ?? authUser
+  const djangoUserFromProfile = profile?.user  ?? profile
+  if (djangoUser?.is_superuser || djangoUser?.is_staff)       return true
+  if (djangoUserFromProfile?.is_superuser || djangoUserFromProfile?.is_staff) return true
+
+  const allRoles = [
+    ...(Array.isArray(profile?.roles)  ? profile.roles  : []),
+    ...(Array.isArray(authUser?.roles) ? authUser.roles : []),
+  ]
+  return allRoles.some(r => {
+    const code = (r?.code || '').toLowerCase()
+    return SALARY_APPROVAL_ROLE_CODES.some(c => code === c || code.startsWith(c))
+  })
+}
+
+// ── UI copy ───────────────────────────────────────────────────────────────────
+export const SALARY_COPY = {
+  pageTitle:           'Salary Management',
+  pageSubtitle:        'Manage employee salary structures, review components and approve changes',
+  tabStructures:       'Salary Structures',
+  tabComponents:       'Component Library',
+  tabHistory:          'Salary History',
+  btnNew:              'New Structure',
+  btnNewComponent:     'New Component',
+  btnSubmit:           'Submit for Approval',
+  btnApprove:          'Approve',
+  btnReject:           'Reject',
+  btnEdit:             'Edit',
+  confirmApprove:      'Approve this salary structure? This will activate it and archive the previous one.',
+  confirmReject:       'Reject this salary structure?',
+  confirmDelete:       'Deactivate this record? This cannot be undone.',
+  emptyStructures:     'No salary structures found.',
+  emptyComponents:     'No salary components defined. Add one to get started.',
+  emptyHistory:        'No salary history recorded yet.',
+  successCreate:       'Salary structure created.',
+  successUpdate:       'Salary structure updated.',
+  successSubmit:       'Submitted for approval.',
+  successApprove:      'Salary structure approved and activated.',
+  successReject:       'Salary structure rejected.',
+  successComponentSave:'Component saved.',
+  pendingBadge:        'Pending Approvals',
+  labelBasic:          'Basic Salary',
+  labelGross:          'Total Gross',
+  labelDeductions:     'Total Deductions',
+  labelNet:            'Net Salary',
+  labelEffective:      'Effective Date',
+  labelCurrency:       'Currency',
+  labelDepartment:     'Department',
+  labelComponents:     'Salary Components',
+  labelReason:         'Review Note',
+  noteReadOnly:        'Approved structures are read-only. Create a new structure to make changes.',
+  noteApprovalRequired:'Requires Senior HR / Manager approval before activation.',
+}
