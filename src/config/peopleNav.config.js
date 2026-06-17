@@ -44,6 +44,15 @@ export const PEOPLE_NAV_TABS = [
     accent: 'from-emerald-500 to-teal-500',
   },
   {
+    id: 'ess',
+    label: 'My Workspace',
+    description: 'Leave, attendance, payroll & personal analytics',
+    to: '/hr/leave',
+    icon: 'SparklesIcon',
+    visibility: 'always',
+    accent: 'from-blue-500 to-cyan-500',
+  },
+  {
     id: 'admin',
     label: 'User Management',
     description: 'Roles, modules & access control',

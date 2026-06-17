@@ -55,6 +55,7 @@ import SalarySlip from './pages/Finance/SalarySlip'
 import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
 import Payroll from './pages/HR/Payroll'
+import EmployeeSelfService from './pages/HR/EmployeeSelfService'
 // import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import FinanceHub from './pages/Finance/FinanceHub'
@@ -639,6 +640,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Payroll />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="hr/leave"
+          element={
+            <ProtectedRoute>
+              <EmployeeSelfService />
             </ProtectedRoute>
           }
         />
