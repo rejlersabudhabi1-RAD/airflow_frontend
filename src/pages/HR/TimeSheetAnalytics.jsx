@@ -349,8 +349,28 @@ const LiveTab = ({ refreshTick }) => {
   if (data?.configured === false) {
     return null  // The HealthBanner above already explains; no extra noise here.
   }
+
+  // Soft-coded: when the rolling window returns 0 rows (e.g. sync agent
+  // hasn't run yet today, or timezone boundary mismatch), show a helpful
+  // diagnostic banner instead of a silent empty table.
+  const windowFrom = data?.window_from
+  const fmtWindowFrom = windowFrom
+    ? new Date(windowFrom).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    : null
+
   return (
     <div className="space-y-4">
+      {/* ── Soft-coded window label — always show what time range is covered ── */}
+      {fmtWindowFrom && (
+        <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+          <HeroIcons.ClockIcon className="w-3.5 h-3.5 text-slate-400" />
+          {TIMESHEET_COPY.liveWindowPrefix}{' '}
+          <span className="font-semibold text-slate-700">{fmtWindowFrom}</span>
+          {data?.lookback_hours && (
+            <span className="ml-1 text-slate-400">({data.lookback_hours} h window)</span>
+          )}
+        </div>
+      )}
       <LiveKpis
         summary={data?.summary}
         asOf={data?.as_of}
@@ -383,10 +403,33 @@ const LiveTab = ({ refreshTick }) => {
           </button>
         </div>
       )}
+
+      {/* ── Soft-coded no-data diagnostic banner (shown only when 0 rows + no filter) ── */}
+      {allRows.length === 0 && !activeFilter && !q && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <HeroIcons.ExclamationTriangleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-amber-800">{TIMESHEET_COPY.liveNoDataTitle}</div>
+            <div className="text-xs text-amber-700 mt-1">{TIMESHEET_COPY.liveNoDataSubtitle}</div>
+            {fmtWindowFrom && (
+              <div className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                <HeroIcons.ClockIcon className="w-3 h-3" />
+                Window checked: {fmtWindowFrom} →{' '}
+                {data?.as_of ? new Date(data.as_of).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : TIMESHEET_COPY.liveSyncUnknown}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <DataTable
         rows={filteredRows}
         columns={TIMESHEET_LIVE_COLUMNS}
-        emptyMessage={q ? `No rows match "${rowSearch}".` : activeFilter ? `No employees match "${LIVE_FILTER_LABELS[activeFilter]}".` : 'No punches recorded today yet.'}
+        emptyMessage={
+          q              ? `No rows match "${rowSearch}".` :
+          activeFilter   ? `No employees match "${LIVE_FILTER_LABELS[activeFilter]}".` :
+          /* else */       TIMESHEET_COPY.liveNoDataTitle
+        }
       />
     </div>
   )

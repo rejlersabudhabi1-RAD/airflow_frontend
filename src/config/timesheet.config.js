@@ -217,4 +217,16 @@ export const TIMESHEET_COPY = {
   mirrorErrorSubtitle:
     'The Postgres mirror table is unreachable. Check the backend service status and database connection.',
   mirrorOkLatestPrefix: 'Last event synced:',
+
+  // Live tab — no punches in the rolling window
+  // (separate from mirrorEmpty which means no events in the DB at all)
+  liveNoDataTitle: 'No punch events in the last window',
+  liveNoDataSubtitle:
+    'The sync agent pushes data hourly from the office biometric system. ' +
+    'If you just arrived, data may appear after the next sync cycle. ' +
+    'Check the Setup tab to confirm the agent is running and events are being received.',
+  // Soft-coded prefix shown next to the rolling-window cutoff time
+  liveWindowPrefix: 'Showing punches since',
+  // Soft-coded fallback when as_of / window_from are not in the response
+  liveSyncUnknown: 'Sync time unknown',
 }
