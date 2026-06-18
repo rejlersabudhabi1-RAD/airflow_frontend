@@ -6,7 +6,7 @@
  * Data comes entirely from the existing timesheet service (SQL Server biometric).
  * All config, thresholds, colours and labels live in hrAttendance.config.js.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
@@ -83,6 +83,188 @@ const EmptyState = ({ icon: IconName = 'InboxIcon', msg, loading, loadingMsg }) 
     <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400 text-sm">
       <Icon className="w-10 h-10 mx-auto mb-2 opacity-40" />
       {msg || ATT_COPY.noData}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DownloadReportPanel
+// Drop-down panel driven entirely by ATT_REPORT_TYPES + ATT_DOWNLOAD_METHOD_MAP.
+// Adding a new report type → edit the config only; no code changes here.
+// Props: year, month — current toolbar selection (defaults for month/year scopes).
+// ─────────────────────────────────────────────────────────────────────────────
+const COLOR_MAP = {
+  emerald: { btn: 'bg-emerald-600 hover:bg-emerald-700 text-white', busy: 'bg-emerald-200 text-emerald-600' },
+  rose:    { btn: 'bg-rose-600    hover:bg-rose-700    text-white', busy: 'bg-rose-200    text-rose-600'    },
+  violet:  { btn: 'bg-violet-600  hover:bg-violet-700  text-white', busy: 'bg-violet-200  text-violet-600'  },
+  blue:    { btn: 'bg-blue-600    hover:bg-blue-700    text-white', busy: 'bg-blue-200    text-blue-600'    },
+  indigo:  { btn: 'bg-indigo-600  hover:bg-indigo-700  text-white', busy: 'bg-indigo-200  text-indigo-600'  },
+}
+
+// Soft-coded year options in the panel — covers 3 years back to current
+const PANEL_YEAR_RANGE = Number(import.meta.env?.VITE_DL_PANEL_YEAR_RANGE || 3)
+
+function DownloadReportPanel({ year, month, tsService }) {
+  const [open,   setOpen]   = useState(false)
+  const [busy,   setBusy]   = useState('')  // tracks which key is downloading
+  const ref = useRef(null)
+
+  // Scope-specific param state — default to current toolbar values
+  const today = new Date().toISOString().slice(0, 10)
+  const [params, setParams] = useState({
+    date:  today,
+    month: month,
+    year:  year,
+  })
+
+  // Keep params in sync when outer year/month toolbar changes
+  useEffect(() => { setParams(p => ({ ...p, year, month })) }, [year, month])
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handle = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  const yearOpts = useMemo(() => {
+    const cur = new Date().getFullYear()
+    return Array.from({ length: PANEL_YEAR_RANGE + 1 }, (_, i) => cur - PANEL_YEAR_RANGE + i + 1)
+  }, [])
+
+  const handleDownload = async (key, scope) => {
+    const method = ATT_DOWNLOAD_METHOD_MAP[key]
+    if (!method || !tsService[method]) return
+    setBusy(key)
+    try {
+      if (scope === 'date')  await tsService[method](params.date)
+      else if (scope === 'year') await tsService[method](params.year)
+      else                   await tsService[method](params.year, params.month)
+    } catch { /* silent — network errors surface via browser */ }
+    finally { setBusy('') }
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition ${
+          open
+            ? 'bg-slate-700 text-white border-slate-800'
+            : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+        }`}
+      >
+        <HeroIcons.ArrowDownTrayIcon className="w-4 h-4" />
+        Reports
+        <HeroIcons.ChevronDownIcon className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl w-[420px] p-4 space-y-4">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">
+            Select report type &amp; format
+          </p>
+
+          {ATT_REPORT_TYPES.map(rpt => {
+            const Icon = HeroIcons[rpt.icon] || HeroIcons.DocumentArrowDownIcon
+            return (
+              <div key={rpt.id} className="border border-slate-100 rounded-xl p-3 space-y-2.5 hover:border-slate-200 transition">
+                {/* Header */}
+                <div className="flex items-start gap-2">
+                  <div className="p-1.5 bg-slate-100 rounded-lg">
+                    <Icon className="w-4 h-4 text-slate-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{rpt.label}</p>
+                    <p className="text-xs text-slate-500 leading-snug">{rpt.description}</p>
+                  </div>
+                </div>
+
+                {/* Scope date controls */}
+                {rpt.scope === 'date' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 w-10 shrink-0">Date</label>
+                    <input
+                      type="date"
+                      value={params.date}
+                      onChange={e => setParams(p => ({ ...p, date: e.target.value }))}
+                      className="border border-slate-300 rounded-lg text-xs px-2 py-1.5 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+                {rpt.scope === 'month' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 w-10 shrink-0">Period</label>
+                    <select
+                      value={params.year}
+                      onChange={e => setParams(p => ({ ...p, year: Number(e.target.value) }))}
+                      className="border border-slate-300 rounded-lg text-xs px-2 py-1.5 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    >
+                      {yearOpts.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <select
+                      value={params.month}
+                      onChange={e => setParams(p => ({ ...p, month: Number(e.target.value) }))}
+                      className="border border-slate-300 rounded-lg text-xs px-2 py-1.5 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    >
+                      {MONTH_FULL.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                    </select>
+                  </div>
+                )}
+                {rpt.scope === 'year' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 w-10 shrink-0">Year</label>
+                    <select
+                      value={params.year}
+                      onChange={e => setParams(p => ({ ...p, year: Number(e.target.value) }))}
+                      className="border border-slate-300 rounded-lg text-xs px-2 py-1.5 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                    >
+                      {yearOpts.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {/* Amber note (e.g. "may take a moment") */}
+                {rpt.note && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                    ⚠ {rpt.note}
+                  </p>
+                )}
+
+                {/* Format download buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {rpt.formats.map(fmt => {
+                    const FmtIcon = HeroIcons[fmt.icon] || HeroIcons.ArrowDownTrayIcon
+                    const c = COLOR_MAP[fmt.color] || COLOR_MAP.emerald
+                    const isBusy = busy === fmt.key
+                    return (
+                      <button
+                        key={fmt.key}
+                        type="button"
+                        disabled={!!busy}
+                        onClick={() => handleDownload(fmt.key, rpt.scope)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition ${
+                          isBusy ? c.busy + ' cursor-wait' : c.btn + (busy ? ' opacity-50 cursor-not-allowed' : '')
+                        }`}
+                      >
+                        {isBusy
+                          ? <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                          : <FmtIcon className="w-3.5 h-3.5" />
+                        }
+                        {isBusy ? 'Generating…' : fmt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -509,17 +691,8 @@ function SummaryTab() {
                   className="pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 w-44" />
               </div>
             </div>
-            {/* Quick exports (re-use existing backend endpoints) */}
-            <button type="button"
-              onClick={() => ts.downloadMonthlyExcel(year, month).catch(() => {})}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition">
-              <HeroIcons.ArrowDownTrayIcon className="w-4 h-4" /> Excel
-            </button>
-            <button type="button"
-              onClick={() => ts.downloadMonthlyPdf(year, month).catch(() => {})}
-              className="flex items-center gap-1.5 px-3 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 transition">
-              <HeroIcons.DocumentArrowDownIcon className="w-4 h-4" /> PDF
-            </button>
+            {/* Quick exports — replaced with smart report panel */}
+            <DownloadReportPanel year={year} month={month} tsService={ts} />
             {/* Public Holidays button — visible to everyone; edit controls appear only for HR */}
             {/* HR Manager: sync leave data from Excel upload */}
             {canEdit && (
