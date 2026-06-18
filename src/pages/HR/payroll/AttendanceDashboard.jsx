@@ -102,7 +102,12 @@ function SummaryTab() {
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
   const [leaveCalendar, setLeaveCalendar] = useState({})  // { employee_code: { 'YYYY-MM-DD': {code,name,...} } }
-  const [annualLeaveDb,  setAnnualLeaveDb]  = useState({})  // { employee_code: { balance, earned_ytd, ... } }
+  const [annualLeaveDb,     setAnnualLeaveDb]     = useState({})  // { employee_code: { balance, ... } }
+  const [annualLeaveByName, setAnnualLeaveByName] = useState({})  // { norm_name: { balance, ... } } — fallback
+  const [annualLeaveLoading, setAnnualLeaveLoading] = useState(false)
+  // Sync upload state (HR Manager only)
+  const [syncUploading, setSyncUploading] = useState(false)
+  const [syncMsg,       setSyncMsg]       = useState('')
   const [summaryBranch,        setSummaryBranch]        = useState(null)   // null = All | 'RAD' | 'RIN'
   // Set of employee_codes for the selected branch; null = no filter (show All)
   const [branchCodes,           setBranchCodes]           = useState(null)
@@ -171,9 +176,14 @@ function SummaryTab() {
   // Soft-coded: only fetched when SUMMARY_AL_SHOW_BALANCE is true
   useEffect(() => {
     if (!SUMMARY_AL_SHOW_BALANCE) return
+    setAnnualLeaveLoading(true)
     payrollService.getAnnualLeaveBalanceSummary(year, month)
-      .then(d => setAnnualLeaveDb(d?.balances || {}))
-      .catch(() => setAnnualLeaveDb({}))
+      .then(d => {
+        setAnnualLeaveDb(d?.balances || {})
+        setAnnualLeaveByName(d?.balances_by_name || {})
+      })
+      .catch(() => { setAnnualLeaveDb({}); setAnnualLeaveByName({}) })
+      .finally(() => setAnnualLeaveLoading(false))
   }, [year, month])
 
   // Fetch HR attendance overrides for this month
@@ -301,6 +311,39 @@ function SummaryTab() {
   }
   const yearOpts    = useMemo(() => [year - 2, year - 1, year].filter(y => y > 2020), [year])
   const round2      = (v) => Math.round(v * 100) / 100
+
+  // Soft-coded: lookup helper — try employee_code first, fall back to normalised name.
+  // Handles cases where biometric codes differ in format from HR Excel codes.
+  const getAnnualLeaveEntry = (empCode, empName) => {
+    if (empCode && annualLeaveDb[empCode]) return annualLeaveDb[empCode]
+    // Normalise name the same way the backend does: lowercase, collapse spaces
+    const norm = (empName || '').toLowerCase().replace(/\s+/g, ' ').trim()
+    return annualLeaveByName[norm] || null
+  }
+
+  // HR Manager: upload Excel to seed/refresh leave data on production
+  const handleSyncUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSyncUploading(true); setSyncMsg('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('year', String(year))
+      fd.append('branch', summaryBranch || 'RAD')
+      const result = await payrollService.syncLeaveData(fd)
+      setSyncMsg(`✅ Synced: ${result.created} created, ${result.updated} updated, ${result.computed} computed`)
+      // Refresh the annual leave balance data
+      payrollService.getAnnualLeaveBalanceSummary(year, month)
+        .then(d => { setAnnualLeaveDb(d?.balances || {}); setAnnualLeaveByName(d?.balances_by_name || {}) })
+        .catch(() => {})
+    } catch (err) {
+      setSyncMsg(`❌ Sync failed: ${err?.message || 'Unknown error'}`)
+    } finally {
+      setSyncUploading(false)
+      e.target.value = ''  // reset input
+    }
+  }
 
   // Human-readable period string shown in the report header, e.g. "June 2026"
   // Soft-coded: label text comes from MONTH_FULL in hrAttendance.config.js
@@ -478,6 +521,28 @@ function SummaryTab() {
               <HeroIcons.DocumentArrowDownIcon className="w-4 h-4" /> PDF
             </button>
             {/* Public Holidays button — visible to everyone; edit controls appear only for HR */}
+            {/* HR Manager: sync leave data from Excel upload */}
+            {canEdit && (
+              <label
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border cursor-pointer transition ${
+                  syncUploading
+                    ? 'bg-sky-100 text-sky-600 border-sky-300 opacity-70'
+                    : 'bg-sky-50 text-sky-700 border-sky-300 hover:bg-sky-100'
+                }`}
+                title="Upload HR Leave Excel to sync annual leave balances for all employees"
+              >
+                {syncUploading
+                  ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Syncing…</>
+                  : <><HeroIcons.ArrowUpTrayIcon className="w-4 h-4" /> Sync Leave</>
+                }
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleSyncUpload} disabled={syncUploading} />
+              </label>
+            )}
+            {syncMsg && (
+              <span className={`text-xs px-2 py-1 rounded border ${syncMsg.startsWith('✅') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                {syncMsg}
+              </span>
+            )}
             <button type="button"
               onClick={() => setShowHolidayPanel(v => !v)}
               className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border transition ${
@@ -808,8 +873,10 @@ function SummaryTab() {
                     </td>
                     <td className="px-3 py-1.5 text-center font-semibold bg-emerald-50 text-emerald-700 whitespace-nowrap">
                       {(() => {
-                        // Soft-coded: show DB balance when SUMMARY_AL_SHOW_BALANCE is true
-                        const dbEntry = annualLeaveDb[r.code] || null
+                        if (SUMMARY_AL_SHOW_BALANCE && annualLeaveLoading) {
+                          return <span className="text-[9px] text-slate-400 italic">…</span>
+                        }
+                        const dbEntry = getAnnualLeaveEntry(r.code, r.name)
                         if (SUMMARY_AL_SHOW_BALANCE && dbEntry) {
                           const bal    = parseFloat(dbEntry.balance ?? 0).toFixed(2)
                           const taken  = parseFloat(dbEntry.taken_ytd  ?? 0).toFixed(2)

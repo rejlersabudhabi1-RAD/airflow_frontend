@@ -206,9 +206,16 @@ const payrollService = {
 
   // ── Annual Leave Balance Summary ───────────────────────────────────────────
   // Returns per-employee YTD balance as of end of (year, month).
-  // Response: { year, month, balances: { employee_code: { balance, earned_ytd, taken_ytd, ... } } }
+  // Response: { year, month, balances: { employee_code: {...} }, balances_by_name: { norm_name: {...} } }
   getAnnualLeaveBalanceSummary: (year, month, params = {}) =>
     unwrap(apiClient.get(`${BASE}/annual-leave-balance/`, { params: { year, month, ...params } })),
+
+  // ── Sync Leave Data (HR Manager upload) ────────────────────────────────────
+  // POST multipart with field "file" (xlsx). Imports + computes accruals.
+  syncLeaveData: (formData) =>
+    unwrap(apiClient.post(`${BASE}/sync-leave-data/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })),
 }
 
 export default payrollService
