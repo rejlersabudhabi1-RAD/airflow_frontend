@@ -31,16 +31,6 @@ const MODULES = [
     badge: 'Live',
   },
   {
-
-    key: 'salary-slip',
-    title: 'Salary Slip',
-    description: 'Generate and download official salary slips for HR processing and employee records.',
-    icon: CreditCard,
-    path: '/finance/salary-slip',
-    gradient: 'from-emerald-500 via-green-600 to-green-700',
-    badge: null,
-  },
-  {
     key: 'sales',
     title: 'Sales Dashboard',
     description: 'Internal sales analytics — pipeline value, win rates, team performance, and revenue trends.',

@@ -357,32 +357,7 @@ export const FEATURES_CATALOG = {
     features: [
       // SOFT-CODED: finance-invoice-upload feature retired — link removed from UI
       // SOFT-CODED: finance-invoice-management feature retired — link removed from UI
-      {
-        id: 'finance-salary-slip',
-        name: 'Salary Slip',
-        shortName: 'Salary',
-        description: 'Generate and manage employee salary slips',
-        path: '/finance/salary-slip',
-        moduleCode: 'finance',
-        status: FEATURE_STATUS.ACTIVE,
-        badges: [FEATURE_BADGES.NEW],
-        capabilities: [
-          'Salary slip generation',
-          'Employee management',
-          'PDF export',
-          'Monthly tracking'
-        ],
-        metrics: {
-          slipsGenerated: 0,
-          employees: 0,
-          avgGenerationTime: 'Instant'
-        },
-        usageStats: {
-          monthlyUses: 0,
-          totalUses: 0,
-          avgRating: 0
-        }
-      }
+      // SOFT-CODED: finance-salary-slip feature retired — link removed from UI
     ]
   },
 

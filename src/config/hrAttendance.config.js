@@ -504,3 +504,19 @@ export const ATT_EDIT_COPY = {
   holidaySaveOk:      'Holiday saved.',
   holidaySaveErr:     'Failed to save holiday.',
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17. SUMMARY LEAVE COLUMNS — soft-coded leave type codes shown as extra
+//     summary columns in the attendance Summary tab.
+//     Change codes/labels here to match any leave type seeded in the backend.
+//     Override via VITE_ env vars without touching this file.
+// ─────────────────────────────────────────────────────────────────────────────
+export const SUMMARY_ANNUAL_LEAVE_CODE  = import.meta.env?.VITE_ANNUAL_LEAVE_CODE  || 'AL'
+export const SUMMARY_UNPAID_LEAVE_CODE  = import.meta.env?.VITE_UNPAID_LEAVE_CODE  || 'UL'
+export const SUMMARY_ANNUAL_LEAVE_LABEL = import.meta.env?.VITE_ANNUAL_LEAVE_LABEL || 'Annual Leave'
+export const SUMMARY_UNPAID_LEAVE_LABEL = import.meta.env?.VITE_UNPAID_LEAVE_LABEL || 'Unpaid Leave'
+
+// Annual leave balance column: show computed DB balance in the column header tooltip.
+// When true, the cell shows remaining balance (from DB); when false, shows days taken this month.
+// Override via VITE_AL_SHOW_BALANCE=false to revert to "days taken" display.
+export const SUMMARY_AL_SHOW_BALANCE    = import.meta.env?.VITE_AL_SHOW_BALANCE !== 'false'

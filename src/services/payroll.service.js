@@ -203,6 +203,12 @@ const payrollService = {
   // ── Salary History ─────────────────────────────────────────────────────────
   getSalaryHistory: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/salary-history/`, { params })),
+
+  // ── Annual Leave Balance Summary ───────────────────────────────────────────
+  // Returns per-employee YTD balance as of end of (year, month).
+  // Response: { year, month, balances: { employee_code: { balance, earned_ytd, taken_ytd, ... } } }
+  getAnnualLeaveBalanceSummary: (year, month, params = {}) =>
+    unwrap(apiClient.get(`${BASE}/annual-leave-balance/`, { params: { year, month, ...params } })),
 }
 
 export default payrollService

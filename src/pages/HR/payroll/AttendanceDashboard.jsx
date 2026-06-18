@@ -31,6 +31,10 @@ import {
   OPEN_SHIFT_INDICATOR,
   // ── Reports catalogue
   ATT_REPORT_TYPES, ATT_DOWNLOAD_METHOD_MAP,
+  // ── Summary leave columns
+  SUMMARY_ANNUAL_LEAVE_CODE, SUMMARY_UNPAID_LEAVE_CODE,
+  SUMMARY_ANNUAL_LEAVE_LABEL, SUMMARY_UNPAID_LEAVE_LABEL,
+  SUMMARY_AL_SHOW_BALANCE,
 } from '../../../config/hrAttendance.config'
 import { getLeaveType, ABSENT_SYMBOL, BRANCHES, getBranch } from '../../../config/hrLeave.config'
 
@@ -98,6 +102,7 @@ function SummaryTab() {
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
   const [leaveCalendar, setLeaveCalendar] = useState({})  // { employee_code: { 'YYYY-MM-DD': {code,name,...} } }
+  const [annualLeaveDb,  setAnnualLeaveDb]  = useState({})  // { employee_code: { balance, earned_ytd, ... } }
   const [summaryBranch,        setSummaryBranch]        = useState(null)   // null = All | 'RAD' | 'RIN'
   // Set of employee_codes for the selected branch; null = no filter (show All)
   const [branchCodes,           setBranchCodes]           = useState(null)
@@ -160,6 +165,15 @@ function SummaryTab() {
     payrollService.getLeaveCalendar(year, month)
       .then(d => setLeaveCalendar(d?.calendar || {}))
       .catch(() => setLeaveCalendar({}))
+  }, [year, month])
+
+  // Fetch computed annual leave balance from the DB (per employee, YTD as of selected month)
+  // Soft-coded: only fetched when SUMMARY_AL_SHOW_BALANCE is true
+  useEffect(() => {
+    if (!SUMMARY_AL_SHOW_BALANCE) return
+    payrollService.getAnnualLeaveBalanceSummary(year, month)
+      .then(d => setAnnualLeaveDb(d?.balances || {}))
+      .catch(() => setAnnualLeaveDb({}))
   }, [year, month])
 
   // Fetch HR attendance overrides for this month
@@ -354,6 +368,9 @@ function SummaryTab() {
           daysPresent: r.days_present || 0,
           normalHrs,
           diff:        round2(totalHrs - normalHrs),
+          // Soft-coded: count approved leave days per type from the leave calendar
+          annualLeaveDays: Object.values(empLeave).filter(lv => lv.code === SUMMARY_ANNUAL_LEAVE_CODE).length,
+          unpaidLeaveDays: Object.values(empLeave).filter(lv => lv.code === SUMMARY_UNPAID_LEAVE_CODE).length,
         }
       })
   }, [rows, search, workingDays, leaveCalendar, branchCodes, overrideMap])
@@ -362,19 +379,22 @@ function SummaryTab() {
   const totals = useMemo(() => {
     const dayMap = {}
     let totalHrs = 0, normalHrs = 0, daysPresent = 0
+    let annualLeaveDays = 0, unpaidLeaveDays = 0
     pivotRows.forEach(r => {
       Object.entries(r.dayMap).forEach(([d, slot]) => {
         const day  = parseInt(d, 10)
         const hrs  = (slot?.type === 'worked' || slot?.type === 'override') ? (slot.hours || 0) : 0
         dayMap[day] = round2((dayMap[day] || 0) + hrs)
       })
-      totalHrs    += r.totalHrs
-      normalHrs   += r.normalHrs
-      daysPresent += r.daysPresent
+      totalHrs        += r.totalHrs
+      normalHrs       += r.normalHrs
+      daysPresent     += r.daysPresent
+      annualLeaveDays += r.annualLeaveDays || 0
+      unpaidLeaveDays += r.unpaidLeaveDays || 0
     })
     totalHrs  = round2(totalHrs)
     normalHrs = round2(normalHrs)
-    return { dayMap, totalHrs, daysPresent, normalHrs, diff: round2(totalHrs - normalHrs) }
+    return { dayMap, totalHrs, daysPresent, normalHrs, diff: round2(totalHrs - normalHrs), annualLeaveDays, unpaidLeaveDays }
   }, [pivotRows])
 
   return (
@@ -659,6 +679,11 @@ function SummaryTab() {
                   })}
                   <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap border-l-2 border-slate-500 bg-slate-800">Total</th>
                   <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-slate-800">Days</th>
+                  <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-emerald-800">
+                    {SUMMARY_ANNUAL_LEAVE_LABEL}
+                    {SUMMARY_AL_SHOW_BALANCE && <div className="text-[9px] font-normal opacity-70">Balance</div>}
+                  </th>
+                  <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-red-900">{SUMMARY_UNPAID_LEAVE_LABEL}</th>
                   <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap bg-slate-800 border-r border-slate-600">
                     Normal Hrs
                   </th>
@@ -684,7 +709,7 @@ function SummaryTab() {
                       </td>
                     )
                   })}
-                  <td colSpan={4} className="bg-slate-600 border-l-2 border-slate-500" />
+                  <td colSpan={6} className="bg-slate-600 border-l-2 border-slate-500" />
                 </tr>
               </thead>
 
@@ -781,6 +806,32 @@ function SummaryTab() {
                     <td className="px-3 py-1.5 text-center font-semibold text-slate-700 bg-slate-50">
                       {r.daysPresent}
                     </td>
+                    <td className="px-3 py-1.5 text-center font-semibold bg-emerald-50 text-emerald-700 whitespace-nowrap">
+                      {(() => {
+                        // Soft-coded: show DB balance when SUMMARY_AL_SHOW_BALANCE is true
+                        const dbEntry = annualLeaveDb[r.code] || null
+                        if (SUMMARY_AL_SHOW_BALANCE && dbEntry) {
+                          const bal    = parseFloat(dbEntry.balance ?? 0).toFixed(2)
+                          const taken  = parseFloat(dbEntry.taken_ytd  ?? 0).toFixed(2)
+                          const earned = parseFloat(dbEntry.earned_ytd ?? 0).toFixed(2)
+                          const balNum = parseFloat(dbEntry.balance ?? 0)
+                          const color  = balNum < 0 ? 'text-rose-700 bg-rose-50' : balNum < 2 ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50'
+                          return (
+                            <span
+                              className={`inline-flex flex-col items-center leading-tight px-1 py-0.5 rounded text-[10px] font-bold ${color}`}
+                              title={`Balance: ${bal} days | Earned YTD: ${earned} | Taken YTD: ${taken} | CF: ${parseFloat(dbEntry.carryforward ?? 0).toFixed(2)}`}
+                            >
+                              <span>{bal} d</span>
+                              {r.annualLeaveDays > 0 && <span className="font-normal opacity-70">{r.annualLeaveDays} taken</span>}
+                            </span>
+                          )
+                        }
+                        return r.annualLeaveDays > 0 ? r.annualLeaveDays : '—'
+                      })()}
+                    </td>
+                    <td className="px-3 py-1.5 text-center font-semibold bg-red-50 text-red-700 whitespace-nowrap">
+                      {r.unpaidLeaveDays > 0 ? r.unpaidLeaveDays : '—'}
+                    </td>
                     <td className="px-3 py-1.5 text-right text-slate-600 bg-slate-50 whitespace-nowrap tabular-nums border-r border-slate-200">
                       {r.normalHrs} h
                     </td>
@@ -824,6 +875,15 @@ function SummaryTab() {
                     {totals.totalHrs.toFixed(2)}
                   </td>
                   <td className="px-3 py-2.5 text-center">{totals.daysPresent}</td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-emerald-300">
+                    {totals.annualLeaveDays > 0 ? totals.annualLeaveDays : '—'}
+                    {SUMMARY_AL_SHOW_BALANCE && Object.keys(annualLeaveDb).length > 0 && (
+                      <div className="text-[9px] font-normal opacity-70">taken</div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-red-300">
+                    {totals.unpaidLeaveDays > 0 ? totals.unpaidLeaveDays : '—'}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums border-r border-slate-600">
                     {totals.normalHrs} h
                   </td>

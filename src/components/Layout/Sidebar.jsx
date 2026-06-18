@@ -241,16 +241,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         expanded: expandedSections.finance,
         children: [
           {
-            id: 'financeSalarySlip',
-            title: '3.1 Salary Slip',
-            path: '/finance/salary-slip',
-            icon: DocumentTextIcon,
-            moduleCode: 'finance',
-            description: 'Generate and manage employee salary slips'
-          },
-          {
             id: 'financeInvoiceTracker',
-            title: '3.2 Invoice Tracker',
+            title: '3.1 Invoice Tracker',
             path: '/finance/invoice-tracker',
             icon: DocumentTextIcon,
             moduleCode: 'finance',
