@@ -897,13 +897,15 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
     setFetching(true)
     timesheetSvc.fetchMonthly(selYear, selMonth)
       .then(res => {
-        const arr = Array.isArray(res) ? res : (res?.rows || [])
-        const lc  = code.toString().toLowerCase()
-        const match = arr.find(e =>
+        // Handle both { rows, working_days_in_month } and plain array responses
+        const rows    = Array.isArray(res) ? res : (res?.rows || [])
+        const wdInMth = res?.working_days_in_month || null
+        const lc      = code.toString().toLowerCase()
+        const match   = rows.find(e =>
           e.employee_code?.toString().toLowerCase() === lc ||
           e.code?.toString().toLowerCase() === lc
         )
-        setSelData(match || null)
+        setSelData(match ? { ...match, working_days: wdInMth || match.working_days } : null)
       })
       .catch(() => setSelData(null))
       .finally(() => setFetching(false))
@@ -913,10 +915,11 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
   const data    = selData
 
   // ── Derive stats ───────────────────────────────────────────────────────────
+  // working_days comes from the response-level field (injected during fetch)
   const presentDays = Number(data?.days_present || data?.present_days)   || 0
-  const workingDays = Number(data?.working_days || data?.total_working_days || ESS_ATT_STANDARD_WORKING_DAYS)
-  const absentDays  = Math.max(0, workingDays - presentDays)
-  const attRate     = workingDays > 0 ? Math.round((presentDays / workingDays) * 100) : 0
+  const workingDays = Number(data?.working_days || data?.working_days_in_month || data?.total_working_days || ESS_ATT_STANDARD_WORKING_DAYS)
+  const absentDays  = data ? Math.max(0, workingDays - presentDays) : 0
+  const attRate     = (data && workingDays > 0) ? Math.round((presentDays / workingDays) * 100) : 0
   const overtime    = Number(data?.total_overtime) || 0
 
   // ── Build per-day rows from days_detail (monthly API field) ───────────────
@@ -939,6 +942,12 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
       return { date, dow, hours, status, ot: Math.max(0, hours - ESS_ATT_STANDARD_DAY_HRS) }
     }).sort((a, b) => (a.date > b.date ? 1 : -1))
   }, [data])
+
+  // ── Compute totals from dayRows (source of truth — API fields may be absent) ──
+  const computedTotalHours   = useMemo(() => dayRows.reduce((s, r) => s + r.hours, 0), [dayRows])
+  const computedOvertimeHrs  = useMemo(() => dayRows.reduce((s, r) => s + r.ot, 0), [dayRows])
+  // Prefer API field for overtime if available (e.g. from userHistory), else use computed
+  const overtime = Number(data?.total_overtime) > 0 ? Number(data.total_overtime) : computedOvertimeHrs
 
   // ── Chart data (trend line) ───────────────────────────────────────────────
   const trendData = useMemo(() =>
@@ -1001,12 +1010,20 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
       </div>
 
       {/* KPI cards */}
+      {!loading && !data ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm space-y-2">
+          <Icon name="ClipboardDocumentCheckIcon" className="w-8 h-8 mx-auto text-slate-200" />
+          <p>No attendance records found for {selectedLabel}.</p>
+          <p className="text-xs text-slate-300">Your employee profile may not yet be linked to the biometric system. Contact HR if this persists.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard icon="CheckCircleIcon"     label={ESS_ATT_COPY.kpiPresent}  value={loading ? EMPTY_DISPLAY : presentDays}          sub={`of ${workingDays} working days`}  tone="green" />
         <KpiCard icon="XCircleIcon"         label={ESS_ATT_COPY.kpiAbsent}   value={loading ? EMPTY_DISPLAY : absentDays}            sub={selectedLabel}                     tone={absentDays > 3 ? 'rose' : 'slate'} />
         <KpiCard icon="ChartBarIcon"        label={ESS_ATT_COPY.kpiRate}     value={loading ? EMPTY_DISPLAY : `${attRate}%`}         sub={rateLabel}                         tone={rateTone} />
         <KpiCard icon="ArrowTrendingUpIcon" label={ESS_ATT_COPY.kpiOvertime} value={loading ? EMPTY_DISPLAY : fmtHours(overtime)}    sub={selectedLabel}                     tone="amber" />
       </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Daily hours trend chart */}
@@ -1115,8 +1132,8 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
                 <tr className="bg-slate-100 border-t-2 border-slate-200 font-semibold">
                   <td className="px-4 py-2 text-slate-700" colSpan={2}>Total</td>
                   <td className="px-3 py-2 text-center text-slate-600">{presentDays} days present</td>
-                  <td className="px-3 py-2 text-right text-slate-700">{fmtHours(Number(data?.total_hours) || 0)}</td>
-                  <td className="px-3 py-2 text-right text-amber-600">{overtime > 0 ? fmtHours(overtime) : EMPTY_DISPLAY}</td>
+                  <td className="px-3 py-2 text-right text-slate-700">{fmtHours(computedTotalHours)}</td>
+                  <td className="px-3 py-2 text-right text-amber-600">{computedOvertimeHrs > 0 ? fmtHours(computedOvertimeHrs) : EMPTY_DISPLAY}</td>
                 </tr>
               </tfoot>
             </table>
@@ -2709,28 +2726,42 @@ export default function EmployeeSelfService() {
         ? timesheetSvc.fetchUserHistory({ code: employeeCode, limit: 60 }).catch(() => null)
         : Promise.resolve(null),
     ]).then(([monthly, daily, history]) => {
-      // Filter monthly data to current user if the response contains all employees
-      if (monthly && Array.isArray(monthly)) {
+      // fetchMonthly returns { rows: [...], working_days_in_month: N } OR a plain array
+      const monthlyRows      = Array.isArray(monthly) ? monthly : (monthly?.rows || [])
+      const workingDaysInMth = monthly?.working_days_in_month || null
+
+      if (monthlyRows.length > 0) {
         const code = employeeCode?.toString().toLowerCase()
-        const match = monthly.find(e =>
-          e.employee_code?.toString().toLowerCase() === code ||
-          e.code?.toString().toLowerCase() === code
-        )
-        setMonthlyTs(match || null)
-      } else {
+        const match = code
+          ? monthlyRows.find(e =>
+              e.employee_code?.toString().toLowerCase() === code ||
+              e.code?.toString().toLowerCase() === code
+            )
+          : null
+        // Enrich row with response-level working_days so components can use it
+        setMonthlyTs(match ? { ...match, working_days: workingDaysInMth || match.working_days } : null)
+      } else if (!Array.isArray(monthly) && monthly && !monthly?.rows) {
+        // Backend returned a single employee object directly (role-scoped endpoint)
         setMonthlyTs(monthly)
+      } else {
+        setMonthlyTs(null)
       }
 
-      // Today's record
-      if (daily && Array.isArray(daily)) {
+      // Today's record — same dual-format handling
+      const dailyRows = Array.isArray(daily) ? daily : (daily?.rows || [])
+      if (dailyRows.length > 0) {
         const code = employeeCode?.toString().toLowerCase()
-        const todayRec = daily.find(e =>
-          e.employee_code?.toString().toLowerCase() === code ||
-          e.code?.toString().toLowerCase() === code
-        )
+        const todayRec = code
+          ? dailyRows.find(e =>
+              e.employee_code?.toString().toLowerCase() === code ||
+              e.code?.toString().toLowerCase() === code
+            )
+          : null
         setTodayTs(todayRec || null)
-      } else {
+      } else if (!Array.isArray(daily) && daily && !daily?.rows) {
         setTodayTs(daily)
+      } else {
+        setTodayTs(null)
       }
 
       setUserHistory(history)
