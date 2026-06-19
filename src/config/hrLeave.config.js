@@ -204,3 +204,128 @@ export const ESS_LEAVE_TYPE_CONFIG = {
   compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5  },
   unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0  },
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. DAILY TRACKER CONFIG — soft-coded labels, icons and thresholds
+//     for the Daily Work Log feature in Employee Self-Service.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DAILY_TRACKER_PRIORITIES = [
+  { id: 'low',      label: 'Low',      icon: '↓', tailwind: 'bg-slate-100  text-slate-600  border-slate-200'  },
+  { id: 'medium',   label: 'Medium',   icon: '→', tailwind: 'bg-blue-100   text-blue-700   border-blue-200'   },
+  { id: 'high',     label: 'High',     icon: '↑', tailwind: 'bg-amber-100  text-amber-700  border-amber-200'  },
+  { id: 'critical', label: 'Critical', icon: '!!', tailwind: 'bg-red-100    text-red-700    border-red-200'    },
+]
+
+export const DAILY_TRACKER_STATUSES = [
+  { id: 'in_progress', label: 'In Progress', icon: '⏳', tailwind: 'bg-blue-100   text-blue-700   border-blue-200'   },
+  { id: 'done',        label: 'Done',        icon: '✓',  tailwind: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { id: 'blocked',     label: 'Blocked',     icon: '🚫', tailwind: 'bg-red-100    text-red-700    border-red-200'    },
+  { id: 'deferred',    label: 'Deferred',    icon: '⏭',  tailwind: 'bg-slate-100  text-slate-600  border-slate-200'  },
+]
+
+export const DAILY_TRACKER_PROJECT_CATEGORIES = [
+  'Design Review',
+  'Deliverable Production',
+  'Client Meeting',
+  'Internal Meeting',
+  'Document Control',
+  'Quality Check',
+  'Change Request',
+  'Site Support',
+  'Procurement',
+  'Training',
+  'Administrative',
+  'Other',
+]
+
+export const DAILY_TRACKER_COPY = {
+  tabLabel:              'Daily Tracker',
+  addButton:             'Log Activity',
+  exportButton:          'Export to S3',
+  exportSuccess:         'Logs exported successfully.',
+  exportError:           'S3 export failed — check your configuration.',
+  emptyLogs:             'No work logs for this date. Click "Log Activity" to add one.',
+  heatmapTitle:          'Activity Heatmap (last 14 weeks)',
+  weeklyChartTitle:      'This Week (hours per day)',
+  teamViewTitle:         'Team Daily Logs',
+  approvalQueueTitle:    'Pending Approvals',
+  // Wizard labels
+  wizardCreateTitle:     'Log New Activity',
+  wizardEditTitle:       'Edit Activity',
+  // Approval labels
+  approveButton:         'Approve',
+  rejectButton:          'Reject',
+  approveSuccess:        'Activity approved successfully.',
+  rejectSuccess:         'Activity rejected.',
+  rejectNotePlaceholder: 'Reason for rejection (required)…',
+  approvalQueueEmpty:    'No activities pending your approval.',
+  // Thresholds
+  maxHoursWarning:       12,   // warn user if hours_spent > this per entry
+  heatmapWeeks:          14,   // rolling weeks shown in heatmap
+  teamPageSize:          20,   // max rows in team view table
+  // Heatmap colour intensity thresholds (hours)
+  heatLow:               1,    // >= 1 h  -> light colour
+  heatMed:               4,    // >= 4 h  -> medium colour
+  heatHigh:              7,    // >= 7 h  -> full colour
+  // Wizard quick-hour selector options (soft-coded)
+  quickHours:            [0.5, 1, 1.5, 2, 3, 4, 6, 8],
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. DAILY TRACKER APPROVAL STATUSES
+// ─────────────────────────────────────────────────────────────────────────────
+export const DAILY_TRACKER_APPROVAL_STATUSES = [
+  {
+    id:      'pending',
+    label:   'Pending Approval',
+    icon:    '⏳',
+    tailwind: 'bg-amber-50 text-amber-700 border-amber-200',
+    rowBg:   'bg-amber-50/40',
+  },
+  {
+    id:      'approved',
+    label:   'Approved',
+    icon:    '✓',
+    tailwind: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    rowBg:   'bg-emerald-50/30',
+  },
+  {
+    id:      'rejected',
+    label:   'Rejected',
+    icon:    '✕',
+    tailwind: 'bg-red-50 text-red-700 border-red-200',
+    rowBg:   'bg-red-50/20',
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. DAILY TRACKER WIZARD STEPS
+// ─────────────────────────────────────────────────────────────────────────────
+export const DAILY_TRACKER_WIZARD_STEPS = [
+  { id: 'task',   label: 'Task',   icon: 'PencilSquareIcon',          description: 'What did you work on?' },
+  { id: 'when',   label: 'When',   icon: 'ClockIcon',                 description: 'Date and time spent' },
+  { id: 'tags',   label: 'Tags',   icon: 'TagIcon',                   description: 'Category, priority & status' },
+  { id: 'review', label: 'Review', icon: 'ClipboardDocumentCheckIcon', description: 'Confirm and submit' },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. DAILY TRACKER — SUBMIT-TO OPTIONS
+//     The two manager roles an employee can route a log entry to for approval.
+// ─────────────────────────────────────────────────────────────────────────────
+export const DAILY_TRACKER_SUBMIT_TO_OPTIONS = [
+  {
+    id:          'project_manager',
+    label:       'Project Manager',
+    description: 'Route to your assigned project manager',
+    chipTailwind:    'bg-blue-50    text-blue-700    border-blue-200',
+    activeTailwind:  'bg-blue-600   text-white       border-blue-600',
+  },
+  {
+    id:          'reporting_manager',
+    label:       'Reporting Manager',
+    description: 'Route to your direct line manager',
+    chipTailwind:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+    activeTailwind:  'bg-emerald-600 text-white      border-emerald-600',
+  },
+]

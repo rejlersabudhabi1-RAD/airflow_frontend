@@ -1,6 +1,7 @@
 /**
  * Payroll Intelligence — Executive Dashboard
  * Shows KPI tiles, payroll runs table, and trend charts.
+ * Every KPI tile is clickable — opens a live drill-down report modal.
  */
 import { useEffect, useState } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
@@ -8,8 +9,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import payrollService from '../../../services/payroll.service'
 import {
   PAYROLL_KPIS, PAYROLL_RUN_COLUMNS, PAYROLL_COPY,
+  PAYROLL_KPI_REPORTS, PAYROLL_SLIP_STATUS, PAYROLL_ALERT_SEVERITY,
   runStatusMeta, fmtCurrency,
 } from '../../../config/hrPayroll.config'
+
+// ── Month names for display ───────────────────────────────────────────────
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 const Spinner = () => (
   <svg className="animate-spin w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24">
@@ -20,12 +25,281 @@ const Spinner = () => (
 
 const PIE_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Report fetchers — one per KPI id.  Runs only when the modal opens.
+// ─────────────────────────────────────────────────────────────────────────────
+const NOW = new Date()
+const CY  = NOW.getFullYear()
+
+const REPORT_FETCHERS = {
+  employees:        () => payrollService.getEmployeeSalaryInfo({ page_size: 500 }),
+  gross:            () => payrollService.getSalarySlips({ page_size: 500 }),
+  net:              () => payrollService.getSalarySlips({ page_size: 500 }),
+  pending:          () => payrollService.getSalarySlips({ status: 'pending_approval', page_size: 500 }),
+  ytd:              () => payrollService.getPayrollRuns({ year: CY, page_size: 50 }),
+  alerts:           () => payrollService.getAuditAlerts({ status: 'open', page_size: 200 }),
+  leave_employees:  () => payrollService.getLeaveRecords({ page_size: 500 }),
+  leave_taken_ytd:  () => payrollService.getLeaveRequests({ status: 'APPROVED', page_size: 500 }),
+  leave_earned_ytd: () => payrollService.getLeaveRecords({ page_size: 500 }),
+  leave_avg_balance:() => payrollService.getLeaveRecords({ page_size: 500 }),
+  leave_critical:   () => payrollService.getLeaveRecords({ page_size: 500 }),
+}
+
+// Post-process raw API response → array of report rows
+const extractRows = (id, data) => {
+  const base = data?.results ?? (Array.isArray(data) ? data : [])
+  if (id === 'net')
+    return [...base].sort((a, b) => parseFloat(b.net_salary || 0) - parseFloat(a.net_salary || 0))
+  if (id === 'leave_avg_balance')
+    return [...base].sort((a, b) => parseFloat(a.balance ?? 0) - parseFloat(b.balance ?? 0))
+  if (id === 'leave_critical')
+    return base.filter((r) => parseFloat(r.balance ?? r.remaining_balance ?? 0) <= 0)
+  return base
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI drill-down report modal
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiReportModal({ reportId, onClose }) {
+  const [rows,    setRows]    = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const config = PAYROLL_KPI_REPORTS[reportId]
+
+  // Escape key to close
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  // Fetch report data on mount
+  useEffect(() => {
+    const fetcher = REPORT_FETCHERS[reportId]
+    if (!fetcher) { setLoading(false); return }
+    setLoading(true)
+    fetcher()
+      .then((data) => setRows(extractRows(reportId, data)))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false))
+  }, [reportId])
+
+  if (!config) return null
+
+  const filtered = search.trim()
+    ? rows.filter((r) => config.searchFn(r).includes(search.toLowerCase()))
+    : rows
+
+  const renderCell = (col, row) => {
+    const val = col.render(row)
+    if (col.slipStatusBadge) {
+      const meta = PAYROLL_SLIP_STATUS[String(val).toLowerCase()] ?? { tone: 'bg-slate-100 text-slate-600 border-slate-200', label: val }
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${meta.tone}`}>{meta.label ?? val}</span>
+    }
+    if (col.runStatusBadge) {
+      const meta = runStatusMeta(String(val))
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${meta.tone}`}>{meta.label}</span>
+    }
+    if (col.severityBadge) {
+      const s = PAYROLL_ALERT_SEVERITY[String(val).toLowerCase()] ?? { tone: 'bg-slate-100 text-slate-600', label: val }
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${s.tone}`}>{s.label}</span>
+    }
+    if (col.leaveStatusBadge) {
+      const LEAVE_STYLES = {
+        APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        PENDING:  'bg-amber-100   text-amber-700   border-amber-200',
+        REJECTED: 'bg-rose-100    text-rose-700    border-rose-200',
+        CANCELLED:'bg-slate-100   text-slate-500   border-slate-200',
+      }
+      const style = LEAVE_STYLES[String(val).toUpperCase()] ?? 'bg-slate-100 text-slate-600 border-slate-200'
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${style}`}>{val}</span>
+    }
+    if (col.balanceBadge) {
+      const n = parseFloat(val) || 0
+      const style = n <= 0
+        ? 'bg-rose-100 text-rose-700 border-rose-200'
+        : n < 5
+          ? 'bg-amber-100 text-amber-700 border-amber-200'
+          : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${style}`}>{val}</span>
+    }
+    if (col.mono) return <span className="font-mono text-xs text-slate-500">{val}</span>
+    return val
+  }
+
+  const HeaderIcon = HeroIcons[config.icon] ?? HeroIcons.ChartBarIcon
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-black/50 backdrop-blur-sm overflow-y-auto"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl my-auto">
+        {/* Gradient header */}
+        <div className={`bg-gradient-to-r ${config.accentGradient} rounded-t-2xl p-5 text-white`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                <HeaderIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">{config.title}</h2>
+                <p className="text-sm text-white/80 mt-0.5 max-w-xl">{config.description}</p>
+              </div>
+            </div>
+            <button type="button" onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center flex-shrink-0 transition-colors"
+              title="Close (Esc)">
+              <HeroIcons.XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+          {!loading && (
+            <div className="mt-3 text-sm text-white/90 flex items-center gap-1.5">
+              <HeroIcons.TableCellsIcon className="w-4 h-4 opacity-80" />
+              <strong>{rows.length}</strong> total records
+              {search.trim() && <> · <strong>{filtered.length}</strong> matching filter</>}
+            </div>
+          )}
+        </div>
+
+        {/* Search bar */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+          <div className="relative flex-1">
+            <HeroIcons.MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input type="text" placeholder="Search by name, code, type…"
+              value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
+              className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+            {search && (
+              <button type="button" onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <HeroIcons.XMarkIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button type="button" onClick={onClose}
+            className="px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">
+            ← Close Report
+          </button>
+        </div>
+
+        {/* Data table */}
+        <div className="overflow-x-auto" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {loading ? (
+            <div className="flex items-center justify-center py-16 gap-3 text-slate-500 text-sm">
+              <Spinner /> Loading report data…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-sm text-slate-500 italic py-14 text-center">
+              {search.trim() ? 'No records match your search.' : config.emptyMsg}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white border-b border-slate-200 shadow-sm z-10">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide w-10">#</th>
+                  {config.columns.map((col) => (
+                    <th key={col.key} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((row, idx) => (
+                  <tr key={row.id ?? idx} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                    {config.columns.map((col) => (
+                      <td key={col.key} className="px-4 py-2.5 text-slate-800 max-w-xs truncate">
+                        {renderCell(col, row)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-100 rounded-b-2xl bg-slate-50/40 flex items-center justify-between text-xs text-slate-400">
+          <span>Payroll Intelligence Platform — live data</span>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-800 font-medium transition-colors">Close ✕</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI tile — now a clickable button that opens the drill-down modal
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiTile({ kpi, summary, onClick }) {
+  const Icon = HeroIcons[kpi.icon] || HeroIcons.ChartBarIcon
+  const val = kpi.compute(summary)
+  const isSalaryTile = ['gross', 'net', 'ytd'].includes(kpi.id)
+  const isZeroSalary = isSalaryTile && (parseFloat(summary?.[
+    kpi.id === 'gross' ? 'current_month_gross' :
+    kpi.id === 'net'   ? 'current_month_net'   : 'ytd_payroll'
+  ] ?? 0) === 0)
+  const noRuns = !summary?.latest_run?.id
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Click to view ${kpi.label} report`}
+      className={`rounded-xl border p-4 ${kpi.tone} border-current/10 relative text-left w-full hover:shadow-md hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer group`}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className="w-4 h-4 opacity-70" />
+        <span className="text-xs font-semibold uppercase tracking-wider opacity-70">{kpi.label}</span>
+      </div>
+      <div className="text-xl font-bold leading-tight">{val}{kpi.suffix}</div>
+      {kpi.sub && summary && (
+        <div className="text-[10px] opacity-60 mt-0.5 font-normal">{kpi.sub(summary)}</div>
+      )}
+      {isSalaryTile && isZeroSalary && noRuns && (
+        <div className="text-[10px] opacity-60 mt-1 font-normal">No payroll runs yet</div>
+      )}
+      <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-60 transition-opacity text-[10px] uppercase tracking-widest">
+        View →
+      </div>
+    </button>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leave intelligence tile — clickable button
+// ─────────────────────────────────────────────────────────────────────────────
+function LeaveTile({ icon, label, value, sub, bg, border, textColor, subColor, onClick }) {
+  const Icon = HeroIcons[icon] ?? HeroIcons.CalendarDaysIcon
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Click to view ${label} report`}
+      className={`${bg} rounded-lg p-3 border ${border} text-left w-full hover:shadow-md hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer group relative`}
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className={`w-3.5 h-3.5 ${textColor}`} />
+        <span className={`text-[10px] font-semibold uppercase tracking-wider ${textColor}`}>{label}</span>
+      </div>
+      <div className={`text-2xl font-bold ${textColor}`}>{value}</div>
+      <div className={`text-[10px] mt-0.5 ${subColor}`}>{sub}</div>
+      <div className={`absolute bottom-1.5 right-2 opacity-0 group-hover:opacity-50 transition-opacity text-[9px] uppercase tracking-widest ${textColor}`}>
+        View →
+      </div>
+    </button>
+  )
+}
+
 export default function PayrollDashboard({ onSelectRun }) {
-  const [summary,  setSummary]  = useState(null)
-  const [runs,     setRuns]     = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
+  const [summary,    setSummary]    = useState(null)
+  const [runs,       setRuns]       = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
   const [processing, setProcessing] = useState(null)
+  const [reportId,   setReportId]   = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -70,21 +344,79 @@ export default function PayrollDashboard({ onSelectRun }) {
   return (
     <div className="space-y-6">
       {/* KPI Tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {PAYROLL_KPIS.map((kpi) => {
-          const Icon = HeroIcons[kpi.icon] || HeroIcons.ChartBarIcon
-          const val = kpi.compute(summary)
-          return (
-            <div key={kpi.id} className={`rounded-xl border p-4 ${kpi.tone} border-current/10`}>
-              <div className="flex items-center gap-2 mb-2">
-                <Icon className="w-4 h-4 opacity-70" />
-                <span className="text-xs font-semibold uppercase tracking-wider opacity-70">{kpi.label}</span>
-              </div>
-              <div className="text-xl font-bold">{val}{kpi.suffix}</div>
-            </div>
-          )
-        })}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        {PAYROLL_KPIS.map((kpi) => (
+          <KpiTile key={kpi.id} kpi={kpi} summary={summary} onClick={() => setReportId(kpi.id)} />
+        ))}
       </div>
+
+      {/* Leave Intelligence Panel — shown when leave data is available */}
+      {summary?.leave_data_available && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <HeroIcons.CalendarDaysIcon className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-sm font-semibold text-slate-700">
+              Leave Intelligence — {summary.current_year}
+            </h3>
+            <span className="ml-auto text-xs text-slate-400">
+              {MONTH_NAMES[(summary.current_month ?? 1) - 1]} {summary.current_year}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+            {/* Employees tracked */}
+            <LeaveTile
+              icon="UsersIcon" label="Employees Tracked"
+              value={summary.leave_employees} sub="active this year"
+              bg="bg-indigo-50" border="border-indigo-100" textColor="text-indigo-700" subColor="text-indigo-500"
+              onClick={() => setReportId('leave_employees')}
+            />
+            {/* Leave taken YTD */}
+            <LeaveTile
+              icon="ArrowTrendingDownIcon" label="Leave Taken YTD"
+              value={parseFloat(summary.leave_total_taken_ytd ?? 0).toFixed(1)} sub="days"
+              bg="bg-amber-50" border="border-amber-100" textColor="text-amber-700" subColor="text-amber-500"
+              onClick={() => setReportId('leave_taken_ytd')}
+            />
+            {/* Leave earned YTD */}
+            <LeaveTile
+              icon="ArrowTrendingUpIcon" label="Leave Earned YTD"
+              value={parseFloat(summary.leave_total_earned_ytd ?? 0).toFixed(1)} sub="days"
+              bg="bg-emerald-50" border="border-emerald-100" textColor="text-emerald-700" subColor="text-emerald-500"
+              onClick={() => setReportId('leave_earned_ytd')}
+            />
+            {/* Avg balance */}
+            <LeaveTile
+              icon="ScaleIcon" label="Avg Leave Balance"
+              value={parseFloat(summary.leave_avg_balance ?? 0).toFixed(1)} sub="days / employee"
+              bg="bg-teal-50" border="border-teal-100" textColor="text-teal-700" subColor="text-teal-500"
+              onClick={() => setReportId('leave_avg_balance')}
+            />
+            {/* Critical alerts */}
+            <LeaveTile
+              icon="ExclamationTriangleIcon" label="Critical Balance"
+              value={summary.leave_critical_alerts ?? 0} sub="employees at ≤ 0 days"
+              bg={(summary.leave_critical_alerts ?? 0) > 0 ? 'bg-rose-50' : 'bg-slate-50'}
+              border={(summary.leave_critical_alerts ?? 0) > 0 ? 'border-rose-100' : 'border-slate-100'}
+              textColor={(summary.leave_critical_alerts ?? 0) > 0 ? 'text-rose-700' : 'text-slate-400'}
+              subColor={(summary.leave_critical_alerts ?? 0) > 0 ? 'text-rose-500' : 'text-slate-400'}
+              onClick={() => setReportId('leave_critical')}
+            />
+          </div>
+          {/* On leave this month sub-line */}
+          {parseFloat(summary.leave_current_month_taken ?? 0) > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-500">
+              <HeroIcons.CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                <strong className="text-slate-700">
+                  {parseFloat(summary.leave_current_month_taken).toFixed(1)} days
+                </strong>{' '}
+                taken in {MONTH_NAMES[(summary.current_month ?? 1) - 1]} across{' '}
+                <strong className="text-slate-700">{summary.leave_employees_taken}</strong> employees YTD
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -189,6 +521,11 @@ export default function PayrollDashboard({ onSelectRun }) {
           </div>
         )}
       </div>
+
+      {/* KPI drill-down report modal */}
+      {reportId && (
+        <KpiReportModal reportId={reportId} onClose={() => setReportId(null)} />
+      )}
     </div>
   )
 }

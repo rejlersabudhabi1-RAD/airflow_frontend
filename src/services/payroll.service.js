@@ -216,6 +216,29 @@ const payrollService = {
     unwrap(apiClient.post(`${BASE}/sync-leave-data/`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })),
+
+  // ── Daily Work Log (Daily Tracker) ─────────────────────────────────────────
+  getDailyLogs:          (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/daily-logs/`,                 { params })),
+  createDailyLog:        (data)        =>
+    unwrap(apiClient.post(`${BASE}/daily-logs/`,                data)),
+  updateDailyLog:        (id, data)    =>
+    unwrap(apiClient.patch(`${BASE}/daily-logs/${id}/`,         data)),
+  deleteDailyLog:        (id)          =>
+    unwrap(apiClient.delete(`${BASE}/daily-logs/${id}/`)),
+  getDailyLogSummary:    (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/daily-logs/summary/`,         { params })),
+  exportDailyLogsToS3:   (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/daily-logs/export-to-s3/`,    { params })),
+  getTeamDailyLogs:      (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/daily-logs/team/`,            { params })),
+  // Approval workflow
+  approveDailyLog:       (id, note = '') =>
+    unwrap(apiClient.post(`${BASE}/daily-logs/${id}/approve/`,  { note })),
+  rejectDailyLog:        (id, note = '') =>
+    unwrap(apiClient.post(`${BASE}/daily-logs/${id}/reject/`,   { note })),
+  getDailyApprovalQueue: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/daily-logs/`,                 { params: { approval_status: 'pending', all: 'true', ...params } })),
 }
 
 export default payrollService

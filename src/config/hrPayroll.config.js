@@ -108,6 +108,19 @@ export const PAYROLL_KPIS = [
     compute: (s) => (s?.open_validations ?? 0) + (s?.open_alerts ?? 0),
     suffix: ' issues',
   },
+  {
+    id: 'activity_hours',
+    label: 'Approved Activity',
+    icon: 'ClipboardDocumentCheckIcon',
+    tone: 'bg-indigo-50 text-indigo-700',
+    compute: (s) => s?.approved_activity_hours_mtd != null
+      ? `${parseFloat(s.approved_activity_hours_mtd).toFixed(1)} hrs`
+      : '—',
+    suffix: '',
+    sub: (s) => s?.approved_activity_count_mtd != null
+      ? `${s.approved_activity_count_mtd} tasks this month`
+      : '',
+  },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -461,6 +474,215 @@ export const severityTone = (s) =>
 
 export const slipStatusMeta = (s) => PAYROLL_SLIP_STATUS[s] ?? { label: s, tone: 'bg-slate-100 text-slate-600 border-slate-200' }
 export const runStatusMeta  = (s) => PAYROLL_RUN_STATUS[s]  ?? { label: s, tone: 'bg-slate-100 text-slate-600' }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI DRILL-DOWN REPORT CONFIGS
+// Maps each tile id → { title, description, icon, accentGradient, emptyMsg,
+//   columns[], searchFn }.  The component supplies the rows via REPORT_FETCHERS.
+//   Badge column types: slipStatusBadge | runStatusBadge | severityBadge |
+//                       leaveStatusBadge | balanceBadge | mono
+// ─────────────────────────────────────────────────────────────────────────────
+const _fmtD = (v) => (v ? new Date(v).toLocaleDateString() : '—')
+const _days = (v) => `${parseFloat(v ?? 0).toFixed(1)} d`
+
+export const PAYROLL_KPI_REPORTS = {
+  employees: {
+    title: 'Active Employees',
+    description: 'All employees with a configured salary structure.',
+    icon: 'UsersIcon',
+    accentGradient: 'from-blue-500 to-indigo-600',
+    emptyMsg: 'No employee salary data found.',
+    searchFn: (r) =>
+      `${r.employee_name || r.full_name || ''} ${r.department || ''} ${r.employee_code || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Employee',   render: (r) => r.employee_name || r.full_name || r.employee_code || '—' },
+      { key: 'code',   label: 'Code',       render: (r) => r.employee_code || '—', mono: true },
+      { key: 'dept',   label: 'Department', render: (r) => r.department || '—' },
+      { key: 'basic',  label: 'Basic',      render: (r) => fmtCurrency(r.basic_salary) },
+      { key: 'gross',  label: 'Gross',      render: (r) => fmtCurrency(r.gross_salary ?? r.total_gross) },
+      { key: 'net',    label: 'Net',        render: (r) => fmtCurrency(r.net_salary) },
+      { key: 'status', label: 'Status',     render: (r) => r.status || '—', slipStatusBadge: true },
+    ],
+  },
+
+  gross: {
+    title: 'Current Month Gross',
+    description: 'All salary slips for the current pay period — gross breakdown.',
+    icon: 'BanknotesIcon',
+    accentGradient: 'from-emerald-500 to-teal-600',
+    emptyMsg: 'No salary slips found for this month.',
+    searchFn: (r) =>
+      `${r.employee_name || ''} ${r.slip_number || ''}`.toLowerCase(),
+    columns: [
+      { key: 'slip',   label: 'Slip #',      render: (r) => r.slip_number || '—', mono: true },
+      { key: 'name',   label: 'Employee',    render: (r) => r.employee_name || '—' },
+      { key: 'period', label: 'Period',      render: (r) => `${String(r.month || '').padStart(2,'0')}/${r.year || ''}` },
+      { key: 'basic',  label: 'Basic',       render: (r) => fmtCurrency(r.basic_salary) },
+      { key: 'allow',  label: 'Allowances',  render: (r) => fmtCurrency(r.total_allowances) },
+      { key: 'gross',  label: 'Gross',       render: (r) => fmtCurrency(r.gross_salary) },
+      { key: 'status', label: 'Status',      render: (r) => r.status || '—', slipStatusBadge: true },
+    ],
+  },
+
+  net: {
+    title: 'Current Month Net',
+    description: 'Net take-home pay for the current month after all deductions.',
+    icon: 'CurrencyDollarIcon',
+    accentGradient: 'from-teal-500 to-cyan-600',
+    emptyMsg: 'No salary slips found for this month.',
+    searchFn: (r) =>
+      `${r.employee_name || ''} ${r.slip_number || ''}`.toLowerCase(),
+    columns: [
+      { key: 'slip',  label: 'Slip #',      render: (r) => r.slip_number || '—', mono: true },
+      { key: 'name',  label: 'Employee',    render: (r) => r.employee_name || '—' },
+      { key: 'period',label: 'Period',      render: (r) => `${String(r.month || '').padStart(2,'0')}/${r.year || ''}` },
+      { key: 'gross', label: 'Gross',       render: (r) => fmtCurrency(r.gross_salary) },
+      { key: 'ded',   label: 'Deductions',  render: (r) => fmtCurrency(r.total_deductions) },
+      { key: 'net',   label: 'Net',         render: (r) => fmtCurrency(r.net_salary) },
+      { key: 'status',label: 'Status',      render: (r) => r.status || '—', slipStatusBadge: true },
+    ],
+  },
+
+  pending: {
+    title: 'Pending Approvals',
+    description: 'Salary slips awaiting HR approval before disbursement.',
+    icon: 'ClockIcon',
+    accentGradient: 'from-amber-500 to-orange-600',
+    emptyMsg: 'No slips pending approval — all clear.',
+    searchFn: (r) =>
+      `${r.employee_name || ''} ${r.slip_number || ''}`.toLowerCase(),
+    columns: [
+      { key: 'slip',   label: 'Slip #',   render: (r) => r.slip_number || '—', mono: true },
+      { key: 'name',   label: 'Employee', render: (r) => r.employee_name || '—' },
+      { key: 'period', label: 'Period',   render: (r) => `${String(r.month || '').padStart(2,'0')}/${r.year || ''}` },
+      { key: 'basic',  label: 'Basic',    render: (r) => fmtCurrency(r.basic_salary) },
+      { key: 'net',    label: 'Net',      render: (r) => fmtCurrency(r.net_salary) },
+      { key: 'status', label: 'Status',   render: (r) => r.status || '—', slipStatusBadge: true },
+    ],
+  },
+
+  ytd: {
+    title: 'YTD Payroll Runs',
+    description: 'All payroll runs processed so far this year.',
+    icon: 'ChartBarIcon',
+    accentGradient: 'from-purple-500 to-violet-600',
+    emptyMsg: 'No payroll runs found for this year.',
+    searchFn: (r) =>
+      `${r.run_code || ''} ${r.month || ''} ${r.year || ''}`.toLowerCase(),
+    columns: [
+      { key: 'code',   label: 'Run Code',  render: (r) => r.run_code || '—', mono: true },
+      { key: 'period', label: 'Period',    render: (r) => `${String(r.month || '').padStart(2,'0')}/${r.year || ''}` },
+      { key: 'emps',   label: 'Employees', render: (r) => r.total_employees ?? '—' },
+      { key: 'gross',  label: 'Gross',     render: (r) => fmtCurrency(r.total_gross_salary) },
+      { key: 'net',    label: 'Net',       render: (r) => fmtCurrency(r.total_net_salary) },
+      { key: 'status', label: 'Status',    render: (r) => r.status || '—', runStatusBadge: true },
+    ],
+  },
+
+  alerts: {
+    title: 'Open Audit Alerts',
+    description: 'Payroll anomalies and compliance flags requiring HR attention.',
+    icon: 'BellAlertIcon',
+    accentGradient: 'from-rose-500 to-red-600',
+    emptyMsg: 'No open alerts — payroll is clean.',
+    searchFn: (r) =>
+      `${r.employee_name || ''} ${r.description || ''} ${r.alert_type || ''}`.toLowerCase(),
+    columns: [
+      { key: 'type',    label: 'Alert Type',  render: (r) => r.alert_type || r.rule_code || '—' },
+      { key: 'emp',     label: 'Employee',    render: (r) => r.employee_name || '—' },
+      { key: 'sev',     label: 'Severity',    render: (r) => r.severity || '—', severityBadge: true },
+      { key: 'desc',    label: 'Description', render: (r) => r.description || '—' },
+      { key: 'created', label: 'Created',     render: (r) => _fmtD(r.created_at) },
+    ],
+  },
+
+  leave_employees: {
+    title: 'Employees Tracked (Leave)',
+    description: 'All employees with leave records imported from HR.',
+    icon: 'UsersIcon',
+    accentGradient: 'from-indigo-500 to-blue-600',
+    emptyMsg: 'No leave records found.',
+    searchFn: (r) =>
+      `${r.employee_name || r.employee_code || ''} ${r.leave_type_name || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',  label: 'Employee',    render: (r) => r.employee_name || r.employee_code || '—' },
+      { key: 'code',  label: 'Code',        render: (r) => r.employee_code || '—', mono: true },
+      { key: 'type',  label: 'Leave Type',  render: (r) => r.leave_type_name || r.leave_type || '—' },
+      { key: 'taken', label: 'Taken (days)', render: (r) => _days(r.days_taken) },
+      { key: 'bal',   label: 'Balance',     render: (r) => _days(r.balance ?? r.remaining_balance), balanceBadge: true },
+    ],
+  },
+
+  leave_taken_ytd: {
+    title: 'Leave Taken YTD',
+    description: 'All approved leave requests so far this year.',
+    icon: 'ArrowTrendingDownIcon',
+    accentGradient: 'from-amber-500 to-orange-600',
+    emptyMsg: 'No approved leave requests found.',
+    searchFn: (r) =>
+      `${r.employee_name || ''} ${r.leave_type_detail?.code || r.leave_type || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Employee',  render: (r) => r.employee_name || '—' },
+      { key: 'type',   label: 'Type',      render: (r) => r.leave_type_detail?.code || r.leave_type || '—' },
+      { key: 'days',   label: 'Days',      render: (r) => _days(r.total_days ?? r.duration_days) },
+      { key: 'from',   label: 'From',      render: (r) => r.start_date || '—' },
+      { key: 'to',     label: 'To',        render: (r) => r.end_date || '—' },
+      { key: 'status', label: 'Status',    render: (r) => r.status || '—', leaveStatusBadge: true },
+    ],
+  },
+
+  leave_earned_ytd: {
+    title: 'Leave Earned YTD',
+    description: 'Leave days accrued per employee from the start of the year.',
+    icon: 'ArrowTrendingUpIcon',
+    accentGradient: 'from-emerald-500 to-teal-600',
+    emptyMsg: 'No leave balance data available.',
+    searchFn: (r) =>
+      `${r.employee_name || r.employee_code || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Employee',   render: (r) => r.employee_name || r.employee_code || '—' },
+      { key: 'code',   label: 'Code',       render: (r) => r.employee_code || '—', mono: true },
+      { key: 'type',   label: 'Leave Type', render: (r) => r.leave_type_name || r.leave_type || '—' },
+      { key: 'earned', label: 'Earned',     render: (r) => _days(r.days_earned ?? r.entitlement) },
+      { key: 'taken',  label: 'Taken',      render: (r) => _days(r.days_taken) },
+      { key: 'bal',    label: 'Balance',    render: (r) => _days(r.balance), balanceBadge: true },
+    ],
+  },
+
+  leave_avg_balance: {
+    title: 'Leave Balance — Per Employee',
+    description: 'Individual leave balances sorted from lowest to highest.',
+    icon: 'ScaleIcon',
+    accentGradient: 'from-teal-500 to-cyan-600',
+    emptyMsg: 'No leave balance data available.',
+    searchFn: (r) =>
+      `${r.employee_name || r.employee_code || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',  label: 'Employee',   render: (r) => r.employee_name || r.employee_code || '—' },
+      { key: 'code',  label: 'Code',       render: (r) => r.employee_code || '—', mono: true },
+      { key: 'type',  label: 'Leave Type', render: (r) => r.leave_type_name || r.leave_type || '—' },
+      { key: 'taken', label: 'Taken',      render: (r) => _days(r.days_taken) },
+      { key: 'bal',   label: 'Balance',    render: (r) => _days(r.balance ?? r.remaining_balance), balanceBadge: true },
+    ],
+  },
+
+  leave_critical: {
+    title: 'Critical Leave Balance',
+    description: 'Employees at or below zero leave days — immediate HR action required.',
+    icon: 'ExclamationTriangleIcon',
+    accentGradient: 'from-rose-600 to-red-700',
+    emptyMsg: 'All employees have positive leave balances.',
+    searchFn: (r) =>
+      `${r.employee_name || r.employee_code || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',  label: 'Employee',   render: (r) => r.employee_name || r.employee_code || '—' },
+      { key: 'code',  label: 'Code',       render: (r) => r.employee_code || '—', mono: true },
+      { key: 'type',  label: 'Leave Type', render: (r) => r.leave_type_name || r.leave_type || '—' },
+      { key: 'taken', label: 'Taken',      render: (r) => _days(r.days_taken) },
+      { key: 'bal',   label: 'Balance',    render: (r) => _days(r.balance ?? r.remaining_balance), balanceBadge: true },
+    ],
+  },
+}
 
 
 // =============================================================================
