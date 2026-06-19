@@ -9,14 +9,14 @@
  * All data is consumed via existing service layer (read-only where applicable).
  *
  * Sections:
- *  0 â€” Overview (profile header + today's status + AI insights)
- *  1 â€” Leave (balance cards + request form)
- *  2 â€” Attendance (charts + calendar heatmap)
- *  3 â€” Timesheet (hours breakdown + trends)
- *  4 â€” Payroll (read-only snapshot)
- *  5 â€” Team Calendar (team availability)
- *  6 â€” Digital Twin (health scores)
- *  7 â€” Notifications
+ *  0 \u2014 Overview (profile header + today's status + AI insights)
+ *  1 \u2014 Leave (balance cards + request form)
+ *  2 \u2014 Attendance (charts + calendar heatmap)
+ *  3 \u2014 Timesheet (hours breakdown + trends)
+ *  4 \u2014 Payroll (read-only snapshot)
+ *  5 \u2014 Team Calendar (team availability)
+ *  6 \u2014 Digital Twin (health scores)
+ *  7 \u2014 Notifications
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,9 +35,9 @@ import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
 import { ESS_LEAVE_TYPE_CONFIG, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS } from '../../config/hrLeave.config'
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Soft-coded configuration
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const ESS_TABS = [
   { id: 'overview',    label: 'Overview',        icon: 'HomeIcon' },
@@ -51,8 +51,13 @@ const ESS_TABS = [
   { id: 'notifications', label: 'Notifications', icon: 'BellIcon' },
 ]
 
-// Leave type config sourced from hrLeave.config.js â€” single source of truth
+// Leave type config sourced from hrLeave.config.js \u2014 single source of truth
 const LEAVE_TYPE_CONFIG = ESS_LEAVE_TYPE_CONFIG
+
+// -- Soft-coded display characters (Unicode escapes prevent encoding corruption)
+const EMPTY_DISPLAY    = '\u2014'  // em dash   for null/undefined value fallback
+const ELLIPSIS_DISPLAY = '\u2026'  // ellipsis  for loading/placeholder text
+const BULLET_DISPLAY   = '\u00B7'  // middle dot for metadata separators
 
 const ATTENDANCE_STATUS_MAP = {
   present:   { label: 'Present',         dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -75,16 +80,16 @@ const SCORE_CONFIG = [
 ]
 
 const STANDARD_DAILY_HOURS = 9
-const STANDARD_MONTHLY_HOURS = 198   // ~22 days Ã— 9 h
+const STANDARD_MONTHLY_HOURS = 198   // ~22 days Ã\u2014 9 h
 const NOTIFICATION_PRIORITY = {
   high:   { badge: 'bg-rose-100 text-rose-700',   dot: 'bg-rose-500' },
   medium: { badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
   low:    { badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Micro-components (stable references outside main component)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const Spinner = ({ size = 'md' }) => {
   const s = size === 'sm' ? 'w-4 h-4' : size === 'lg' ? 'w-8 h-8' : 'w-5 h-5'
@@ -117,7 +122,7 @@ const KpiCard = ({ icon, label, value, sub, tone = 'blue', trend = null }) => {
         <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
         <Icon name={icon} className={`w-4 h-4 ${t.icon}`} />
       </div>
-      <div className={`text-2xl font-bold ${t.text}`}>{value ?? 'â€”'}</div>
+      <div className={`text-2xl font-bold ${t.text}`}>{value ?? EMPTY_DISPLAY}</div>
       {sub && <div className="text-xs text-slate-400">{sub}</div>}
       {trend !== null && (
         <div className={`text-xs flex items-center gap-1 mt-0.5 ${trend >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
@@ -176,24 +181,24 @@ const EmptyNotice = ({ icon = 'InboxIcon', message = 'No data available' }) => (
   </div>
 )
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Helpers
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 const nowYear  = () => new Date().getFullYear()
 const nowMonth = () => new Date().getMonth() + 1
 
 const fmtDate = (d) => {
-  if (!d) return 'â€”'
+  if (!d) return EMPTY_DISPLAY
   const dt = new Date(d)
   return dt.toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const fmtHours = (h) => {
-  if (h === null || h === undefined) return 'â€”'
+  if (h === null || h === undefined) return EMPTY_DISPLAY
   const n = Number(h)
-  if (isNaN(n)) return 'â€”'
+  if (isNaN(n)) return EMPTY_DISPLAY
   const hrs = Math.floor(n)
   const mins = Math.round((n - hrs) * 60)
   return `${hrs}h${mins > 0 ? ` ${mins}m` : ''}`
@@ -253,7 +258,7 @@ const generateInsights = ({ leaveRecord, monthlyTs, today, slips }) => {
         severity: attRate >= 95 ? 'success' : attRate >= 80 ? 'warning' : 'error',
         title: `Attendance rate this month: ${attRate}%`,
         description: attRate >= 95
-          ? 'Excellent attendance â€” keep it up!'
+          ? 'Excellent attendance \u2014 keep it up!'
           : `Your attendance is below target. ${days - (monthlyTs.present_days || 0)} working days were missed.`,
       })
     }
@@ -265,7 +270,7 @@ const generateInsights = ({ leaveRecord, monthlyTs, today, slips }) => {
         severity: 'info',
         title: `${fmtHours(otHrs)} overtime worked this month`,
         description: otHrs > 20
-          ? `High overtime detected. ${fmtHours(otHrs)} extra hours logged â€” consider discussing workload with your manager.`
+          ? `High overtime detected. ${fmtHours(otHrs)} extra hours logged \u2014 consider discussing workload with your manager.`
           : `You logged ${fmtHours(otHrs)} overtime hours this month.`,
       })
     }
@@ -315,9 +320,9 @@ const INSIGHT_TONES = {
   error:   'bg-rose-50 border-rose-200 text-rose-800',
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Employee Profile Header
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const EmployeeProfileHeader = ({ profile, leaveRecord, monthlyTs, salaryInfo, loading }) => {
   const name = profile
@@ -328,25 +333,25 @@ const EmployeeProfileHeader = ({ profile, leaveRecord, monthlyTs, salaryInfo, lo
   const quickStats = [
     {
       label: 'Leave Balance',
-      value: leaveRecord ? `${Number(leaveRecord.leave_balance).toFixed(1)} d` : 'â€”',
+      value: leaveRecord ? `${Number(leaveRecord.leave_balance).toFixed(1)} d` : EMPTY_DISPLAY,
       icon: 'CalendarDaysIcon',
       tone: 'blue',
     },
     {
       label: 'Month Hours',
-      value: monthlyTs ? fmtHours(monthlyTs.total_hours) : 'â€”',
+      value: monthlyTs ? fmtHours(monthlyTs.total_hours) : EMPTY_DISPLAY,
       icon: 'ClockIcon',
       tone: 'green',
     },
     {
       label: 'Month OT',
-      value: monthlyTs ? fmtHours(monthlyTs.total_overtime) : 'â€”',
+      value: monthlyTs ? fmtHours(monthlyTs.total_overtime) : EMPTY_DISPLAY,
       icon: 'ArrowTrendingUpIcon',
       tone: 'amber',
     },
     {
       label: 'Basic Salary',
-      value: salaryInfo ? fmtCurrency(salaryInfo.basic_salary) : 'â€”',
+      value: salaryInfo ? fmtCurrency(salaryInfo.basic_salary) : EMPTY_DISPLAY,
       icon: 'BanknotesIcon',
       tone: 'purple',
     },
@@ -452,9 +457,9 @@ const EmployeeProfileHeader = ({ profile, leaveRecord, monthlyTs, salaryInfo, lo
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Today's Status
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const TodayStatusCard = ({ todayData, loading }) => {
   const status = todayData?.status || 'missing'
@@ -491,28 +496,28 @@ const TodayStatusCard = ({ todayData, loading }) => {
                 <Icon name="ArrowRightCircleIcon" className="w-3.5 h-3.5 text-emerald-500" />
                 Check-In
               </div>
-              <div className="font-bold text-slate-800">{checkin || 'â€”'}</div>
+              <div className="font-bold text-slate-800">{checkin || EMPTY_DISPLAY}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ArrowLeftCircleIcon" className="w-3.5 h-3.5 text-rose-500" />
                 Check-Out
               </div>
-              <div className="font-bold text-slate-800">{checkout || 'â€”'}</div>
+              <div className="font-bold text-slate-800">{checkout || EMPTY_DISPLAY}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ClockIcon" className="w-3.5 h-3.5 text-blue-500" />
                 Total Hours
               </div>
-              <div className="font-bold text-slate-800">{hours > 0 ? fmtHours(hours) : 'â€”'}</div>
+              <div className="font-bold text-slate-800">{hours > 0 ? fmtHours(hours) : EMPTY_DISPLAY}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ArrowTrendingUpIcon" className="w-3.5 h-3.5 text-amber-500" />
                 Overtime
               </div>
-              <div className="font-bold text-slate-800">{ot > 0 ? fmtHours(ot) : 'â€”'}</div>
+              <div className="font-bold text-slate-800">{ot > 0 ? fmtHours(ot) : EMPTY_DISPLAY}</div>
             </div>
           </div>
 
@@ -531,9 +536,9 @@ const TodayStatusCard = ({ todayData, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: AI Insights
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const AIInsightsPanel = ({ insights, loading }) => (
   <SectionCard
@@ -546,7 +551,7 @@ const AIInsightsPanel = ({ insights, loading }) => (
         {[...Array(3)].map((_, i) => <SkeletonBox key={i} className="h-14 w-full" />)}
       </div>
     ) : insights.length === 0 ? (
-      <EmptyNotice icon="LightBulbIcon" message="No insights yet â€” check back after data loads." />
+      <EmptyNotice icon="LightBulbIcon" message={"No insights yet \u2014 check back after data loads."} />
     ) : (
       <div className="space-y-3">
         {insights.map((ins) => (
@@ -565,9 +570,9 @@ const AIInsightsPanel = ({ insights, loading }) => (
   </SectionCard>
 )
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Leave Dashboard
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
   const taken     = Number(leaveRecord?.total_taken)    || 0
@@ -679,9 +684,9 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Leave Request Form
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitting, submitResult }) => {
   const [form, setForm] = useState({
@@ -766,7 +771,7 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
               required
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
             >
-              <option value="">Select leave typeâ€¦</option>
+              <option value="">Select leave type{ELLIPSIS_DISPLAY}</option>
               {types.map(t => (
                 <option key={t.id || t.name} value={t.id || t.name}>{t.name || t.label}</option>
               ))}
@@ -820,7 +825,7 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
             value={form.reason}
             onChange={(e) => set('reason', e.target.value)}
             rows={3}
-            placeholder="Briefly describe your reason for leaveâ€¦"
+            placeholder={"Briefly describe your reason for leave\u2026"}
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
           />
         </div>
@@ -842,7 +847,7 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
                 <div>Balance after approval: <strong>{(balance - calcDays).toFixed(1)} days</strong></div>
               )}
               {conflict && <div>âš  Overlapping leave request detected</div>}
-              {insufficient && <div>âœ— Insufficient annual leave balance</div>}
+              {insufficient && <div>Insufficient annual leave balance</div>}
             </div>
           </div>
         )}
@@ -865,9 +870,9 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Attendance Analytics
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const AttendanceAnalytics = ({ monthlyTs, loading }) => {
   // Build chart data from monthly timesheet
@@ -956,9 +961,9 @@ const AttendanceAnalytics = ({ monthlyTs, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Timesheet Insights
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
   const totalHrs    = Number(monthlyTs?.total_hours) || 0
@@ -980,7 +985,7 @@ const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <KpiCard icon="ClockIcon" label="Total Hours" value={fmtHours(totalHrs)} sub={`of ~${fmtHours(STANDARD_MONTHLY_HOURS)} expected`} tone="blue" />
         <KpiCard icon="ArrowTrendingUpIcon" label="Overtime" value={fmtHours(totalOt)} sub="This month" tone="amber" />
-        <KpiCard icon="CurrencyDollarIcon" label="Billable Hours" value={billable > 0 ? fmtHours(billable) : 'â€”'} sub="Chargeable to projects" tone="green" />
+        <KpiCard icon="CurrencyDollarIcon" label="Billable Hours" value={billable > 0 ? fmtHours(billable) : EMPTY_DISPLAY} sub="Chargeable to projects" tone="green" />
         <KpiCard icon="ChartBarIcon" label="Utilization" value={`${utilPct}%`} sub={utilPct >= 90 ? 'On track' : 'Below target'} tone={utilPct >= 90 ? 'green' : utilPct >= 70 ? 'amber' : 'rose'} />
       </div>
 
@@ -1040,9 +1045,9 @@ const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Payroll Snapshot (read-only)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const PayrollSnapshot = ({ salaryInfo, slips, loading }) => {
   const latest = slips?.[0] || null
@@ -1063,11 +1068,11 @@ const PayrollSnapshot = ({ salaryInfo, slips, loading }) => {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-        <KpiCard icon="BanknotesIcon"     label="Basic Salary"    value={basic > 0 ? fmtCurrency(basic) : 'â€”'} sub="Monthly" tone="blue" />
-        <KpiCard icon="ArrowUpIcon"       label="Gross Earnings"  value={gross > 0 ? fmtCurrency(gross) : 'â€”'} sub={latest ? `${MONTH_SHORT[(latest.month||1)-1]} ${latest.year}` : 'Latest'} tone="green" />
-        <KpiCard icon="ArrowTrendingUpIcon" label="Overtime Pay"  value={ot > 0 ? fmtCurrency(ot) : 'â€”'} sub="Included in gross" tone="amber" />
-        <KpiCard icon="MinusCircleIcon"   label="Deductions"      value={deductions > 0 ? fmtCurrency(deductions) : 'â€”'} sub="This month" tone="rose" />
-        <KpiCard icon="CurrencyDollarIcon" label="Net Salary"     value={net > 0 ? fmtCurrency(net) : 'â€”'} sub={latest?.status || 'â€”'} tone="purple" />
+        <KpiCard icon="BanknotesIcon"     label="Basic Salary"    value={basic > 0 ? fmtCurrency(basic) : EMPTY_DISPLAY} sub="Monthly" tone="blue" />
+        <KpiCard icon="ArrowUpIcon"       label="Gross Earnings"  value={gross > 0 ? fmtCurrency(gross) : EMPTY_DISPLAY} sub={latest ? `${MONTH_SHORT[(latest.month||1)-1]} ${latest.year}` : 'Latest'} tone="green" />
+        <KpiCard icon="ArrowTrendingUpIcon" label="Overtime Pay"  value={ot > 0 ? fmtCurrency(ot) : EMPTY_DISPLAY} sub="Included in gross" tone="amber" />
+        <KpiCard icon="MinusCircleIcon"   label="Deductions"      value={deductions > 0 ? fmtCurrency(deductions) : EMPTY_DISPLAY} sub="This month" tone="rose" />
+        <KpiCard icon="CurrencyDollarIcon" label="Net Salary"     value={net > 0 ? fmtCurrency(net) : EMPTY_DISPLAY} sub={latest?.status || EMPTY_DISPLAY} tone="purple" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -1135,9 +1140,9 @@ const PayrollSnapshot = ({ salaryInfo, slips, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Team Availability Calendar
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const TeamCalendar = ({ calendarData, loading }) => {
   const [viewMonth, setViewMonth] = useState({ year: nowYear(), month: nowMonth() })
@@ -1252,9 +1257,9 @@ const TeamCalendar = ({ calendarData, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Notifications
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const NotificationsCenter = ({ requests, loading }) => {
   const [readIds, setReadIds] = useState(new Set())
@@ -1269,7 +1274,7 @@ const NotificationsCenter = ({ requests, loading }) => {
           type: 'leave',
           priority: 'medium',
           title: 'Leave Request Approved',
-          message: `Your ${r.leave_type_display || 'leave'} request (${fmtDate(r.start_date)} â€“ ${fmtDate(r.end_date)}) has been approved.`,
+          message: `Your ${r.leave_type_display || 'leave'} request (${fmtDate(r.start_date)} \u2013 ${fmtDate(r.end_date)}) has been approved.`,
           icon: 'CheckCircleIcon',
           time: r.approved_at || r.updated_at,
         })
@@ -1359,9 +1364,9 @@ const NotificationsCenter = ({ requests, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // Section: Employee Digital Twin
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 const DigitalTwin = ({ monthlyTs, leaveRecord, slips, requests, loading }) => {
   const scores = useMemo(() => {
@@ -1480,11 +1485,11 @@ const DigitalTwin = ({ monthlyTs, leaveRecord, slips, requests, loading }) => {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // DAILY TRACKER TAB
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
-// â”€â”€ Config helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Config helpers ------------------------------------------------------------
 function priorityConfig(id) {
   return DAILY_TRACKER_PRIORITIES.find(p => p.id === id) || DAILY_TRACKER_PRIORITIES[1]
 }
@@ -1495,7 +1500,7 @@ function approvalConfig(id) {
   return DAILY_TRACKER_APPROVAL_STATUSES.find(a => a.id === id) || DAILY_TRACKER_APPROVAL_STATUSES[0]
 }
 
-// â”€â”€ 14-week rolling heatmap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- 14-week rolling heatmap ---------------------------------------------------
 function ActivityHeatmap({ summary }) {
   const cfg    = DAILY_TRACKER_COPY
   const weeks  = cfg.heatmapWeeks
@@ -1564,7 +1569,7 @@ function ActivityHeatmap({ summary }) {
   )
 }
 
-// â”€â”€ Smart rotating placeholders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Smart rotating placeholders -----------------------------------------------
 // -- Quick Log Form (wide two-column layout)
 const TASK_PLACEHOLDERS = [
   'Reviewed P&ID drawings for Train 2',
@@ -1670,7 +1675,7 @@ function ActivityWizard({ initial, onSave, onClose, submitting, alreadyLoggedHou
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] divide-y md:divide-y-0 md:divide-x divide-slate-100">
 
-            {/* LEFT COL — main content */}
+            {/* LEFT COL \u2014 main content */}
             <div className="p-5 space-y-4">
 
               {/* Task title */}
@@ -1692,7 +1697,7 @@ function ActivityWizard({ initial, onSave, onClose, submitting, alreadyLoggedHou
                 />
               </div>
 
-              {/* Notes — always visible */}
+              {/* Notes \u2014 always visible */}
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5">
                   Notes / Context
@@ -1770,7 +1775,7 @@ function ActivityWizard({ initial, onSave, onClose, submitting, alreadyLoggedHou
               </div>
             </div>
 
-            {/* RIGHT COL — quick selectors */}
+            {/* RIGHT COL \u2014 quick selectors */}
             <div className="p-5 space-y-5">
 
               {/* Hours */}
@@ -1909,7 +1914,7 @@ function ActivityWizard({ initial, onSave, onClose, submitting, alreadyLoggedHou
     </div>
   )
 }
-// â”€â”€ Reject note mini-modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Reject note mini-modal ----------------------------------------------------
 function RejectModal({ onConfirm, onClose }) {
   const cfg = DAILY_TRACKER_COPY
   const [note, setNote] = useState('')
@@ -1948,7 +1953,7 @@ function RejectModal({ onConfirm, onClose }) {
   )
 }
 
-// â”€â”€ Main Daily Tracker tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Main Daily Tracker tab ----------------------------------------------------
 function DailyTrackerTab({ currentUser }) {
   const cfg     = DAILY_TRACKER_COPY
   const isStaff = currentUser?.is_staff || currentUser?.is_superuser || false
@@ -1974,7 +1979,7 @@ function DailyTrackerTab({ currentUser }) {
     setTimeout(() => setToast(null), 3500)
   }
 
-  // â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Data loading ----------------------------------------------------------
   const loadLogs = useCallback(async () => {
     setLoading(true)
     try {
@@ -2021,7 +2026,7 @@ function DailyTrackerTab({ currentUser }) {
 
   useEffect(() => { if (showTeam) loadTeam() }, [showTeam, loadTeam])
 
-  // â”€â”€ Derived KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Derived KPIs ----------------------------------------------------------
   const todayLogs    = logs
   const hoursToday   = todayLogs.reduce((a, l) => a + parseFloat(l.hours_spent || 0), 0)
   const tasksDone    = todayLogs.filter(l => l.status === 'done').length
@@ -2043,7 +2048,7 @@ function DailyTrackerTab({ currentUser }) {
     return { day, hours: row ? parseFloat(row.total_hours.toFixed(1)) : 0 }
   })
 
-  // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- CRUD handlers ---------------------------------------------------------
   async function handleSave(data) {
     setSubmitting(true)
     try {
@@ -2054,7 +2059,7 @@ function DailyTrackerTab({ currentUser }) {
       } else {
         const created = await payrollService.createDailyLog(data)
         if (data.log_date === selectedDate) setLogs(p => [created, ...p])
-        showToast('Activity submitted â€” pending manager approval.')
+        showToast('Activity submitted \u2014 pending manager approval.')
       }
       setWizardOpen(false)
       setEditingLog(null)
@@ -2105,7 +2110,7 @@ function DailyTrackerTab({ currentUser }) {
     finally { setExportLoading(false) }
   }
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Render ----------------------------------------------------------------
   return (
     <div className="space-y-5">
 
@@ -2145,7 +2150,7 @@ function DailyTrackerTab({ currentUser }) {
           <button onClick={handleExport} disabled={exportLoading}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-50">
             <HeroIcons.CloudArrowUpIcon className="h-4 w-4 inline mr-1" />
-            {exportLoading ? 'Exportingâ€¦' : cfg.exportButton}
+            {exportLoading ? 'Exporting\u2026' : cfg.exportButton}
           </button>
           <button onClick={() => { setEditingLog(null); setWizardOpen(true) }}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-sm transition-all">
@@ -2160,7 +2165,7 @@ function DailyTrackerTab({ currentUser }) {
           { label: 'Hours Today',     value: hoursToday.toFixed(1), sub: `${pendingCount} pending approval`,  icon: 'ClockIcon',            color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
           { label: 'Tasks Done',      value: tasksDone,             sub: 'approved + non-approved',           icon: 'CheckCircleIcon',      color: 'text-emerald-600', bg: 'bg-emerald-50' },
           { label: 'Blocked',         value: blocked,               sub: 'need attention',                    icon: 'ExclamationCircleIcon', color: 'text-red-500',    bg: 'bg-red-50'     },
-          { label: 'Hours This Week', value: hoursWeek.toFixed(1),  sub: 'Monâ€“today',                         icon: 'CalendarDaysIcon',     color: 'text-purple-600', bg: 'bg-purple-50'  },
+          { label: 'Hours This Week', value: hoursWeek.toFixed(1),  sub: 'Mon\u2013today',                         icon: 'CalendarDaysIcon',     color: 'text-purple-600', bg: 'bg-purple-50'  },
         ].map(tile => {
           const Icon = HeroIcons[tile.icon]
           return (
@@ -2196,7 +2201,7 @@ function DailyTrackerTab({ currentUser }) {
         </div>
       </div>
 
-      {/* Approval Queue â€” managers/staff only */}
+      {/* Approval Queue \u2014 managers/staff only */}
       {isStaff && (
         <div className="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-amber-50 flex items-center justify-between bg-amber-50/50">
@@ -2216,7 +2221,7 @@ function DailyTrackerTab({ currentUser }) {
           </div>
 
           {queueLoading ? (
-            <div className="p-6 text-center text-slate-400 text-sm">Loadingâ€¦</div>
+            <div className="p-6 text-center text-slate-400 text-sm">Loading{ELLIPSIS_DISPLAY}</div>
           ) : approvalQueue.length === 0 ? (
             <div className="p-6 text-center text-slate-400 text-sm">
               <HeroIcons.CheckBadgeIcon className="h-8 w-8 mx-auto mb-2 text-emerald-300" />
@@ -2287,12 +2292,12 @@ function DailyTrackerTab({ currentUser }) {
       {!showTeam && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
-            <p className="font-semibold text-slate-700 text-sm">Activity Log â€” {selectedDate}</p>
+            <p className="font-semibold text-slate-700 text-sm">Activity Log {EMPTY_DISPLAY} {selectedDate}</p>
             <span className="text-xs text-slate-400">{todayLogs.length} {todayLogs.length === 1 ? 'entry' : 'entries'}</span>
           </div>
 
           {loading ? (
-            <div className="p-8 text-center text-slate-400 text-sm">Loadingâ€¦</div>
+            <div className="p-8 text-center text-slate-400 text-sm">Loading{ELLIPSIS_DISPLAY}</div>
           ) : todayLogs.length === 0 ? (
             <div className="p-8 text-center space-y-2">
               <HeroIcons.ClipboardDocumentListIcon className="h-10 w-10 mx-auto text-slate-200" />
@@ -2320,7 +2325,7 @@ function DailyTrackerTab({ currentUser }) {
                     return (
                       <tr key={log.id} className={`transition-colors hover:brightness-95 ${ac.rowBg}`}>
                         <td className="px-4 py-3 font-medium text-slate-800 max-w-[180px] truncate">{log.task_title}</td>
-                        <td className="px-4 py-3 text-slate-500 text-xs">{log.project_category || 'â€”'}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{log.project_category || EMPTY_DISPLAY}</td>
                         <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700">
                           {parseFloat(log.hours_spent).toFixed(1)}
                         </td>
@@ -2386,10 +2391,10 @@ function DailyTrackerTab({ currentUser }) {
       {showTeam && isStaff && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-50">
-            <p className="font-semibold text-slate-700 text-sm">{cfg.teamViewTitle} â€” {selectedDate}</p>
+            <p className="font-semibold text-slate-700 text-sm">{cfg.teamViewTitle} {EMPTY_DISPLAY} {selectedDate}</p>
           </div>
           {teamLoading ? (
-            <div className="p-8 text-center text-slate-400 text-sm">Loadingâ€¦</div>
+            <div className="p-8 text-center text-slate-400 text-sm">Loading{ELLIPSIS_DISPLAY}</div>
           ) : teamLogs.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">No team logs for this date.</div>
           ) : (
@@ -2415,7 +2420,7 @@ function DailyTrackerTab({ currentUser }) {
                       <tr key={log.id} className={`hover:brightness-95 transition-colors ${ac.rowBg}`}>
                         <td className="px-4 py-3 font-medium text-slate-700">{log.user_full_name}</td>
                         <td className="px-4 py-3 text-slate-800 max-w-[180px] truncate">{log.task_title}</td>
-                        <td className="px-4 py-3 text-slate-500 text-xs">{log.project_category || 'â€”'}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{log.project_category || EMPTY_DISPLAY}</td>
                         <td className="px-4 py-3 text-center font-mono font-semibold text-slate-700">
                           {parseFloat(log.hours_spent).toFixed(1)}
                         </td>
@@ -2480,9 +2485,9 @@ function DailyTrackerTab({ currentUser }) {
   )
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 // MAIN COMPONENT
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -----------------------------------------------------------------------------
 
 export default function EmployeeSelfService() {
   const { user: authUser } = useSelector((s) => s.auth) || {}
@@ -2492,7 +2497,7 @@ export default function EmployeeSelfService() {
   const now = new Date()
   const [activeTab, setActiveTab] = useState('overview')
 
-  // â”€â”€ Data state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Data state --------------------------------------------------------------
   const [profile,      setProfile]      = useState(null)
   const [monthlyTs,    setMonthlyTs]    = useState(null)
   const [todayTs,      setTodayTs]      = useState(null)
@@ -2504,18 +2509,18 @@ export default function EmployeeSelfService() {
   const [salaryInfo,   setSalaryInfo]   = useState(null)
   const [slips,        setSlips]        = useState([])
 
-  // â”€â”€ Loading / error state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Loading / error state ---------------------------------------------------
   const [loadingProfile,  setLoadingProfile]  = useState(true)
   const [loadingTs,       setLoadingTs]       = useState(true)
   const [loadingLeave,    setLoadingLeave]    = useState(true)
   const [loadingPayroll,  setLoadingPayroll]  = useState(true)
   const [loadingCalendar, setLoadingCalendar] = useState(true)
 
-  // â”€â”€ Leave form state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Leave form state --------------------------------------------------------
   const [submitting,    setSubmitting]    = useState(false)
   const [submitResult,  setSubmitResult]  = useState(null)
 
-  // â”€â”€ Load profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load profile ------------------------------------------------------------
   useEffect(() => {
     setLoadingProfile(true)
     rbacService.getCurrentUser()
@@ -2524,7 +2529,7 @@ export default function EmployeeSelfService() {
       .finally(() => setLoadingProfile(false))
   }, [])
 
-  // â”€â”€ Load timesheet data for current user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load timesheet data for current user ------------------------------------
   useEffect(() => {
     setLoadingTs(true)
     const employeeCode = profile?.employee_code || profile?.engineer_profile?.employee_code || profile?.username
@@ -2564,7 +2569,7 @@ export default function EmployeeSelfService() {
     }).finally(() => setLoadingTs(false))
   }, [profile])
 
-  // â”€â”€ Load leave data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load leave data ---------------------------------------------------------
   useEffect(() => {
     setLoadingLeave(true)
     const employeeName = profile
@@ -2590,7 +2595,7 @@ export default function EmployeeSelfService() {
     }).finally(() => setLoadingLeave(false))
   }, [profile])
 
-  // â”€â”€ Load payroll data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load payroll data -------------------------------------------------------
   useEffect(() => {
     setLoadingPayroll(true)
     const userId = profile?.id
@@ -2610,7 +2615,7 @@ export default function EmployeeSelfService() {
     }).finally(() => setLoadingPayroll(false))
   }, [profile])
 
-  // â”€â”€ Load team calendar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Load team calendar ------------------------------------------------------
   useEffect(() => {
     setLoadingCalendar(true)
     payrollService.getLeaveCalendar(now.getFullYear(), now.getMonth() + 1)
@@ -2619,7 +2624,7 @@ export default function EmployeeSelfService() {
       .finally(() => setLoadingCalendar(false))
   }, [])
 
-  // â”€â”€ Derived: AI insights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Derived: AI insights ----------------------------------------------------
   const insights = useMemo(() => generateInsights({
     leaveRecord,
     monthlyTs,
@@ -2627,7 +2632,7 @@ export default function EmployeeSelfService() {
     slips,
   }), [leaveRecord, monthlyTs, todayTs, slips])
 
-  // â”€â”€ Leave request submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Leave request submit ----------------------------------------------------
   const handleLeaveSubmit = useCallback(async (form) => {
     setSubmitting(true)
     setSubmitResult(null)
@@ -2654,7 +2659,7 @@ export default function EmployeeSelfService() {
     }
   }, [profile])
 
-  // â”€â”€ Tab notification badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Tab notification badges -------------------------------------------------
   const pendingLeave   = leaveRequests.filter(r => r.status === 'pending').length
   const unreadNotifs   = leaveRequests.filter(r => ['approved','rejected'].includes(r.status)).length
 
@@ -2663,7 +2668,7 @@ export default function EmployeeSelfService() {
     notifications: unreadNotifs > 0 ? unreadNotifs : null,
   }
 
-  // â”€â”€ Section renders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Section renders ---------------------------------------------------------
   const renderSection = () => {
     switch (activeTab) {
       case 'overview':
@@ -2733,8 +2738,8 @@ export default function EmployeeSelfService() {
                                 {r.leave_type_display || r.leave_type || 'Leave'}
                               </div>
                               <div className="text-xs text-slate-400">
-                                {fmtDate(r.start_date)} â€“ {fmtDate(r.end_date)}
-                                {r.duration_days ? ` Â· ${r.duration_days}d` : ''}
+                                {fmtDate(r.start_date)} {EMPTY_DISPLAY} {fmtDate(r.end_date)}
+                                {r.duration_days ? ` ${BULLET_DISPLAY} ${r.duration_days}d` : ''}
                               </div>
                             </div>
                             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sm}`}>
@@ -2794,7 +2799,7 @@ export default function EmployeeSelfService() {
       </div>
 
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-        {/* â”€â”€ Profile Header â”€â”€ */}
+        {/* -- Profile Header -- */}
         <EmployeeProfileHeader
           profile={profile}
           leaveRecord={leaveRecord}
@@ -2803,7 +2808,7 @@ export default function EmployeeSelfService() {
           loading={loadingProfile}
         />
 
-        {/* â”€â”€ Tab Navigation â”€â”€ */}
+        {/* -- Tab Navigation -- */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
           <div className="px-4 py-2 flex gap-1 overflow-x-auto scrollbar-hide">
             {ESS_TABS.map(tab => {
@@ -2834,12 +2839,12 @@ export default function EmployeeSelfService() {
           </div>
         </div>
 
-        {/* â”€â”€ Active Section â”€â”€ */}
+        {/* -- Active Section -- */}
         <div>
           {renderSection()}
         </div>
 
-        {/* â”€â”€ Footer â”€â”€ */}
+        {/* -- Footer -- */}
         <div className="pb-6 text-center text-xs text-slate-400 flex items-center justify-center gap-1">
           <Icon name="ShieldCheckIcon" className="w-3.5 h-3.5 text-emerald-400" />
           You are viewing your own personal workspace. Data is securely scoped to your account.
