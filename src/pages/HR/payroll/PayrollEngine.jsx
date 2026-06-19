@@ -611,6 +611,8 @@ function NewRunModal({ onClose, onCreated }) {
   const now = new Date()
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState('')
+  const [year,   setYear]   = useState(String(now.getFullYear()))
+  const [month,  setMonth]  = useState(String(now.getMonth() + 1))
 
   const runCodePreview = `${ENGINE_COPY.runCodePrefix}-${year}-${String(month).padStart(2, '0')}`
   const periodStart    = `${year}-${String(month).padStart(2, '0')}-01`
