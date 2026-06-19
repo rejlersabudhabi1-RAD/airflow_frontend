@@ -33,13 +33,23 @@ export default defineConfig(({ mode }) => {
   
   // Smart API URL detection (soft-coded for Docker and production)
   // Priority: VITE_API_PROXY_TARGET env var → fallback to localhost:8000
-  // Set VITE_API_PROXY_TARGET=https://aiflowbackend-production-9bdc.up.railway.app to use Railway testing backend
+  //
+  // Modes (set in .env.local):
+  //   LOCAL  → VITE_API_PROXY_TARGET=http://aiflow_backend:8000
+  //   PROD   → VITE_API_PROXY_TARGET=https://aiflowbackend-production.up.railway.app
+  //
   let apiUrl = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
   const apiUrlObj = new URL(apiUrl)
-  const targetHost = apiUrlObj.host // dynamic: 'localhost:8000' OR 'aiflowbackend-production-9bdc.up.railway.app'
+  const targetHost = apiUrlObj.host // dynamic: 'localhost:8000' OR 'aiflowbackend-production.up.railway.app'
+
+  // Soft-coded: detect when pointing at production so we can warn in the browser
+  const IS_PROD_BACKEND = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1') && !apiUrl.includes('aiflow_backend')
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)
+  if (IS_PROD_BACKEND) {
+    console.log('⚠️  PROD BACKEND MODE — all API calls proxy to Railway production. Writes hit production data!')
+  }
 
   return {
     plugins: [react()],
@@ -47,6 +57,11 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
+    },
+    // Soft-coded: expose backend mode to the React app as a compile-time constant
+    // Use in components: if (import.meta.env.VITE_IS_PROD_BACKEND === 'true') { ... }
+    define: {
+      '__PROD_BACKEND__': JSON.stringify(IS_PROD_BACKEND),
     },
     server: {
       host: '0.0.0.0', // Listen on all interfaces for Docker

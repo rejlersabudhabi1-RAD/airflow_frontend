@@ -153,8 +153,50 @@ const payrollService = {
   sendSalarySlipEmail: (id) =>
     unwrap(apiClient.post(`${FINANCE}/salary-slips/${id}/send-email/`)),
 
+  createPayrollRun: (data) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-runs/`, data)),
+
   processPayrollRun: (id) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/${id}/process/`)),
+
+  // Bulk approve all pending-approval slips in a run in one DB update
+  bulkApproveRun: (runId) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-runs/${runId}/bulk-approve/`)),
+
+  // Queue email delivery for all approved slips in a run
+  bulkSendApprovedRun: (runId) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-runs/${runId}/bulk-send-approved/`)),
+
+  // ── Master Payroll Generator (Sympa + ValueFrame + RADAI merge) ────────────
+  // formData must contain: sympa_file?, valueframe_file?, year, month
+  generateMasterPayroll: (formData) =>
+    unwrap(apiClient.post(`${BASE}/generate-master-payroll/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })),
+
+  // Download master payroll as Excel binary (returns a Blob)
+  downloadMasterPayrollExcel: (formData) =>
+    apiClient.post(`${BASE}/generate-master-payroll/?format=xlsx`, formData, {
+      headers:      { 'Content-Type': 'multipart/form-data' },
+      responseType: 'blob',
+    }).then(r => r.data),
+
+  // List past master payroll import sessions (paginated)
+  getMasterPayrollHistory: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/master-payroll-history/`, { params })),
+
+  // Download a previously generated master payroll by its import ID.
+  // Returns presigned S3 URL JSON or streams the Excel directly.
+  downloadMasterPayrollById: (importId) =>
+    apiClient.get(`${BASE}/master-payroll-history/${importId}/download/`, {
+      responseType: 'blob',
+    }).then(r => {
+      // If backend returned JSON (presigned URL redirect), parse it
+      if (r.headers['content-type']?.includes('application/json')) {
+        return r.data.text().then(t => JSON.parse(t))
+      }
+      return r.data   // Blob (on-the-fly Excel)
+    }),
 
   // ── Salary Components ──────────────────────────────────────────────────────
   getSalaryComponents: (params = {}) =>

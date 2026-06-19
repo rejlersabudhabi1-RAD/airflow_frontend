@@ -800,3 +800,259 @@ export const SALARY_COPY = {
   noteReadOnly:        'Approved structures are read-only. Create a new structure to make changes.',
   noteApprovalRequired:'Requires Senior HR / Manager approval before activation.',
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. PAYROLL ENGINE — full lifecycle + AI intelligence constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ENGINE_BULK_PAGE_SIZE = 200
+
+export const ENGINE_ANOMALY_RULES = {
+  // Flag slips where net salary changed more than this % vs previous month
+  salaryJumpPct:              20,
+  // Flag slips with absent_days above this threshold
+  highAbsentDays:             5,
+  // Biometric present_days vs slip present_days tolerance before flagging mismatch
+  attendanceMismatchTolerance: 1,
+  // Always flag slips where net_salary is exactly 0
+  zeroNetSalary:              true,
+}
+
+export const ENGINE_ANOMALY_SEVERITY = {
+  highAbsent:          { label: 'High Absence',          severity: 'high' },
+  zeroNet:             { label: 'Zero Net Salary',        severity: 'critical' },
+  salaryJump:          { label: 'Salary Jump',            severity: 'medium' },
+  attendanceMismatch:  { label: 'Attendance Mismatch',    severity: 'medium' },
+}
+
+// Chart colour palette for department bar chart — 10 distinct hues
+export const ENGINE_DEPT_CHART_COLORS = [
+  '#3b82f6', // blue-500
+  '#10b981', // emerald-500
+  '#f59e0b', // amber-500
+  '#8b5cf6', // violet-500
+  '#ef4444', // red-500
+  '#06b6d4', // cyan-500
+  '#f97316', // orange-500
+  '#84cc16', // lime-500
+  '#ec4899', // pink-500
+  '#6366f1', // indigo-500
+]
+
+export const ENGINE_SUBTABS = [
+  { id: 'overview',   label: 'Overview',   icon: 'ChartBarIcon' },
+  { id: 'slips',      label: 'Slips',      icon: 'DocumentTextIcon' },
+  { id: 'analytics',  label: 'Analytics',  icon: 'PresentationChartLineIcon' },
+]
+
+export const ENGINE_COPY = {
+  sectionTitle:        'Payroll Engine',
+  sectionSubtitle:     'Full lifecycle payroll management with AI anomaly detection',
+  newRunBtn:           'New Payroll Run',
+  runEngineBtn:        'Run Engine',
+  runEngineRunning:    'Processing…',
+  bulkApproveBtn:      'Approve All Pending',
+  bulkSendBtn:         'Send All Approved',
+  createRunTitle:      'Create New Payroll Run',
+  noRunSelected:       'Select a payroll run to continue.',
+  noSlipsFound:        'No salary slips found for this run.',
+  noRuns:              'No payroll runs found. Create one to get started.',
+  processing:          'Generating salary slips — this may take a moment…',
+  processSuccess:      'Payroll run completed. Slips generated successfully.',
+  processFailed:       'Payroll run failed. Check the error log below.',
+  bulkApproveSuccess:  'All pending slips approved.',
+  bulkSendSuccess:     'Emails queued for all approved slips.',
+  anomalyPanelTitle:   'AI Anomaly Flags',
+  anomalyNone:         'No anomalies detected for this run.',
+  kpiEmployees:        'Total Employees',
+  kpiGross:            'Gross Payroll',
+  kpiNet:              'Net Payroll',
+  kpiPending:          'Pending Approval',
+  kpiAnomalies:        'AI Anomalies',
+  deptChartTitle:      'Net Salary by Department',
+  pieChartTitle:       'Allowances vs Deductions',
+  drawerAttendance:    'Attendance',
+  drawerBiometric:     'Biometric',
+  drawerSlip:          'Slip',
+  drawerAIFlags:       'AI Flags',
+  drawerApprove:       'Approve',
+  drawerReject:        'Reject',
+  drawerSendEmail:     'Send Slip Email',
+  drawerRejectNote:    'Rejection reason (required)',
+  runCodePrefix:       'PAY',
+  monthLabel:          (m) => new Date(2000, m - 1, 1).toLocaleString('en-US', { month: 'long' }),
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. PAYROLL DATA IMPORT — Sympa + ValueFrame + RADAI attendance merge
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Source definitions — each entry drives both the upload card UI and backend routing
+export const IMPORT_SOURCES = [
+  {
+    id:          'sympa',
+    label:       'Sympa HR',
+    abbr:        'SYM',
+    color:       'bg-blue-50 border-blue-200',
+    badge:       'bg-blue-100 text-blue-700 border-blue-200',
+    icon:        'UserGroupIcon',
+    iconColor:   'text-blue-600',
+    accept:      '.xlsx,.xls,.csv',
+    description: 'Employee master: names, IDs, departments, base salary, allowances, leave balance',
+    hint:        'Sympa → HR module → Employee Report → Export XLSX / CSV',
+  },
+  {
+    id:          'valueframe',
+    label:       'ValueFrame',
+    abbr:        'VF',
+    color:       'bg-emerald-50 border-emerald-200',
+    badge:       'bg-emerald-100 text-emerald-700 border-emerald-200',
+    icon:        'ClipboardDocumentListIcon',
+    iconColor:   'text-emerald-600',
+    accept:      '.xlsx,.xls,.csv',
+    description: 'Project hours and cost allocations per employee per month',
+    hint:        'ValueFrame → Projects → Hours by Employee → Export XLSX / CSV',
+  },
+  {
+    id:          'other',
+    label:       'Supplementary Data',
+    abbr:        'OTH',
+    color:       'bg-orange-50 border-orange-200',
+    badge:       'bg-orange-100 text-orange-700 border-orange-200',
+    icon:        'DocumentPlusIcon',
+    iconColor:   'text-orange-600',
+    accept:      '.xlsx,.xls,.csv',
+    description: 'Bonuses, gratuity, insurance, special deductions, adjustments, or any extra payroll data',
+    hint:        'Any XLSX/CSV with an employee code column — fields are auto-detected and merged',
+  },
+]
+
+// RADAI attendance source (auto-fetched — no upload needed)
+export const IMPORT_RADAI_SOURCE = {
+  id:        'radai',
+  label:     'RADAI Attendance',
+  abbr:      'RAD',
+  badge:     'bg-violet-100 text-violet-700 border-violet-200',
+  icon:      'ClockIcon',
+  iconColor: 'text-violet-600',
+  note:      'RADAI activity data is fetched automatically from the database.',
+}
+
+// Biometric attendance source (auto-fetched from DailyAttendanceSummary — no upload needed)
+export const IMPORT_BIOMETRIC_SOURCE = {
+  id:        'biometric',
+  label:     'Biometric Attendance',
+  abbr:      'BIO',
+  badge:     'bg-teal-100 text-teal-700 border-teal-200',
+  icon:      'FingerPrintIcon',
+  iconColor: 'text-teal-600',
+  note:      'Biometric access-control attendance data is cross-verified automatically from the RADAI database.',
+}
+
+// Soft-coded column aliases — backend uses these to detect columns regardless of header text
+// First match in each list wins (all comparisons case-insensitive, trimmed)
+export const IMPORT_FIELD_ALIASES_SYMPA = {
+  employee_code:       ['employee no', 'employee id', 'emp no', 'emp id', 'personnel no', 'staff id', 'empno', 'id no', 'employee number'],
+  employee_name:       ['name', 'full name', 'employee name', 'emp name', 'staff name', 'employee full name'],
+  department:          ['department', 'dept', 'division', 'business unit', 'cost centre', 'cost center'],
+  job_title:           ['job title', 'position', 'title', 'designation', 'role'],
+  joining_date:        ['joining date', 'join date', 'hire date', 'date of joining', 'doj', 'start date', 'employment date', 'commencement date'],
+  basic_salary:        ['basic salary', 'basic', 'base salary', 'monthly salary', 'salary', 'basic pay'],
+  housing_allowance:   ['housing allowance', 'house allowance', 'hra', 'housing', 'home allowance', 'accommodation allowance'],
+  transport_allowance: ['transport allowance', 'transport', 'ta', 'travel allowance', 'commute allowance', 'transportation'],
+  other_allowances:    ['other allowances', 'misc allowances', 'miscellaneous', 'additional allowances'],
+  other_pay:           ['other pay', 'other payment', 'extra pay', 'additional pay', 'other compensation', 'bonus pay', 'other emoluments'],
+  deductions:          ['deductions', 'total deductions', 'deduction', 'monthly deduction', 'salary deduction'],
+  deduction_details:   ['deduction details', 'deduction remarks', 'deduction notes', 'deduction breakdown', 'salary deduction details'],
+  details:             ['details', 'notes', 'remarks', 'additional details', 'employee notes', 'comments'],
+  leave_balance:       ['annual leave balance', 'leave balance', 'remaining leave', 'al balance', 'leave days remaining'],
+}
+
+export const IMPORT_FIELD_ALIASES_VALUEFRAME = {
+  employee_code:  ['employee no', 'employee id', 'emp no', 'resource id', 'staff id', 'personnel no', 'resource code'],
+  employee_name:  ['name', 'full name', 'employee name', 'resource', 'resource name'],
+  project_code:   ['project code', 'project no', 'project', 'project id', 'proj code', 'project number'],
+  project_name:   ['project name', 'proj name', 'project description', 'project title'],
+  total_hours:    ['hours', 'total hours', 'billed hours', 'worked hours', 'billable hours', 'actual hours', 'logged hours'],
+  overtime_hours: ['overtime hours', 'ot hours', 'extra hours', 'overtime', 'ot'],
+  month:          ['month', 'period month', 'billing month', 'period'],
+  year:           ['year', 'period year', 'billing year'],
+}
+
+// Master payroll preview table columns — matches the 15-column Excel output exactly
+export const IMPORT_MASTER_COLUMNS = [
+  { key: 'employee_code',      label: 'Emp Code',            mono: true  },
+  { key: 'employee_name',      label: 'Employee Name'                     },
+  { key: 'joining_date',       label: 'Joining Date'                      },
+  { key: 'total_hours',        label: 'Working Hours',       numeric: true },
+  { key: 'employee_salary',    label: 'Employee Salary',     numeric: true },
+  { key: 'basic_salary',       label: 'Basic',               numeric: true },
+  { key: 'total_allowances',   label: 'Allowance',           numeric: true },
+  { key: 'transport_allowance',label: 'Transportation',      numeric: true },
+  { key: 'housing_allowance',  label: 'Home Allowance',      numeric: true },
+  { key: 'other_allowances',   label: 'Other Allowance',     numeric: true },
+  { key: 'other_pay',          label: 'Other Pay',           numeric: true },
+  { key: 'details',            label: 'Details'                           },
+  { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true },
+  { key: 'deduction_details',  label: 'Deduction Details'                 },
+  { key: 'final_salary',       label: 'Final Salary',        numeric: true, highlight: true },
+]
+
+// UI copy for the import modal
+export const IMPORT_COPY = {
+  btnOpen:          'Import Data Sources',
+  modalTitle:       'Payroll Master File Generator',
+  modalSubtitle:    'Upload Sympa and/or ValueFrame exports. RADAI attendance is merged automatically.',
+  step1Title:       'Upload Source Files',
+  step1Sub:         'Drag & drop or click to upload. Supports XLSX, XLS, and CSV.',
+  step2Title:       'Master Payroll Preview',
+  step2Sub:         rows => `${rows} employee rows extracted and merged from all active sources.`,
+  generateBtn:      'Generate Master',
+  generatingBtn:    'Extracting & merging…',
+  downloadBtn:      'Download Excel',
+  downloadingBtn:   'Preparing…',
+  resetBtn:         'Upload New Files',
+  cancelBtn:        'Cancel',
+  radaiNote:        'RADAI attendance data will be merged automatically for the selected period.',
+  noFiles:          'Upload at least one source file (Sympa, ValueFrame, or Supplementary) to continue.',
+  warningTitle:     'Merge Warnings',
+  noWarnings:       'All rows merged cleanly.',
+  statsLabel:       stats =>
+    `Sympa: ${stats.sympa_rows ?? 0} rows  ·  ValueFrame: ${stats.vf_employees ?? 0} employees  ·  RADAI: ${stats.radai_rows ?? 0} records${stats.other_rows ? `  ·  Other: ${stats.other_rows}` : ''}${stats.biometric_rows ? `  ·  Biometric: ${stats.biometric_rows}` : ''}  ·  Merged: ${stats.matched ?? 0}`,
+  errorParse:       'File parsing failed. Please check the format and try again.',
+  errorGeneric:     'An error occurred. Please try again.',
+  savedToDB:        'Data saved to RADAI database.',
+  s3Queued:         'Excel upload to S3 queued — available in Import History shortly.',
+}
+
+// ─── Section 17: Master Payroll Import History ────────────────────────────────
+
+// Columns for the Import History table
+export const IMPORT_HISTORY_COLUMNS = [
+  { key: 'period',            label: 'Period'                          },
+  { key: 'generated_at',      label: 'Generated'                       },
+  { key: 'generated_by',      label: 'By'                              },
+  { key: 'total_rows',        label: 'Employees',   numeric: true      },
+  { key: 'sympa_filename',    label: 'Sympa File'                      },
+  { key: 'valueframe_filename', label: 'VF File'                       },
+  { key: 'status',            label: 'S3 Status',   status: true       },
+  { key: 'actions',           label: '',            actions: true      },
+]
+
+// Status badge styles for MasterPayrollImport.status
+export const IMPORT_STATUS_STYLES = {
+  processing: { label: 'Processing', cls: 'bg-amber-100 text-amber-700 border-amber-200'   },
+  ready:      { label: 'Ready',      cls: 'bg-blue-100 text-blue-700 border-blue-200'      },
+  uploaded:   { label: 'On S3',      cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  failed:     { label: 'Failed',     cls: 'bg-rose-100 text-rose-700 border-rose-200'      },
+}
+
+export const IMPORT_HISTORY_COPY = {
+  title:        'Import History',
+  subtitle:     'Past Sympa + ValueFrame master payroll generations.',
+  empty:        'No imports yet. Generate a master payroll file to get started.',
+  downloadBtn:  'Download Excel',
+  refreshBtn:   'Refresh',
+  loadingMsg:   'Loading history…',
+  errorMsg:     'Failed to load history.',
+}

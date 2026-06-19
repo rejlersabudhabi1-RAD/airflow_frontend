@@ -20,6 +20,9 @@
 import {
   HR_DISCIPLINES,
   matchDiscipline,
+  fullName,
+  getEmail,
+  formatDate,
 } from './hrEmployees.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,13 +155,16 @@ export const HR_DASHBOARD_KPIS = [
   {
     id: 'attendance_rate',
     label: 'Attendance Today',
-    sub: 'Seen vs active employees',
+    sub: 'Of active employees seen (capped 100%)',
     icon: 'PresentationChartLineIcon',
     accent: 'from-cyan-500 to-blue-600',
     compute: ({ live, workforce }) => {
-      const seen = live?.summary?.total_seen_today ?? 0
+      const seen   = live?.summary?.total_seen_today ?? 0
       const active = workforce.filter((e) => e.status === 'active').length
-      return pct(seen, active)
+      if (active === 0) return seen > 0 ? '100%' : '0%'
+      // Biometric can record contractors/visitors not in RBAC — cap at 100
+      // so the tile always shows a meaningful 0–100 % range.
+      return `${Math.min(100, Math.round((seen / active) * 100))}%`
     },
   },
   {
@@ -646,6 +652,193 @@ export const buildStatusDistribution = (workforce) => {
       }),
     }))
     .sort((a, b) => b.count - a.count)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. KPI DRILL-DOWN REPORT CONFIGS
+//     Maps each top KPI tile id → the full report shown in the slide-over modal.
+//     `getRows({ workforce, live, daily, monthly })` returns the report rows.
+//     `columns` declares how each column is labelled and rendered.
+//     Badge types: statusBadge | mfaBadge | lateBadge | attendanceBadge | mono
+// ─────────────────────────────────────────────────────────────────────────────
+const _liveName  = (r) => r.radai_full_name  || r.name || r.employee_name  || r.employee_code || '—'
+const _liveDept  = (r) => r.radai_department || r.department || '—'
+const _liveTime  = (raw) => {
+  if (!raw) return '—'
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime())
+    ? String(raw)
+    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+export const HR_DASHBOARD_KPI_REPORTS = {
+  headcount: {
+    title: 'Total Headcount',
+    description: 'All registered employees across every status and department.',
+    icon: 'UsersIcon',
+    accentGradient: 'from-blue-500 to-indigo-600',
+    emptyMsg: 'No employees registered.',
+    getRows: ({ workforce }) => workforce,
+    searchFn: (r) =>
+      `${fullName(r)} ${getEmail(r)} ${r.department || ''} ${r.status || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Name',       render: (r) => fullName(r) || '—' },
+      { key: 'email',  label: 'Email',       render: (r) => getEmail(r) || '—', mono: true },
+      { key: 'dept',   label: 'Department',  render: (r) => r.department || '—' },
+      { key: 'status', label: 'Status',      render: (r) => r.status || '—', statusBadge: true },
+      { key: 'mfa',    label: 'MFA',         render: (r) => r.is_mfa_enabled ? 'Enabled' : 'Disabled', mfaBadge: true },
+      { key: 'joined', label: 'Joined',      render: (r) => formatDate(r.created_at) },
+    ],
+  },
+
+  active: {
+    title: 'Active Employees',
+    description: 'Employees with "active" status — currently engaged in the organisation.',
+    icon: 'CheckBadgeIcon',
+    accentGradient: 'from-emerald-500 to-teal-600',
+    emptyMsg: 'No active employees found.',
+    getRows: ({ workforce }) => workforce.filter((e) => e.status === 'active'),
+    searchFn: (r) =>
+      `${fullName(r)} ${getEmail(r)} ${r.department || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Name',       render: (r) => fullName(r) || '—' },
+      { key: 'email',  label: 'Email',       render: (r) => getEmail(r) || '—', mono: true },
+      { key: 'dept',   label: 'Department',  render: (r) => r.department || '—' },
+      { key: 'mfa',    label: 'MFA',         render: (r) => r.is_mfa_enabled ? 'Enabled' : 'Disabled', mfaBadge: true },
+      { key: 'joined', label: 'Joined',      render: (r) => formatDate(r.created_at) },
+    ],
+  },
+
+  currently_in: {
+    title: 'Currently IN',
+    description: 'Employees with a live punch-IN recorded from the biometric system right now.',
+    icon: 'ArrowRightOnRectangleIcon',
+    accentGradient: 'from-green-500 to-emerald-600',
+    emptyMsg: 'No employees currently punched in.',
+    getRows: ({ live }) => {
+      const rows = Array.isArray(live?.rows) ? live.rows : []
+      // Use the backend-computed `is_in` boolean (authoritative) with a
+      // punch_type fallback for rows that pre-date the is_in enrichment.
+      return rows.filter((r) =>
+        r.is_in === true ||
+        (r.is_in === undefined &&
+          ['IN', '1'].includes((r.punch_type || '').toString().toUpperCase()))
+      )
+    },
+    searchFn: (r) => `${_liveName(r)} ${_liveDept(r)}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Name',       render: (r) => _liveName(r) },
+      { key: 'dept',   label: 'Department', render: (r) => _liveDept(r) },
+      { key: 'code',   label: 'Emp. Code',  render: (r) => r.employee_code || '—', mono: true },
+      { key: 'punch',  label: 'Punch Time', render: (r) => _liveTime(r.punch_time || r.login_time) },
+    ],
+  },
+
+  currently_out: {
+    title: 'Currently OUT',
+    description: 'Employees whose last biometric record today is an OUT punch.',
+    icon: 'ArrowLeftOnRectangleIcon',
+    accentGradient: 'from-slate-500 to-slate-700',
+    emptyMsg: 'No employees marked as out.',
+    getRows: ({ live }) => {
+      const rows = Array.isArray(live?.rows) ? live.rows : []
+      // `is_in === false` is set by the backend for every OUT row — this is
+      // the same field the summary.currently_out counter uses, so the
+      // drill-down count will always match the KPI tile.
+      return rows.filter((r) =>
+        r.is_in === false ||
+        (r.is_in === undefined &&
+          ['OUT', '0', '2'].includes((r.punch_type || '').toString().toUpperCase()))
+      )
+    },
+    searchFn: (r) => `${_liveName(r)} ${_liveDept(r)}`.toLowerCase(),
+    columns: [
+      { key: 'name',    label: 'Name',        render: (r) => _liveName(r) },
+      { key: 'dept',    label: 'Department',  render: (r) => _liveDept(r) },
+      { key: 'code',    label: 'Emp. Code',   render: (r) => r.employee_code || '—', mono: true },
+      { key: 'punch',   label: 'Punched Out', render: (r) => _liveTime(r.punch_time || r.logout_time) },
+    ],
+  },
+
+  late_today: {
+    title: 'Late Arrivals Today',
+    description: 'Employees who punched in after the grace period cutoff for today.',
+    icon: 'ClockIcon',
+    accentGradient: 'from-amber-500 to-orange-600',
+    emptyMsg: 'No late arrivals recorded today.',
+    getRows: ({ daily }) =>
+      (Array.isArray(daily?.rows) ? daily.rows : []).filter((r) => r.is_late),
+    searchFn: (r) =>
+      `${r.employee_name || r.name || r.employee_code || ''} ${r.department || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',  label: 'Name',        render: (r) => r.employee_name || r.name || r.employee_code || '—' },
+      { key: 'dept',  label: 'Department',  render: (r) => r.department || '—' },
+      { key: 'in',    label: 'Punch In',    render: (r) => r.first_in_time || r.login_time || '—' },
+      { key: 'hours', label: 'Hours Today', render: (r) => r.total_hours != null ? `${Number(r.total_hours).toFixed(1)}h` : '—' },
+      { key: 'flag',  label: 'Status',      render: () => 'Late', lateBadge: true },
+    ],
+  },
+
+  attendance_rate: {
+    title: "Today's Attendance",
+    description: 'All employees tracked via biometric today — punch records and hours worked.',
+    icon: 'PresentationChartLineIcon',
+    accentGradient: 'from-cyan-500 to-blue-600',
+    emptyMsg: 'No attendance data captured for today.',
+    getRows: ({ daily }) => Array.isArray(daily?.rows) ? daily.rows : [],
+    searchFn: (r) =>
+      `${r.employee_name || r.name || r.employee_code || ''} ${r.department || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',    label: 'Name',       render: (r) => r.employee_name || r.name || r.employee_code || '—' },
+      { key: 'dept',    label: 'Department', render: (r) => r.department || '—' },
+      { key: 'in',      label: 'First In',   render: (r) => r.first_in_time || r.login_time || '—' },
+      { key: 'hours',   label: 'Hours',      render: (r) => r.total_hours != null ? `${Number(r.total_hours).toFixed(1)}h` : '—' },
+      { key: 'late',    label: 'Punctuality', render: (r) => r.is_late ? 'Late' : 'On Time', attendanceBadge: true },
+      { key: 'fullday', label: 'Full Day',   render: (r) => r.is_full_day ? 'Yes' : 'No' },
+    ],
+  },
+
+  pending_onboarding: {
+    title: 'Pending Onboarding',
+    description: 'Employees registered but awaiting first login or onboarding completion.',
+    icon: 'UserPlusIcon',
+    accentGradient: 'from-purple-500 to-fuchsia-600',
+    emptyMsg: 'No employees pending onboarding.',
+    getRows: ({ workforce }) => workforce.filter((e) => e.status === 'pending'),
+    searchFn: (r) =>
+      `${fullName(r)} ${getEmail(r)} ${r.department || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Name',       render: (r) => fullName(r) || '—' },
+      { key: 'email',  label: 'Email',       render: (r) => getEmail(r) || '—', mono: true },
+      { key: 'dept',   label: 'Department',  render: (r) => r.department || '—' },
+      { key: 'status', label: 'Status',      render: (r) => r.status || '—', statusBadge: true },
+      { key: 'reg',    label: 'Registered',  render: (r) => formatDate(r.created_at) },
+    ],
+  },
+
+  mfa_adoption: {
+    title: 'MFA Adoption Report',
+    description: 'Two-factor authentication status for all registered employees. Disabled accounts shown first.',
+    icon: 'ShieldCheckIcon',
+    accentGradient: 'from-indigo-500 to-violet-600',
+    emptyMsg: 'No employees found.',
+    getRows: ({ workforce }) =>
+      [...workforce].sort((a, b) => {
+        // Disabled first so HR can act on them immediately
+        if (!a.is_mfa_enabled && b.is_mfa_enabled) return -1
+        if (a.is_mfa_enabled && !b.is_mfa_enabled) return 1
+        return 0
+      }),
+    searchFn: (r) =>
+      `${fullName(r)} ${getEmail(r)} ${r.department || ''}`.toLowerCase(),
+    columns: [
+      { key: 'name',   label: 'Name',       render: (r) => fullName(r) || '—' },
+      { key: 'email',  label: 'Email',       render: (r) => getEmail(r) || '—', mono: true },
+      { key: 'dept',   label: 'Department',  render: (r) => r.department || '—' },
+      { key: 'status', label: 'Status',      render: (r) => r.status || '—', statusBadge: true },
+      { key: 'mfa',    label: 'MFA Status',  render: (r) => r.is_mfa_enabled ? 'Enabled' : 'Disabled', mfaBadge: true },
+    ],
+  },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

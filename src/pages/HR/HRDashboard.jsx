@@ -35,6 +35,7 @@ import {
   HR_DASHBOARD_QUICK_LINKS,
   HR_DASHBOARD_AI_CHAMPION,
   HR_DASHBOARD_PENDING_TYPES,
+  HR_DASHBOARD_KPI_REPORTS,
   getAIChampionTierStyle,
   buildAIChampionPodium,
   buildTotalPending,
@@ -70,11 +71,221 @@ const formatTime = (d) =>
   d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-component: top KPI tile
+// Badge palette for KPI report modal cells (status codes → Tailwind classes)
 // ─────────────────────────────────────────────────────────────────────────────
-const KpiTile = ({ kpi, value }) => (
-  <div
-    className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${kpi.accent} text-white p-5 shadow-md hover:shadow-lg transition-shadow`}
+const STATUS_BADGE_STYLES = {
+  active:    'bg-emerald-100 text-emerald-700 border-emerald-200',
+  pending:   'bg-amber-100   text-amber-700   border-amber-200',
+  inactive:  'bg-slate-100   text-slate-600   border-slate-200',
+  suspended: 'bg-red-100     text-red-700     border-red-200',
+  on_leave:  'bg-blue-100    text-blue-700    border-blue-200',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: KPI drill-down report modal (full-screen overlay)
+// ─────────────────────────────────────────────────────────────────────────────
+const KpiReportModal = ({ reportId, ctx, onClose }) => {
+  const [search, setSearch] = useState('')
+  const config = HR_DASHBOARD_KPI_REPORTS[reportId]
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  if (!config) return null
+
+  const allRows = config.getRows(ctx)
+  const filteredRows = search.trim()
+    ? allRows.filter((r) => config.searchFn(r).includes(search.toLowerCase()))
+    : allRows
+
+  const renderCell = (col, row) => {
+    const val = col.render(row)
+    if (col.statusBadge) {
+      const style =
+        STATUS_BADGE_STYLES[String(val).toLowerCase()] ||
+        'bg-slate-100 text-slate-600 border-slate-200'
+      return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border capitalize ${style}`}>
+          {val}
+        </span>
+      )
+    }
+    if (col.mfaBadge) {
+      const enabled = String(val) === 'Enabled'
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+          enabled
+            ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+            : 'bg-rose-100 text-rose-700 border-rose-200'
+        }`}>
+          {enabled ? '✓ Enabled' : '✗ Disabled'}
+        </span>
+      )
+    }
+    if (col.lateBadge) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border bg-amber-100 text-amber-700 border-amber-200">
+          ⏰ Late
+        </span>
+      )
+    }
+    if (col.attendanceBadge) {
+      const isLate = String(val) === 'Late'
+      return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+          isLate
+            ? 'bg-amber-100 text-amber-700 border-amber-200'
+            : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+        }`}>
+          {isLate ? '⏰ Late' : '✓ On Time'}
+        </span>
+      )
+    }
+    if (col.mono) {
+      return <span className="font-mono text-xs text-slate-500">{val}</span>
+    }
+    return val
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-black/50 backdrop-blur-sm overflow-y-auto"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl my-auto">
+        {/* ── Gradient header ── */}
+        <div className={`bg-gradient-to-r ${config.accentGradient} rounded-t-2xl p-5 text-white`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                <Icon name={config.icon} className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">{config.title}</h2>
+                <p className="text-sm text-white/80 mt-0.5 max-w-xl">{config.description}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center flex-shrink-0 transition-colors"
+              title="Close (Esc)"
+            >
+              <Icon name="XMarkIcon" className="w-5 h-5" />
+            </button>
+          </div>
+          {/* Summary stats bar */}
+          <div className="mt-4 flex items-center gap-4 flex-wrap text-sm text-white/90">
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="TableCellsIcon" className="w-4 h-4 opacity-80" />
+              <strong>{allRows.length}</strong> total records
+            </span>
+            {search.trim() && (
+              <span className="inline-flex items-center gap-1.5">
+                <Icon name="FunnelIcon" className="w-4 h-4 opacity-80" />
+                <strong>{filteredRows.length}</strong> matching filter
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Search bar ── */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+          <div className="relative flex-1">
+            <Icon name="MagnifyingGlassIcon" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by name, email, department…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <Icon name="XMarkIcon" className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap"
+          >
+            ← Close Report
+          </button>
+        </div>
+
+        {/* ── Data table ── */}
+        <div className="overflow-x-auto" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {filteredRows.length === 0 ? (
+            <div className="text-sm text-slate-500 italic py-14 text-center">
+              {search.trim() ? 'No records match your search.' : config.emptyMsg}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white border-b border-slate-200 shadow-sm z-10">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide w-10">#</th>
+                  {config.columns.map((col) => (
+                    <th key={col.key} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRows.map((row, idx) => (
+                  <tr
+                    key={row.id || row.user?.id || row.employee_code || idx}
+                    className="hover:bg-slate-50/80 transition-colors"
+                  >
+                    <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                    {config.columns.map((col) => (
+                      <td key={col.key} className="px-4 py-2.5 text-slate-800 max-w-xs truncate">
+                        {renderCell(col, row)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-5 py-3 border-t border-slate-100 rounded-b-2xl bg-slate-50/40 flex items-center justify-between gap-2 text-xs text-slate-400">
+          <span>Live data — auto-refresh every {Math.round(HR_DASHBOARD_POLL_MS / 1000)}s</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-800 font-medium transition-colors"
+          >
+            Close ✕
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: top KPI tile — clickable, opens drill-down report
+// ─────────────────────────────────────────────────────────────────────────────
+const KpiTile = ({ kpi, value, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${kpi.accent} text-white p-5 shadow-md hover:shadow-xl hover:scale-[1.03] active:scale-[0.98] transition-all cursor-pointer text-left w-full group`}
+    title={`Click to view ${kpi.label} report`}
   >
     <div className="flex items-start justify-between">
       <div className="opacity-90">
@@ -86,7 +297,12 @@ const KpiTile = ({ kpi, value }) => (
       {value === null || value === undefined ? '—' : value}
     </div>
     <div className="mt-1 text-sm font-medium opacity-95">{kpi.label}</div>
-  </div>
+    {/* Click hint — appears on hover */}
+    <div className="absolute bottom-2.5 right-3 opacity-0 group-hover:opacity-80 transition-opacity text-[10px] uppercase tracking-widest flex items-center gap-1">
+      <Icon name="ArrowTopRightOnSquareIcon" className="w-3 h-3" />
+      View report
+    </div>
+  </button>
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -499,6 +715,9 @@ export default function HRDashboard() {
   const [daily, setDaily] = useState(null)
   const [monthly, setMonthly] = useState(null)
 
+  // KPI drill-down report — id of the tile that was clicked (null = closed)
+  const [reportKpiId, setReportKpiId] = useState(null)
+
   // Payroll / leave / salary pending data (from 4.2 + 4.3)
   const [pending, setPending] = useState({
     pendingLeave: [], pendingLeaveCount: 0,
@@ -834,9 +1053,23 @@ export default function HRDashboard() {
         {/* ── KPI tile strip ───────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4">
           {HR_DASHBOARD_KPIS.map((kpi) => (
-            <KpiTile key={kpi.id} kpi={kpi} value={kpi.compute(ctx)} />
+            <KpiTile
+              key={kpi.id}
+              kpi={kpi}
+              value={kpi.compute(ctx)}
+              onClick={() => setReportKpiId(kpi.id)}
+            />
           ))}
         </div>
+
+        {/* ── KPI drill-down report modal ──────────────────────────────── */}
+        {reportKpiId && (
+          <KpiReportModal
+            reportId={reportKpiId}
+            ctx={ctx}
+            onClose={() => setReportKpiId(null)}
+          />
+        )}
 
         {/* ── Payroll Snapshot KPI strip (secondary row) ───────────────── */}
         {HR_DASHBOARD_SECTIONS.payrollSnapshot && (
