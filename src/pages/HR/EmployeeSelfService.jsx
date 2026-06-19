@@ -892,7 +892,7 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
   useEffect(() => {
     const isCurrent = selYear === now.getFullYear() && selMonth === now.getMonth() + 1
     if (isCurrent && monthlyTs) { setSelData(monthlyTs); return }
-    const code = profile?.employee_code || profile?.engineer_profile?.employee_code || profile?.username
+    const code = profile?.employee_id || profile?.engineer_profile?.employee_code
     if (!code) return
     setFetching(true)
     timesheetSvc.fetchMonthly(selYear, selMonth)
@@ -2716,7 +2716,8 @@ export default function EmployeeSelfService() {
   // -- Load timesheet data for current user ------------------------------------
   useEffect(() => {
     setLoadingTs(true)
-    const employeeCode = profile?.employee_code || profile?.engineer_profile?.employee_code || profile?.username
+    // profile.employee_id is the biometric employee code stored on UserProfile
+    const employeeCode = profile?.employee_id || profile?.engineer_profile?.employee_code
 
     Promise.all([
       timesheetSvc.fetchMonthly(now.getFullYear(), now.getMonth() + 1).catch(() => null),
@@ -2774,19 +2775,31 @@ export default function EmployeeSelfService() {
       ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username
       : null
 
+    // employee.id from backend = Django User.id (not UserProfile.id)
+    // employee_id on UserProfile = biometric employee code
+    const userId     = profile?.user?.id    // Django User UUID — matches LeaveRequest.employee FK
+    const empCode    = profile?.employee_id // biometric code — matches employee_code on leave records
+
     Promise.all([
       payrollService.getLeaveTypes().catch(() => []),
+      // Backend now auto-scopes to current user (via perform_create + get_queryset fix)
       payrollService.getLeaveRequests({ page_size: 50 }).catch(() => ({ results: [] })),
-      employeeName
-        ? payrollService.getLeaveRecords({ search: employeeName, page_size: 5 }).catch(() => ({ results: [] }))
-        : Promise.resolve({ results: [] }),
+      empCode
+        ? payrollService.getLeaveRecords({ employee_code: empCode, page_size: 5 }).catch(() => ({ results: [] }))
+        : employeeName
+          ? payrollService.getLeaveRecords({ search: employeeName, page_size: 5 }).catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
     ]).then(([types, reqRes, recRes]) => {
       setLeaveTypes(Array.isArray(types) ? types : types?.results || [])
 
       const reqs = Array.isArray(reqRes) ? reqRes : reqRes?.results || []
-      // Filter to current user's requests only
-      const userId = profile?.id
-      setLeaveRequests(userId ? reqs.filter(r => r.employee === userId || r.employee_id === userId) : reqs)
+      // Backend scopes leave requests to the current user. As a safety net, also
+      // filter client-side using the correct User UUID (not the UserProfile UUID).
+      setLeaveRequests(
+        userId
+          ? reqs.filter(r => r.employee === userId)
+          : reqs
+      )
 
       const recs = Array.isArray(recRes) ? recRes : recRes?.results || []
       setLeaveRecord(recs.length > 0 ? recs[0] : null)
@@ -2796,12 +2809,15 @@ export default function EmployeeSelfService() {
   // -- Load payroll data -------------------------------------------------------
   useEffect(() => {
     setLoadingPayroll(true)
-    const userId = profile?.id
+    const userId  = profile?.user?.id   // Django User UUID for SalarySlip FK lookups
+    const empCode = profile?.employee_id // biometric code for EmployeeSalaryInfo lookup
 
     Promise.all([
+      // Backend SalarySlipViewSet filters by ?employee=<User UUID> (added in backend fix)
       userId
         ? payrollService.getSalarySlips({ employee: userId, page_size: 12 }).catch(() => ({ results: [] }))
         : payrollService.getSalarySlips({ page_size: 12 }).catch(() => ({ results: [] })),
+      // EmployeeSalaryInfo: filter by user UUID (added in backend fix)
       userId
         ? payrollService.getEmployeeSalaryInfo({ employee: userId }).catch(() => null)
         : Promise.resolve(null),
@@ -2835,17 +2851,25 @@ export default function EmployeeSelfService() {
     setSubmitting(true)
     setSubmitResult(null)
     try {
-      const userId = profile?.id
+      // Use Django User UUID — matches the LeaveRequest.employee FK
+      const userId  = profile?.user?.id
+      const empCode = profile?.employee_id
+      const empName = profile
+        ? [profile.user?.first_name, profile.user?.last_name].filter(Boolean).join(' ') || profile.user?.username
+        : null
       const payload = {
         ...form,
-        ...(userId ? { employee: userId } : {}),
+        // Backend perform_create also sets these — we send them for non-staff HR fallback
+        ...(userId   ? { employee: userId }             : {}),
+        ...(empCode  ? { employee_code: empCode }       : {}),
+        ...(empName  ? { employee_name: empName }       : {}),
       }
       await payrollService.createLeaveRequest(payload)
       setSubmitResult({ success: true, message: 'Leave request submitted successfully! Awaiting manager approval.' })
-      // Reload requests
+      // Reload requests — backend now scopes to current user
       const reqRes = await payrollService.getLeaveRequests({ page_size: 50 }).catch(() => ({ results: [] }))
       const reqs   = Array.isArray(reqRes) ? reqRes : reqRes?.results || []
-      setLeaveRequests(userId ? reqs.filter(r => r.employee === userId || r.employee_id === userId) : reqs)
+      setLeaveRequests(userId ? reqs.filter(r => r.employee === userId) : reqs)
     } catch (err) {
       const msg = err?.response?.data?.detail ||
                   err?.response?.data?.non_field_errors?.[0] ||
