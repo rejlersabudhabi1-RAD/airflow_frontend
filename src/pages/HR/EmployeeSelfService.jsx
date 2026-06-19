@@ -33,7 +33,7 @@ import rbacService   from '../../services/rbac.service'
 import payrollService from '../../services/payroll.service'
 import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
-import { ESS_LEAVE_TYPE_CONFIG, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS } from '../../config/hrLeave.config'
+import { ESS_LEAVE_TYPE_CONFIG, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
 
 // -----------------------------------------------------------------------------
 // Soft-coded configuration
@@ -871,44 +871,147 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
 }
 
 // -----------------------------------------------------------------------------
-// Section: Attendance Analytics
+// Section: Attendance Analytics (individual — month-selectable)
 // -----------------------------------------------------------------------------
 
-const AttendanceAnalytics = ({ monthlyTs, loading }) => {
-  // Build chart data from monthly timesheet
-  const trendData = useMemo(() => {
-    if (!monthlyTs?.daily_breakdown) return []
-    return (monthlyTs.daily_breakdown || []).slice(-30).map((d) => ({
-      date:  d.date?.slice(5) || '',
-      hours: Number(d.hours_worked) || 0,
-      ot:    Number(d.overtime) || 0,
-    }))
+const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => {
+  const now = new Date()
+  const [selYear,   setSelYear]   = useState(now.getFullYear())
+  const [selMonth,  setSelMonth]  = useState(now.getMonth() + 1)
+  const [selData,   setSelData]   = useState(null)   // filtered employee record
+  const [fetching,  setFetching]  = useState(false)
+
+  // On initial render, seed with already-loaded parent data (avoids extra request)
+  useEffect(() => {
+    if (monthlyTs && selYear === now.getFullYear() && selMonth === now.getMonth() + 1) {
+      setSelData(monthlyTs)
+    }
   }, [monthlyTs])
 
-  // Monthly summary stats
-  const presentDays = monthlyTs?.present_days || 0
-  const workingDays = monthlyTs?.working_days || monthlyTs?.total_working_days || 22
-  const absentDays  = workingDays - presentDays
+  // Fetch a different month when selector changes
+  useEffect(() => {
+    const isCurrent = selYear === now.getFullYear() && selMonth === now.getMonth() + 1
+    if (isCurrent && monthlyTs) { setSelData(monthlyTs); return }
+    const code = profile?.employee_code || profile?.engineer_profile?.employee_code || profile?.username
+    if (!code) return
+    setFetching(true)
+    timesheetSvc.fetchMonthly(selYear, selMonth)
+      .then(res => {
+        const arr = Array.isArray(res) ? res : (res?.rows || [])
+        const lc  = code.toString().toLowerCase()
+        const match = arr.find(e =>
+          e.employee_code?.toString().toLowerCase() === lc ||
+          e.code?.toString().toLowerCase() === lc
+        )
+        setSelData(match || null)
+      })
+      .catch(() => setSelData(null))
+      .finally(() => setFetching(false))
+  }, [selYear, selMonth, profile])
+
+  const loading = parentLoading || fetching
+  const data    = selData
+
+  // ── Derive stats ───────────────────────────────────────────────────────────
+  const presentDays = Number(data?.days_present || data?.present_days)   || 0
+  const workingDays = Number(data?.working_days || data?.total_working_days || ESS_ATT_STANDARD_WORKING_DAYS)
+  const absentDays  = Math.max(0, workingDays - presentDays)
   const attRate     = workingDays > 0 ? Math.round((presentDays / workingDays) * 100) : 0
+  const overtime    = Number(data?.total_overtime) || 0
+
+  // ── Build per-day rows from days_detail (monthly API field) ───────────────
+  const dayRows = useMemo(() => {
+    const details = data?.days_detail || data?.daily_breakdown || []
+    const today   = new Date()
+    return details.map(d => {
+      const date   = d.date || d.day || ''
+      const dt     = date ? new Date(date) : null
+      const dow    = dt ? ESS_ATT_DOW[dt.getDay()] : ''
+      const hours  = Number(d.hours_worked ?? d.hours ?? 0)
+      const isWknd = dt ? (dt.getDay() === 0 || dt.getDay() === 6) : false
+      const isFut  = dt ? dt > today : false
+      let status
+      if (isWknd)       status = 'weekend'
+      else if (isFut)   status = 'future'
+      else if (hours >= ESS_ATT_PARTIAL_DAY_HRS) status = 'worked'
+      else if (hours > 0) status = 'partial'
+      else              status = 'absent'
+      return { date, dow, hours, status, ot: Math.max(0, hours - ESS_ATT_STANDARD_DAY_HRS) }
+    }).sort((a, b) => (a.date > b.date ? 1 : -1))
+  }, [data])
+
+  // ── Chart data (trend line) ───────────────────────────────────────────────
+  const trendData = useMemo(() =>
+    dayRows
+      .filter(r => r.status !== 'weekend' && r.status !== 'future')
+      .map(r => ({
+        date:  r.date.slice(5),   // MM-DD
+        hours: r.hours,
+        ot:    r.ot,
+      })),
+    [dayRows]
+  )
+
+  // ── Month/year selector helpers ──────────────────────────────────────────
+  const monthOpts = useMemo(() => {
+    const opts = []
+    for (let i = 0; i <= ESS_ATT_MONTHS_BACK; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      opts.push({ year: d.getFullYear(), month: d.getMonth() + 1,
+        label: `${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}` })
+    }
+    return opts
+  }, [])
+
+  const selectedLabel = `${MONTH_SHORT[selMonth - 1]} ${selYear}`
+  const rateLabel = attRate >= ESS_ATT_RATE_GOOD
+    ? ESS_ATT_COPY.rateExcellent : attRate >= ESS_ATT_RATE_WARN
+    ? ESS_ATT_COPY.rateGood : ESS_ATT_COPY.rateNeeds
+  const rateTone = attRate >= ESS_ATT_RATE_GOOD ? 'green' : attRate >= ESS_ATT_RATE_WARN ? 'amber' : 'rose'
 
   const summaryData = [
-    { name: 'Present',  value: presentDays, fill: '#10b981' },
-    { name: 'Absent',   value: absentDays > 0 ? absentDays : 0, fill: '#ef4444' },
+    { name: 'Present', value: presentDays, fill: '#10b981' },
+    { name: 'Absent',  value: absentDays,  fill: '#ef4444' },
   ]
 
   return (
     <div className="space-y-5">
+      {/* Month selector */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Icon name="CalendarDaysIcon" className="w-4 h-4 text-slate-400" />
+          <span className="text-sm font-medium text-slate-700">{ESS_ATT_COPY.sectionTitle}</span>
+          <span className="text-xs text-slate-400">{ESS_ATT_COPY.sectionSubtitle}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <select
+            value={`${selYear}-${selMonth}`}
+            onChange={e => {
+              const [y, m] = e.target.value.split('-').map(Number)
+              setSelYear(y); setSelMonth(m)
+            }}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {monthOpts.map(o => (
+              <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>{o.label}</option>
+            ))}
+          </select>
+          {fetching && <Spinner size="sm" />}
+        </div>
+      </div>
+
+      {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiCard icon="CheckCircleIcon" label="Present Days" value={presentDays} sub={`of ${workingDays} working days`} tone="green" />
-        <KpiCard icon="XCircleIcon" label="Absent Days" value={Math.max(0, absentDays)} sub="This month" tone={absentDays > 3 ? 'rose' : 'slate'} />
-        <KpiCard icon="ChartBarIcon" label="Attendance Rate" value={`${attRate}%`} sub={attRate >= 95 ? 'Excellent' : attRate >= 80 ? 'Good' : 'Needs attention'} tone={attRate >= 95 ? 'green' : attRate >= 80 ? 'amber' : 'rose'} />
-        <KpiCard icon="ArrowTrendingUpIcon" label="Overtime Hours" value={fmtHours(monthlyTs?.total_overtime)} sub="This month" tone="amber" />
+        <KpiCard icon="CheckCircleIcon"     label={ESS_ATT_COPY.kpiPresent}  value={loading ? EMPTY_DISPLAY : presentDays}          sub={`of ${workingDays} working days`}  tone="green" />
+        <KpiCard icon="XCircleIcon"         label={ESS_ATT_COPY.kpiAbsent}   value={loading ? EMPTY_DISPLAY : absentDays}            sub={selectedLabel}                     tone={absentDays > 3 ? 'rose' : 'slate'} />
+        <KpiCard icon="ChartBarIcon"        label={ESS_ATT_COPY.kpiRate}     value={loading ? EMPTY_DISPLAY : `${attRate}%`}         sub={rateLabel}                         tone={rateTone} />
+        <KpiCard icon="ArrowTrendingUpIcon" label={ESS_ATT_COPY.kpiOvertime} value={loading ? EMPTY_DISPLAY : fmtHours(overtime)}    sub={selectedLabel}                     tone="amber" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Daily hours trend */}
+        {/* Daily hours trend chart */}
         <div className="xl:col-span-2">
-          <SectionCard title="Daily Hours Trend" subtitle="Working hours per day this month" icon="ClockIcon">
+          <SectionCard title="Daily Hours Trend" subtitle={`Working hours per day — ${selectedLabel}`} icon="ClockIcon">
             {loading ? (
               <SkeletonBox className="h-52 w-full" />
             ) : trendData.length > 0 ? (
@@ -919,17 +1022,17 @@ const AttendanceAnalytics = ({ monthlyTs, loading }) => {
                   <YAxis tick={{ fontSize: 10 }} domain={[0, 14]} />
                   <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} h`]} />
                   <Area type="monotone" dataKey="hours" stroke="#3b82f6" fill="#dbeafe" name="Hours Worked" strokeWidth={2} />
-                  <Area type="monotone" dataKey="ot" stroke="#f59e0b" fill="#fef3c7" name="Overtime" strokeWidth={2} />
+                  <Area type="monotone" dataKey="ot"    stroke="#f59e0b" fill="#fef3c7" name="Overtime"     strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyNotice icon="ChartBarIcon" message="No daily data available for this month" />
+              <EmptyNotice icon="ChartBarIcon" message={ESS_ATT_COPY.noData} />
             )}
           </SectionCard>
         </div>
 
-        {/* Attendance pie */}
-        <SectionCard title="Month Summary" subtitle={`${MONTH_SHORT[nowMonth() - 1]} ${nowYear()}`} icon="ChartPieIcon">
+        {/* Month summary pie */}
+        <SectionCard title="Month Summary" subtitle={selectedLabel} icon="ChartPieIcon">
           {loading ? (
             <SkeletonBox className="h-52 w-full" />
           ) : (
@@ -952,14 +1055,79 @@ const AttendanceAnalytics = ({ monthlyTs, loading }) => {
                     <span className="font-semibold">{s.value} days</span>
                   </div>
                 ))}
+                <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Attendance Rate</span>
+                  <span className={`font-bold ${rateTone === 'green' ? 'text-emerald-600' : rateTone === 'amber' ? 'text-amber-600' : 'text-rose-600'}`}>{attRate}%</span>
+                </div>
               </div>
             </>
           )}
         </SectionCard>
       </div>
+
+      {/* Per-day detail table */}
+      <SectionCard title={ESS_ATT_COPY.dailyTableTitle} subtitle={`Day-by-day log — ${selectedLabel}`} icon="TableCellsIcon">
+        {loading ? (
+          <SkeletonBox className="h-64 w-full" />
+        ) : dayRows.length === 0 ? (
+          <EmptyNotice icon="CalendarDaysIcon" message={ESS_ATT_COPY.noData} />
+        ) : (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Date</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Day</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wide">Status</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Hours</th>
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Overtime</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayRows.map((row, i) => {
+                  const sm = ESS_ATT_DAY_STATUS[row.status] || ESS_ATT_DAY_STATUS.absent
+                  const isWknd = row.status === 'weekend'
+                  return (
+                    <tr key={row.date} className={`border-b border-slate-100 ${isWknd ? 'opacity-50' : ''} ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                      <td className="px-4 py-2 text-slate-800 font-medium tabular-nums">{row.date}</td>
+                      <td className="px-3 py-2 text-slate-500">{row.dow}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${sm.badge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${sm.dot}`} />
+                          {sm.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                        {row.status === 'weekend' || row.status === 'future' ? EMPTY_DISPLAY : `${row.hours.toFixed(1)} h`}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.ot > 0
+                          ? <span className="text-amber-600 font-medium">{row.ot.toFixed(1)} h</span>
+                          : <span className="text-slate-300">{EMPTY_DISPLAY}</span>
+                        }
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              {/* Footer totals */}
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-200 font-semibold">
+                  <td className="px-4 py-2 text-slate-700" colSpan={2}>Total</td>
+                  <td className="px-3 py-2 text-center text-slate-600">{presentDays} days present</td>
+                  <td className="px-3 py-2 text-right text-slate-700">{fmtHours(Number(data?.total_hours) || 0)}</td>
+                  <td className="px-3 py-2 text-right text-amber-600">{overtime > 0 ? fmtHours(overtime) : EMPTY_DISPLAY}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   )
 }
+
+
 
 // -----------------------------------------------------------------------------
 // Section: Timesheet Insights
@@ -2758,7 +2926,7 @@ export default function EmployeeSelfService() {
         )
 
       case 'attendance':
-        return <AttendanceAnalytics monthlyTs={monthlyTs} loading={loadingTs} />
+        return <AttendanceAnalytics profile={profile} monthlyTs={monthlyTs} loading={loadingTs} />
 
       case 'timesheet':
         return <TimesheetInsights monthlyTs={monthlyTs} userHistory={userHistory} loading={loadingTs} />
@@ -2810,7 +2978,7 @@ export default function EmployeeSelfService() {
 
         {/* -- Tab Navigation -- */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-          <div className="px-4 py-2 flex gap-1 overflow-x-auto scrollbar-hide">
+          <div className="px-4 pt-1 pb-0 flex gap-0.5 overflow-x-auto scrollbar-hide border-b border-slate-100">
             {ESS_TABS.map(tab => {
               const isActive = tab.id === activeTab
               const badge    = tabBadges[tab.id]
@@ -2819,11 +2987,12 @@ export default function EmployeeSelfService() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium
+                    flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium
                     whitespace-nowrap transition-colors flex-shrink-0 relative
+                    border-b-2 -mb-px
                     ${isActive
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}
+                      ? 'bg-blue-50/70 text-blue-700 border-blue-500 rounded-t-lg'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent rounded-t-lg'}
                   `}
                 >
                   <Icon name={tab.icon} className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />

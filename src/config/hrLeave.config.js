@@ -329,3 +329,56 @@ export const DAILY_TRACKER_SUBMIT_TO_OPTIONS = [
     activeTailwind:  'bg-emerald-600 text-white      border-emerald-600',
   },
 ]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. ESS ATTENDANCE TAB — soft-coded configuration
+//     Controls the individual employee attendance tracking panel in /hr/leave.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** How many past months the employee can scroll back to */
+export const ESS_ATT_MONTHS_BACK = 12
+
+/** Standard working hours per day (used to classify a day as full/partial) */
+export const ESS_ATT_STANDARD_DAY_HRS = 9
+
+/** Standard working days in a month (fallback when API doesn't return it) */
+export const ESS_ATT_STANDARD_WORKING_DAYS = 22
+
+/** Attendance rate % thresholds for colour coding */
+export const ESS_ATT_RATE_GOOD = 95   // >= good → green
+export const ESS_ATT_RATE_WARN = 80   // >= warn → amber, else → rose
+
+/** Day-level classification thresholds (hours) */
+export const ESS_ATT_PARTIAL_DAY_HRS = 4   // < this → partial day, else full
+export const ESS_ATT_OVERTIME_HRS    = 9   // > this → overtime flag
+
+/**
+ * Day-status style map (used in the per-day attendance table in ESS).
+ * Keys mirror classifyDay() categories from hrAttendance.config.js.
+ */
+export const ESS_ATT_DAY_STATUS = {
+  worked:   { label: 'Present',   dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  partial:  { label: 'Partial',   dot: 'bg-amber-400',   badge: 'bg-amber-50  text-amber-700  border-amber-200'  },
+  absent:   { label: 'Absent',    dot: 'bg-rose-500',    badge: 'bg-rose-50   text-rose-700   border-rose-200'   },
+  weekend:  { label: 'Day Off',   dot: 'bg-slate-300',   badge: 'bg-slate-50  text-slate-500  border-slate-200'  },
+  future:   { label: 'Upcoming',  dot: 'bg-slate-200',   badge: 'bg-slate-50  text-slate-400  border-slate-100'  },
+}
+
+/** Day-of-week short labels (Sun=0 … Sat=6) */
+export const ESS_ATT_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Copy strings for the ESS Attendance tab */
+export const ESS_ATT_COPY = {
+  sectionTitle:    'My Attendance',
+  sectionSubtitle: 'Personal attendance records — select any month to view details',
+  kpiPresent:      'Present Days',
+  kpiAbsent:       'Absent Days',
+  kpiRate:         'Attendance Rate',
+  kpiOvertime:     'Overtime Hours',
+  dailyTableTitle: 'Daily Breakdown',
+  noData:          'No attendance data found for this period.',
+  loading:         'Loading attendance\u2026',
+  rateExcellent:   'Excellent',
+  rateGood:        'Good',
+  rateNeeds:       'Needs attention',
+}

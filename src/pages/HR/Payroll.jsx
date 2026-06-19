@@ -58,7 +58,7 @@ export default function Payroll() {
           </div>
 
           {/* Tab Navigation */}
-          <div className="mt-4 flex gap-1 overflow-x-auto pb-px">
+          <div className="mt-4 flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
             {PAYROLL_TABS.map((tab) => {
               const Icon = HeroIcons[tab.icon] || HeroIcons.ChartBarIcon
               const isActive = activeTab === tab.id
