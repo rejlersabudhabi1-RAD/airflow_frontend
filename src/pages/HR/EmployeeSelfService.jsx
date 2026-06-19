@@ -920,7 +920,6 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
   const workingDays = Number(data?.working_days || data?.working_days_in_month || data?.total_working_days || ESS_ATT_STANDARD_WORKING_DAYS)
   const absentDays  = data ? Math.max(0, workingDays - presentDays) : 0
   const attRate     = (data && workingDays > 0) ? Math.round((presentDays / workingDays) * 100) : 0
-  const overtime    = Number(data?.total_overtime) || 0
 
   // ── Build per-day rows from days_detail (monthly API field) ───────────────
   const dayRows = useMemo(() => {
