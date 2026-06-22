@@ -160,10 +160,29 @@ export const getPublicRequestConfig = () => {
 
 /**
  * ================================================================
- * ADMIN PASSWORD RESET CONFIGURATION
+ * ADMIN RESET CONFIRM MODAL — soft-coded copy & behaviour
+ * Replaces native window.confirm() — no browser dialog popups.
  * ================================================================
- * Configuration for admin-initiated password resets
- * Allows admins to reset user passwords to default
+ */
+export const RESET_CONFIRM_MODAL_CONFIG = {
+  title:          'Reset User Password',
+  bodyLine1:      'The password for this account will be reset to the default password below.',
+  bodyLine2:      'The user will be required to change it on next login.',
+  defaultPwLabel: 'New Default Password',
+  userLabel:      'User',
+  confirmBtn:     'Reset Password',
+  cancelBtn:      'Cancel',
+  successMsg:     'Password reset successfully.',
+  errorMsg:       'Failed to reset password. Please try again.',
+  // icon keys must match HeroIcons outline names
+  icon:           'KeyIcon',
+  iconBg:         'bg-orange-100',
+  iconColor:      'text-orange-600',
+}
+
+/**
+ * ================================================================
+ * ADMIN PASSWORD RESET CONFIGURATION
  * ================================================================
  */
 
@@ -221,21 +240,7 @@ ${req.requireSpecialChars ? `• At least one special character (${req.specialCh
 };
 
 /**
- * Show confirmation dialog before resetting password
+ * @deprecated Use RESET_CONFIRM_MODAL_CONFIG + a React modal instead.
+ * Kept for backward-compatibility only. Always returns true (no popup).
  */
-export const confirmAdminPasswordReset = (userEmail) => {
-  if (!ADMIN_PASSWORD_RESET_CONFIG.SECURITY.requireAdminConfirmation) {
-    return true;
-  }
-  
-  const message = `${ADMIN_PASSWORD_RESET_CONFIG.UI.confirmationMessage}
-
-User: ${userEmail}
-${ADMIN_PASSWORD_RESET_CONFIG.UI.warningMessage}
-
-Default Password: ${ADMIN_PASSWORD_RESET_CONFIG.DEFAULT_PASSWORD}
-
-Click OK to proceed with password reset.`;
-  
-  return window.confirm(message);
-};
+export const confirmAdminPasswordReset = (_userEmail) => true;

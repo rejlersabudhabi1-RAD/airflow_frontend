@@ -20,6 +20,19 @@ import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
 import PendingActivationAlert from '../components/UserManagement/PendingActivationAlert';
 import PeopleNav from '../components/PeopleNav/PeopleNav';
 
+// ── Soft-coded copy for the Reset Password confirmation modal ──────────────
+// All visible strings and the default password come from one place — easy to change.
+const RESET_MODAL_COPY = {
+  title:           'Reset User Password',
+  userLabel:       'User',
+  bodyLine1:       'The account password will be reset to the default below. No current password is required.',
+  defaultPwLabel:  'New Default Password',
+  defaultPassword: 'Rejlers@123',
+  bodyLine2:       'The user must change this password on their next login.',
+  confirmBtn:      'Reset Password',
+  cancelBtn:       'Cancel',
+};
+
 /**
  * User Management Page - Rebuilt
  * CRUD operations for users with role assignment
@@ -64,6 +77,9 @@ const UserManagement = ({ pageControls }) => {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+
+  // Local state — password reset modal (replaces window.confirm popup)
+  const [resetTarget, setResetTarget] = useState(null); // { userId, email } | null
   
   // Local state - Data
   const [organizations, setOrganizations] = useState([]);
@@ -845,24 +861,23 @@ const UserManagement = ({ pageControls }) => {
     }
   };
 
-  const handleResetPassword = async (userId, userEmail) => {
-    const { confirmAdminPasswordReset, ADMIN_PASSWORD_RESET_CONFIG } = await import('../config/passwordReset.config');
-    
-    if (!confirmAdminPasswordReset(userEmail)) {
-      return;
-    }
-    
+  const handleResetPassword = (userId, userEmail) => {
+    // Open the inline React modal — no browser dialog popups
+    setResetTarget({ userId, email: userEmail });
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!resetTarget) return;
+    const { userId } = resetTarget;
+    const { ADMIN_PASSWORD_RESET_CONFIG } = await import('../config/passwordReset.config');
     try {
       setActionLoading({ [`reset_${userId}`]: true });
-      
       await rbacService.resetUserPassword(userId);
-      
       setNotification({
         show: true,
         type: 'success',
         message: ADMIN_PASSWORD_RESET_CONFIG.UI.successMessage
       });
-      
     } catch (error) {
       console.error('[UserManagement] Reset password error:', error);
       setNotification({
@@ -872,6 +887,7 @@ const UserManagement = ({ pageControls }) => {
       });
     } finally {
       setActionLoading({ [`reset_${userId}`]: false });
+      setResetTarget(null);
     }
   };
   
@@ -2508,6 +2524,67 @@ const UserManagement = ({ pageControls }) => {
         totalUsers={users?.length || 0}
         loading={actionLoading.access_to_all}
       />
+
+      {/* ── Reset Password Confirm Modal ──────────────────────────────────
+          Replaces the old window.confirm() browser dialog.
+          Shows a single clean confirmation — no double popup.
+      ─────────────────────────────────────────────────────────────────── */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 flex items-start gap-4">
+              <span className="shrink-0 p-2.5 rounded-xl bg-orange-100">
+                <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{RESET_MODAL_COPY.title}</h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {RESET_MODAL_COPY.userLabel}: <span className="font-medium text-slate-700">{resetTarget.email}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 pb-4 space-y-3">
+              <p className="text-sm text-slate-600">{RESET_MODAL_COPY.bodyLine1}</p>
+              <div className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+                <span className="text-xs font-medium text-orange-700">{RESET_MODAL_COPY.defaultPwLabel}</span>
+                <span className="font-mono font-semibold text-orange-800 tracking-wide">
+                  {RESET_MODAL_COPY.defaultPassword}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">{RESET_MODAL_COPY.bodyLine2}</p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-6 pb-6">
+              <button
+                type="button"
+                onClick={() => setResetTarget(null)}
+                className="flex-1 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+              >
+                {RESET_MODAL_COPY.cancelBtn}
+              </button>
+              <button
+                type="button"
+                disabled={!!actionLoading[`reset_${resetTarget.userId}`]}
+                onClick={handleConfirmResetPassword}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg transition"
+              >
+                {actionLoading[`reset_${resetTarget.userId}`]
+                  ? <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                  : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                }
+                {RESET_MODAL_COPY.confirmBtn}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
