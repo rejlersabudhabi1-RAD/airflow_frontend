@@ -225,6 +225,10 @@ const payrollService = {
   getMasterPayrollRows: (importId) =>
     unwrap(apiClient.get(`${BASE}/master-payroll-history/${importId}/rows/`)),
 
+  // Update a single employee row (draft stage only) — computed fields cascade automatically
+  updateMasterPayrollRow: (importId, rowId, data) =>
+    unwrap(apiClient.patch(`${BASE}/master-payroll-history/${importId}/rows/${rowId}/`, data)),
+
   // Delete a master payroll import session and all its employee rows
   deleteMasterPayroll: (importId) =>
     unwrap(apiClient.delete(`${BASE}/master-payroll-history/${importId}/delete/`)),

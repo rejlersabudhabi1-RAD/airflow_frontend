@@ -1099,6 +1099,56 @@ export const IMPORT_FIELD_ALIASES_VALUEFRAME = {
   year:           ['year', 'period year', 'billing year'],
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Row-level edit modal — soft-coded field groups.
+// 'computed' fields are shown as read-only formula displays.
+// All keys match MasterPayrollRow model fields.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ROW_EDIT_SECTIONS = [
+  {
+    section: 'Identity & Attendance',
+    fields: [
+      { key: 'employee_name',  label: 'Employee Name',   type: 'text'   },
+      { key: 'joining_date',   label: 'Joining Date',    type: 'text',  placeholder: 'YYYY-MM-DD' },
+      { key: 'total_hours',    label: 'Working Hours',   type: 'number' },
+    ],
+  },
+  {
+    section: 'Salary Components',
+    fields: [
+      { key: 'basic_salary',        label: 'Basic Salary',      type: 'number' },
+      { key: 'transport_allowance', label: 'Transportation',    type: 'number' },
+      { key: 'housing_allowance',   label: 'Home Allowance',    type: 'number' },
+      { key: 'other_allowances',    label: 'Other Allowance',   type: 'number' },
+      { key: 'other_pay',           label: 'Other Pay',         type: 'number' },
+    ],
+  },
+  {
+    section: 'Deductions',
+    fields: [
+      { key: 'total_deductions',  label: 'Salary Deduction',  type: 'number'   },
+      { key: 'deduction_details', label: 'Deduction Details', type: 'textarea' },
+    ],
+  },
+  {
+    section: 'Notes',
+    fields: [
+      { key: 'details', label: 'Details / Notes', type: 'textarea' },
+    ],
+  },
+]
+
+export const ROW_EDIT_COPY = {
+  modalTitle:      'Edit Employee Record',
+  saveBtn:         'Save Changes',
+  savingBtn:       'Saving…',
+  cancelBtn:       'Cancel',
+  saveSuccess:     'Employee record updated.',
+  saveFailed:      'Save failed — please try again.',
+  lockedNotice:    'This record is locked. Only draft payroll files can be edited.',
+  computedSection: 'Calculated Summary',
+}
+
 // Master payroll preview table columns — matches the 15-column Excel output exactly
 export const IMPORT_MASTER_COLUMNS = [
   { key: 'employee_code',      label: 'Emp Code',            mono: true,                                         editable: false },

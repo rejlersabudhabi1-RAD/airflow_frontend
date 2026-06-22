@@ -52,6 +52,8 @@ import {
   WORKFLOW_COPY,
   recomputeMasterRow,
   MASTER_PAYROLL_SUMMARY_KPIS,
+  ROW_EDIT_SECTIONS,
+  ROW_EDIT_COPY,
 } from '../../../config/hrPayroll.config'
 
 // â”€â”€â”€ tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -710,6 +712,166 @@ function NewRunModal({ onClose, onCreated }) {
 
 // â”€â”€â”€ main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ─── Slip Edit Modal ──────────────────────────────────────────────────────────
+function RowEditModal({ row, onClose, onSave, onSuccess }) {
+  const buildInitial = (r) => ({
+    employee_name:        r.employee_name        ?? '',
+    joining_date:         r.joining_date         ?? '',
+    total_hours:          String(r.total_hours        ?? 0),
+    basic_salary:         String(r.basic_salary        ?? 0),
+    transport_allowance:  String(r.transport_allowance ?? 0),
+    housing_allowance:    String(r.housing_allowance   ?? 0),
+    other_allowances:     String(r.other_allowances    ?? 0),
+    other_pay:            String(r.other_pay            ?? 0),
+    total_deductions:     String(r.total_deductions    ?? 0),
+    deduction_details:    r.deduction_details    ?? '',
+    details:              r.details              ?? '',
+  })
+
+  const [form,    setForm]    = useState(() => buildInitial(row))
+  const [saving,  setSaving]  = useState(false)
+  const [err,     setErr]     = useState('')
+  const [success, setSuccess] = useState('')
+
+  // Live preview of computed fields as user types
+  const preview = recomputeMasterRow({
+    ...row, ...form,
+    total_hours:         parseFloat(form.total_hours)         || 0,
+    basic_salary:        parseFloat(form.basic_salary)        || 0,
+    transport_allowance: parseFloat(form.transport_allowance) || 0,
+    housing_allowance:   parseFloat(form.housing_allowance)   || 0,
+    other_allowances:    parseFloat(form.other_allowances)    || 0,
+    other_pay:           parseFloat(form.other_pay)           || 0,
+    total_deductions:    parseFloat(form.total_deductions)    || 0,
+  })
+
+  const set = (k) => (e) => { setForm(f => ({ ...f, [k]: e.target.value })); setErr(''); setSuccess('') }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true); setErr(''); setSuccess('')
+    try {
+      await onSave(row.id, {
+        employee_name:        form.employee_name.trim(),
+        joining_date:         form.joining_date.trim(),
+        total_hours:          parseFloat(form.total_hours)         || 0,
+        basic_salary:         parseFloat(form.basic_salary)        || 0,
+        transport_allowance:  parseFloat(form.transport_allowance) || 0,
+        housing_allowance:    parseFloat(form.housing_allowance)   || 0,
+        other_allowances:     parseFloat(form.other_allowances)    || 0,
+        other_pay:            parseFloat(form.other_pay)           || 0,
+        total_deductions:     parseFloat(form.total_deductions)    || 0,
+        deduction_details:    form.deduction_details.trim(),
+        details:              form.details.trim(),
+      })
+      setSuccess(ROW_EDIT_COPY.saveSuccess)
+      onSuccess?.(ROW_EDIT_COPY.saveSuccess)
+      setTimeout(() => onClose(), 900)
+    } catch (ex) {
+      setErr(ex?.response?.data?.error || ex?.message || ROW_EDIT_COPY.saveFailed)
+    } finally { setSaving(false) }
+  }
+
+  const numInput = (key, label) => (
+    <label key={key} className="block">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <input type="number" step="0.01" min="0" value={form[key]} onChange={set(key)}
+        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none text-right font-mono" />
+    </label>
+  )
+  const txtInput = (key, label, placeholder = '') => (
+    <label key={key} className="block">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <input type="text" value={form[key]} onChange={set(key)} placeholder={placeholder}
+        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+    </label>
+  )
+  const txtArea = (key, label) => (
+    <label key={key} className="block col-span-2">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <textarea rows={2} value={form[key]} onChange={set(key)}
+        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none resize-none" />
+    </label>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Icon name="PencilSquareIcon" className="w-5 h-5 text-blue-600" />
+              {ROW_EDIT_COPY.modalTitle}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {row.employee_name}&nbsp;·&nbsp;Code:&nbsp;<span className="font-mono">{row.employee_code}</span>
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5">
+            <Icon name="XMarkIcon" className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+          {/* Field sections from config */}
+          {ROW_EDIT_SECTIONS.map(sec => (
+            <div key={sec.section}>
+              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">{sec.section}</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {sec.fields.map(f => {
+                  if (f.type === 'textarea') return txtArea(f.key, f.label)
+                  if (f.type === 'number')   return numInput(f.key, f.label)
+                  return txtInput(f.key, f.label, f.placeholder)
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Live-preview computed summary */}
+          <div>
+            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              {ROW_EDIT_COPY.computedSection}
+            </h4>
+            <div className="bg-slate-50 rounded-xl divide-y divide-slate-100 text-sm">
+              {[
+                ['Total Allowances',   preview.total_allowances, 'text-violet-700'],
+                ['Gross Salary',       preview.employee_salary,  'text-blue-700'],
+                ['Final Salary (Net)', preview.final_salary,     'text-emerald-700 font-bold'],
+              ].map(([label, val, cls]) => (
+                <div key={label} className="flex justify-between items-center px-4 py-2.5">
+                  <span className="text-slate-500 text-xs">{label}</span>
+                  <span className={`font-mono font-semibold ${cls}`}>{fmtCurrency(val)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1.5 pl-1">Recalculated automatically on save.</p>
+          </div>
+
+          {err     && <div className="bg-rose-50    border border-rose-200    text-rose-700    text-xs rounded-xl px-4 py-3">{err}</div>}
+          {success && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl px-4 py-3 flex items-center gap-2"><Icon name="CheckCircleIcon" className="w-4 h-4" />{success}</div>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition">
+            {ROW_EDIT_COPY.cancelBtn}
+          </button>
+          <button type="button" disabled={saving} onClick={handleSubmit}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition">
+            {saving
+              ? <><Spinner size={3} />{ROW_EDIT_COPY.savingBtn}</>
+              : <><Icon name="CheckIcon" className="w-4 h-4" />{ROW_EDIT_COPY.saveBtn}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Slip Edit Modal (existing payroll run slip editor) ───────────────────────
 function SlipEditModal({ slip, onClose, onSaved }) {
   const [form, setForm] = useState({
     basic_salary:     String(slip.basic_salary      ?? ''),
@@ -974,8 +1136,9 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
   const [importOpen,   setImportOpen]  = useState(false)
   const [masterPreview,setMasterPreview] = useState(null)  // {rows,stats,warnings,year,month,sympaFile,vfFile,otherFile}
   const [prevDlLoading,setPrevDlLoading] = useState(false)
-  const [previewEditMode, setPreviewEditMode] = useState(false)
-  const [editableRows,    setEditableRows]    = useState([])
+  const [previewEditMode,  setPreviewEditMode]  = useState(false)
+  const [editableRows,     setEditableRows]     = useState([])
+  const [rowEditTarget,    setRowEditTarget]    = useState(null) // single MasterPayrollRow being edited
   const [runsLoading,  setRunsLoading] = useState(true)
   const [editModal,    setEditModal]   = useState(null)  // slip object | null
   const [deleteModal,  setDeleteModal] = useState(null)  // slip object | null
@@ -1350,6 +1513,18 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     }
   }, [loadWorkflow, reloadHistory, masterPreview, workflowInfo])
 
+  // ── Individual row edit (RowEditModal) ────────────────────────────────────
+  const handleRowEditSave = useCallback(async (rowId, formData) => {
+    const importId = masterPreview?.importId
+    if (!importId) throw new Error('No active import session.')
+    const updated = await payrollService.updateMasterPayrollRow(importId, rowId, formData)
+    // Splice the updated row back into editableRows (recompute formulas client-side too)
+    setEditableRows(prev => prev.map(r =>
+      r.id === rowId ? recomputeMasterRow({ ...r, ...updated }) : r
+    ))
+    return updated
+  }, [masterPreview])
+
   // Load workflow when master preview changes
   useEffect(() => {
     if (masterPreview?.importId) {
@@ -1716,6 +1891,12 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                         {col.computed && <span className="ml-1 text-[9px] font-normal text-emerald-600 opacity-70">=</span>}
                       </th>
                     ))}
+                    {/* Actions column — only rendered in draft stage */}
+                    {canEditRows && (
+                      <th className="px-3 py-2.5 text-center font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 bg-slate-50">
+                        Edit
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -1768,6 +1949,23 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                             </td>
                           )
                         })}
+                        {/* Pencil button — only in draft stage, only when row has a DB id */}
+                        {canEditRows && (
+                          <td className="px-2 py-2 text-center">
+                            {row.id ? (
+                              <button
+                                type="button"
+                                title="Edit this employee record"
+                                onClick={() => setRowEditTarget({ ...row })}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                              >
+                                <Icon name="PencilSquareIcon" className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <span className="text-slate-200 text-xs" title="Not yet saved to database">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                       )
                     })}
@@ -1784,6 +1982,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                   return (
                     <tfoot className="sticky bottom-0 bg-slate-100 border-t-2 border-slate-300 z-10">
                       <tr>
+                        {canEditRows && <td className="px-2 py-2.5" />}
                         {IMPORT_MASTER_COLUMNS.map(col => {
                           const isTotal = SUMMABLE.includes(col.key)
                           return (
@@ -2470,6 +2669,16 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
           onClose={() => setImportOpen(false)}
           selRun={selRun}
           onGenerated={data => { setMasterPreview(data); reloadHistory() }}
+        />
+      )}
+
+      {/* Row Edit Modal — individual MasterPayrollRow editing (draft stage only) */}
+      {rowEditTarget && (
+        <RowEditModal
+          row={rowEditTarget}
+          onClose={() => setRowEditTarget(null)}
+          onSave={handleRowEditSave}
+          onSuccess={(msg) => toast(msg)}
         />
       )}
 
