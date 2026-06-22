@@ -16,6 +16,14 @@ const FirstLoginCheck = ({ children }) => {
   const [mustResetPassword, setMustResetPassword] = useState(false);
   const [checked, setChecked] = useState(false);
 
+  // Reset state on logout so the check reruns on the next login
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setChecked(false);
+      setMustResetPassword(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const checkFirstLogin = async () => {
       if (!isAuthenticated || checked) {

@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { useState, useEffect, useCallback } from 'react'
 import { API_BASE_URL, API_ENDPOINTS } from './config/api.config'
 import { FEATURE_FLAGS, ENV } from './config/features.config'
+import passwordExpiryService from './services/passwordExpiry.service'
 import Layout from './components/Layout/Layout'
 import FirstLoginCheck from './components/Auth/FirstLoginCheck'
 import ChangePasswordModal from './components/Auth/ChangePasswordModal'
@@ -322,6 +323,12 @@ function App() {
   // Handle password change success
   const handlePasswordChangeSuccess = async () => {
     setMustChangePassword(false)
+    // Immediately clear expiry banner — backend has already cleared the flag
+    passwordExpiryService.clearAndNotify()
+    // Re-check from backend so the service has accurate fresh state
+    passwordExpiryService.checkPasswordExpiry().catch(err =>
+      console.warn('[App] Failed to refresh expiry status after password change:', err)
+    )
     // Refresh user data
     try {
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access')
