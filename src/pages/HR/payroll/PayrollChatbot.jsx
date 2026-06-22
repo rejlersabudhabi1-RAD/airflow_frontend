@@ -2,6 +2,7 @@
  * Payroll AI Assistant — rule-based chatbot
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollService from '../../../services/payroll.service'
 import timesheetService from '../../../services/timesheet.service'
@@ -61,6 +62,10 @@ export default function PayrollChatbot() {
   const [ctxData,   setCtxData] = useState(null)
   const bottomRef               = useRef(null)
 
+  // Current user's biometric employee code from RBAC Redux store
+  const rbacUser      = useSelector((s) => s.rbac?.currentUser)
+  const employeeCode  = rbacUser?.employee_id || null
+
   // Welcome message
   useEffect(() => {
     setMessages([{ id: uid(), role: 'assistant', content: PAYROLL_COPY.chatWelcome }])
@@ -71,19 +76,36 @@ export default function PayrollChatbot() {
 
   // Pre-load context data for rule engine
   useEffect(() => {
-    const now = new Date()
+    const now   = new Date()
+    const year  = now.getFullYear()
+    const month = now.getMonth() + 1
+
+    // Build slip params — filter by current user's employee code when known
+    const slipParams = { page_size: 1, ordering: '-created_at' }
+    if (employeeCode) slipParams.employee_id = employeeCode
+
     Promise.allSettled([
       payrollService.getDashboardSummary(),
-      payrollService.getSalarySlips({ page_size: 1, ordering: '-created_at' }),
-      timesheetService.fetchMonthly(now.getFullYear(), now.getMonth() + 1),
-    ]).then(([sum, slips, ts]) => {
+      payrollService.getSalarySlips(slipParams),
+      // Per-user timesheet history for accurate overtime calculation
+      employeeCode
+        ? timesheetService.fetchUserHistory({ employee_code: employeeCode, year, month })
+        : Promise.resolve(null),
+      // Live leave record for the current user
+      employeeCode
+        ? payrollService.getLeaveRecords({ employee_code: employeeCode, year, page_size: 1 })
+        : Promise.resolve(null),
+    ]).then(([sum, slips, ts, leave]) => {
+      const tsPayload  = ts.value
+      const leaveList  = leave.value?.results ?? leave.value ?? []
       setCtxData({
-        summary:    sum.value  ?? null,
-        latestSlip: (slips.value?.results ?? slips.value ?? [])[0] ?? null,
-        monthlyTs:  ts.value   ?? null,
+        summary:     sum.value ?? null,
+        latestSlip:  (slips.value?.results ?? slips.value ?? [])[0] ?? null,
+        userTs:      tsPayload?.summary ?? null,   // per-user timesheet summary
+        leaveRecord: leaveList[0] ?? null,         // first leave record for the year
       })
     })
-  }, [])
+  }, [employeeCode]) // re-load when user identity resolves
 
   const send = useCallback(async (text) => {
     if (!text.trim() || loading) return

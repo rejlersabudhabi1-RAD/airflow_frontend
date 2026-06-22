@@ -183,13 +183,38 @@ export const PAYROLL_SLIP_COLUMNS = [
 // 5. AUDIT THRESHOLDS — soft-coded, override without touching component code
 // ─────────────────────────────────────────────────────────────────────────────
 export const PAYROLL_AUDIT_THRESHOLDS = {
-  spikePercent:     20,    // % change in net salary that triggers a spike alert
-  overtimeHours:    60,    // hours/month above which overtime alert fires
-  minPresentDays:   15,    // days below which attendance anomaly fires
-  minHoursPerDay:   4,     // hours below which a day is not counted as present
-  burnoutHoursMonth: 200,  // monthly hours above which burnout risk fires
-  lowUtilPercent:   50,    // utilization % below which productivity alert fires
+  spikePercent:       20,    // % change in net salary that triggers a spike alert
+  overtimeHours:      60,    // hours/month above which overtime alert fires
+  minPresentDays:     15,    // days below which attendance anomaly fires
+  minHoursPerDay:     4,     // hours below which a day is not counted as present
+  burnoutHoursMonth:  200,   // monthly hours above which burnout risk fires
+  lowUtilPercent:     50,    // utilization % below which productivity alert fires
+  standardHoursPerDay: 9,   // expected biometric hours per working day (overtime baseline)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance KPI tiles — live biometric data, fetched client-side from
+// /api/v1/timesheet/monthly/.  compute(s) receives the attStats object set in
+// PayrollDashboard.  These tiles do NOT open a drill-down modal.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ATT_KPIS = [
+  {
+    id:    'att_present',
+    label: 'Present This Month',
+    icon:  'UserGroupIcon',
+    tone:  'bg-cyan-50 text-cyan-700',
+    compute: (s) => s ? `${s.presentCount} / ${s.totalEmployees}` : '—',
+    sub:     (s) => s ? `${(s.attendanceRateMtd ?? 0).toFixed(0)}% attendance rate` : 'Loading biometric data…',
+  },
+  {
+    id:    'att_avg_hours',
+    label: 'Avg Hours / Day',
+    icon:  'ClockIcon',
+    tone:  'bg-violet-50 text-violet-700',
+    compute: (s) => s ? `${(s.avgHoursPerDay ?? 0).toFixed(1)} hrs` : '—',
+    sub:     (s) => s ? `${(s.totalHours ?? 0).toFixed(0)} total hrs · biometric` : 'Live biometric data',
+  },
+]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cross-tab connection copy — Engine ↔ Auditor alignment labels
@@ -444,12 +469,14 @@ export const PAYROLL_CHATBOT_PATTERNS = [
     quickLabel: 'Overtime this month',
     intent: 'overtime',
     respond: (data) => {
-      const hours = data?.monthlyTs?.total_hours ?? 0
-      const standard = 8 * (data?.monthlyTs?.days_present ?? 22)
+      const s = data?.userTs  // summary from fetchUserHistory (per-user)
+      if (!s) return 'Timesheet data is not available right now. Please try again shortly.'
+      const hours = s.total_hours ?? 0
+      const standard = PAYROLL_AUDIT_THRESHOLDS.standardHoursPerDay * (s.days_present ?? 0)
       const ot = Math.max(0, hours - standard)
       return ot > 0
-        ? `You have logged ${ot.toFixed(1)} overtime hours this month (${hours.toFixed(1)}h total vs ${standard}h standard).`
-        : 'No overtime recorded this month.'
+        ? `You have logged ${ot.toFixed(1)} overtime hours this month (${hours.toFixed(1)}h actual vs ${standard}h standard at ${PAYROLL_AUDIT_THRESHOLDS.standardHoursPerDay}h/day × ${s.days_present} days).`
+        : `No overtime this month. Total: ${hours.toFixed(1)}h across ${s.days_present ?? 0} days.`
     },
   },
   {
@@ -457,7 +484,14 @@ export const PAYROLL_CHATBOT_PATTERNS = [
     keywords: ['leave', 'leave balance', 'annual leave', 'vacation'],
     quickLabel: 'Leave balance',
     intent: 'leave_balance',
-    respond: () => 'Leave balance data is managed in Sympa HRMS. Please check your HR portal for current leave balances.',
+    respond: (data) => {
+      const rec = data?.leaveRecord
+      if (!rec) return 'Leave balance could not be loaded. Please contact HR.'
+      const balance = parseFloat(rec.leave_balance ?? rec.balance ?? rec.remaining_balance ?? 0)
+      const leaveType = rec.leave_type || 'Annual Leave'
+      const taken = parseFloat(rec.days_taken ?? rec.taken ?? 0)
+      return `Your ${leaveType} balance: ${balance.toFixed(1)} days remaining (${taken.toFixed(1)} days taken this year).`
+    },
   },
   {
     id: 'deduction',

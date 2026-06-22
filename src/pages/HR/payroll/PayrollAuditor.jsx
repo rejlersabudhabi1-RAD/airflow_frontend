@@ -31,7 +31,7 @@ const detectAnomalies = (currSlips, prevSlips) => {
       anomalies.push({
         type: 'new_employee',
         severity: 'low',
-        employee: curr.slip_number,
+        employee: curr.employee_name || curr.employee_id || curr.slip_number,
         current: curr.net_salary,
         previous: null,
         changePct: null,
@@ -48,7 +48,7 @@ const detectAnomalies = (currSlips, prevSlips) => {
         anomalies.push({
           type: 'salary_spike',
           severity: Math.abs(pct) > 40 ? 'critical' : Math.abs(pct) > 25 ? 'high' : 'medium',
-          employee: curr.slip_number,
+          employee: curr.employee_name || curr.employee_id || curr.slip_number,
           current: currNet,
           previous: prevNet,
           changePct: pct,
@@ -66,7 +66,7 @@ const detectAnomalies = (currSlips, prevSlips) => {
       anomalies.push({
         type: 'missing_employee',
         severity: 'high',
-        employee: prev.slip_number,
+        employee: prev.employee_name || prev.employee_id || prev.slip_number,
         current: null,
         previous: prev.net_salary,
         changePct: null,

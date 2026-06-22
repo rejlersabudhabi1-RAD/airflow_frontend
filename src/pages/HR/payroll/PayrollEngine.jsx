@@ -1052,10 +1052,10 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     const flags = []
     const prevMap = {}
     prevSlips.forEach(s => {
-      prevMap[(s.employee_code || s.employee_salary_info?.employee_id || '').toString().toLowerCase().trim()] = s
+      prevMap[(s.employee_code || s.employee_id || '').toString().toLowerCase().trim()] = s
     })
     slips.forEach(slip => {
-      const code = (slip.employee_code || slip.employee_salary_info?.employee_id || '').toString().toLowerCase().trim()
+      const code = (slip.employee_code || slip.employee_id || '').toString().toLowerCase().trim()
 
       if (Number(slip.absent_days ?? 0) > ENGINE_ANOMALY_RULES.highAbsentDays)
         flags.push({ slipId: slip.id, employeeName: slip.employee_name || code, rule: 'highAbsent',
@@ -1111,7 +1111,14 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     pendingCount:   slips.filter(r => r.status === 'pending_approval').length,
     approvedCount:  slips.filter(r => r.status === 'approved').length,
     anomalyCount:   Object.keys(anomalyMap).length,
-  }), [slips, anomalyMap])
+    // slips with no matching biometric row (only meaningful when attendance data loaded)
+    unmatchedBiometric: Object.keys(attendance).length > 0
+      ? slips.filter(s => {
+          const code = (s.employee_code || s.employee_id || '').toString().toLowerCase().trim()
+          return code && !attendance[code]
+        }).length
+      : 0,
+  }), [slips, anomalyMap, attendance])
 
   const deptChartData = useMemo(() => {
     const agg = {}
@@ -1890,6 +1897,16 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
 
               {!loading && <AnomalyPanel flags={anomalyFlags} />}
 
+              {/* Biometric unmatched notice — only show when attendance data is available */}
+              {!loading && kpiData.unmatchedBiometric > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                  <HeroIcons.ExclamationCircleIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span>
+                    <strong className="text-slate-800">{kpiData.unmatchedBiometric}</strong> slip{kpiData.unmatchedBiometric !== 1 ? 's' : ''} had no biometric match — attendance data may be incomplete for those employees.
+                  </span>
+                </div>
+              )}
+
               {!loading && slips.length > 0 && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   <div className="bg-white rounded-2xl border border-slate-200 p-4">
@@ -1958,7 +1975,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                           )
                           : filteredSlips.map(slip => {
                             const flags   = anomalyMap[slip.id] ?? []
-                            const empCode = (slip.employee_code || slip.employee_salary_info?.employee_id || '').toString().toLowerCase().trim()
+                            const empCode = (slip.employee_code || slip.employee_id || '').toString().toLowerCase().trim()
                             const bio     = attendance[empCode]
                             const bioP    = bio?.days_present ?? bio?.present_days
                             const attStr  = bioP != null ? `${slip.present_days ?? '?'} / ${bioP}` : `${slip.present_days ?? 'â€”'}`
@@ -2355,7 +2372,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
           slip={drawer}
           biometricRow={
             attendance[
-              (drawer.employee_code || drawer.employee_salary_info?.employee_id || '')
+              (drawer.employee_code || drawer.employee_id || '')
                 .toString().toLowerCase().trim()
             ] ?? null
           }

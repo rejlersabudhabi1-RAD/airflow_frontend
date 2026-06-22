@@ -7,8 +7,9 @@ import { useEffect, useState } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import payrollService from '../../../services/payroll.service'
+import timesheetSvc from '../../../services/timesheet.service'
 import {
-  PAYROLL_KPIS, PAYROLL_RUN_COLUMNS, PAYROLL_COPY,
+  PAYROLL_KPIS, ATT_KPIS, PAYROLL_RUN_COLUMNS, PAYROLL_COPY,
   PAYROLL_KPI_REPORTS, PAYROLL_SLIP_STATUS, PAYROLL_ALERT_SEVERITY,
   PAYROLL_RUN_COPY, PAYROLL_RUN_MONTHS,
   runStatusMeta, fmtCurrency,
@@ -578,6 +579,7 @@ export default function PayrollDashboard({ onSelectRun }) {
   const [reportId,   setReportId]   = useState(null)
   const [editRun,    setEditRun]    = useState(null)   // run being edited
   const [deleteRun,  setDeleteRun]  = useState(null)   // run pending deletion
+  const [attStats,   setAttStats]   = useState(null)   // live biometric stats
 
   useEffect(() => {
     setLoading(true)
@@ -588,6 +590,28 @@ export default function PayrollDashboard({ onSelectRun }) {
       setSummary(s)
       setRuns(r?.results ?? r ?? [])
     }).catch((e) => setError(e.message)).finally(() => setLoading(false))
+
+    // Attendance stats — non-blocking, biometric data is optional
+    const now = new Date()
+    timesheetSvc.fetchMonthly(now.getFullYear(), now.getMonth() + 1)
+      .then((res) => {
+        const rows = res?.rows ?? []
+        if (!rows.length) return
+        const totalEmployees = rows.length
+        const presentCount   = rows.filter((r) => (r.days_present ?? 0) > 0).length
+        const totalHours     = rows.reduce((s, r) => s + (r.total_hours ?? 0), 0)
+        const avgHoursPerDay = totalEmployees
+          ? rows.reduce((s, r) => s + (r.avg_hours_per_day ?? 0), 0) / totalEmployees
+          : 0
+        setAttStats({
+          presentCount,
+          totalEmployees,
+          attendanceRateMtd: totalEmployees ? (presentCount / totalEmployees) * 100 : 0,
+          avgHoursPerDay,
+          totalHours,
+        })
+      })
+      .catch(() => {}) // biometric tile degrades gracefully
   }, [])
 
   // Build trend data from runs list
@@ -631,6 +655,32 @@ export default function PayrollDashboard({ onSelectRun }) {
           <KpiTile key={kpi.id} kpi={kpi} summary={summary} onClick={() => setReportId(kpi.id)} />
         ))}
       </div>
+
+      {/* Attendance KPI Tiles — live biometric data (non-clickable, gracefully hidden if unavailable) */}
+      {attStats && (
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 uppercase tracking-wider">
+            <HeroIcons.SignalIcon className="w-3.5 h-3.5" />
+            Biometric Attendance
+          </div>
+          {ATT_KPIS.map((kpi) => {
+            const Icon = HeroIcons[kpi.icon] || HeroIcons.ClockIcon
+            return (
+              <div
+                key={kpi.id}
+                className={`rounded-xl border p-4 ${kpi.tone} border-current/10 min-w-[160px] flex-1 max-w-xs`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon className="w-4 h-4 opacity-70" />
+                  <span className="text-xs font-semibold uppercase tracking-wider opacity-70">{kpi.label}</span>
+                </div>
+                <div className="text-xl font-bold leading-tight">{kpi.compute(attStats)}</div>
+                <div className="text-[10px] opacity-60 mt-0.5">{kpi.sub(attStats)}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Leave Intelligence Panel — always shown when summary is loaded */}
       {summary && (
