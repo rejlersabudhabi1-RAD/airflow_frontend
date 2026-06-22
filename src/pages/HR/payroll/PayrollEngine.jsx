@@ -51,6 +51,7 @@ import {
   WORKFLOW_STAGE_ORDER,
   WORKFLOW_COPY,
   recomputeMasterRow,
+  MASTER_PAYROLL_SUMMARY_KPIS,
 } from '../../../config/hrPayroll.config'
 
 // â”€â”€â”€ tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1670,6 +1671,30 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
               </div>
             )}
 
+            {/* ── Salary Summary Strip ─────────────────────────────────────── */}
+            {editableRows.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-slate-100 border-b border-slate-200">
+                {MASTER_PAYROLL_SUMMARY_KPIS.map(kpi => {
+                  const val = kpi.compute(editableRows)
+                  return (
+                    <div key={kpi.id}
+                      className={`flex items-center gap-3 px-4 py-3 bg-white ${kpi.highlight ? 'ring-1 ring-inset ring-emerald-300' : ''}`}>
+                      <div className={`p-1.5 rounded-lg border ${kpi.tone}`}>
+                        <Icon name={kpi.icon} className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide truncate">{kpi.label}</p>
+                        <p className={`text-sm font-bold truncate ${kpi.highlight ? 'text-emerald-700' : 'text-slate-800'}`}>
+                          {kpi.currency ? fmtCurrency(val) : val}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">{kpi.sub(editableRows)}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Warnings */}
             {warnings.length > 0 && (
               <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 space-y-1">
@@ -1696,8 +1721,12 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {editableRows.length === 0
                     ? <tr><td colSpan={IMPORT_MASTER_COLUMNS.length} className="px-4 py-10 text-center text-slate-400">{IMPORT_COPY.noFiles}</td></tr>
-                    : editableRows.map((row, rowIdx) => (
-                      <tr key={rowIdx} className="hover:bg-blue-50/40 transition-colors">
+                    : editableRows.map((row, rowIdx) => {
+                      // Highlight rows where no salary data was found (final_salary=0
+                      // but employee exists in attendance/VF without a Sympa record)
+                      const noSalaryData = (parseFloat(row.basic_salary) || 0) === 0
+                      return (
+                      <tr key={rowIdx} className={`transition-colors ${noSalaryData ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-blue-50/40'}`}>
                         {IMPORT_MASTER_COLUMNS.map(col => {
                           if (col.sources) return (
                             <td key={col.key} className="px-3 py-2">
@@ -1740,8 +1769,8 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                           )
                         })}
                       </tr>
-                    ))
-                  }
+                      )
+                    })}
                 </tbody>
                 {/* Totals footer row — aggregates all numeric columns */}
                 {editableRows.length > 0 && (() => {
@@ -1770,6 +1799,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                     </tfoot>
                   )
                 })()}
+              </table>
             </div>
 
             {/* Footer */}

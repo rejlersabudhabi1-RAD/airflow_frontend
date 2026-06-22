@@ -1119,6 +1119,66 @@ export const IMPORT_MASTER_COLUMNS = [
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Summary KPIs shown in the Master Payroll File panel header.
+// Each entry reads from the editableRows array (already recomputed).
+// ─────────────────────────────────────────────────────────────────────────────
+export const MASTER_PAYROLL_SUMMARY_KPIS = [
+  {
+    id:    'employees',
+    label: 'Employees',
+    icon:  'UsersIcon',
+    tone:  'bg-slate-50 text-slate-700 border-slate-200',
+    compute: (rows) => rows.length,
+    format:  (v)    => v,
+    sub:     (rows) => {
+      const withSalary = rows.filter(r => parseFloat(r.final_salary) > 0).length
+      return `${withSalary} with salary data`
+    },
+  },
+  {
+    id:    'total_basic',
+    label: 'Total Basic',
+    icon:  'BanknotesIcon',
+    tone:  'bg-blue-50 text-blue-700 border-blue-200',
+    compute: (rows) => rows.reduce((s, r) => s + (parseFloat(r.basic_salary) || 0), 0),
+    format:  (v)    => v,   // fmtCurrency applied in component
+    sub:     ()     => 'Sum of basic salary',
+    currency: true,
+  },
+  {
+    id:    'total_allowances',
+    label: 'Total Allowance',
+    icon:  'PlusCircleIcon',
+    tone:  'bg-violet-50 text-violet-700 border-violet-200',
+    compute: (rows) => rows.reduce((s, r) => s + (parseFloat(r.total_allowances) || 0), 0),
+    format:  (v)    => v,
+    sub:     ()     => 'Transport + Housing + Other',
+    currency: true,
+  },
+  {
+    id:    'total_deductions',
+    label: 'Total Deductions',
+    icon:  'MinusCircleIcon',
+    tone:  'bg-rose-50 text-rose-700 border-rose-200',
+    compute: (rows) => rows.reduce((s, r) => s + (parseFloat(r.total_deductions) || 0), 0),
+    format:  (v)    => v,
+    sub:     ()     => 'Sum of all deductions',
+    currency: true,
+  },
+  {
+    id:    'final_salary',
+    label: 'Total Final Salary',
+    icon:  'CheckBadgeIcon',
+    tone:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+    compute: (rows) => rows.reduce((s, r) => s + (parseFloat(r.final_salary) || 0), 0),
+    format:  (v)    => v,
+    sub:     ()     => 'Net payroll = Basic + Allow − Deductions',
+    currency: true,
+    highlight: true,
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Cascade formula: recalculates all three derived payroll fields in order.
 // Call this whenever any source field changes (edit mode) and on initial load.
 //   total_allowances  = transport + housing + other_allowances
