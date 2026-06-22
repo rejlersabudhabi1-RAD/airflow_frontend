@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/api.config';
 import { STORAGE_KEYS } from '../../config/app.config';
+import { logout } from '../../store/slices/authSlice';
+import passwordExpiryService from '../../services/passwordExpiry.service';
+
+// Soft-coded post-change behaviour constants
+const POST_CHANGE_REDIRECT       = '/login';
+const POST_CHANGE_REDIRECT_DELAY = 2000; // ms
+const SUCCESS_HEADING            = 'Password Updated!';
+const SUCCESS_BODY               = 'Your password has been changed. Redirecting to login page...';
 
 /**
  * First Login Password Reset Component
@@ -11,6 +20,7 @@ import { STORAGE_KEYS } from '../../config/app.config';
  */
 const FirstLoginPasswordReset = ({ user, onSuccess }) => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [formData, setFormData] = useState({
     current_password: '',
     new_password: '',
@@ -18,6 +28,7 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState({
     score: 0,
     label: '',
@@ -128,23 +139,17 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
       );
 
       if (response.data.success) {
-        alert('Password successfully updated! Please login again with your new password.');
-        
-        // Clear all possible token storage keys
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('access');
-        localStorage.removeItem('refresh');
-        
-        if (onSuccess) {
-          onSuccess();
-        } else {
-          navigate('/login');
-        }
+        // Show inline success state — no browser alert()
+        setSuccess(true);
+        // Clear expiry banner immediately
+        passwordExpiryService.clearAndNotify();
+        passwordExpiryService.stopPeriodicCheck();
+        // Log out properly via Redux (clears localStorage + Redux state)
+        // then redirect to login for a fresh session
+        setTimeout(() => {
+          dispatch(logout());
+          navigate(POST_CHANGE_REDIRECT);
+        }, POST_CHANGE_REDIRECT_DELAY);
       }
     } catch (error) {
       console.error('Error resetting password:', error);
@@ -172,6 +177,23 @@ const FirstLoginPasswordReset = ({ user, onSuccess }) => {
       setLoading(false);
     }
   };
+
+  // Success screen — shown after password is changed, before redirect
+  if (success) {
+    return (
+      <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-md w-full p-6 text-center">
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+            <svg className="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{SUCCESS_HEADING}</h2>
+          <p className="text-gray-600">{SUCCESS_BODY}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
