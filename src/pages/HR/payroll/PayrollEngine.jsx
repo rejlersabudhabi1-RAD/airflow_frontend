@@ -11,7 +11,7 @@
  *
  * All thresholds / labels are soft-coded via ENGINE_* in hrPayroll.config.js
  */
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -1148,6 +1148,24 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
   const [historyDeleting, setHistoryDeleting] = useState(null) // importId being deleted
   const [runDeleting,     setRunDeleting]     = useState(false)
 
+  // Fullscreen
+  const pageRef        = useRef(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      pageRef.current?.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handler)
+    return () => document.removeEventListener('fullscreenchange', handler)
+  }, [])
+
   // AI Analytics state
   const [aiAnalytics,        setAiAnalytics]        = useState(null)   // response from GPT-4o
   const [aiAnalyticsLoading, setAiAnalyticsLoading] = useState(false)
@@ -1575,7 +1593,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
 
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <div className="space-y-4">
+    <div ref={pageRef} className={`space-y-4 ${isFullscreen ? 'bg-white p-6 overflow-y-auto' : ''}`}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -1627,6 +1645,15 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
             className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition">
             <Icon name="PlusIcon" className="w-4 h-4" />
             {ENGINE_COPY.newRunBtn}
+          </button>
+          {/* Fullscreen toggle */}
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit full screen' : 'Full screen'}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium rounded-lg border border-slate-200 transition">
+            <Icon name={isFullscreen ? 'ArrowsPointingInIcon' : 'ArrowsPointingOutIcon'} className="w-4 h-4" />
+            {isFullscreen ? 'Exit' : 'Full Screen'}
           </button>
         </div>
       </div>
