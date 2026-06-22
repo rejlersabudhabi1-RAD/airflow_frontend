@@ -10,6 +10,7 @@ import payrollService from '../../../services/payroll.service'
 import {
   PAYROLL_KPIS, PAYROLL_RUN_COLUMNS, PAYROLL_COPY,
   PAYROLL_KPI_REPORTS, PAYROLL_SLIP_STATUS, PAYROLL_ALERT_SEVERITY,
+  PAYROLL_RUN_COPY, PAYROLL_RUN_MONTHS,
   runStatusMeta, fmtCurrency,
 } from '../../../config/hrPayroll.config'
 
@@ -37,7 +38,31 @@ const REPORT_FETCHERS = {
   net:              () => payrollService.getSalarySlips({ page_size: 500 }),
   pending:          () => payrollService.getSalarySlips({ status: 'pending_approval', page_size: 500 }),
   ytd:              () => payrollService.getPayrollRuns({ year: CY, page_size: 50 }),
-  alerts:           () => payrollService.getAuditAlerts({ status: 'open', page_size: 200 }),
+  // Merges PayrollAuditAlert (status=open) + PayrollValidationLog (is_resolved=false)
+  // into a single normalised list so the drill-down matches the KPI tile count.
+  alerts: async () => {
+    const [auditResult, validResult] = await Promise.allSettled([
+      payrollService.getAuditAlerts({ status: 'open', page_size: 500 }),
+      payrollService.getValidationLogs({ is_resolved: 'false', page_size: 500 }),
+    ])
+    const toArr = (r) =>
+      r.status === 'fulfilled'
+        ? (r.value?.results ?? (Array.isArray(r.value) ? r.value : []))
+        : []
+    const auditRows = toArr(auditResult).map((r) => ({
+      ...r,
+      _source:     'Audit Alert',
+      alert_type:  r.alert_type_display || r.alert_type || '—',
+      description: r.root_cause || r.suggested_action || '',
+    }))
+    const validRows = toArr(validResult).map((r) => ({
+      ...r,
+      _source:     'Validation',
+      alert_type:  r.rule_label || r.rule_id || '—',
+      description: r.description || r.suggested_action || '',
+    }))
+    return { results: [...auditRows, ...validRows] }
+  },
   leave_employees:  () => payrollService.getLeaveRecords({ page_size: 500 }),
   leave_taken_ytd:  () => payrollService.getLeaveRequests({ status: 'APPROVED', page_size: 500 }),
   leave_earned_ytd: () => payrollService.getLeaveRecords({ page_size: 500 }),
@@ -293,6 +318,257 @@ function LeaveTile({ icon, label, value, sub, bg, border, textColor, subColor, o
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit Payroll Run modal
+// ─────────────────────────────────────────────────────────────────────────────
+function RunEditModal({ run, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    run_code:     run.run_code     || '',
+    month:        run.month        || 1,
+    year:         run.year         || new Date().getFullYear(),
+    period_start: run.period_start || '',
+    period_end:   run.period_end   || '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg,  setMsg]  = useState('')
+
+  const isDraft = run.status === 'draft'
+
+  // Close on Escape
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const handleSave = async () => {
+    if (!form.run_code?.trim()) { setMsg('Error: Run Code is required.'); return }
+    setBusy(true)
+    setMsg('')
+    try {
+      const payload = {
+        run_code:     form.run_code,
+        month:        form.month,
+        year:         form.year,
+        ...(form.period_start ? { period_start: form.period_start } : {}),
+        ...(form.period_end   ? { period_end:   form.period_end   } : {}),
+      }
+      await payrollService.updatePayrollRun(run.id, payload)
+      setMsg(PAYROLL_RUN_COPY.successEdit)
+      setTimeout(onSaved, 800)
+    } catch (e) {
+      const detail = e?.response?.data
+      const errMsg = typeof detail === 'object'
+        ? Object.entries(detail).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')
+        : (detail || e?.message || 'Update failed')
+      setMsg('Error: ' + errMsg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <HeroIcons.PencilSquareIcon className="w-5 h-5 text-blue-600" />
+            <h3 className="text-base font-semibold text-slate-800">{PAYROLL_RUN_COPY.editTitle}</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <HeroIcons.XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {!isDraft && (
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">
+              <HeroIcons.ExclamationTriangleIcon className="w-4 h-4 shrink-0" />
+              {PAYROLL_RUN_COPY.errorNotDraft}
+            </div>
+          )}
+          {msg && (
+            <div className={`flex items-center gap-2 p-3 rounded-lg text-sm border ${
+              msg.startsWith('Error')
+                ? 'bg-rose-50 border-rose-200 text-rose-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}>
+              {msg.startsWith('Error')
+                ? <HeroIcons.ExclamationCircleIcon className="w-4 h-4 shrink-0" />
+                : <HeroIcons.CheckCircleIcon className="w-4 h-4 shrink-0" />
+              }
+              {msg}
+            </div>
+          )}
+
+          {/* Run Code */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Run Code</label>
+            <input
+              type="text"
+              value={form.run_code}
+              onChange={e => setForm(f => ({ ...f, run_code: e.target.value }))}
+              disabled={!isDraft}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-slate-50"
+            />
+          </div>
+
+          {/* Month + Year */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Month</label>
+              <select
+                value={form.month}
+                onChange={e => setForm(f => ({ ...f, month: parseInt(e.target.value, 10) }))}
+                disabled={!isDraft}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-slate-50"
+              >
+                {PAYROLL_RUN_MONTHS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Year</label>
+              <input
+                type="number"
+                value={form.year}
+                onChange={e => setForm(f => ({ ...f, year: parseInt(e.target.value, 10) }))}
+                disabled={!isDraft}
+                min={2020} max={2099} step={1}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-slate-50"
+              />
+            </div>
+          </div>
+
+          {/* Period Start + End */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Period Start</label>
+              <input
+                type="date"
+                value={form.period_start}
+                onChange={e => setForm(f => ({ ...f, period_start: e.target.value }))}
+                disabled={!isDraft}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-slate-50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Period End</label>
+              <input
+                type="date"
+                value={form.period_end}
+                onChange={e => setForm(f => ({ ...f, period_end: e.target.value }))}
+                disabled={!isDraft}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-slate-50"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">{PAYROLL_RUN_COPY.editNote}</p>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 rounded-lg transition flex items-center gap-1.5"
+          >
+            {busy ? <Spinner /> : <HeroIcons.CheckIcon className="w-4 h-4" />}
+            {PAYROLL_RUN_COPY.btnEdit}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete Payroll Run confirmation modal
+// ─────────────────────────────────────────────────────────────────────────────
+function DeleteConfirmModal({ run, onClose, onDeleted }) {
+  const [busy, setBusy] = useState(false)
+  const [msg,  setMsg]  = useState('')
+
+  const isDraft = run.status === 'draft'
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const handleDelete = async () => {
+    setBusy(true)
+    try {
+      await payrollService.deletePayrollRun(run.id)
+      setMsg(PAYROLL_RUN_COPY.successDelete)
+      setTimeout(onDeleted, 600)
+    } catch (e) {
+      setMsg('Error: ' + (e?.response?.data?.detail || e?.message || 'Delete failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md">
+        <div className="p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4">
+            <HeroIcons.TrashIcon className="w-7 h-7 text-rose-600" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-800 mb-2">{PAYROLL_RUN_COPY.deleteTitle}</h3>
+          <p className="text-sm text-slate-500">{PAYROLL_RUN_COPY.deleteConfirm}</p>
+          <p className="text-xs text-slate-400 mt-2">
+            Run: <strong className="text-slate-700">{run.run_code}</strong>
+            {' · '}{String(run.month).padStart(2, '0')}/{run.year}
+          </p>
+          {!isDraft && (
+            <p className="text-xs text-amber-600 mt-2 font-medium">{PAYROLL_RUN_COPY.deleteNote}</p>
+          )}
+          {msg && (
+            <p className={`text-xs mt-3 font-medium ${msg.startsWith('Error') ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {msg}
+            </p>
+          )}
+        </div>
+        <div className="px-6 pb-6 flex justify-center gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 rounded-lg transition flex items-center gap-1.5"
+          >
+            {busy ? <Spinner /> : <HeroIcons.TrashIcon className="w-4 h-4" />}
+            {PAYROLL_RUN_COPY.btnDelete}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PayrollDashboard({ onSelectRun }) {
   const [summary,    setSummary]    = useState(null)
   const [runs,       setRuns]       = useState([])
@@ -300,6 +576,8 @@ export default function PayrollDashboard({ onSelectRun }) {
   const [error,      setError]      = useState(null)
   const [processing, setProcessing] = useState(null)
   const [reportId,   setReportId]   = useState(null)
+  const [editRun,    setEditRun]    = useState(null)   // run being edited
+  const [deleteRun,  setDeleteRun]  = useState(null)   // run pending deletion
 
   useEffect(() => {
     setLoading(true)
@@ -319,12 +597,16 @@ export default function PayrollDashboard({ onSelectRun }) {
     net:    parseFloat(r.total_net_salary)   || 0,
   }))
 
+  const reloadRuns = async () => {
+    const r = await payrollService.getPayrollRuns({ page_size: 12 }).catch(() => ({ results: [] }))
+    setRuns(r?.results ?? r ?? [])
+  }
+
   const handleProcess = async (runId) => {
     setProcessing(runId)
     try {
       await payrollService.processPayrollRun(runId)
-      const r = await payrollService.getPayrollRuns({ page_size: 12 })
-      setRuns(r?.results ?? r ?? [])
+      await reloadRuns()
     } finally {
       setProcessing(null)
     }
@@ -350,8 +632,8 @@ export default function PayrollDashboard({ onSelectRun }) {
         ))}
       </div>
 
-      {/* Leave Intelligence Panel — shown when leave data is available */}
-      {summary?.leave_data_available && (
+      {/* Leave Intelligence Panel — always shown when summary is loaded */}
+      {summary && (
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center gap-2 mb-4">
             <HeroIcons.CalendarDaysIcon className="w-4 h-4 text-indigo-500" />
@@ -359,7 +641,7 @@ export default function PayrollDashboard({ onSelectRun }) {
               Leave Intelligence — {summary.current_year}
             </h3>
             <span className="ml-auto text-xs text-slate-400">
-              {MONTH_NAMES[(summary.current_month ?? 1) - 1]} {summary.current_year}
+              {MONTH_NAMES[(summary.current_month ?? new Date().getMonth() + 1) - 1]} {summary.current_year ?? new Date().getFullYear()}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -505,14 +787,38 @@ export default function PayrollDashboard({ onSelectRun }) {
                       return <td key={c.id} className="px-4 py-3 text-slate-700">{v}</td>
                     })}
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleProcess(r.id) }}
-                        disabled={r.status === 'completed' || processing === r.id}
-                        className="text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-md transition"
-                      >
-                        {processing === r.id ? '…' : 'Process'}
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Process */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleProcess(r.id) }}
+                          disabled={r.status === 'completed' || processing === r.id}
+                          title="Process this payroll run"
+                          className="text-xs px-2.5 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-md transition"
+                        >
+                          {processing === r.id ? '…' : 'Process'}
+                        </button>
+                        {/* Edit */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditRun(r) }}
+                          title={r.status !== 'draft' ? PAYROLL_RUN_COPY.tooltipEdit + ' (draft only)' : PAYROLL_RUN_COPY.tooltipEdit}
+                          className="text-xs px-2.5 py-1 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-md transition flex items-center gap-1"
+                        >
+                          <HeroIcons.PencilSquareIcon className="w-3 h-3" />
+                          Edit
+                        </button>
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteRun(r) }}
+                          title={r.status !== 'draft' ? PAYROLL_RUN_COPY.tooltipDelete + ' (draft only)' : PAYROLL_RUN_COPY.tooltipDelete}
+                          className="text-xs px-2.5 py-1 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-md transition flex items-center gap-1"
+                        >
+                          <HeroIcons.TrashIcon className="w-3 h-3" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -525,6 +831,24 @@ export default function PayrollDashboard({ onSelectRun }) {
       {/* KPI drill-down report modal */}
       {reportId && (
         <KpiReportModal reportId={reportId} onClose={() => setReportId(null)} />
+      )}
+
+      {/* Edit payroll run modal */}
+      {editRun && (
+        <RunEditModal
+          run={editRun}
+          onClose={() => setEditRun(null)}
+          onSaved={() => { setEditRun(null); reloadRuns() }}
+        />
+      )}
+
+      {/* Delete payroll run confirmation */}
+      {deleteRun && (
+        <DeleteConfirmModal
+          run={deleteRun}
+          onClose={() => setDeleteRun(null)}
+          onDeleted={() => { setDeleteRun(null); reloadRuns() }}
+        />
       )}
     </div>
   )

@@ -8,6 +8,7 @@
  * All config (thresholds, colours, columns) → hrLeave.config.js
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -96,7 +97,11 @@ export default function LeaveDashboard() {
   const [sortAsc,     setSortAsc]     = useState(true)
 
   // ── Requests view state ────────────────────────────────────────────────────
-  const [reqTab,       setReqTab]       = useState('new')   // 'new' | 'pending' | 'history'
+  // 'rm_pending'  → PENDING requests (awaiting Reporting Manager)
+  // 'hr_pending'  → RM_APPROVED requests (awaiting HR final approval)
+  // 'new'         → Submit new request form
+  // 'history'     → Resolved requests
+  const [reqTab,       setReqTab]       = useState('rm_pending')
   const [leaveTypes,   setLeaveTypes]   = useState([])
   const [requests,     setRequests]     = useState([])
   const [reqLoading,   setReqLoading]   = useState(false)
@@ -172,19 +177,37 @@ export default function LeaveDashboard() {
       .catch(() => {})
   }, [])
 
+  // ── Role checks ───────────────────────────────────────────────────────────
+  const rbacUser    = useSelector(s => s.rbac?.currentUser)
+  const authUser    = useSelector(s => s.auth?.user)
+  const isHRManager = (
+    authUser?.is_staff ||
+    authUser?.is_superuser ||
+    rbacUser?.roles?.some(r =>
+      r.code?.startsWith('hr') || r.code === 'admin' || r.code === 'superadmin'
+    )
+  ) ?? false
+  // Reporting Manager: any staff user can action Stage-1
+  const isManager = authUser?.is_staff || authUser?.is_superuser ||
+    rbacUser?.roles?.some(r => (r.level ?? 0) >= 3 || r.code?.includes('manager') || r.code?.includes('senior'))
+
   // ── Load requests whenever requests tab is active ──────────────────────────
   useEffect(() => {
     if (view !== 'requests') return
     setReqLoading(true)
-    const params = reqTab === 'pending'
-      ? { status: 'PENDING' }
-      : reqTab === 'history'
-      ? { status: 'APPROVED,REJECTED,CANCELLED' }
-      : {}
-    payrollService.getLeaveRequests(params)
-      .then(d => setRequests(Array.isArray(d) ? d : (d?.results ?? [])))
-      .catch(() => setRequests([]))
-      .finally(() => setReqLoading(false))
+    let params = {}
+    if      (reqTab === 'rm_pending')  params = { status: 'PENDING' }
+    else if (reqTab === 'hr_pending')  params = { status: 'RM_APPROVED' }
+    else if (reqTab === 'history')     params = { status: 'APPROVED,REJECTED,CANCELLED,RM_REJECTED' }
+    // 'new' tab: no fetch needed
+    if (reqTab !== 'new') {
+      payrollService.getLeaveRequests(params)
+        .then(d => setRequests(Array.isArray(d) ? d : (d?.results ?? [])))
+        .catch(() => setRequests([]))
+        .finally(() => setReqLoading(false))
+    } else {
+      setReqLoading(false)
+    }
   }, [view, reqTab])
 
   // ── Working days preview for the new-request form ─────────────────────────
@@ -229,10 +252,15 @@ export default function LeaveDashboard() {
   const reviewRequest = async (id, action) => {
     setReviewBusy(id)
     try {
-      if (action === 'approve') await payrollService.approveLeaveRequest(id, reqNote)
-      else                      await payrollService.rejectLeaveRequest(id, reqNote)
+      if (action === 'rm_approve') await payrollService.rmApproveLeaveRequest(id, reqNote)
+      else if (action === 'rm_reject') await payrollService.rmRejectLeaveRequest(id, reqNote)
+      else if (action === 'approve')   await payrollService.approveLeaveRequest(id, reqNote)
+      else                             await payrollService.rejectLeaveRequest(id, reqNote)
       setRequests(prev => prev.filter(r => r.id !== id))
-    } catch { /* silently fail — server error shown via no-update */ }
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || 'Action failed'
+      setFormMsg({ type: 'err', text: msg })
+    }
     finally { setReviewBusy(null); setReqNote('') }
   }
 
@@ -624,22 +652,25 @@ export default function LeaveDashboard() {
   // REQUESTS VIEW
   // ─────────────────────────────────────────────────────────────────────────
   const REQ_TABS = [
-    { id: 'new',     label: 'New Request',  icon: 'PlusCircleIcon' },
-    { id: 'pending', label: 'Pending',      icon: 'ClockIcon' },
-    { id: 'history', label: 'History',      icon: 'ArchiveBoxIcon' },
+    { id: 'new',        label: 'New Request',            icon: 'PlusCircleIcon' },
+    { id: 'rm_pending', label: 'Awaiting Manager',       icon: 'ClockIcon',      badge: requests.length },
+    { id: 'hr_pending', label: 'Awaiting HR Approval',   icon: 'CheckBadgeIcon', badge: null },
+    { id: 'history',    label: 'History',                icon: 'ArchiveBoxIcon' },
   ]
 
   const STATUS_STYLES = {
-    PENDING:   'bg-amber-100 text-amber-800 border-amber-300',
-    APPROVED:  'bg-emerald-100 text-emerald-800 border-emerald-300',
-    REJECTED:  'bg-rose-100 text-rose-800 border-rose-300',
-    CANCELLED: 'bg-slate-100 text-slate-600 border-slate-300',
+    PENDING:     'bg-amber-100 text-amber-800 border-amber-300',
+    RM_APPROVED: 'bg-blue-100 text-blue-800 border-blue-300',
+    RM_REJECTED: 'bg-orange-100 text-orange-800 border-orange-300',
+    APPROVED:    'bg-emerald-100 text-emerald-800 border-emerald-300',
+    REJECTED:    'bg-rose-100 text-rose-800 border-rose-300',
+    CANCELLED:   'bg-slate-100 text-slate-600 border-slate-300',
   }
 
   const renderRequests = () => (
     <div className="space-y-4">
       {/* Sub-tabs */}
-      <div className="bg-white rounded-xl border border-slate-200 px-4 py-2 flex gap-1">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-2 flex gap-1 flex-wrap">
         {REQ_TABS.map(t => {
           const Icon = HeroIcons[t.icon] || HeroIcons.ClipboardDocumentListIcon
           return (
@@ -652,6 +683,19 @@ export default function LeaveDashboard() {
           )
         })}
       </div>
+      {/* Stage guide banner */}
+      {reqTab !== 'new' && reqTab !== 'history' && (
+        <div className="flex items-start gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+          <HeroIcons.InformationCircleIcon className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+          <span>
+            <strong>Two-stage leave approval:</strong>{' '}
+            Employee submits → <strong className="text-amber-700">Reporting Manager</strong> approves →{' '}
+            <strong className="text-blue-700">HR Manager</strong> gives final approval.
+            {reqTab === 'rm_pending' && ' ← You are on Stage 1.'}
+            {reqTab === 'hr_pending' && ' ← You are on Stage 2 (HR final approval).'}
+          </span>
+        </div>
+      )}
 
       {/* ── NEW REQUEST form ─────────────────────────────────────────────── */}
       {reqTab === 'new' && (
@@ -755,7 +799,7 @@ export default function LeaveDashboard() {
       )}
 
       {/* ── PENDING / HISTORY table ─────────────────────────────────────── */}
-      {(reqTab === 'pending' || reqTab === 'history') && (
+      {(reqTab === 'rm_pending' || reqTab === 'hr_pending' || reqTab === 'history') && (
         reqLoading ? (
           <div className="flex items-center justify-center h-28 gap-2 text-slate-400 text-sm"><Spinner /> Loading…</div>
         ) : (
@@ -765,7 +809,9 @@ export default function LeaveDashboard() {
                 <thead className="bg-slate-50">
                   <tr>
                     {['Employee','Code','Dept','Leave Type','From','To','Days','Reason','Status',
-                      reqTab === 'pending' ? 'Actions' : 'Reviewer',
+                      reqTab === 'rm_pending' ? 'RM Action'
+                      : reqTab === 'hr_pending' ? 'HR Action'
+                      : 'Reviewer',
                     ].map(h => (
                       <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -774,7 +820,9 @@ export default function LeaveDashboard() {
                 <tbody className="divide-y divide-slate-100">
                   {requests.length === 0 ? (
                     <tr><td colSpan={10} className="text-center py-10 text-slate-400 text-sm">
-                      {reqTab === 'pending' ? 'No pending requests' : 'No leave history'}
+                      {reqTab === 'rm_pending' ? 'No requests awaiting manager approval'
+                       : reqTab === 'hr_pending' ? 'No requests awaiting HR approval'
+                       : 'No leave history'}
                     </td></tr>
                   ) : requests.map(r => {
                     const lt   = r.leave_type_detail
@@ -800,25 +848,57 @@ export default function LeaveDashboard() {
                             {r.status_display || r.status}
                           </span>
                         </td>
-                        {reqTab === 'pending' ? (
+                        {reqTab === 'rm_pending' ? (
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-1.5">
-                              <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'approve')}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition">
-                                {isBusy ? <Spinner /> : <HeroIcons.CheckIcon className="w-3.5 h-3.5" />}
-                                Approve
-                              </button>
-                              <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'reject')}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition">
-                                <HeroIcons.XMarkIcon className="w-3.5 h-3.5" />
-                                Reject
-                              </button>
+                              {isManager && (
+                                <>
+                                  <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'rm_approve')}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition">
+                                    {isBusy ? <Spinner /> : <HeroIcons.CheckIcon className="w-3.5 h-3.5" />}
+                                    Approve
+                                  </button>
+                                  <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'rm_reject')}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition">
+                                    <HeroIcons.XMarkIcon className="w-3.5 h-3.5" />
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              {!isManager && <span className="text-xs text-slate-400">Manager action</span>}
+                            </div>
+                          </td>
+                        ) : reqTab === 'hr_pending' ? (
+                          <td className="px-3 py-2.5">
+                            <div className="flex flex-col gap-1">
+                              <div className="text-xs text-slate-400 mb-0.5">
+                                RM: <span className="font-medium text-slate-600">{r.rm_reviewed_by_name || '—'}</span>
+                                {r.rm_reviewed_at && <span className="ml-1">({r.rm_reviewed_at.slice(0,10)})</span>}
+                              </div>
+                              {isHRManager ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'approve')}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition">
+                                    {isBusy ? <Spinner /> : <HeroIcons.CheckBadgeIcon className="w-3.5 h-3.5" />}
+                                    Final Approve
+                                  </button>
+                                  <button type="button" disabled={isBusy} onClick={() => reviewRequest(r.id, 'reject')}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition">
+                                    <HeroIcons.XMarkIcon className="w-3.5 h-3.5" />
+                                    Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">HR Manager action</span>
+                              )}
                             </div>
                           </td>
                         ) : (
                           <td className="px-3 py-2.5 text-slate-500 text-xs">
-                            {r.reviewed_by_name || '—'}
-                            {r.reviewed_at && <div className="text-slate-400">{r.reviewed_at.slice(0, 10)}</div>}
+                            <div>{r.reviewed_by_name || r.rm_reviewed_by_name || '—'}</div>
+                            {(r.reviewed_at || r.rm_reviewed_at) && (
+                              <div className="text-slate-400">{(r.reviewed_at || r.rm_reviewed_at).slice(0, 10)}</div>
+                            )}
                           </td>
                         )}
                       </tr>

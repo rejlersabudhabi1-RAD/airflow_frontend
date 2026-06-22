@@ -6,6 +6,7 @@
  * Hoists shared state (activeRunId, selectedEmployee) and passes down as props.
  */
 import { useState } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
   PAYROLL_TABS,
@@ -36,6 +37,18 @@ export default function Payroll() {
   const [activeTab,    setActiveTab]    = useState(PAYROLL_DEFAULT_TAB)
   const [activeRunId,  setActiveRunId]  = useState(null)
 
+  // ── Role-based tab visibility ────────────────────────────────────────────
+  const rbacUser   = useSelector(s => s.rbac?.currentUser)
+  const authUser   = useSelector(s => s.auth?.user)
+  const isHRManager = (
+    authUser?.is_staff ||
+    authUser?.is_superuser ||
+    rbacUser?.roles?.some(r =>
+      r.code?.startsWith('hr') || r.code === 'admin' || r.code === 'superadmin'
+    )
+  ) ?? false
+  const visibleTabs = PAYROLL_TABS.filter(tab => !tab.hrOnly || isHRManager)
+
   const ActiveModule = TAB_COMPONENTS[activeTab]
 
   return (
@@ -59,7 +72,7 @@ export default function Payroll() {
 
           {/* Tab Navigation */}
           <div className="mt-4 flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
-            {PAYROLL_TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = HeroIcons[tab.icon] || HeroIcons.ChartBarIcon
               const isActive = activeTab === tab.id
               return (
@@ -84,7 +97,7 @@ export default function Payroll() {
       </div>
 
       {/* Module Content */}
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
+      <div className="py-6">
         {ActiveModule ? (
           <ActiveModule
             activeRunId={activeRunId}
@@ -92,6 +105,7 @@ export default function Payroll() {
               const id = typeof run === 'string' ? run : run?.id
               setActiveRunId(id)
             }}
+            onSwitchTab={(tabId) => setActiveTab(tabId)}
           />
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 p-14 text-center text-slate-400">

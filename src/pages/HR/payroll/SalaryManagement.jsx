@@ -113,6 +113,11 @@ function KpiStrip({ structures }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const catLabel = (v) => SALARY_COMPONENT_CATEGORIES.find(c => c.value === v)?.label ?? v
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Salary Structure drawer (create / view / edit)
 // ─────────────────────────────────────────────────────────────────────────────
 function StructureDrawer({ item, components, onClose, onSaved, canApprove }) {
@@ -167,9 +172,20 @@ function StructureDrawer({ item, components, onClose, onSaved, canApprove }) {
   }
 
   const save = async () => {
+    if (!form.employee_code?.trim() || !form.employee_name?.trim() || !form.effective_date) {
+      setLocalMsg('Error: Employee Code, Name, and Effective Date are required.')
+      return
+    }
     setBusy(true)
     try {
-      const payload = { ...form }
+      const payload = {
+        ...form,
+        basic_salary: form.basic_salary === '' ? '0.00' : String(form.basic_salary),
+        components: (form.components || []).map(c => ({
+          ...c,
+          amount: c.amount === '' ? '0.00' : String(c.amount),
+        })),
+      }
       if (isNew) {
         await payrollService.createSalaryStructure(payload)
         setLocalMsg(SALARY_COPY.successCreate)
@@ -179,7 +195,11 @@ function StructureDrawer({ item, components, onClose, onSaved, canApprove }) {
       }
       setTimeout(() => { onSaved(); onClose() }, 800)
     } catch (e) {
-      setLocalMsg('Error: ' + (e?.response?.data?.detail || e?.message || 'Save failed'))
+      const detail = e?.response?.data
+      const msg = typeof detail === 'object'
+        ? Object.entries(detail).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')
+        : (detail || e?.message || 'Save failed')
+      setLocalMsg('Error: ' + msg)
     } finally {
       setBusy(false)
     }
@@ -313,7 +333,7 @@ function StructureDrawer({ item, components, onClose, onSaved, canApprove }) {
                     >
                       <option value="">Select…</option>
                       {components.filter(m => m.is_active).map(m => (
-                        <option key={m.code} value={m.code}>{m.code}</option>
+                        <option key={m.code} value={m.code}>{m.code} – {m.name}</option>
                       ))}
                     </select>
                   </div>
@@ -476,7 +496,7 @@ function ComponentLibrary({ canEdit }) {
     }
   }
 
-  const catLabel = (v) => SALARY_COMPONENT_CATEGORIES.find(c => c.value === v)?.label ?? v
+  // catLabel is defined at module scope
 
   return (
     <div>

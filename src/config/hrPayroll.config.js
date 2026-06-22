@@ -14,7 +14,7 @@
 export const PAYROLL_TABS = [
   { id: 'dashboard',  label: 'Dashboard',         icon: 'ChartBarIcon',               description: 'Executive KPI overview' },
   { id: 'attendance', label: 'Attendance',         icon: 'ClipboardDocumentCheckIcon', description: 'HR Attendance — Daily · Monthly · Yearly' },
-  { id: 'leave',      label: 'Leave',              icon: 'CalendarDaysIcon',           description: 'Leave balances imported from HR Excel' },
+  { id: 'leave',      label: 'Leave',              icon: 'CalendarDaysIcon',           description: 'Leave approvals — Reporting Manager → HR Manager', hrOnly: true },
   { id: 'engine',     label: 'Payroll Engine',     icon: 'CpuChipIcon',                description: 'Salary slips & approvals' },
   { id: 'salary',     label: 'Salary Management', icon: 'BanknotesIcon',              description: 'Employee salary structures & history' },
   { id: 'auditor',    label: 'AI Auditor',         icon: 'MagnifyingGlassIcon',        description: 'Anomaly detection' },
@@ -135,6 +135,40 @@ export const PAYROLL_RUN_COLUMNS = [
   { id: 'status',      label: 'Status',     accessor: (r) => r.status, cellType: 'run_status' },
 ]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Payroll Run — Edit / Delete UI copy (soft-coded)
+// ─────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_RUN_COPY = {
+  editTitle:       'Edit Payroll Run',
+  editNote:        'Only draft runs can be modified. Period dates align to the chosen month / year.',
+  deleteTitle:     'Delete Payroll Run',
+  deleteConfirm:   'Are you sure you want to permanently delete this payroll run? This cannot be undone.',
+  deleteNote:      'Only draft runs can be deleted.',
+  btnEdit:         'Save Changes',
+  btnDelete:       'Delete Run',
+  successEdit:     'Payroll run updated successfully.',
+  successDelete:   'Payroll run deleted.',
+  errorNotDraft:   'Only draft payroll runs can be edited or deleted.',
+  tooltipEdit:     'Edit run (draft only)',
+  tooltipDelete:   'Delete run (draft only)',
+}
+
+// Month lookup used by the RunEditModal dropdown
+export const PAYROLL_RUN_MONTHS = [
+  { value: 1,  label: 'January'   },
+  { value: 2,  label: 'February'  },
+  { value: 3,  label: 'March'     },
+  { value: 4,  label: 'April'     },
+  { value: 5,  label: 'May'       },
+  { value: 6,  label: 'June'      },
+  { value: 7,  label: 'July'      },
+  { value: 8,  label: 'August'    },
+  { value: 9,  label: 'September' },
+  { value: 10, label: 'October'   },
+  { value: 11, label: 'November'  },
+  { value: 12, label: 'December'  },
+]
+
 export const PAYROLL_SLIP_COLUMNS = [
   { id: 'slip_number', label: 'Slip #',     accessor: (r) => r.slip_number },
   { id: 'employee',    label: 'Employee',   accessor: (r) => r.employee_name || r.employee_salary_info },
@@ -155,6 +189,25 @@ export const PAYROLL_AUDIT_THRESHOLDS = {
   minHoursPerDay:   4,     // hours below which a day is not counted as present
   burnoutHoursMonth: 200,  // monthly hours above which burnout risk fires
   lowUtilPercent:   50,    // utilization % below which productivity alert fires
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cross-tab connection copy — Engine ↔ Auditor alignment labels
+// ─────────────────────────────────────────────────────────────────────────────
+export const CROSS_TAB_COPY = {
+  // Engine → Auditor button
+  auditRunBtn:      'Audit This Run',
+  auditRunTitle:    'Open this run in the AI Auditor for deep anomaly analysis',
+  // Auditor header
+  syncedBadge:      'Synced with Engine',
+  notSyncedBadge:   'Select a run above to sync with Engine',
+  backToEngine:     '← Back to Engine',
+  backToEngineTitle:'Return to Payroll Engine for this run',
+  autoAuditNote:    'Run selected in Engine — click Run Audit to analyse',
+  autoAuditDone:    'Auto-analysis complete',
+  // Analytics subtab cross-link
+  openAuditorLink:  'Open Full Audit →',
+  openAuditorTitle: 'Switch to AI Auditor for detailed anomaly breakdown',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -580,15 +633,16 @@ export const PAYROLL_KPI_REPORTS = {
   },
 
   alerts: {
-    title: 'Open Audit Alerts',
-    description: 'Payroll anomalies and compliance flags requiring HR attention.',
+    title: 'Open Alerts & Validation Issues',
+    description: 'All open audit alerts and unresolved validation issues requiring HR attention.',
     icon: 'BellAlertIcon',
     accentGradient: 'from-rose-500 to-red-600',
     emptyMsg: 'No open alerts — payroll is clean.',
     searchFn: (r) =>
-      `${r.employee_name || ''} ${r.description || ''} ${r.alert_type || ''}`.toLowerCase(),
+      `${r.employee_name || ''} ${r.description || ''} ${r.alert_type || ''} ${r._source || ''}`.toLowerCase(),
     columns: [
-      { key: 'type',    label: 'Alert Type',  render: (r) => r.alert_type || r.rule_code || '—' },
+      { key: 'source',  label: 'Source',      render: (r) => r._source || '—' },
+      { key: 'type',    label: 'Alert Type',  render: (r) => r.alert_type || '—' },
       { key: 'emp',     label: 'Employee',    render: (r) => r.employee_name || '—' },
       { key: 'sev',     label: 'Severity',    render: (r) => r.severity || '—', severityBadge: true },
       { key: 'desc',    label: 'Description', render: (r) => r.description || '—' },
@@ -881,7 +935,39 @@ export const ENGINE_COPY = {
   drawerRejectNote:    'Rejection reason (required)',
   runCodePrefix:       'PAY',
   monthLabel:          (m) => new Date(2000, m - 1, 1).toLocaleString('en-US', { month: 'long' }),
+  // Row-level action copy — soft-coded so labels can change without touching component logic
+  editBtn:             'Edit Slip',
+  deleteBtn:           'Delete Slip',
+  hrOverrideBtn:       'HR Override',
+  editModalTitle:      'Edit Salary Slip',
+  deleteConfirmTitle:  'Delete Salary Slip',
+  deleteConfirmMsg:    'This will permanently remove the salary slip from this payroll run. The action cannot be undone.',
+  hrOverrideTitle:     'HR Override',
+  hrNoteLabel:         'Internal note (required)',
+  hrNoteRequired:      'Please enter a reason for this override.',
+  editSuccess:         'Salary slip updated successfully.',
+  deleteSuccess:       'Salary slip deleted.',
+  hrOverrideSuccess:   'HR override applied.',
+  deleteRunBtn:        'Delete Run',
+  deleteRunTitle:      'Delete Payroll Run',
+  deleteRunMsg:        'This will permanently delete this payroll run and all its salary slips. This action cannot be undone.',
+  deleteRunProtected:  'Only draft runs can be deleted. This run is currently',
+  deleteRunSuccess:    'Payroll run deleted.',
+  deleteRunFailed:     'Failed to delete run. Please try again.',
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16a. HR OVERRIDE STATUS OPTIONS — drives the "New Status" select in the HR modal
+// Soft-coded: add / remove statuses here; no component changes needed.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ENGINE_HR_OVERRIDE_STATUSES = [
+  { value: 'draft',            label: 'Draft' },
+  { value: 'generated',        label: 'Generated' },
+  { value: 'pending_approval', label: 'Pending Approval' },
+  { value: 'approved',         label: 'Approved' },
+  { value: 'rejected',         label: 'Rejected' },
+  { value: 'sent',             label: 'Sent to Employee' },
+]
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 16. PAYROLL DATA IMPORT — Sympa + ValueFrame + RADAI attendance merge
@@ -981,21 +1067,21 @@ export const IMPORT_FIELD_ALIASES_VALUEFRAME = {
 
 // Master payroll preview table columns — matches the 15-column Excel output exactly
 export const IMPORT_MASTER_COLUMNS = [
-  { key: 'employee_code',      label: 'Emp Code',            mono: true  },
-  { key: 'employee_name',      label: 'Employee Name'                     },
-  { key: 'joining_date',       label: 'Joining Date'                      },
-  { key: 'total_hours',        label: 'Working Hours',       numeric: true },
-  { key: 'employee_salary',    label: 'Employee Salary',     numeric: true },
-  { key: 'basic_salary',       label: 'Basic',               numeric: true },
-  { key: 'total_allowances',   label: 'Allowance',           numeric: true },
-  { key: 'transport_allowance',label: 'Transportation',      numeric: true },
-  { key: 'housing_allowance',  label: 'Home Allowance',      numeric: true },
-  { key: 'other_allowances',   label: 'Other Allowance',     numeric: true },
-  { key: 'other_pay',          label: 'Other Pay',           numeric: true },
-  { key: 'details',            label: 'Details'                           },
-  { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true },
-  { key: 'deduction_details',  label: 'Deduction Details'                 },
-  { key: 'final_salary',       label: 'Final Salary',        numeric: true, highlight: true },
+  { key: 'employee_code',      label: 'Emp Code',            mono: true,                              editable: false },
+  { key: 'employee_name',      label: 'Employee Name',                                                editable: true  },
+  { key: 'joining_date',       label: 'Joining Date',                                                 editable: true  },
+  { key: 'total_hours',        label: 'Working Hours',       numeric: true,                           editable: true  },
+  { key: 'employee_salary',    label: 'Employee Salary',     numeric: true,                           editable: true  },
+  { key: 'basic_salary',       label: 'Basic',               numeric: true,                           editable: true  },
+  { key: 'total_allowances',   label: 'Allowance',           numeric: true,                           editable: true  },
+  { key: 'transport_allowance',label: 'Transportation',      numeric: true,                           editable: true  },
+  { key: 'housing_allowance',  label: 'Home Allowance',      numeric: true,                           editable: true  },
+  { key: 'other_allowances',   label: 'Other Allowance',     numeric: true,                           editable: true  },
+  { key: 'other_pay',          label: 'Other Pay',           numeric: true,                           editable: true  },
+  { key: 'details',            label: 'Details',                                                      editable: true  },
+  { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true,                           editable: true  },
+  { key: 'deduction_details',  label: 'Deduction Details',                                            editable: true  },
+  { key: 'final_salary',       label: 'Final Salary',        numeric: true, highlight: true,           editable: true  },
 ]
 
 // UI copy for the import modal
@@ -1023,6 +1109,11 @@ export const IMPORT_COPY = {
   errorGeneric:     'An error occurred. Please try again.',
   savedToDB:        'Data saved to RADAI database.',
   s3Queued:         'Excel upload to S3 queued — available in Import History shortly.',
+  editToggleBtn:    'Edit Data',
+  editDoneBtn:      'Done Editing',
+  editResetBtn:     'Reset Changes',
+  editModeLabel:    'Editing Mode',
+  editDirtyBadge:   'Modified',
 }
 
 // ─── Section 17: Master Payroll Import History ────────────────────────────────
@@ -1048,11 +1139,199 @@ export const IMPORT_STATUS_STYLES = {
 }
 
 export const IMPORT_HISTORY_COPY = {
-  title:        'Import History',
-  subtitle:     'Past Sympa + ValueFrame master payroll generations.',
-  empty:        'No imports yet. Generate a master payroll file to get started.',
-  downloadBtn:  'Download Excel',
-  refreshBtn:   'Refresh',
-  loadingMsg:   'Loading history…',
-  errorMsg:     'Failed to load history.',
+  title:          'Import History',
+  subtitle:       'Past Sympa + ValueFrame master payroll generations.',
+  empty:          'No imports yet. Generate a master payroll file to get started.',
+  downloadBtn:    'Download Excel',
+  refreshBtn:     'Refresh',
+  loadingMsg:     'Loading history…',
+  errorMsg:       'Failed to load history.',
+  restoreBtn:     'Restore Preview',
+  deleteBtn:      'Delete',
+  deleteConfirmMsg: 'This will permanently delete this master payroll import and all its employee rows. This action cannot be undone.',
+  deleteSuccess:  'Master payroll deleted successfully.',
+  deleteFailed:   'Delete failed. Please try again.',
+  restoreSuccess: 'Preview restored from database.',
+  restoreFailed:  'Failed to restore preview. Please try again.',
+  downloadFailed: 'Download failed. Please try again.',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI ANALYTICS — strings, labels, and colour maps for the GPT-4o intelligence panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AI_ANALYTICS_COPY = {
+  panelTitle:           'AI Intelligence Report',
+  panelSubtitle:        'Powered by GPT-4o',
+  generateBtn:          'Generate AI Report',
+  regenerateBtn:        'Regenerate',
+  loadingMsg:           'Analysing payroll data…',
+  loadingSubtitle:      'GPT-4o is reviewing your payroll run. This takes a few seconds.',
+  noRunMsg:             'Select a payroll run to generate AI analytics.',
+  healthLabel:          'Payroll Health Score',
+  execSummaryTitle:     'Executive Summary',
+  riskTitle:            'Risk Items',
+  noRisks:              'No significant risks detected for this payroll run.',
+  recoTitle:            'Top Recommendations',
+  complianceTitle:      'Compliance Flags',
+  noCompliance:         'No compliance flags raised.',
+  forecastTitle:        'Next Month Forecast',
+  deptHealthTitle:      'Department Health',
+  errorRetry:           'Retry',
+  lastGeneratedLabel:   'Generated at',
+  disclaimerText:       'AI-generated analysis based on payroll summary data. Always verify with HR records before taking action.',
+}
+
+/** Map GPT severity → Tailwind colour classes for badges */
+export const AI_ANALYTICS_SEVERITY_COLORS = {
+  critical: { bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-200',    dot: 'bg-red-500' },
+  high:     { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500' },
+  medium:   { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500' },
+  low:      { bg: 'bg-blue-100',   text: 'text-blue-700',   border: 'border-blue-200',   dot: 'bg-blue-400' },
+}
+
+/** Map health_score ranges → ring/text colour  */
+export const AI_ANALYTICS_HEALTH_COLORS = [
+  { min: 85, label: 'Excellent',     ring: 'stroke-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50' },
+  { min: 70, label: 'Good',          ring: 'stroke-green-500',   text: 'text-green-600',   bg: 'bg-green-50'   },
+  { min: 55, label: 'Fair',          ring: 'stroke-yellow-500',  text: 'text-yellow-600',  bg: 'bg-yellow-50'  },
+  { min: 40, label: 'Needs Attention', ring: 'stroke-orange-500', text: 'text-orange-600', bg: 'bg-orange-50' },
+  { min: 0,  label: 'Critical',      ring: 'stroke-red-500',     text: 'text-red-600',     bg: 'bg-red-50'     },
+]
+
+/** Map trend direction → icon + colour */
+export const AI_ANALYTICS_TREND_MAP = {
+  Increasing: { icon: 'ArrowTrendingUpIcon',   color: 'text-red-500',    label: 'Increasing' },
+  Stable:     { icon: 'MinusIcon',             color: 'text-green-500',  label: 'Stable'     },
+  Decreasing: { icon: 'ArrowTrendingDownIcon', color: 'text-blue-500',   label: 'Decreasing' },
+}
+
+/** Map urgency → colour */
+export const AI_ANALYTICS_URGENCY_COLORS = {
+  Immediate: 'bg-red-100 text-red-700 border-red-200',
+  Soon:      'bg-amber-100 text-amber-700 border-amber-200',
+  Monitor:   'bg-slate-100 text-slate-600 border-slate-200',
+}
+
+/** Map dept health status → colour */
+export const AI_ANALYTICS_DEPT_STATUS_COLORS = {
+  Healthy:  'bg-emerald-100 text-emerald-700',
+  Review:   'bg-yellow-100  text-yellow-700',
+  Concern:  'bg-red-100     text-red-700',
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTER PAYROLL WORKFLOW — freeze / approve / finance / release
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Ordered workflow stages — the array index defines the progression order.
+ * Adding a new stage only requires updating this array and WORKFLOW_STAGE_META.
+ */
+export const WORKFLOW_STAGE_ORDER = [
+  'draft',
+  'frozen',
+  'hr_approved',
+  'finance_review',
+  'finance_approved',
+  'released',
+]
+
+/** Visual metadata for each workflow stage */
+export const WORKFLOW_STAGE_META = {
+  draft: {
+    label:     'Draft',
+    subtitle:  'HR Editing',
+    color:     'text-slate-700',
+    bg:        'bg-slate-100',
+    border:    'border-slate-300',
+    dot:       'bg-slate-400',
+    icon:      'PencilSquareIcon',
+  },
+  frozen: {
+    label:     'Frozen',
+    subtitle:  'Awaiting HR Approval',
+    color:     'text-blue-700',
+    bg:        'bg-blue-50',
+    border:    'border-blue-300',
+    dot:       'bg-blue-500',
+    icon:      'LockClosedIcon',
+  },
+  hr_approved: {
+    label:     'HR Approved',
+    subtitle:  'Sent to Finance',
+    color:     'text-violet-700',
+    bg:        'bg-violet-50',
+    border:    'border-violet-300',
+    dot:       'bg-violet-500',
+    icon:      'CheckBadgeIcon',
+  },
+  finance_review: {
+    label:     'Finance Review',
+    subtitle:  'Finance Verifying',
+    color:     'text-amber-700',
+    bg:        'bg-amber-50',
+    border:    'border-amber-300',
+    dot:       'bg-amber-500',
+    icon:      'ClipboardDocumentCheckIcon',
+  },
+  finance_approved: {
+    label:     'Finance Approved',
+    subtitle:  'Sent to Accounts',
+    color:     'text-emerald-700',
+    bg:        'bg-emerald-50',
+    border:    'border-emerald-300',
+    dot:       'bg-emerald-500',
+    icon:      'CurrencyDollarIcon',
+  },
+  released: {
+    label:     'Released',
+    subtitle:  'Salary Disbursed',
+    color:     'text-green-700',
+    bg:        'bg-green-50',
+    border:    'border-green-300',
+    dot:       'bg-green-600',
+    icon:      'BanknotesIcon',
+  },
+}
+
+/** UI copy for every workflow action button + toast */
+export const WORKFLOW_COPY = {
+  // Action buttons
+  freezeBtn:           'Freeze File',
+  unfreezeBtn:         'Unfreeze',
+  hrApproveBtn:        'Approve & Send to Finance',
+  financeReviewBtn:    'Open for Finance Review',
+  financeApproveBtn:   'Confirm & Send to Accounts',
+  releaseBtn:          'Release Salary',
+  // Button titles
+  freezeTitle:         'Lock the master payroll file — prevents further edits by HR',
+  unfreezeTitle:       'Superadmin only — revert to draft for re-editing',
+  hrApproveTitle:      'Approve the frozen file and forward to Finance for verification',
+  financeReviewTitle:  'Open the file for Finance team review and modification',
+  financeApproveTitle: 'Finance has verified — forward to Accounts for salary release',
+  releaseTitle:        'Mark salary as disbursed',
+  // Note placeholder
+  notePlaceholder:     'Optional note (visible in audit log)…',
+  noteLabel:           'Action Note',
+  confirmAction:       'Confirm',
+  cancelAction:        'Cancel',
+  // Status messages
+  freezeSuccess:       'Master payroll file frozen successfully.',
+  unfreezeSuccess:     'Master payroll reverted to draft.',
+  hrApproveSuccess:    'Approved and forwarded to Finance.',
+  financeReviewSuccess:'Opened for Finance review.',
+  financeApproveSuccess:'Finance confirmed — sent to Accounts.',
+  releaseSuccess:      'Salary release recorded.',
+  actionFailed:        'Action failed. Please try again.',
+  // Locked banner
+  lockedMsg:           'This file is locked — editing is disabled.',
+  lockedSubtitle:      'Only the superadmin can unfreeze this record.',
+  // Workflow log
+  logTitle:            'Workflow History',
+  logEmpty:            'No workflow actions yet.',
+  logByLabel:          'by',
+  // Section title
+  workflowTitle:       'Approval Workflow',
+  workflowSubtitle:    'Freeze → HR Approve → Finance → Accounts → Release',
 }

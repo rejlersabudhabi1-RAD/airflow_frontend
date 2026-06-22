@@ -593,8 +593,8 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
     { name: 'Encashed', value: encashed, fill: '#f59e0b' },
   ].filter(d => d.value > 0)
 
-  const pending  = (requests || []).filter(r => r.status === 'pending')
-  const approved = (requests || []).filter(r => r.status === 'approved')
+  const pending  = (requests || []).filter(r => ['PENDING','RM_APPROVED'].includes(r.status?.toUpperCase()))
+  const approved = (requests || []).filter(r => r.status?.toUpperCase() === 'APPROVED')
   const upcoming = approved.filter(r => new Date(r.start_date) >= new Date())
 
   return (
@@ -1474,7 +1474,7 @@ const NotificationsCenter = ({ requests, loading }) => {
           time: r.updated_at,
         })
       }
-      if (r.status === 'pending') {
+      if (r.status?.toUpperCase() === 'PENDING') {
         items.push({
           id: `leave_pending_${r.id}`,
           type: 'leave',
@@ -1483,6 +1483,17 @@ const NotificationsCenter = ({ requests, loading }) => {
           message: `Your leave request for ${fmtDate(r.start_date)} is awaiting manager approval.`,
           icon: 'ClockIcon',
           time: r.created_at,
+        })
+      }
+      if (r.status?.toUpperCase() === 'RM_APPROVED') {
+        items.push({
+          id: `leave_rm_approved_${r.id}`,
+          type: 'leave',
+          priority: 'medium',
+          title: 'Manager Approved — Awaiting HR',
+          message: `Your leave request for ${fmtDate(r.start_date)} was approved by your manager and is now awaiting HR final approval.`,
+          icon: 'CheckBadgeIcon',
+          time: r.rm_reviewed_at || r.updated_at,
         })
       }
     })
@@ -2882,8 +2893,8 @@ export default function EmployeeSelfService() {
   }, [profile])
 
   // -- Tab notification badges -------------------------------------------------
-  const pendingLeave   = leaveRequests.filter(r => r.status === 'pending').length
-  const unreadNotifs   = leaveRequests.filter(r => ['approved','rejected'].includes(r.status)).length
+  const pendingLeave   = leaveRequests.filter(r => r.status?.toUpperCase() === 'PENDING').length
+  const unreadNotifs   = leaveRequests.filter(r => ['APPROVED','REJECTED','RM_REJECTED'].includes(r.status?.toUpperCase())).length
 
   const tabBadges = {
     leave:         pendingLeave > 0 ? pendingLeave : null,
@@ -2946,12 +2957,23 @@ export default function EmployeeSelfService() {
                 ) : (
                   <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
                     {leaveRequests.slice(0, 15).map(r => {
+                      const st = (r.status || '').toUpperCase()
                       const sm = {
-                        pending:  'bg-amber-50 text-amber-700 border-amber-200',
-                        approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                        rejected: 'bg-rose-50 text-rose-700 border-rose-200',
-                        cancelled:'bg-slate-50 text-slate-500 border-slate-200',
-                      }[r.status] || 'bg-slate-50 text-slate-500 border-slate-200'
+                        PENDING:     'bg-amber-50 text-amber-700 border-amber-200',
+                        RM_APPROVED: 'bg-blue-50 text-blue-700 border-blue-200',
+                        RM_REJECTED: 'bg-orange-50 text-orange-700 border-orange-200',
+                        APPROVED:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+                        REJECTED:    'bg-rose-50 text-rose-700 border-rose-200',
+                        CANCELLED:   'bg-slate-50 text-slate-500 border-slate-200',
+                      }[st] || 'bg-slate-50 text-slate-500 border-slate-200'
+                      const stLabel = r.status_display || {
+                        PENDING:     'Pending',
+                        RM_APPROVED: 'Awaiting HR',
+                        RM_REJECTED: 'Rejected by Manager',
+                        APPROVED:    'Approved',
+                        REJECTED:    'Rejected',
+                        CANCELLED:   'Cancelled',
+                      }[st] || st
                       return (
                         <div key={r.id} className="py-2.5">
                           <div className="flex items-center justify-between gap-2">
@@ -2965,10 +2987,17 @@ export default function EmployeeSelfService() {
                               </div>
                             </div>
                             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sm}`}>
-                              {r.status}
+                              {stLabel}
                             </span>
                           </div>
                           {r.reason && <div className="text-xs text-slate-400 mt-0.5 truncate">{r.reason}</div>}
+                          {/* Show RM reviewer when applicable */}
+                          {(st === 'RM_APPROVED' || st === 'APPROVED') && r.rm_reviewed_by_name && (
+                            <div className="text-xs text-blue-500 mt-0.5">
+                              Manager: {r.rm_reviewed_by_name}
+                              {r.rm_reviewed_at && ` · ${r.rm_reviewed_at.slice(0,10)}`}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
