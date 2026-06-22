@@ -50,6 +50,7 @@ import {
   WORKFLOW_STAGE_META,
   WORKFLOW_STAGE_ORDER,
   WORKFLOW_COPY,
+  recomputeMasterRow,
 } from '../../../config/hrPayroll.config'
 
 // â”€â”€â”€ tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1357,21 +1358,25 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     }
   }, [masterPreview?.importId, loadWorkflow])
 
-  // Sync editable rows whenever a new master preview is generated
+  // Sync editable rows whenever a new master preview is generated.
+  // Run recomputeMasterRow on each row so totals are correct even when
+  // the backend sent stale computed values.
   useEffect(() => {
     if (masterPreview?.rows) {
-      setEditableRows(masterPreview.rows.map(r => ({ ...r })))
+      setEditableRows(masterPreview.rows.map(r => recomputeMasterRow({ ...r })))
       setPreviewEditMode(false)
     }
   }, [masterPreview])
 
   const handleEditCell = useCallback((rowIdx, key, value) => {
-    setEditableRows(prev => prev.map((r, i) => i === rowIdx ? { ...r, [key]: value } : r))
+    setEditableRows(prev => prev.map((r, i) =>
+      i === rowIdx ? recomputeMasterRow({ ...r, [key]: value }) : r
+    ))
   }, [])
 
   const handleResetRows = useCallback(() => {
     if (masterPreview?.rows) {
-      setEditableRows(masterPreview.rows.map(r => ({ ...r })))
+      setEditableRows(masterPreview.rows.map(r => recomputeMasterRow({ ...r })))
     }
   }, [masterPreview])
 
@@ -1681,8 +1686,9 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                 <thead className="sticky top-0 bg-slate-50 z-10">
                   <tr>
                     {IMPORT_MASTER_COLUMNS.map(col => (
-                      <th key={col.key} className={`px-3 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 ${col.numeric ? 'text-right' : ''}`}>
+                      <th key={col.key} className={`px-3 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 ${col.numeric ? 'text-right' : ''} ${col.computed ? 'bg-emerald-50/60' : ''}`}>
                         {col.label}
+                        {col.computed && <span className="ml-1 text-[9px] font-normal text-emerald-600 opacity-70">=</span>}
                       </th>
                     ))}
                   </tr>
@@ -1701,6 +1707,16 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                             </td>
                           )
                           const v   = row[col.key]
+                          // Computed (auto-calculated) field — show in edit mode with a teal bg to
+                          // distinguish from user-input cells; shows formula result, not an input
+                          if (previewEditMode && col.computed) {
+                            const num = col.numeric && v != null && v !== '' && v !== 'None'
+                            return (
+                              <td key={col.key} className={`px-3 py-2 whitespace-nowrap text-right font-mono ${col.highlight ? 'font-semibold text-emerald-700 bg-emerald-50/70' : 'text-slate-600 bg-teal-50/40'}`}>
+                                <span title="Auto-calculated">{num ? fmtCurrency(v) : (v ?? '—')}</span>
+                              </td>
+                            )
+                          }
                           // Editable input in edit mode
                           if (previewEditMode && col.editable !== false) {
                             return (
@@ -1727,7 +1743,33 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                     ))
                   }
                 </tbody>
-              </table>
+                {/* Totals footer row — aggregates all numeric columns */}
+                {editableRows.length > 0 && (() => {
+                  const SUMMABLE = ['basic_salary','transport_allowance','housing_allowance',
+                                    'other_allowances','other_pay','total_allowances',
+                                    'total_deductions','employee_salary','final_salary']
+                  const totals = editableRows.reduce((acc, r) => {
+                    SUMMABLE.forEach(k => { acc[k] = (acc[k] || 0) + (parseFloat(r[k]) || 0) })
+                    return acc
+                  }, {})
+                  return (
+                    <tfoot className="sticky bottom-0 bg-slate-100 border-t-2 border-slate-300 z-10">
+                      <tr>
+                        {IMPORT_MASTER_COLUMNS.map(col => {
+                          const isTotal = SUMMABLE.includes(col.key)
+                          return (
+                            <td key={col.key}
+                              className={`px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-t border-slate-200 ${col.numeric ? 'text-right font-mono' : ''} ${col.highlight ? 'text-emerald-700' : 'text-slate-700'} ${col.computed ? 'bg-emerald-50/50' : ''}`}>
+                              {col.key === 'employee_name'
+                                ? <span className="text-slate-500 font-normal">{editableRows.length} employees</span>
+                                : isTotal ? fmtCurrency(totals[col.key] ?? 0) : ''}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
             </div>
 
             {/* Footer */}

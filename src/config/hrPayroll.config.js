@@ -1101,22 +1101,51 @@ export const IMPORT_FIELD_ALIASES_VALUEFRAME = {
 
 // Master payroll preview table columns — matches the 15-column Excel output exactly
 export const IMPORT_MASTER_COLUMNS = [
-  { key: 'employee_code',      label: 'Emp Code',            mono: true,                              editable: false },
-  { key: 'employee_name',      label: 'Employee Name',                                                editable: true  },
-  { key: 'joining_date',       label: 'Joining Date',                                                 editable: true  },
-  { key: 'total_hours',        label: 'Working Hours',       numeric: true,                           editable: true  },
-  { key: 'employee_salary',    label: 'Employee Salary',     numeric: true,                           editable: true  },
-  { key: 'basic_salary',       label: 'Basic',               numeric: true,                           editable: true  },
-  { key: 'total_allowances',   label: 'Allowance',           numeric: true,                           editable: true  },
-  { key: 'transport_allowance',label: 'Transportation',      numeric: true,                           editable: true  },
-  { key: 'housing_allowance',  label: 'Home Allowance',      numeric: true,                           editable: true  },
-  { key: 'other_allowances',   label: 'Other Allowance',     numeric: true,                           editable: true  },
-  { key: 'other_pay',          label: 'Other Pay',           numeric: true,                           editable: true  },
-  { key: 'details',            label: 'Details',                                                      editable: true  },
-  { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true,                           editable: true  },
-  { key: 'deduction_details',  label: 'Deduction Details',                                            editable: true  },
-  { key: 'final_salary',       label: 'Final Salary',        numeric: true, highlight: true,           editable: true  },
+  { key: 'employee_code',      label: 'Emp Code',            mono: true,                                         editable: false },
+  { key: 'employee_name',      label: 'Employee Name',                                                         editable: true  },
+  { key: 'joining_date',       label: 'Joining Date',                                                          editable: true  },
+  { key: 'total_hours',        label: 'Working Hours',       numeric: true,                                    editable: true  },
+  { key: 'employee_salary',    label: 'Employee Salary',     numeric: true,  computed: true,                   editable: false },
+  { key: 'basic_salary',       label: 'Basic',               numeric: true,                                    editable: true  },
+  { key: 'total_allowances',   label: 'Allowance',           numeric: true,  computed: true,                   editable: false },
+  { key: 'transport_allowance',label: 'Transportation',      numeric: true,                                    editable: true  },
+  { key: 'housing_allowance',  label: 'Home Allowance',      numeric: true,                                    editable: true  },
+  { key: 'other_allowances',   label: 'Other Allowance',     numeric: true,                                    editable: true  },
+  { key: 'other_pay',          label: 'Other Pay',           numeric: true,                                    editable: true  },
+  { key: 'details',            label: 'Details',                                                               editable: true  },
+  { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true,                                    editable: true  },
+  { key: 'deduction_details',  label: 'Deduction Details',                                                     editable: true  },
+  { key: 'final_salary',       label: 'Final Salary',        numeric: true,  computed: true, highlight: true,  editable: false },
 ]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cascade formula: recalculates all three derived payroll fields in order.
+// Call this whenever any source field changes (edit mode) and on initial load.
+//   total_allowances  = transport + housing + other_allowances
+//   employee_salary   = basic + total_allowances + other_pay
+//   final_salary      = max(0, employee_salary - total_deductions)
+// ─────────────────────────────────────────────────────────────────────────────
+const _n = (v) => parseFloat(v) || 0
+export const recomputeMasterRow = (row) => {
+  const transport  = _n(row.transport_allowance)
+  const housing    = _n(row.housing_allowance)
+  const otherAllow = _n(row.other_allowances)
+  const totalAllow = transport + housing + otherAllow
+
+  const basic      = _n(row.basic_salary)
+  const otherPay   = _n(row.other_pay)
+  const empSalary  = basic + totalAllow + otherPay
+
+  const deductions = _n(row.total_deductions)
+  const finalSal   = Math.max(0, empSalary - deductions)
+
+  return {
+    ...row,
+    total_allowances: totalAllow.toFixed(2),
+    employee_salary:  empSalary.toFixed(2),
+    final_salary:     finalSal.toFixed(2),
+  }
+}
 
 // UI copy for the import modal
 export const IMPORT_COPY = {
