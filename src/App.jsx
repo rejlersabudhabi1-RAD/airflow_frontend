@@ -145,6 +145,7 @@ import PipingHub from './pages/Engineering/Piping/PipingHub'
 import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
 import AdvancedAnalytics from './pages/Admin/AdvancedAnalytics'
+import RoleManagement from './pages/Admin/RoleManagement'
 // Debug Components
 import FeaturesDebug from './pages/FeaturesDebug'
 // AI Champion telemetry — fires per-route activity events to keep
@@ -1167,6 +1168,14 @@ function App() {
           element={
             <ProtectedRoute>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/roles"
+          element={
+            <ProtectedRoute>
+              <RoleManagement />
             </ProtectedRoute>
           }
         />

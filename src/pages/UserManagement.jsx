@@ -16,6 +16,7 @@ import {
 } from '../config/userManagement.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
+import RoleAssignPopover from '../components/UserManagement/RoleAssignPopover';
 import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
 import PendingActivationAlert from '../components/UserManagement/PendingActivationAlert';
 import PeopleNav from '../components/PeopleNav/PeopleNav';
@@ -528,6 +529,15 @@ const UserManagement = ({ pageControls }) => {
     // Smart admin check using utility function
     const isDjangoAdmin = isUserAdmin(authUser);
     return hasRBACRole || isDjangoAdmin;
+  }, [currentUser, authUser]);
+
+  // Super Admin = can assign roles, reset passwords, activate/deactivate users
+  const isSuperAdmin = useMemo(() => {
+    const hasSuperRole = currentUser?.roles?.some(
+      (role) => ['super_admin', 'superadmin'].includes(role.code)
+    );
+    const isDjangoSuperuser = authUser?.is_superuser === true || authUser?.user?.is_superuser === true;
+    return hasSuperRole || isDjangoSuperuser;
   }, [currentUser, authUser]);
   
   // ========== COMPUTED: FILTERED USERS ==========
@@ -1657,6 +1667,7 @@ const UserManagement = ({ pageControls }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modules</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -1664,7 +1675,7 @@ const UserManagement = ({ pageControls }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
+                  <td colSpan="8" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -1712,6 +1723,19 @@ const UserManagement = ({ pageControls }) => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
+                      <RoleAssignPopover
+                        userId={user.id}
+                        currentRoles={user.roles || []}
+                        allRoles={Array.isArray(roles) ? roles : []}
+                        isSuperAdmin={isSuperAdmin}
+                        onRolesChange={(uid, updatedRoles) => {
+                          // Optimistic update is already handled inside the popover;
+                          // re-fetch users to keep Redux store consistent.
+                          dispatch(fetchUsers());
+                        }}
+                      />
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
                         {user.accessible_modules?.length || 0} modules
                       </div>
@@ -1738,44 +1762,53 @@ const UserManagement = ({ pageControls }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
-                        <button
-                          onClick={() => handleStatusToggle(user.id, user.status)}
-                          disabled={actionLoading[`status_${user.id}`]}
-                          className={`p-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                            user.status === 'active'
-                              ? 'text-red-600 hover:text-red-900 hover:bg-red-50'
-                              : 'text-green-600 hover:text-green-900 hover:bg-green-50'
-                          }`}
-                          title={user.status === 'active' ? 'Deactivate' : 'Activate'}
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
+                        {/* Activate / Deactivate — Super Admin only */}
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleStatusToggle(user.id, user.status)}
+                            disabled={actionLoading[`status_${user.id}`]}
+                            className={`p-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                               user.status === 'active'
-                                ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-                                : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            } />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleResetPassword(user.id, user.user?.email)}
-                          disabled={actionLoading[`reset_${user.id}`]}
-                          className="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Reset Password to Default"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          disabled={actionLoading[`delete_${user.id}`]}
-                          className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Delete User"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                                ? 'text-red-600 hover:text-red-900 hover:bg-red-50'
+                                : 'text-green-600 hover:text-green-900 hover:bg-green-50'
+                            }`}
+                            title={user.status === 'active' ? 'Deactivate' : 'Activate'}
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
+                                user.status === 'active'
+                                  ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                                  : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                              } />
+                            </svg>
+                          </button>
+                        )}
+                        {/* Reset Password — Super Admin only */}
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleResetPassword(user.id, user.user?.email)}
+                            disabled={actionLoading[`reset_${user.id}`]}
+                            className="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Reset Password to Default"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                          </button>
+                        )}
+                        {/* Delete — Super Admin only */}
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={actionLoading[`delete_${user.id}`]}
+                            className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete User"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

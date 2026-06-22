@@ -518,15 +518,22 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           description: 'User accounts & permissions'
         },
         {
+          id: 'roleManagement',
+          title: '9.3 Role Management',
+          icon: ShieldCheckIcon,
+          path: '/admin/roles',
+          description: 'Define roles, module access & sensitive permissions'
+        },
+        {
           id: 'wrenchIntegration',
-          title: '9.3 Wrench Integration',
+          title: '9.4 Wrench Integration',
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
           description: 'Wrench Project Platform sync'
         },
         {
           id: 'aiChampion',
-          title: '9.4 AI Champion',
+          title: '9.5 AI Champion',
           icon: SparklesIcon,
           path: '/admin/ai-champion',
           description: 'Top AI users leaderboard & badges'
