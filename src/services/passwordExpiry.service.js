@@ -225,6 +225,15 @@ class PasswordExpiryService {
   clearStatus() {
     this.expiryStatus = null;
   }
+
+  /**
+   * Clear cached status and immediately notify all listeners
+   * Use after a successful password change so banners hide instantly
+   */
+  clearAndNotify() {
+    this.expiryStatus = null;
+    this.notifyListeners(null);
+  }
 }
 
 // Create singleton instance

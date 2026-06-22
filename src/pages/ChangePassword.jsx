@@ -6,10 +6,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { Eye, EyeOff, Lock, CheckCircle, XCircle, Info } from 'lucide-react';
 import apiClient from '../services/api.service';
 import { PASSWORD_RESET_API } from '../config/passwordReset.config';
 import passwordExpiryService from '../services/passwordExpiry.service';
+import { logout } from '../store/slices/authSlice';
+
+// Soft-coded constants for post-change behaviour
+const POST_CHANGE_REDIRECT      = '/login';
+const POST_CHANGE_REDIRECT_DELAY = 2000; // ms
+const SUCCESS_REDIRECT_TEXT      = 'Redirecting to login page...';
 
 const ChangePassword = () => {
   const [formData, setFormData] = useState({
@@ -30,6 +37,7 @@ const ChangePassword = () => {
   const [expiryStatus, setExpiryStatus] = useState(null);
   
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   useEffect(() => {
     // Get current expiry status
@@ -114,13 +122,15 @@ const ChangePassword = () => {
         confirm_password: '',
       });
 
-      // Refresh expiry status
-      await passwordExpiryService.checkPasswordExpiry();
+      // Clear expiry cache and stop polling so the banner hides immediately
+      passwordExpiryService.clearAndNotify();
+      passwordExpiryService.stopPeriodicCheck();
 
-      // Redirect after delay
+      // Log out current session and redirect to login for a fresh start
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
+        dispatch(logout());
+        navigate(POST_CHANGE_REDIRECT);
+      }, POST_CHANGE_REDIRECT_DELAY);
 
     } catch (err) {
       console.error('Password change error:', err);
@@ -169,7 +179,7 @@ const ChangePassword = () => {
             Your password has been successfully updated.
           </p>
           <p className="text-sm text-gray-500">
-            Redirecting to dashboard...
+            {SUCCESS_REDIRECT_TEXT}
           </p>
         </div>
       </div>
