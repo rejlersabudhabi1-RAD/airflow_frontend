@@ -1,13 +1,14 @@
 /**
- * Payroll Auditor — anomaly detection comparing payroll runs
+ * Payroll Auditor — anomaly detection comparing payroll runs.
+ * Aligned with PayrollEngine via shared activeRunId / onSelectRun / onSwitchTab props.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import payrollService from '../../../services/payroll.service'
 import {
   PAYROLL_AUDIT_THRESHOLDS, PAYROLL_ALERT_SEVERITY,
-  PAYROLL_COPY, fmtCurrency,
+  PAYROLL_COPY, fmtCurrency, CROSS_TAB_COPY,
 } from '../../../config/hrPayroll.config'
 
 const Spinner = () => (
@@ -78,7 +79,7 @@ const detectAnomalies = (currSlips, prevSlips) => {
   return anomalies
 }
 
-export default function PayrollAuditor({ activeRunId }) {
+export default function PayrollAuditor({ activeRunId, onSelectRun, onSwitchTab }) {
   const [runs,       setRuns]       = useState([])
   const [runId,      setRunId]      = useState(activeRunId ?? '')
   const [currSlips,  setCurrSlips]  = useState([])
@@ -86,6 +87,8 @@ export default function PayrollAuditor({ activeRunId }) {
   const [allRuns,    setAllRuns]    = useState([])
   const [loading,    setLoading]    = useState(false)
   const [analysed,   setAnalysed]   = useState(false)
+  // Track the last activeRunId we already auto-ran to avoid duplicate triggers
+  const lastAutoRunId = useRef(null)
 
   useEffect(() => {
     payrollService.getPayrollRuns({ page_size: 24 }).then((r) => {
@@ -96,18 +99,31 @@ export default function PayrollAuditor({ activeRunId }) {
     })
   }, [])
 
-  useEffect(() => { if (activeRunId) setRunId(activeRunId) }, [activeRunId])
+  // When Engine selects a run: sync into local state + auto-trigger audit
+  useEffect(() => {
+    if (!activeRunId) return
+    setRunId(activeRunId)
+    setAnalysed(false)
+    // Auto-run only once per unique activeRunId to avoid re-running on every render
+    if (activeRunId !== lastAutoRunId.current) {
+      lastAutoRunId.current = activeRunId
+      // Run after a tick so allRuns is populated
+      setTimeout(() => runAnalysisForId(activeRunId), 0)
+    }
+  }, [activeRunId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const runAnalysis = async () => {
-    if (!runId) return
+  // Core analysis function accepting an explicit runId so it works both from
+  // the button click and the auto-trigger above.
+  const runAnalysisForId = async (targetId) => {
+    if (!targetId) return
     setLoading(true); setAnalysed(false)
     try {
       const sortedRuns = [...allRuns].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
-      const currIdx = sortedRuns.findIndex((r) => r.id === runId)
+      const currIdx = sortedRuns.findIndex((r) => r.id === targetId)
       const prevRun = currIdx > 0 ? sortedRuns[currIdx - 1] : null
 
       const [curr, prev] = await Promise.all([
-        payrollService.getSalarySlips({ payroll_run: runId, page_size: 200 }),
+        payrollService.getSalarySlips({ payroll_run: targetId, page_size: 200 }),
         prevRun ? payrollService.getSalarySlips({ payroll_run: prevRun.id, page_size: 200 }) : Promise.resolve({ results: [] }),
       ])
       setCurrSlips(curr?.results ?? curr ?? [])
@@ -115,6 +131,20 @@ export default function PayrollAuditor({ activeRunId }) {
       setAnalysed(true)
     } finally { setLoading(false) }
   }
+
+  const runAnalysis = () => runAnalysisForId(runId)
+
+  // When the user manually picks a different run in the Auditor's own selector,
+  // sync it back to the parent (Payroll.jsx) so the Engine also knows.
+  const handleRunChange = (newId) => {
+    setRunId(newId)
+    setAnalysed(false)
+    lastAutoRunId.current = null // allow auto-run if Engine sends this ID next
+    onSelectRun?.(newId)
+  }
+
+  const isSyncedWithEngine = activeRunId && runId === activeRunId
+  const activeRunMeta = runs.find(r => r.id === runId)
 
   const anomalies = useMemo(() =>
     analysed ? detectAnomalies(currSlips, prevSlips) : []
@@ -133,13 +163,55 @@ export default function PayrollAuditor({ activeRunId }) {
 
   return (
     <div className="space-y-5">
+      {/* Connection header — shows sync state with Engine */}
+      <div className={`rounded-xl border px-4 py-3 flex items-center justify-between flex-wrap gap-2 ${
+        isSyncedWithEngine
+          ? 'bg-indigo-50 border-indigo-200'
+          : 'bg-slate-50 border-slate-200'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSyncedWithEngine ? 'bg-indigo-500' : 'bg-slate-400'}`} />
+          {isSyncedWithEngine ? (
+            <span className="text-xs font-medium text-indigo-700">
+              {CROSS_TAB_COPY.syncedBadge}
+              {activeRunMeta && (
+                <span className="ml-1.5 text-indigo-500 font-normal">
+                  · {activeRunMeta.run_code} · {String(activeRunMeta.month).padStart(2,'0')}/{activeRunMeta.year}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-500">{CROSS_TAB_COPY.notSyncedBadge}</span>
+          )}
+          {loading && (
+            <span className="text-xs text-indigo-500 flex items-center gap-1"><Spinner /> Auto-analysing…</span>
+          )}
+          {analysed && isSyncedWithEngine && !loading && (
+            <span className="text-xs text-emerald-600 flex items-center gap-1">
+              <HeroIcons.CheckCircleIcon className="w-3.5 h-3.5" /> {CROSS_TAB_COPY.autoAuditDone}
+            </span>
+          )}
+        </div>
+        {isSyncedWithEngine && (
+          <button
+            type="button"
+            onClick={() => onSwitchTab?.('engine')}
+            title={CROSS_TAB_COPY.backToEngineTitle}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+          >
+            <HeroIcons.ArrowLeftIcon className="w-3.5 h-3.5" />
+            {CROSS_TAB_COPY.backToEngine}
+          </button>
+        )}
+      </div>
+
       {/* Controls */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-48">
           <label className="block text-xs text-slate-500 mb-1">Payroll Run to Audit</label>
           <select
             value={runId}
-            onChange={(e) => { setRunId(e.target.value); setAnalysed(false) }}
+            onChange={(e) => { handleRunChange(e.target.value) }}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
           >
             <option value="">— Select run —</option>

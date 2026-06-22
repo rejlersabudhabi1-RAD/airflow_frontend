@@ -37,6 +37,19 @@ import {
   slipStatusMeta,
   runStatusMeta,
   fmtCurrency,
+  ENGINE_HR_OVERRIDE_STATUSES,
+  IMPORT_HISTORY_COPY,
+  IMPORT_STATUS_STYLES,
+  AI_ANALYTICS_COPY,
+  AI_ANALYTICS_SEVERITY_COLORS,
+  AI_ANALYTICS_HEALTH_COLORS,
+  AI_ANALYTICS_TREND_MAP,
+  AI_ANALYTICS_URGENCY_COLORS,
+  AI_ANALYTICS_DEPT_STATUS_COLORS,
+  CROSS_TAB_COPY,
+  WORKFLOW_STAGE_META,
+  WORKFLOW_STAGE_ORDER,
+  WORKFLOW_COPY,
 } from '../../../config/hrPayroll.config'
 
 // â”€â”€â”€ tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -54,7 +67,7 @@ const Spinner = ({ size = 4 }) => (
 
 const SkeletonRow = () => (
   <tr>
-    {Array.from({ length: 9 }).map((_, i) => (
+    {Array.from({ length: 10 }).map((_, i) => (
       <td key={i} className="px-3 py-3">
         <div className="h-3 bg-slate-100 rounded animate-pulse" />
       </td>
@@ -694,9 +707,255 @@ function NewRunModal({ onClose, onCreated }) {
 }
 
 // â”€â”€â”€ main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Slip Edit Modal ──────────────────────────────────────────────────────────
+function SlipEditModal({ slip, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    basic_salary:     String(slip.basic_salary      ?? ''),
+    total_allowances: String(slip.total_allowances  ?? ''),
+    gross_salary:     String(slip.gross_salary      ?? ''),
+    total_deductions: String(slip.total_deductions  ?? ''),
+    net_salary:       String(slip.net_salary        ?? ''),
+    present_days:     String(slip.present_days      ?? ''),
+    absent_days:      String(slip.absent_days       ?? ''),
+    working_days:     String(slip.working_days      ?? ''),
+    remarks:          slip.remarks ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err,    setErr]    = useState('')
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true); setErr('')
+    try {
+      const payload = {
+        basic_salary:     parseFloat(form.basic_salary)     || 0,
+        total_allowances: parseFloat(form.total_allowances) || 0,
+        gross_salary:     parseFloat(form.gross_salary)     || 0,
+        total_deductions: parseFloat(form.total_deductions) || 0,
+        net_salary:       parseFloat(form.net_salary)       || 0,
+        present_days:     parseInt(form.present_days,  10)  || 0,
+        absent_days:      parseInt(form.absent_days,   10)  || 0,
+        working_days:     parseInt(form.working_days,  10)  || 0,
+        remarks:          form.remarks.trim(),
+      }
+      await payrollService.updateSalarySlip(slip.id, payload)
+      onSaved(ENGINE_COPY.editSuccess)
+    } catch (ex) {
+      setErr(
+        ex?.response?.data?.detail ||
+        Object.values(ex?.response?.data ?? {})?.[0]?.[0] ||
+        'Failed to save changes.'
+      )
+    } finally { setSaving(false) }
+  }
+
+  const numField = (label, key) => (
+    <label key={key} className="block">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <input type="number" step="0.01" min="0" value={form[key]} onChange={set(key)}
+        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+    </label>
+  )
+  const intField = (label, key) => (
+    <label key={key} className="block">
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <input type="number" step="1" min="0" value={form[key]} onChange={set(key)}
+        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+    </label>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Icon name="PencilSquareIcon" className="w-5 h-5 text-blue-600" />
+              {ENGINE_COPY.editModalTitle}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">{slip.employee_name} · {slip.slip_number}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5">
+            <Icon name="XMarkIcon" className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
+          <div className="grid grid-cols-2 gap-3">
+            {numField('Basic Salary (AED)', 'basic_salary')}
+            {numField('Total Allowances (AED)', 'total_allowances')}
+            {numField('Gross Salary (AED)', 'gross_salary')}
+            {numField('Total Deductions (AED)', 'total_deductions')}
+            {numField('Net Salary (AED)', 'net_salary')}
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {intField('Working Days', 'working_days')}
+            {intField('Present Days', 'present_days')}
+            {intField('Absent Days', 'absent_days')}
+          </div>
+          <label className="block">
+            <span className="text-xs text-slate-500 font-medium">Remarks</span>
+            <textarea value={form.remarks} onChange={set('remarks')} rows={2}
+              placeholder="Optional remarks..."
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
+          </label>
+          {err && <p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition">
+              {saving ? <Spinner size={3} /> : <Icon name="CheckIcon" className="w-4 h-4" />}
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Slip Delete Confirm Modal ─────────────────────────────────────────────────
+function SlipDeleteModal({ slip, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false)
+  const [err,      setErr]      = useState('')
+  const isProtected = ['approved', 'sent'].includes(slip.status)
+
+  const handleDelete = async () => {
+    setDeleting(true); setErr('')
+    try {
+      await payrollService.deleteSalarySlip(slip.id)
+      onDeleted(slip.id)
+    } catch (ex) {
+      setErr(ex?.response?.data?.detail || 'Failed to delete salary slip.')
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 p-2.5 rounded-xl bg-rose-100">
+            <Icon name="TrashIcon" className="w-5 h-5 text-rose-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">{ENGINE_COPY.deleteConfirmTitle}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{slip.employee_name} · {slip.slip_number}</p>
+          </div>
+        </div>
+        <p className="text-sm text-slate-600">{ENGINE_COPY.deleteConfirmMsg}</p>
+        {isProtected && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+            <Icon name="ExclamationTriangleIcon" className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800">
+              This slip is <strong>{slip.status}</strong>. Deleting it may affect payroll records and audit trails.
+            </p>
+          </div>
+        )}
+        {err && <p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+            Cancel
+          </button>
+          <button type="button" disabled={deleting} onClick={handleDelete}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg transition">
+            {deleting ? <Spinner size={3} /> : <Icon name="TrashIcon" className="w-4 h-4" />}
+            Delete Slip
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Slip HR Override Modal ────────────────────────────────────────────────────
+function SlipHRModal({ slip, onClose, onSaved }) {
+  const [newStatus, setNewStatus] = useState(slip.status)
+  const [notes,     setNotes]     = useState('')
+  const [saving,    setSaving]    = useState(false)
+  const [err,       setErr]       = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!notes.trim()) { setErr(ENGINE_COPY.hrNoteRequired); return }
+    setSaving(true); setErr('')
+    try {
+      await payrollService.updateSalarySlip(slip.id, {
+        status:         newStatus,
+        internal_notes: notes.trim(),
+      })
+      onSaved(ENGINE_COPY.hrOverrideSuccess)
+    } catch (ex) {
+      setErr(ex?.response?.data?.detail || 'Failed to apply HR override.')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Icon name="AdjustmentsHorizontalIcon" className="w-5 h-5 text-amber-600" />
+            {ENGINE_COPY.hrOverrideTitle}
+          </h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <Icon name="XMarkIcon" className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="bg-slate-50 rounded-xl px-4 py-3 text-sm space-y-1">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-400">Employee</span>
+            <span className="font-medium text-slate-800">{slip.employee_name}</span>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+            <span className="text-slate-400">Current Status</span>
+            <StatusBadge status={slip.status} />
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <label className="block">
+            <span className="text-xs text-slate-500 font-medium">New Status</span>
+            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              {ENGINE_HR_OVERRIDE_STATUSES.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-500 font-medium">{ENGINE_COPY.hrNoteLabel}</span>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+              placeholder={ENGINE_COPY.hrNoteRequired}
+              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
+          </label>
+          {err && <p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg transition">
+              {saving ? <Spinner size={3} /> : <Icon name="AdjustmentsHorizontalIcon" className="w-4 h-4" />}
+              Apply Override
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 const STATUS_FILTER_OPTIONS = ['all', 'draft', 'generated', 'pending_approval', 'approved', 'rejected', 'sent']
 
-export default function PayrollEngine({ activeRunId, onSelectRun }) {
+export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab }) {
   const [runs,         setRuns]        = useState([])
   const [selRunId,     setSelRunId]    = useState(activeRunId ?? '')
   const [slips,        setSlips]       = useState([])
@@ -713,7 +972,28 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
   const [importOpen,   setImportOpen]  = useState(false)
   const [masterPreview,setMasterPreview] = useState(null)  // {rows,stats,warnings,year,month,sympaFile,vfFile,otherFile}
   const [prevDlLoading,setPrevDlLoading] = useState(false)
+  const [previewEditMode, setPreviewEditMode] = useState(false)
+  const [editableRows,    setEditableRows]    = useState([])
   const [runsLoading,  setRunsLoading] = useState(true)
+  const [editModal,    setEditModal]   = useState(null)  // slip object | null
+  const [deleteModal,  setDeleteModal] = useState(null)  // slip object | null
+  const [hrModal,      setHrModal]     = useState(null)  // slip object | null
+  const [importHistory,   setImportHistory]   = useState([])
+  const [historyLoading,  setHistoryLoading]  = useState(true)
+  const [historyDeleting, setHistoryDeleting] = useState(null) // importId being deleted
+  const [runDeleting,     setRunDeleting]     = useState(false)
+
+  // AI Analytics state
+  const [aiAnalytics,        setAiAnalytics]        = useState(null)   // response from GPT-4o
+  const [aiAnalyticsLoading, setAiAnalyticsLoading] = useState(false)
+  const [aiAnalyticsError,   setAiAnalyticsError]   = useState(null)
+  const [aiGeneratedAt,      setAiGeneratedAt]      = useState(null)
+
+  // Master Payroll Workflow state
+  const [workflowInfo,     setWorkflowInfo]     = useState(null)  // workflow status + log
+  const [workflowLoading,  setWorkflowLoading]  = useState(false)
+  const [workflowAction,   setWorkflowAction]   = useState(null)  // pending action modal
+  const [workflowNote,     setWorkflowNote]     = useState('')     // note for the modal
 
   const selRun = useMemo(() => runs.find(r => r.id === selRunId) ?? null, [runs, selRunId])
 
@@ -736,6 +1016,8 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
     if (!selRun) return
     setLoading(true)
     setSlips([]); setPrevSlips([]); setAttendance({})
+    // Reset AI analytics when run changes so stale results are not shown
+    setAiAnalytics(null); setAiAnalyticsError(null); setAiGeneratedAt(null)
 
     const { year, month } = selRun
 
@@ -896,23 +1178,202 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
     await payrollService.sendSalarySlipEmail(id); toast('Email sent.'); reloadSlips()
   }, [toast, reloadSlips])
 
+  // Called by edit/HR modals on successful save
+  const handleSlipSaved = useCallback((msg) => {
+    toast(msg)
+    reloadSlips()
+  }, [toast, reloadSlips])
+
+  // Called by delete modal on successful delete
+  const handleSlipDeleted = useCallback((slipId) => {
+    toast(ENGINE_COPY.deleteSuccess)
+    reloadSlips()
+    setDrawer(d => (d?.id === slipId ? null : d))
+  }, [toast, reloadSlips])
+
   const handleNewRunCreated = useCallback((run) => {
     setRuns(prev => [run, ...prev]); setSelRunId(run.id)
     setNewRunOpen(false); toast(`Run ${run.run_code} created. Click "Run Engine" to generate slips.`)
   }, [toast])
 
+  // ── Import History ────────────────────────────────────────────────────────
+  const reloadHistory = useCallback(() => {
+    setHistoryLoading(true)
+    payrollService.getMasterPayrollHistory({ page_size: 50 })
+      .then(r => setImportHistory(r?.results ?? []))
+      .catch(() => setImportHistory([]))
+      .finally(() => setHistoryLoading(false))
+  }, [])
+
+  useEffect(() => { reloadHistory() }, [reloadHistory])
+
+  const handleHistoryRestore = useCallback(async (item) => {
+    try {
+      const res = await payrollService.getMasterPayrollRows(item.id)
+      setMasterPreview({
+        rows:     res.rows     ?? [],
+        stats:    res.stats    ?? {},
+        warnings: res.warnings ?? [],
+        year:     String(res.year),
+        month:    String(res.month),
+        importId: item.id,
+      })
+      toast(IMPORT_HISTORY_COPY.restoreSuccess)
+    } catch (e) {
+      toast(e?.response?.data?.error || IMPORT_HISTORY_COPY.restoreFailed, false)
+    }
+  }, [toast])
+
+  const handleHistoryDelete = useCallback(async (importId) => {
+    if (!window.confirm(IMPORT_HISTORY_COPY.deleteConfirmMsg)) return
+    setHistoryDeleting(importId)
+    try {
+      await payrollService.deleteMasterPayroll(importId)
+      toast(IMPORT_HISTORY_COPY.deleteSuccess)
+      setImportHistory(prev => prev.filter(h => h.id !== importId))
+      // Clear active preview if it belongs to the deleted import
+      setMasterPreview(prev => (prev?.importId === importId ? null : prev))
+    } catch (e) {
+      toast(e?.response?.data?.error || IMPORT_HISTORY_COPY.deleteFailed, false)
+    } finally { setHistoryDeleting(null) }
+  }, [toast])
+
+  const [historyDownloading, setHistoryDownloading] = useState(null) // importId being downloaded
+
+  const handleHistoryDownload = useCallback(async (item) => {
+    setHistoryDownloading(item.id)
+    try {
+      const res  = await payrollService.getMasterPayrollRows(item.id)
+      const blob = await payrollService.exportRowsToExcel(String(item.year), String(item.month), res.rows ?? [])
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `master_payroll_${item.year}_${String(item.month).padStart(2, '0')}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      toast(e?.response?.data?.error || IMPORT_HISTORY_COPY.downloadFailed, false)
+    } finally { setHistoryDownloading(null) }
+  }, [toast])
+
+  const handleRunDelete = useCallback(async () => {
+    if (!selRun) return
+    if (selRun.status !== 'draft') {
+      toast(`${ENGINE_COPY.deleteRunProtected} "${runStatusMeta(selRun.status).label}". Only draft runs can be deleted.`, false)
+      return
+    }
+    if (!window.confirm(ENGINE_COPY.deleteRunMsg)) return
+    setRunDeleting(true)
+    try {
+      await payrollService.deletePayrollRun(selRunId)
+      toast(ENGINE_COPY.deleteRunSuccess)
+      setRuns(prev => prev.filter(r => r.id !== selRunId))
+      setSelRunId('')
+      setSlips([])
+    } catch (e) {
+      toast(e?.response?.data?.error || ENGINE_COPY.deleteRunFailed, false)
+    } finally { setRunDeleting(false) }
+  }, [selRun, selRunId, toast])
+
+  // Generate GPT-4o HR intelligence report for the selected payroll run
+  const handleGenerateAIAnalytics = useCallback(async () => {
+    if (!selRunId) return
+    setAiAnalyticsLoading(true)
+    setAiAnalyticsError(null)
+    try {
+      const data = await payrollService.generateAIAnalytics(selRunId)
+      setAiAnalytics(data)
+      setAiGeneratedAt(new Date())
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'AI analysis failed. Please try again.'
+      setAiAnalyticsError(msg)
+    } finally {
+      setAiAnalyticsLoading(false)
+    }
+  }, [selRunId])
+
+  // ── Workflow helpers ─────────────────────────────────────────────────────
+  const loadWorkflow = useCallback(async (importId) => {
+    if (!importId) return
+    try {
+      const data = await payrollService.getMasterPayrollWorkflow(importId)
+      setWorkflowInfo(data)
+    } catch { /* non-blocking — workflow panel will stay null */ }
+  }, [])
+
+  const handleWorkflowAction = useCallback(async (action, importId, note) => {
+    const actionMap = {
+      freeze:          payrollService.freezeMasterPayroll,
+      unfreeze:        payrollService.unfreezeMasterPayroll,
+      hr_approve:      payrollService.hrApproveMasterPayroll,
+      finance_review:  payrollService.financeReviewMasterPayroll,
+      finance_approve: payrollService.financeApproveMasterPayroll,
+      release:         payrollService.releaseMasterPayroll,
+    }
+    const successMap = {
+      freeze:          WORKFLOW_COPY.freezeSuccess,
+      unfreeze:        WORKFLOW_COPY.unfreezeSuccess,
+      hr_approve:      WORKFLOW_COPY.hrApproveSuccess,
+      finance_review:  WORKFLOW_COPY.financeReviewSuccess,
+      finance_approve: WORKFLOW_COPY.financeApproveSuccess,
+      release:         WORKFLOW_COPY.releaseSuccess,
+    }
+    const fn = actionMap[action]
+    if (!fn) return
+    setWorkflowLoading(true)
+    try {
+      await fn(importId, note || '')
+      toast(successMap[action] || 'Done.')
+      await loadWorkflow(importId)
+      // Refresh the import history row so stage badge updates
+      reloadHistory?.()
+      // Re-fetch master preview rows to sync is_editable_by_hr
+      if (masterPreview?.importId === importId) {
+        setMasterPreview(prev => prev
+          ? { ...prev, workflow_stage: workflowInfo?.stage }
+          : prev
+        )
+      }
+    } catch (e) {
+      toast(e?.response?.data?.error || WORKFLOW_COPY.actionFailed, false)
+    } finally {
+      setWorkflowLoading(false)
+    }
+  }, [loadWorkflow, reloadHistory, masterPreview, workflowInfo])
+
+  // Load workflow when master preview changes
+  useEffect(() => {
+    if (masterPreview?.importId) {
+      loadWorkflow(masterPreview.importId)
+    } else {
+      setWorkflowInfo(null)
+    }
+  }, [masterPreview?.importId, loadWorkflow])
+
+  // Sync editable rows whenever a new master preview is generated
+  useEffect(() => {
+    if (masterPreview?.rows) {
+      setEditableRows(masterPreview.rows.map(r => ({ ...r })))
+      setPreviewEditMode(false)
+    }
+  }, [masterPreview])
+
+  const handleEditCell = useCallback((rowIdx, key, value) => {
+    setEditableRows(prev => prev.map((r, i) => i === rowIdx ? { ...r, [key]: value } : r))
+  }, [])
+
+  const handleResetRows = useCallback(() => {
+    if (masterPreview?.rows) {
+      setEditableRows(masterPreview.rows.map(r => ({ ...r })))
+    }
+  }, [masterPreview])
 
   const handlePreviewDownload = useCallback(async () => {
     if (!masterPreview) return
-    const { year, month, sympaFile, vfFile, otherFile } = masterPreview
+    const { year, month } = masterPreview
     setPrevDlLoading(true)
     try {
-      const fd = new FormData()
-      fd.append('year', year); fd.append('month', month)
-      if (sympaFile) fd.append('sympa_file',     sympaFile)
-      if (vfFile)    fd.append('valueframe_file', vfFile)
-      if (otherFile) fd.append('other_file',      otherFile)
-      const blob = await payrollService.downloadMasterPayrollExcel(fd)
+      const blob = await payrollService.exportRowsToExcel(year, month, editableRows)
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
@@ -922,7 +1383,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
     } catch (e) {
       toast(e?.response?.data?.error || IMPORT_COPY.errorGeneric, false)
     } finally { setPrevDlLoading(false) }
-  }, [masterPreview, toast])
+  }, [masterPreview, editableRows, toast])
 
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
@@ -948,6 +1409,27 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
               </select>
             )
           }
+          {selRunId && selRun && (
+            <>
+              <button
+                type="button"
+                onClick={() => onSwitchTab?.('auditor')}
+                title={CROSS_TAB_COPY.auditRunTitle}
+                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium rounded-lg border border-indigo-200 transition">
+                <Icon name="MagnifyingGlassCircleIcon" className="w-4 h-4" />
+                {CROSS_TAB_COPY.auditRunBtn}
+              </button>
+              <button
+                type="button"
+                disabled={runDeleting}
+                onClick={handleRunDelete}
+                title={ENGINE_COPY.deleteRunTitle}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-medium rounded-lg border border-rose-200 disabled:opacity-40 transition">
+                {runDeleting ? <Spinner size={3} /> : <Icon name="TrashIcon" className="w-4 h-4" />}
+                {ENGINE_COPY.deleteRunBtn}
+              </button>
+            </>
+          )}
           <button type="button" onClick={() => setImportOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition">
             <Icon name="CircleStackIcon" className="w-4 h-4" />
@@ -963,10 +1445,160 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
 
       {/* ── Master Payroll Preview (inline, shown after import) ──────── */}
       {masterPreview && (() => {
-        const { rows, stats, warnings, year, month } = masterPreview
+        const { stats, warnings, year, month } = masterPreview
         const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+        const isDirty = editableRows !== masterPreview.rows
+
+        // ── Workflow helpers for this panel ─────────────────────────────
+        const stage       = workflowInfo?.stage ?? masterPreview?.workflow_stage ?? 'draft'
+        const stageMeta   = WORKFLOW_STAGE_META[stage] ?? WORKFLOW_STAGE_META.draft
+        const stageIdx    = WORKFLOW_STAGE_ORDER.indexOf(stage)
+        const canEditRows = stage === 'draft'
+        const importId    = masterPreview.importId
+        const wfLog       = workflowInfo?.log ?? []
+
+        // Action button helper — returns props or null if not applicable
+        const wfBtnProps = (action, reqStage, label, btnCls, titleKey) => {
+          if (stage !== reqStage) return null
+          return {
+            action, label,
+            title:   WORKFLOW_COPY[titleKey] ?? label,
+            className: `flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${btnCls}`,
+          }
+        }
+
         return (
           <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm overflow-hidden">
+
+            {/* ── Workflow Banner ─────────────────────────────────────── */}
+            <div className={`px-5 py-3 border-b ${stageMeta.bg} ${stageMeta.border}`}>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                {/* Left: stage pill + progress steps */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${stageMeta.bg} ${stageMeta.color} border ${stageMeta.border}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${stageMeta.dot}`} />
+                    {stageMeta.label}
+                    <span className="font-normal opacity-75">— {stageMeta.subtitle}</span>
+                  </span>
+                  {/* Mini progress bar */}
+                  <div className="hidden sm:flex items-center gap-0.5">
+                    {WORKFLOW_STAGE_ORDER.map((s, i) => (
+                      <div key={s} className="flex items-center gap-0.5">
+                        <div title={WORKFLOW_STAGE_META[s]?.label}
+                          className={`w-5 h-1.5 rounded-full transition-all ${i <= stageIdx ? stageMeta.dot : 'bg-slate-200'}`} />
+                        {i < WORKFLOW_STAGE_ORDER.length - 1 && (
+                          <div className={`w-2 h-px ${i < stageIdx ? stageMeta.dot : 'bg-slate-200'}`} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right: action buttons */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Freeze */}
+                  {stage === 'draft' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.freezeTitle}
+                      onClick={() => { setWorkflowAction({ action: 'freeze', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40">
+                      <Icon name="LockClosedIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.freezeBtn}
+                    </button>
+                  )}
+                  {/* HR Approve */}
+                  {stage === 'frozen' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.hrApproveTitle}
+                      onClick={() => { setWorkflowAction({ action: 'hr_approve', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-40">
+                      <Icon name="CheckBadgeIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.hrApproveBtn}
+                    </button>
+                  )}
+                  {/* Finance Review */}
+                  {stage === 'hr_approved' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.financeReviewTitle}
+                      onClick={() => { setWorkflowAction({ action: 'finance_review', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40">
+                      <Icon name="ClipboardDocumentCheckIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.financeReviewBtn}
+                    </button>
+                  )}
+                  {/* Finance Approve */}
+                  {stage === 'finance_review' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.financeApproveTitle}
+                      onClick={() => { setWorkflowAction({ action: 'finance_approve', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-40">
+                      <Icon name="CurrencyDollarIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.financeApproveBtn}
+                    </button>
+                  )}
+                  {/* Accounts Release */}
+                  {stage === 'finance_approved' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.releaseTitle}
+                      onClick={() => { setWorkflowAction({ action: 'release', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-green-600 hover:bg-green-700 text-white disabled:opacity-40">
+                      <Icon name="BanknotesIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.releaseBtn}
+                    </button>
+                  )}
+                  {/* Superadmin Unfreeze (all non-draft stages) */}
+                  {stage !== 'draft' && stage !== 'released' && (
+                    <button type="button"
+                      disabled={workflowLoading}
+                      title={WORKFLOW_COPY.unfreezeTitle}
+                      onClick={() => { setWorkflowAction({ action: 'unfreeze', importId }); setWorkflowNote('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 disabled:opacity-40">
+                      <Icon name="LockOpenIcon" className="w-3.5 h-3.5" />
+                      {WORKFLOW_COPY.unfreezeBtn}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Locked warning */}
+              {!canEditRows && stage !== 'released' && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                  <Icon name="ExclamationTriangleIcon" className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  {WORKFLOW_COPY.lockedMsg}
+                  <span className="text-slate-400">{WORKFLOW_COPY.lockedSubtitle}</span>
+                </div>
+              )}
+
+              {/* Workflow audit log accordion */}
+              {wfLog.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700">
+                    {WORKFLOW_COPY.logTitle} ({wfLog.length})
+                  </summary>
+                  <div className="mt-2 space-y-1 max-h-36 overflow-y-auto pr-1">
+                    {wfLog.map((entry, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs text-slate-600">
+                        <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${WORKFLOW_STAGE_META[entry.to_stage]?.dot ?? 'bg-slate-400'}`} />
+                        <span className="font-medium">{entry.action?.replace(/_/g, ' ')}</span>
+                        <span className="text-slate-400">{WORKFLOW_COPY.logByLabel}</span>
+                        <span className="font-medium">{entry.by}</span>
+                        <span className="text-slate-400 ml-auto whitespace-nowrap">
+                          {entry.at ? new Date(entry.at).toLocaleString() : ''}
+                        </span>
+                        {entry.note && <span className="italic text-slate-400">— {entry.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+            {/* END Workflow Banner */}
+
             {/* Panel header */}
             <div className="flex items-center justify-between px-5 py-3.5 bg-emerald-50 border-b border-emerald-100">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -975,15 +1607,36 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                   <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 flex-wrap">
                     Master Payroll File
                     <span className="text-xs font-normal text-slate-400">
-                      {MN[Number(month) - 1]} {year} &middot; {rows.length} employees
+                      {MN[Number(month) - 1]} {year} &middot; {editableRows.length} employees
                     </span>
+                    {isDirty && previewEditMode && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-full">{IMPORT_COPY.editDirtyBadge}</span>
+                    )}
                   </h3>
                   {stats && (
                     <p className="text-xs text-slate-500 mt-0.5 truncate">{IMPORT_COPY.statsLabel(stats)}</p>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {/* Edit / Done / Reset buttons — hidden when file is locked */}
+                {canEditRows && !previewEditMode ? (
+                  <button type="button" onClick={() => setPreviewEditMode(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">
+                    <Icon name="PencilSquareIcon" className="w-3.5 h-3.5" />{IMPORT_COPY.editToggleBtn}
+                  </button>
+                ) : canEditRows ? (
+                  <>
+                    <button type="button" onClick={handleResetRows}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">
+                      <Icon name="ArrowPathIcon" className="w-3.5 h-3.5" />{IMPORT_COPY.editResetBtn}
+                    </button>
+                    <button type="button" onClick={() => setPreviewEditMode(false)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition">
+                      <Icon name="CheckIcon" className="w-3.5 h-3.5" />{IMPORT_COPY.editDoneBtn}
+                    </button>
+                  </>
+                ) : null}
                 <button type="button" disabled={prevDlLoading} onClick={handlePreviewDownload}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition">
                   {prevDlLoading
@@ -996,6 +1649,14 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                 </button>
               </div>
             </div>
+
+            {/* Edit mode banner */}
+            {previewEditMode && (
+              <div className="flex items-center gap-2 px-5 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-700">
+                <Icon name="PencilSquareIcon" className="w-3.5 h-3.5 shrink-0" />
+                <span>{IMPORT_COPY.editModeLabel} — click any cell to modify. Changes are reflected in the downloaded Excel.</span>
+              </div>
+            )}
 
             {/* Warnings */}
             {warnings.length > 0 && (
@@ -1020,10 +1681,10 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {rows.length === 0
+                  {editableRows.length === 0
                     ? <tr><td colSpan={IMPORT_MASTER_COLUMNS.length} className="px-4 py-10 text-center text-slate-400">{IMPORT_COPY.noFiles}</td></tr>
-                    : rows.map((row, i) => (
-                      <tr key={i} className="hover:bg-blue-50/40 transition-colors">
+                    : editableRows.map((row, rowIdx) => (
+                      <tr key={rowIdx} className="hover:bg-blue-50/40 transition-colors">
                         {IMPORT_MASTER_COLUMNS.map(col => {
                           if (col.sources) return (
                             <td key={col.key} className="px-3 py-2">
@@ -1033,6 +1694,21 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                             </td>
                           )
                           const v   = row[col.key]
+                          // Editable input in edit mode
+                          if (previewEditMode && col.editable !== false) {
+                            return (
+                              <td key={col.key} className={`px-1.5 py-1 ${col.highlight ? 'bg-emerald-50/60' : ''}`}>
+                                <input
+                                  type={col.numeric ? 'number' : 'text'}
+                                  step={col.numeric ? '0.01' : undefined}
+                                  value={v ?? ''}
+                                  onChange={e => handleEditCell(rowIdx, col.key, e.target.value)}
+                                  className={`w-full min-w-[72px] px-2 py-1 text-xs border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 outline-none bg-white ${col.numeric ? 'text-right font-mono' : ''} ${col.highlight ? 'text-emerald-700 font-semibold border-emerald-400 focus:ring-emerald-500' : ''}`}
+                                />
+                              </td>
+                            )
+                          }
+                          // Read-only cell
                           const num = col.numeric && v != null && v !== '' && v !== 'None'
                           return (
                             <td key={col.key} className={`px-3 py-2 whitespace-nowrap ${col.numeric ? 'text-right font-mono' : ''} ${col.highlight ? 'font-semibold text-emerald-700' : col.key === 'employee_code' ? 'font-mono text-slate-500 text-[11px]' : 'text-slate-700'}`}>
@@ -1049,7 +1725,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
 
             {/* Footer */}
             <div className="flex items-center justify-between px-5 py-2.5 bg-slate-50 border-t border-slate-100 text-xs text-slate-400">
-              <span>{rows.length} employees &middot; {MN[Number(month) - 1]} {year}</span>
+              <span>{editableRows.length} employees &middot; {MN[Number(month) - 1]} {year}</span>
               <button type="button" onClick={() => setMasterPreview(null)}
                 className="flex items-center gap-1 hover:text-slate-600 transition">
                 <Icon name="XMarkIcon" className="w-3.5 h-3.5" /> Clear preview
@@ -1058,6 +1734,102 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
           </div>
         )
       })()}
+
+      {/* ── Import History Panel ─────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Icon name="ClockIcon" className="w-4 h-4 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-700">{IMPORT_HISTORY_COPY.title}</h3>
+            {importHistory.length > 0 && (
+              <span className="text-xs bg-slate-200 text-slate-600 rounded-full px-2 py-0.5 font-medium">{importHistory.length}</span>
+            )}
+          </div>
+          <button type="button" onClick={reloadHistory} title={IMPORT_HISTORY_COPY.refreshBtn}
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition">
+            <Icon name="ArrowPathIcon" className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {historyLoading ? (
+          <div className="px-5 py-8 text-center text-sm text-slate-400 flex items-center justify-center gap-2">
+            <Spinner size={3} />{IMPORT_HISTORY_COPY.loadingMsg}
+          </div>
+        ) : importHistory.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-slate-400">
+            <Icon name="CircleStackIcon" className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            {IMPORT_HISTORY_COPY.empty}
+          </div>
+        ) : (
+          <div className="overflow-auto">
+            <table className="min-w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-100 z-10">
+                <tr>
+                  {['Period', 'Generated', 'By', 'Employees', 'S3 Status', 'Workflow', ''].map(h => (
+                    <th key={h} className={`px-4 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap ${h === 'Employees' ? 'text-right' : ''}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {importHistory.map(item => {
+                  const MN2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+                  const s   = IMPORT_STATUS_STYLES[item.status] ?? IMPORT_STATUS_STYLES.ready
+                  const isDel = historyDeleting === item.id
+                  const isActive = masterPreview?.importId === item.id
+                  const wStage = item.workflow_stage ?? 'draft'
+                  const wMeta  = WORKFLOW_STAGE_META[wStage] ?? WORKFLOW_STAGE_META.draft
+                  return (
+                    <tr key={item.id} className={`transition-colors ${isActive ? 'bg-emerald-50/60' : 'hover:bg-slate-50/70'}`}>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span className="font-semibold text-slate-800">{MN2[Number(item.month) - 1]} {item.year}</span>
+                        {isActive && <span className="ml-1.5 text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-1.5 py-0.5 font-semibold">Active</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                        {new Date(item.generated_at).toLocaleDateString()}{' '}
+                        {new Date(item.generated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{item.generated_by ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-slate-700">{item.total_rows}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${s.cls}`}>{s.label}</span>
+                      </td>
+                      {/* Workflow Stage badge */}
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${wMeta.bg} ${wMeta.color}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${wMeta.dot}`} />
+                          {wMeta.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button type="button" disabled={historyDownloading === item.id} onClick={() => handleHistoryDownload(item)}
+                            title={IMPORT_HISTORY_COPY.downloadBtn}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 disabled:opacity-40 transition">
+                            {historyDownloading === item.id ? <Spinner size={3} /> : <Icon name="ArrowDownTrayIcon" className="w-3 h-3" />}
+                            {IMPORT_HISTORY_COPY.downloadBtn}
+                          </button>
+                          <button type="button" onClick={() => handleHistoryRestore(item)}
+                            title={IMPORT_HISTORY_COPY.restoreBtn}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg border border-emerald-200 transition">
+                            <Icon name="ArrowUpTrayIcon" className="w-3 h-3" />{IMPORT_HISTORY_COPY.restoreBtn}
+                          </button>
+                          <button type="button" disabled={isDel} onClick={() => handleHistoryDelete(item.id)}
+                            title={IMPORT_HISTORY_COPY.deleteBtn}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-medium rounded-lg border border-rose-200 disabled:opacity-40 transition">
+                            {isDel ? <Spinner size={3} /> : <Icon name="TrashIcon" className="w-3 h-3" />}
+                            {IMPORT_HISTORY_COPY.deleteBtn}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Toast */}
       {actionMsg && (
@@ -1167,7 +1939,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50">
                       <tr>
-                        {['Employee','Department','Basic','Allowances','Deductions','Net Salary','Attendance','Status','AI Flags'].map(h => (
+                        {['Employee','Department','Basic','Allowances','Deductions','Net Salary','Attendance','Status','AI Flags','Actions'].map(h => (
                           <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -1178,7 +1950,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                         : filteredSlips.length === 0
                           ? (
                             <tr>
-                              <td colSpan={9} className="px-4 py-10 text-center text-slate-400 text-sm">
+                              <td colSpan={10} className="px-4 py-10 text-center text-slate-400 text-sm">
                                 <Icon name="InboxIcon" className="w-8 h-8 mx-auto mb-2 opacity-30" />
                                 {ENGINE_COPY.noSlipsFound}
                               </td>
@@ -1211,6 +1983,25 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                                     </span>
                                   )}
                                 </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" title={ENGINE_COPY.editBtn}
+                                      onClick={() => setEditModal(slip)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">
+                                      <Icon name="PencilSquareIcon" className="w-4 h-4" />
+                                    </button>
+                                    <button type="button" title={ENGINE_COPY.hrOverrideBtn}
+                                      onClick={() => setHrModal(slip)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition">
+                                      <Icon name="AdjustmentsHorizontalIcon" className="w-4 h-4" />
+                                    </button>
+                                    <button type="button" title={ENGINE_COPY.deleteBtn}
+                                      onClick={() => setDeleteModal(slip)}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                                      <Icon name="TrashIcon" className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             )
                           })
@@ -1222,11 +2013,11 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
             </div>
           )}
 
-          {/* â”€â”€ ANALYTICS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* AI ANALYTICS */}
           {subtab === 'analytics' && (
             <div className="space-y-4">
               {loading ? (
-                <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm"><Spinner /> Loadingâ€¦</div>
+                <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm"><Spinner /> Loading…</div>
               ) : slips.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 text-sm">
                   <Icon name="PresentationChartLineIcon" className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -1234,6 +2025,243 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
                 </div>
               ) : (
                 <>
+                  {/* AI Intelligence Panel */}
+                  <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-1 shadow-lg">
+                    <div className="rounded-xl bg-white/[0.03] backdrop-blur-sm p-5">
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                            <Icon name="SparklesIcon" className="w-5 h-5 text-indigo-300" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-white">{AI_ANALYTICS_COPY.panelTitle}</h3>
+                            <p className="text-xs text-indigo-300">{AI_ANALYTICS_COPY.panelSubtitle}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {aiGeneratedAt && (
+                            <span className="text-xs text-slate-400">
+                              {AI_ANALYTICS_COPY.lastGeneratedLabel} {aiGeneratedAt.toLocaleTimeString()}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={aiAnalyticsLoading}
+                            onClick={handleGenerateAIAnalytics}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 text-white transition-colors shadow-md"
+                          >
+                            {aiAnalyticsLoading ? (
+                              <><Spinner /> {AI_ANALYTICS_COPY.loadingMsg}</>
+                            ) : aiAnalytics ? (
+                              <><Icon name="ArrowPathIcon" className="w-3.5 h-3.5" /> {AI_ANALYTICS_COPY.regenerateBtn}</>
+                            ) : (
+                              <><Icon name="SparklesIcon" className="w-3.5 h-3.5" /> {AI_ANALYTICS_COPY.generateBtn}</>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Loading state */}
+                      {aiAnalyticsLoading && (
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center">
+                          <div className="inline-flex items-center gap-3 text-indigo-200 text-sm">
+                            <Spinner />
+                            <div>
+                              <div className="font-medium">{AI_ANALYTICS_COPY.loadingMsg}</div>
+                              <div className="text-xs text-slate-400 mt-0.5">{AI_ANALYTICS_COPY.loadingSubtitle}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error state */}
+                      {!aiAnalyticsLoading && aiAnalyticsError && (
+                        <div className="rounded-xl bg-red-900/20 border border-red-500/30 p-4 flex items-start gap-3">
+                          <Icon name="ExclamationCircleIcon" className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm text-red-300 font-medium">Analysis Failed</p>
+                            <p className="text-xs text-red-400 mt-0.5">{aiAnalyticsError}</p>
+                          </div>
+                          <button type="button" onClick={handleGenerateAIAnalytics}
+                            className="text-xs text-red-300 hover:text-white border border-red-500/40 rounded-lg px-3 py-1.5">
+                            {AI_ANALYTICS_COPY.errorRetry}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Idle prompt */}
+                      {!aiAnalyticsLoading && !aiAnalyticsError && !aiAnalytics && (
+                        <div className="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                          <Icon name="SparklesIcon" className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                          <p className="text-sm text-slate-300">Click <strong className="text-indigo-300">Generate AI Report</strong> for a deep-dive intelligence analysis of this payroll run.</p>
+                          <p className="text-xs text-slate-500 mt-1">Powered by GPT-4o · Anonymized data · Actionable insights</p>
+                        </div>
+                      )}
+
+                      {/* Results */}
+                      {!aiAnalyticsLoading && aiAnalytics?.ai && (() => {
+                        const ai = aiAnalytics.ai
+                        const scoreNum = ai.health_score ?? 0
+                        const healthMeta = AI_ANALYTICS_HEALTH_COLORS.find(h => scoreNum >= h.min) ?? AI_ANALYTICS_HEALTH_COLORS[AI_ANALYTICS_HEALTH_COLORS.length - 1]
+                        const circumference = 2 * Math.PI * 36
+                        const dashOffset = circumference - (scoreNum / 100) * circumference
+                        return (
+                          <div className="space-y-4">
+                            {/* Health Score + Executive Summary */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div className={`rounded-xl ${healthMeta.bg} border border-white/10 p-5 flex flex-col items-center justify-center gap-2`}>
+                                <p className="text-xs font-medium text-slate-500">{AI_ANALYTICS_COPY.healthLabel}</p>
+                                <svg viewBox="0 0 80 80" className="w-24 h-24 -rotate-90">
+                                  <circle cx="40" cy="40" r="36" fill="none" strokeWidth="8" stroke="currentColor" className="text-slate-200" />
+                                  <circle cx="40" cy="40" r="36" fill="none" strokeWidth="8" strokeLinecap="round"
+                                    className={healthMeta.ring}
+                                    strokeDasharray={circumference}
+                                    strokeDashoffset={dashOffset}
+                                    style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                                  />
+                                </svg>
+                                <div className="text-center -mt-3">
+                                  <span className={`text-3xl font-bold ${healthMeta.text}`}>{scoreNum}</span>
+                                  <span className={`text-xs ml-1 ${healthMeta.text}`}>/100</span>
+                                  <p className={`text-xs font-semibold mt-0.5 ${healthMeta.text}`}>{ai.health_label}</p>
+                                </div>
+                              </div>
+                              <div className="sm:col-span-2 rounded-xl bg-white/5 border border-white/10 p-5">
+                                <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-2">{AI_ANALYTICS_COPY.execSummaryTitle}</h4>
+                                <p className="text-sm text-slate-200 leading-relaxed">{ai.executive_summary}</p>
+                                <div className="flex gap-4 mt-3 pt-3 border-t border-white/10 text-xs text-slate-400">
+                                  <span><span className="font-medium text-slate-300">{aiAnalytics.summary?.total_employees}</span> employees</span>
+                                  <span><span className="font-medium text-slate-300">{aiAnalytics.period}</span></span>
+                                  <span><span className="font-medium text-slate-300">{aiAnalytics.run_code}</span></span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Forecast + Compliance */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {ai.forecast && (() => {
+                                const trendMeta = AI_ANALYTICS_TREND_MAP[ai.forecast.trend] ?? AI_ANALYTICS_TREND_MAP['Stable']
+                                return (
+                                  <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+                                    <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">{AI_ANALYTICS_COPY.forecastTitle}</h4>
+                                    <div className="flex items-center gap-3 mb-3">
+                                      <div className="text-2xl font-bold text-white">{fmtCurrency(ai.forecast.next_month_estimate)}</div>
+                                      <div className={`flex items-center gap-1 text-xs font-medium ${trendMeta.color}`}>
+                                        <Icon name={trendMeta.icon} className="w-4 h-4" />
+                                        {trendMeta.label}
+                                      </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400">{ai.forecast.rationale}</p>
+                                    <div className="mt-2 text-xs text-slate-500">Confidence: <span className="text-slate-300 font-medium">{ai.forecast.confidence}</span></div>
+                                  </div>
+                                )
+                              })()}
+                              <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+                                <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">{AI_ANALYTICS_COPY.complianceTitle}</h4>
+                                {(!ai.compliance_flags || ai.compliance_flags.length === 0) ? (
+                                  <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                    <Icon name="CheckCircleIcon" className="w-4 h-4" /> {AI_ANALYTICS_COPY.noCompliance}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {ai.compliance_flags.map((flag, i) => (
+                                      <div key={i} className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 border ${AI_ANALYTICS_URGENCY_COLORS[flag.urgency] ?? AI_ANALYTICS_URGENCY_COLORS['Monitor']}`}>
+                                        <Icon name="ExclamationTriangleIcon" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                        <div><span className="font-semibold">{flag.type}: </span>{flag.description} <span className="opacity-60">({flag.urgency})</span></div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Risk Items */}
+                            {ai.risk_items && ai.risk_items.length > 0 && (
+                              <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+                                <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">{AI_ANALYTICS_COPY.riskTitle}</h4>
+                                <div className="space-y-2">
+                                  {[...ai.risk_items].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)).map((risk, i) => {
+                                    const colors = AI_ANALYTICS_SEVERITY_COLORS[risk.severity] ?? AI_ANALYTICS_SEVERITY_COLORS['low']
+                                    return (
+                                      <div key={i} className={`rounded-xl border ${colors.border} ${colors.bg} p-4`}>
+                                        <div className="flex items-start gap-3">
+                                          <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} border ${colors.border} flex-shrink-0 capitalize`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${colors.dot} inline-block`} />
+                                            {risk.severity}
+                                          </span>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className={`text-sm font-semibold ${colors.text}`}>{risk.issue}</span>
+                                              {risk.emp_code && <span className="text-xs text-slate-500 bg-white/60 rounded px-1.5 py-0.5">{risk.emp_code}</span>}
+                                              <span className="text-xs text-slate-400 capitalize">{risk.category}</span>
+                                            </div>
+                                            <p className="text-xs text-slate-600 mt-1">{risk.root_cause}</p>
+                                            <div className="flex items-start gap-1 mt-2 text-xs text-slate-700">
+                                              <Icon name="LightBulbIcon" className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                              <span>{risk.recommendation}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Top Recommendations */}
+                            {ai.top_recommendations && ai.top_recommendations.length > 0 && (
+                              <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+                                <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">{AI_ANALYTICS_COPY.recoTitle}</h4>
+                                <div className="space-y-3">
+                                  {ai.top_recommendations.map((rec, i) => (
+                                    <div key={i} className="flex items-start gap-3">
+                                      <div className="w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xs font-bold text-indigo-300">{i + 1}</span>
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-slate-200">{rec.action}</p>
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <span className="text-xs text-emerald-400 flex items-center gap-1">
+                                            <Icon name="ArrowTrendingUpIcon" className="w-3 h-3" />{rec.impact}
+                                          </span>
+                                          {rec.effort && <span className="text-xs text-slate-500">Effort: <span className="text-slate-400">{rec.effort}</span></span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Department Health */}
+                            {ai.dept_health && ai.dept_health.length > 0 && (
+                              <div className="rounded-xl bg-white/5 border border-white/10 p-5">
+                                <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wide mb-3">{AI_ANALYTICS_COPY.deptHealthTitle}</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {ai.dept_health.map((d, i) => (
+                                    <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3 flex items-start gap-2">
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${AI_ANALYTICS_DEPT_STATUS_COLORS[d.status] ?? 'bg-slate-100 text-slate-600'}`}>{d.dept}</span>
+                                      <p className="text-xs text-slate-400">{d.insight}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Disclaimer */}
+                            <div className="flex items-center gap-2 text-xs text-slate-500 pt-1">
+                              <Icon name="InformationCircleIcon" className="w-3.5 h-3.5 flex-shrink-0" />
+                              {AI_ANALYTICS_COPY.disclaimerText}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Standard Charts */}
                   <div className="bg-white rounded-2xl border border-slate-200 p-5">
                     <h3 className="text-sm font-semibold text-slate-700 mb-1">{ENGINE_COPY.deptChartTitle}</h3>
                     <p className="text-xs text-slate-400 mb-4">Net salary total by department for this run</p>
@@ -1264,7 +2292,18 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
 
                   {anomalyFlags.length > 0 && (
                     <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">Anomaly Summary</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-slate-700">Anomaly Summary</h3>
+                        <button
+                          type="button"
+                          onClick={() => onSwitchTab?.('auditor')}
+                          title={CROSS_TAB_COPY.openAuditorTitle}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                        >
+                          <Icon name="MagnifyingGlassCircleIcon" className="w-3.5 h-3.5" />
+                          {CROSS_TAB_COPY.openAuditorLink}
+                        </button>
+                      </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {Object.entries(ENGINE_ANOMALY_SEVERITY).map(([rule, meta]) => {
                           const count = anomalyFlags.filter(f => f.rule === rule).length
@@ -1341,8 +2380,80 @@ export default function PayrollEngine({ activeRunId, onSelectRun }) {
         <DataImportModal
           onClose={() => setImportOpen(false)}
           selRun={selRun}
-          onGenerated={data => setMasterPreview(data)}
+          onGenerated={data => { setMasterPreview(data); reloadHistory() }}
         />
+      )}
+
+      {/* Slip Edit Modal */}
+      {editModal && (
+        <SlipEditModal
+          slip={editModal}
+          onClose={() => setEditModal(null)}
+          onSaved={(msg) => { toast(msg); reloadSlips(); setEditModal(null) }}
+        />
+      )}
+
+      {/* Slip Delete Modal */}
+      {deleteModal && (
+        <SlipDeleteModal
+          slip={deleteModal}
+          onClose={() => setDeleteModal(null)}
+          onDeleted={(id) => { handleSlipDeleted(id); setDeleteModal(null) }}
+        />
+      )}
+
+      {/* Slip HR Override Modal */}
+      {hrModal && (
+        <SlipHRModal
+          slip={hrModal}
+          onClose={() => setHrModal(null)}
+          onSaved={(msg) => { toast(msg); reloadSlips(); setHrModal(null) }}
+        />
+      )}
+
+      {/* ── Workflow Action Confirmation Modal ───────────────────────── */}
+      {workflowAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+              <span className={`p-2 rounded-xl ${WORKFLOW_STAGE_META[workflowAction.action === 'freeze' ? 'frozen' : workflowAction.action === 'unfreeze' ? 'draft' : workflowAction.action === 'hr_approve' ? 'hr_approved' : workflowAction.action === 'finance_review' ? 'finance_review' : workflowAction.action === 'finance_approve' ? 'finance_approved' : 'released']?.bg ?? 'bg-slate-100'}`}>
+                <Icon name="ArrowRightCircleIcon" className="w-5 h-5 text-slate-600" />
+              </span>
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm">{WORKFLOW_COPY[`${workflowAction.action.replace(/_([a-z])/g, (_, c) => c.toUpperCase())}Btn`] ?? 'Confirm Action'}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{WORKFLOW_COPY[`${workflowAction.action.replace(/_([a-z])/g, (_, c) => c.toUpperCase())}Title`] ?? ''}</p>
+              </div>
+            </div>
+            <div className="px-6 py-4">
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">{WORKFLOW_COPY.noteLabel}</label>
+              <textarea
+                rows={3}
+                value={workflowNote}
+                onChange={e => setWorkflowNote(e.target.value)}
+                placeholder={WORKFLOW_COPY.notePlaceholder}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 text-slate-700"
+              />
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-2 border-t border-slate-100">
+              <button type="button"
+                onClick={() => { setWorkflowAction(null); setWorkflowNote('') }}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                {WORKFLOW_COPY.cancelAction}
+              </button>
+              <button type="button"
+                disabled={workflowLoading}
+                onClick={async () => {
+                  const { action, importId } = workflowAction
+                  setWorkflowAction(null)
+                  await handleWorkflowAction(action, importId, workflowNote)
+                  setWorkflowNote('')
+                }}
+                className="px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-40">
+                {workflowLoading ? 'Processing…' : WORKFLOW_COPY.confirmAction}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
