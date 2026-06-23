@@ -464,7 +464,10 @@ function RoleManagement() {
   const [assignResults, setAssignResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [assigning,     setAssigning]     = useState(false);
-  const [removingId,    setRemovingId]    = useState(null);
+  const [removingId,      setRemovingId]      = useState(null);
+  const [showAddPanel,    setShowAddPanel]    = useState(false);   // 'Add User' inline panel
+  const [editingUser,     setEditingUser]     = useState(null);    // UserProfile being edited
+  const [setPrimaryLoading, setSetPrimaryLoading] = useState(false);
   const [showCreate,    setShowCreate]    = useState(false);
   const [creating,      setCreating]      = useState(false);
   const [createForm,    setCreateForm]    = useState(EMPTY_FORM);
@@ -507,6 +510,7 @@ function RoleManagement() {
 
   const handleSelectRole = useCallback((role) => {
     setSelectedRole(role); setAssignSearch(''); setAssignResults([]);
+    setShowAddPanel(false); setEditingUser(null);
     loadRoleUsers(role.code); setDetailTab('modules');
   }, [loadRoleUsers]);
 
@@ -553,9 +557,22 @@ function RoleManagement() {
     finally { setAssigning(false); }
   }, [selectedRole, assigning, loadRoleUsers, refreshRoles, notify]);
 
+  const handleSetPrimary = useCallback(async (u) => {
+    if (!selectedRole || setPrimaryLoading) return;
+    setSetPrimaryLoading(true);
+    try {
+      await rbacService.setPrimaryRole(u.id, selectedRole.id);
+      await loadRoleUsers(selectedRole.code);
+      setEditingUser(null);
+      const name = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || u.user?.email;
+      notify('success', `${name}'s primary role set to ${selectedRole.name}.`);
+    } catch (err) { notify('error', err?.response?.data?.error || err?.response?.data?.detail || 'Failed to set primary role.'); }
+    finally { setSetPrimaryLoading(false); }
+  }, [selectedRole, setPrimaryLoading, loadRoleUsers, notify]);
+
   const handleRemoveUser = useCallback(async (u) => {
     if (!selectedRole || removingId) return;
-    setRemovingId(u.id);
+    setRemovingId(u.id); setEditingUser(null);
     try {
       await rbacService.revokeRole(u.id, selectedRole.id);
       setRoleUsers((prev) => prev.filter((x) => x.id !== u.id));
@@ -872,45 +889,99 @@ function RoleManagement() {
 
                   {/* ── Users tab ── */}
                   {detailTab === 'users' && (
-                    <div className="p-6 max-w-2xl">
+                    <div className="p-6 max-w-2xl space-y-5">
 
-                      {/* Add user search */}
-                      {canManageRoleUsers && (
-                        <div className="mb-6">
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                            Add User to This Role
-                          </label>
+                      {/* ── Super-admin-only guard notice ── */}
+                      {isAdmin && !isSuperAdmin && selectedRole?.code === SUPER_ADMIN_ROLE_CODE && (
+                        <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 rounded-xl border border-amber-200 text-sm text-amber-700">
+                          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                          Only Super Administrators can manage this role.
+                        </div>
+                      )}
+
+                      {/* ── Section header + Add User button ── */}
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                          {loadingUsers ? 'Loading…' : `${roleUsers.length} user${roleUsers.length !== 1 ? 's' : ''} assigned`}
+                        </p>
+                        {canManageRoleUsers && (
+                          <button
+                            onClick={() => { setShowAddPanel((v) => !v); setAssignSearch(''); setAssignResults([]); setEditingUser(null); }}
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
+                              showAddPanel
+                                ? 'bg-gray-100 text-gray-600 border-gray-200'
+                                : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm'
+                            }`}
+                          >
+                            {showAddPanel ? (
+                              <>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Cancel
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Add User
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* ── Add User inline panel ── */}
+                      {showAddPanel && canManageRoleUsers && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Search &amp; Add User to "{selectedRole?.name}"</p>
                           <div className="relative">
                             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
-                            <input type="text" placeholder="Search by name or email…" value={assignSearch}
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Type a name or email to search…"
+                              value={assignSearch}
                               onChange={(e) => setAssignSearch(e.target.value)}
-                              className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white shadow-sm" />
-                            {assigning && (
+                              className="w-full pl-10 pr-10 py-2.5 text-sm border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white shadow-sm"
+                            />
+                            {(assigning || searchLoading) && (
                               <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                             )}
                           </div>
-                          {assignSearch.length >= USER_SEARCH_MIN_CHARS && (
-                            <div className="mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
-                              {searchLoading ? (
-                                <p className="text-sm text-gray-400 px-4 py-3">Searching…</p>
-                              ) : assignResults.length === 0 ? (
-                                <p className="text-sm text-gray-400 px-4 py-3">No users found, or all already have this role.</p>
-                              ) : assignResults.map((u) => {
+                          {assignSearch.length < USER_SEARCH_MIN_CHARS ? (
+                            <p className="text-xs text-blue-500 px-1">Type at least {USER_SEARCH_MIN_CHARS} characters to search.</p>
+                          ) : searchLoading ? (
+                            <p className="text-xs text-blue-500 px-1">Searching…</p>
+                          ) : assignResults.length === 0 ? (
+                            <p className="text-xs text-blue-500 px-1">No matching users found, or all already assigned this role.</p>
+                          ) : (
+                            <div className="bg-white border border-blue-100 rounded-xl overflow-hidden shadow-sm max-h-56 overflow-y-auto">
+                              {assignResults.map((u) => {
                                 const email = u.user?.email || '—';
                                 const name  = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || email;
+                                const meta  = [u.job_title, u.department].filter(Boolean).join(' · ');
                                 return (
-                                  <button key={u.id} onClick={() => handleAssignUser(u)} disabled={assigning}
-                                    className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center gap-3 border-b border-gray-50 last:border-0 disabled:opacity-50 transition-colors">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-white text-xs font-bold">{name.charAt(0).toUpperCase()}</span>
+                                  <button key={u.id} onClick={() => { handleAssignUser(u); setShowAddPanel(false); }} disabled={assigning}
+                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center gap-3 border-b border-gray-50 last:border-0 disabled:opacity-50 transition-colors">
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                      <span className="text-white text-sm font-bold">{name.charAt(0).toUpperCase()}</span>
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
-                                      <p className="text-xs text-gray-400 truncate">{email}</p>
+                                      <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
+                                      <p className="text-xs text-gray-400 truncate">{email}{meta ? ` · ${meta}` : ''}</p>
                                     </div>
-                                    <span className="flex-shrink-0 text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">+ Add</span>
+                                    <span className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                                      </svg>
+                                      Add
+                                    </span>
                                   </button>
                                 );
                               })}
@@ -919,16 +990,7 @@ function RoleManagement() {
                         </div>
                       )}
 
-                      {isAdmin && !isSuperAdmin && selectedRole?.code === SUPER_ADMIN_ROLE_CODE && (
-                        <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-amber-50 rounded-xl border border-amber-200 text-sm text-amber-700">
-                          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                          </svg>
-                          Only Super Administrators can manage this role.
-                        </div>
-                      )}
-
-                      {/* User list */}
+                      {/* ── User list ── */}
                       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                         {loadingUsers ? (
                           <div className="py-10 text-center">
@@ -942,37 +1004,123 @@ function RoleManagement() {
                                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             <p className="text-sm text-gray-400">No users have been assigned this role yet.</p>
-                            {canManageRoleUsers && <p className="text-xs text-gray-300 mt-1">Use the search above to add users.</p>}
+                            {canManageRoleUsers && (
+                              <button onClick={() => setShowAddPanel(true)} className="mt-2 text-xs text-blue-500 underline">
+                                Add the first user
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <ul className="divide-y divide-gray-100">
                             {roleUsers.map((u) => {
-                              const email = u.user?.email || u.email || '—';
-                              const name  = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || email;
+                              const email    = u.user?.email || u.email || '—';
+                              const name     = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || email;
+                              const meta     = [u.job_title, u.department].filter(Boolean).join(' · ');
+                              const isPrimary = u.primary_role?.name === selectedRole?.name;
+                              const isEditing = editingUser?.id === u.id;
                               return (
-                                <li key={u.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 group transition-colors">
-                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-white text-xs font-bold">{name.charAt(0).toUpperCase()}</span>
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
-                                    <p className="text-xs text-gray-400 truncate">{email}</p>
-                                  </div>
-                                  {canManageRoleUsers && (
-                                    <button onClick={() => handleRemoveUser(u)} disabled={!!removingId}
-                                      title="Remove from role"
-                                      className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded-lg transition-all disabled:opacity-30">
-                                      {removingId === u.id ? (
-                                        <div className="w-3.5 h-3.5 border border-red-400 border-t-transparent rounded-full animate-spin" />
-                                      ) : (
-                                        <>
+                                <li key={u.id} className="transition-colors">
+                                  {/* ── Row ── */}
+                                  <div className={`flex items-center gap-3 px-4 py-3 ${isEditing ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}>
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                      <span className="text-white text-sm font-bold">{name.charAt(0).toUpperCase()}</span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
+                                        {isPrimary && (
+                                          <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
+                                            Primary
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-gray-400 truncate">{email}{meta ? ` · ${meta}` : ''}</p>
+                                    </div>
+                                    {canManageRoleUsers && (
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        {/* Edit button */}
+                                        <button
+                                          onClick={() => setEditingUser(isEditing ? null : u)}
+                                          title={isEditing ? 'Close' : 'Edit assignment'}
+                                          className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg border transition-all ${
+                                            isEditing
+                                              ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                                              : 'text-gray-500 border-gray-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'
+                                          }`}
+                                        >
                                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                           </svg>
-                                          Remove
-                                        </>
-                                      )}
-                                    </button>
+                                          Edit
+                                        </button>
+                                        {/* Remove button */}
+                                        <button
+                                          onClick={() => handleRemoveUser(u)}
+                                          disabled={!!removingId}
+                                          title="Remove from role"
+                                          className="flex items-center gap-1 text-xs font-medium text-red-400 border border-red-100 hover:text-red-600 hover:bg-red-50 hover:border-red-200 px-2 py-1 rounded-lg transition-all disabled:opacity-30"
+                                        >
+                                          {removingId === u.id ? (
+                                            <div className="w-3.5 h-3.5 border border-red-400 border-t-transparent rounded-full animate-spin" />
+                                          ) : (
+                                            <>
+                                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                                              </svg>
+                                              Remove
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* ── Inline edit panel ── */}
+                                  {isEditing && (
+                                    <div className="mx-4 mb-3 bg-white border border-indigo-200 rounded-xl p-4 shadow-sm space-y-3">
+                                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Edit Assignment — {name}</p>
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
+                                        <span><span className="font-medium text-gray-700">Email:</span> {email}</span>
+                                        {u.department && <span><span className="font-medium text-gray-700">Dept:</span> {u.department}</span>}
+                                        {u.job_title  && <span><span className="font-medium text-gray-700">Title:</span> {u.job_title}</span>}
+                                      </div>
+                                      <div className="border-t border-indigo-100 pt-3 flex items-center justify-between flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                          {isPrimary ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
+                                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                              </svg>
+                                              Already primary role for this user
+                                            </span>
+                                          ) : (
+                                            <button
+                                              onClick={() => handleSetPrimary(u)}
+                                              disabled={setPrimaryLoading}
+                                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                                            >
+                                              {setPrimaryLoading ? (
+                                                <div className="w-3.5 h-3.5 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                              ) : (
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                                </svg>
+                                              )}
+                                              Set as Primary Role
+                                            </button>
+                                          )}
+                                        </div>
+                                        <button
+                                          onClick={() => setEditingUser(null)}
+                                          className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all"
+                                        >
+                                          Close
+                                        </button>
+                                      </div>
+                                    </div>
                                   )}
                                 </li>
                               );
@@ -982,6 +1130,7 @@ function RoleManagement() {
                       </div>
                     </div>
                   )}
+
 
                 </div>
               </>

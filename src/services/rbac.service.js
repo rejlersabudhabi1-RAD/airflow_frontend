@@ -64,6 +64,12 @@ class RBACService {
     });
   }
 
+  // SOFT-CODED: marks role_id as the primary role for userId;
+  // backend demotes all other roles for that user automatically.
+  async setPrimaryRole(userId, roleId) {
+    return apiService.post(`${RBAC_BASE_URL}/users/${userId}/set_primary_role/`, { role_id: roleId });
+  }
+
   async deactivateUser(userId, reason) {
     return apiService.post(`${RBAC_BASE_URL}/users/${userId}/deactivate/`, { reason });
   }
