@@ -40,6 +40,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const dispatch = useDispatch()
   const { user } = useSelector((state) => state.auth)
   const [userModules, setUserModules] = useState([])
+  // SOFT-CODED: freshIsAdmin is set from the live /rbac/users/me/ response so that
+  // stale localStorage data does not permanently hide menu items until re-login.
+  const [freshIsAdmin, setFreshIsAdmin] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
@@ -70,7 +73,9 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const hasSuperAdminRole = user?.roles?.some(role => 
     role.code === 'super_admin' || role.name === 'Super Administrator'
   )
-  const isAdmin = hasAdminFlags || hasSuperAdminRole
+  // isAdmin: combines stale Redux data with live freshIsAdmin flag so sidebar
+  // shows correctly even when localStorage hasn't been refreshed since login.
+  const isAdmin = hasAdminFlags || hasSuperAdminRole || freshIsAdmin
 
   // Fetch user's accessible modules
   React.useEffect(() => {
@@ -93,6 +98,50 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         const data = await response.json()
         console.log('🔐 Full user data:', data)
         
+        // ── Derive admin status from live API response ────────────────────
+        // This fixes the stale-localStorage bug where is_staff/is_superuser
+        // may be false in cached Redux state even though the DB is correct.
+        const apiIsAdmin =
+          data.user?.is_staff === true ||
+          data.user?.is_superuser === true ||
+          data.roles?.some(r => r.code === 'super_admin' || r.name === 'Super Administrator')
+        if (apiIsAdmin) {
+          setFreshIsAdmin(true)
+          console.log('✅ Admin status confirmed from live API')
+        }
+
+        // ── Sync Redux store with fresh auth data ─────────────────────────
+        // Dispatches only when the payload actually differs to avoid
+        // triggering an infinite update loop (effect depends on user?.id,
+        // not on the nested user.user object or roles).
+        const shouldUpdateUser = data.user && (
+          data.user.is_staff !== user?.user?.is_staff ||
+          data.user.is_superuser !== user?.user?.is_superuser
+        )
+        const shouldUpdateRoles = data.roles && (
+          JSON.stringify(data.roles) !== JSON.stringify(user?.roles)
+        )
+        if (shouldUpdateUser || shouldUpdateRoles) {
+          dispatch(updateUser({
+            ...(shouldUpdateUser ? { user: data.user } : {}),
+            ...(shouldUpdateRoles ? { roles: data.roles } : {}),
+          }))
+          // Also persist corrected auth data to localStorage so the next
+          // page reload doesn't start with stale Redux state.
+          try {
+            const storedRaw = localStorage.getItem('radai_user_data')
+            const stored = storedRaw ? JSON.parse(storedRaw) : {}
+            const merged = {
+              ...stored,
+              ...(shouldUpdateUser ? { user: data.user } : {}),
+              ...(shouldUpdateRoles ? { roles: data.roles } : {}),
+            }
+            localStorage.setItem('radai_user_data', JSON.stringify(merged))
+            console.log('✅ User auth data persisted to localStorage')
+          } catch (_) { /* non-fatal */ }
+          console.log('✅ User auth data synced from live API')
+        }
+
         // Update Redux store with profile photo and other user data
         // Note: profile_photo currently disabled in backend until S3 CORS configured
         // SOFT-CODED: only dispatch if profile_photo value actually changed
@@ -264,7 +313,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: ChartBarIcon,
             path: '/hr',
             description: 'Consolidated real-time HR command center',
-            moduleCode: 'human_resource'
+            moduleCode: 'hr_management'  // matches DB module code
           },
           {
             id: 'hrEmployees',
@@ -272,7 +321,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: UsersIcon,
             path: '/hr/employees',
             description: 'Employee records and profiles',
-            moduleCode: 'human_resource'
+            moduleCode: 'hr_management'
           },
           {
             id: 'hrPayroll',
@@ -280,7 +329,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: CurrencyDollarIcon,
             path: '/hr/payroll',
             description: 'Payroll processing and management',
-            moduleCode: 'human_resource'
+            moduleCode: 'payroll'  // matches DB module code
           },
           {
             id: 'hrLeave',
@@ -288,7 +337,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: SparklesIcon,
             path: '/hr/leave',
             description: 'My leave, attendance, timesheet & payroll',
-            moduleCode: 'human_resource'
+            moduleCode: 'hr_management'
           }
         ]
       },
