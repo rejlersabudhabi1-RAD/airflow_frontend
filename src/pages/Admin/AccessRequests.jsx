@@ -113,7 +113,7 @@ export default function AccessRequests() {
     try {
       const params = tab ? { status: tab } : {};
       const res = await rbacService.getAccessRequests(params);
-      setRequests(res?.results ?? res ?? []);
+      setRequests(res?.data?.results ?? res?.data ?? []);
     } catch {
       setError('Failed to load access requests.');
     } finally {

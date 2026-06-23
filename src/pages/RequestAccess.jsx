@@ -123,12 +123,12 @@ export default function RequestAccess() {
       const [modsRes, reqsRes, meRes] = await Promise.all([
         rbacService.getModules(),
         rbacService.getAccessRequests(),
-        rbacService.getMyProfile(),
+        rbacService.getCurrentUser(),
       ]);
 
-      const mods   = modsRes?.results   ?? modsRes   ?? [];
-      const reqs   = reqsRes?.results   ?? reqsRes   ?? [];
-      const me     = meRes;
+      const mods   = modsRes?.data?.results   ?? modsRes?.data   ?? [];
+      const reqs   = reqsRes?.data?.results   ?? reqsRes?.data   ?? [];
+      const me     = meRes?.data ?? meRes;
 
       setAllModules(mods);
       setMyRequests(reqs);
