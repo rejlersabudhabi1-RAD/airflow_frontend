@@ -1119,6 +1119,144 @@ function SlipHRModal({ slip, onClose, onSaved }) {
 
 const STATUS_FILTER_OPTIONS = ['all', 'draft', 'generated', 'pending_approval', 'approved', 'rejected', 'sent']
 
+// ─── Auto-Generate Schedule Panel ────────────────────────────────────────────
+function SchedulePanel() {
+  const [sched,    setSched]    = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [firing,   setFiring]   = useState(false)
+  const [open,     setOpen]     = useState(false)
+  const [draft,    setDraft]    = useState({})
+  const [msg,      setMsg]      = useState(null)
+
+  useEffect(() => {
+    payrollService.getPayrollSchedule()
+      .then(d => { setSched(d); setDraft({ enabled: d.enabled, day_of_month: d.day_of_month, auto_send_emails: d.auto_send_emails, notify_emails: d.notify_emails }) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const toast = (text, ok = true) => { setMsg({ text, ok }); setTimeout(() => setMsg(null), 4000) }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const res = await payrollService.updatePayrollSchedule(draft)
+      setSched(prev => ({ ...prev, ...draft }))
+      toast('Schedule saved.')
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Save failed.', false)
+    } finally { setSaving(false) }
+  }
+
+  const triggerNow = async () => {
+    if (!window.confirm('Trigger auto-generation for the previous month now? This will create a new payroll run.')) return
+    setFiring(true)
+    try {
+      const res = await payrollService.triggerAutoRun()
+      toast(`Task queued (ID: ${res?.task_id ?? 'n/a'}). The run will appear shortly.`)
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Trigger failed.', false)
+    } finally { setFiring(false) }
+  }
+
+  if (loading) return null
+
+  const lastRunBadge = sched?.last_run_status
+    ? sched.last_run_status === 'ok'
+      ? <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">Last run: OK</span>
+      : <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-semibold rounded-full">Last run: {sched.last_run_status}</span>
+    : null
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <button type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition">
+        <div className="flex items-center gap-2.5">
+          <Icon name="CalendarDaysIcon" className="w-5 h-5 text-violet-500" />
+          <span className="text-sm font-semibold text-slate-700">Auto-Generate Monthly Payroll</span>
+          {sched?.enabled
+            ? <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">Enabled</span>
+            : <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-semibold rounded-full">Disabled</span>}
+          {lastRunBadge}
+        </div>
+        <Icon name={open ? 'ChevronUpIcon' : 'ChevronDownIcon'} className="w-4 h-4 text-slate-400" />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 pt-1 space-y-4 border-t border-slate-100">
+          {msg && (
+            <div className={`px-3 py-2 rounded-lg text-xs font-medium ${msg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+              {msg.text}
+            </div>
+          )}
+
+          {/* Toggle + day-of-month */}
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <span className="relative">
+                <input type="checkbox" className="sr-only peer"
+                  checked={draft.enabled ?? false}
+                  onChange={e => setDraft(d => ({ ...d, enabled: e.target.checked }))} />
+                <div className="w-10 h-5 bg-slate-200 peer-checked:bg-violet-500 rounded-full transition" />
+                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition peer-checked:translate-x-5" />
+              </span>
+              <span className="text-sm text-slate-700 font-medium">Enable automatic monthly generation</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <span>Generate on day</span>
+              <input type="number" min={1} max={28} value={draft.day_of_month ?? 25}
+                onChange={e => setDraft(d => ({ ...d, day_of_month: Number(e.target.value) }))}
+                className="w-14 text-center border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+              <span>of each month</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-slate-600">
+              <input type="checkbox"
+                checked={draft.auto_send_emails ?? false}
+                onChange={e => setDraft(d => ({ ...d, auto_send_emails: e.target.checked }))}
+                className="w-4 h-4 accent-violet-600" />
+              Auto-send emails on approval
+            </label>
+          </div>
+
+          {/* Notification emails */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Notify emails (comma-separated)</label>
+            <input type="text" placeholder="hr@company.com, payroll@company.com"
+              value={draft.notify_emails ?? ''}
+              onChange={e => setDraft(d => ({ ...d, notify_emails: e.target.value }))}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
+          </div>
+
+          {/* Status line */}
+          {sched?.last_run_at && (
+            <p className="text-xs text-slate-400">
+              Last run: {new Date(sched.last_run_at).toLocaleString()} &mdash; {sched.last_run_details || 'no details'}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={save} disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition">
+              {saving ? <Spinner size={3} /> : <Icon name="CheckIcon" className="w-4 h-4" />}
+              Save Schedule
+            </button>
+            <button type="button" onClick={triggerNow} disabled={firing}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-semibold rounded-xl transition">
+              {firing ? <Spinner size={3} /> : <Icon name="BoltIcon" className="w-4 h-4" />}
+              Run Now
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab }) {
   const [runs,         setRuns]        = useState([])
   const [selRunId,     setSelRunId]    = useState(activeRunId ?? '')
@@ -1147,6 +1285,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
   const [historyLoading,  setHistoryLoading]  = useState(true)
   const [historyDeleting, setHistoryDeleting] = useState(null) // importId being deleted
   const [runDeleting,     setRunDeleting]     = useState(false)
+  const [pdfDownloading,  setPdfDownloading]  = useState(null) // slipId being downloaded
 
   // Fullscreen
   const pageRef        = useRef(null)
@@ -1373,6 +1512,28 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     toast(msg)
     reloadSlips()
   }, [toast, reloadSlips])
+
+  const handlePdfDownload = useCallback(async (slip, e) => {
+    e?.stopPropagation()
+    setPdfDownloading(slip.id)
+    try {
+      const res = await payrollService.downloadSlipPdf(slip.id)
+      if (res?.url) {
+        const a = document.createElement('a')
+        a.href = res.url
+        a.download = res.filename || `${slip.slip_number}.pdf`
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      } else {
+        toast('PDF not available yet. Run the payroll to generate slips.', false)
+      }
+    } catch (err) {
+      toast(err?.response?.data?.error || 'PDF download failed.', false)
+    } finally {
+      setPdfDownloading(null)
+    }
+  }, [toast])
 
   // Called by delete modal on successful delete
   const handleSlipDeleted = useCallback((slipId) => {
@@ -2220,6 +2381,9 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                 <KpiTile icon="ExclamationTriangleIcon" label={ENGINE_COPY.kpiAnomalies} value={loading ? 'â€¦' : kpiData.anomalyCount}              sub="AI-detected issues"   tone={kpiData.anomalyCount > 0 ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-500'} />
               </div>
 
+              {/* Auto-generate schedule (visible to all HR staff) */}
+              <SchedulePanel />
+
               {loading && (
                 <div className="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
                   <Spinner /> Analysing payroll data…
@@ -2372,6 +2536,14 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                                 </td>
                                 <td className="px-3 py-2.5">
                                   <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" title="Download PDF"
+                                      onClick={(e) => handlePdfDownload(slip, e)}
+                                      disabled={pdfDownloading === slip.id}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition disabled:opacity-40">
+                                      {pdfDownloading === slip.id
+                                        ? <Spinner size={3} />
+                                        : <Icon name="ArrowDownTrayIcon" className="w-4 h-4" />}
+                                    </button>
                                     <button type="button" title={ENGINE_COPY.editBtn}
                                       onClick={() => setEditModal(slip)}
                                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">

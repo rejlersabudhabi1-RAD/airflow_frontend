@@ -190,6 +190,18 @@ const payrollService = {
   bulkSendApprovedRun: (runId) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/${runId}/bulk-send-approved/`)),
 
+  // ── Auto-generate schedule (PayrollSchedule singleton) ──────────────────────
+  getPayrollSchedule: () =>
+    unwrap(apiClient.get(`${FINANCE}/payroll-schedule/`)),
+  updatePayrollSchedule: (data) =>
+    unwrap(apiClient.patch(`${FINANCE}/payroll-schedule/1/`, data)),
+  triggerAutoRun: () =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-schedule/trigger-now/`)),
+
+  // ── PDF presigned download ────────────────────────────────────────────────
+  downloadSlipPdf: (slipId) =>
+    unwrap(apiClient.get(`${FINANCE}/salary-slips/${slipId}/download-pdf/`)),
+
   // ── Master Payroll Generator (Sympa + ValueFrame + RADAI merge) ────────────
   // formData must contain: sympa_file?, valueframe_file?, year, month
   generateMasterPayroll: (formData) =>
