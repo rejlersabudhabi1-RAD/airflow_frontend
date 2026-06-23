@@ -382,7 +382,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: HomeIcon,
           path: '/procurement',
           description: 'Procurement overview',
-          moduleCode: 'procurement'
+          moduleCode: 'procurement'              // root access / dashboard
         },
         {
           id: 'vendors',
@@ -390,7 +390,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: UsersIcon,
           path: '/procurement/vendors',
           description: 'Vendor management',
-          moduleCode: 'procurement'
+          moduleCode: 'procurement_vendors'       // granular: vendor management
         },
         {
           id: 'requisitions',
@@ -398,7 +398,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
           description: 'Purchase recommendations',
-          moduleCode: 'procurement'
+          moduleCode: 'procurement_requisitions'  // granular: purchase requisitions
         },
         {
           id: 'purchaseOrders',
@@ -406,7 +406,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentPlusIcon,
           path: '/procurement/orders',
           description: 'PO management',
-          moduleCode: 'procurement'
+          moduleCode: 'procurement_orders'        // granular: purchase orders
         },
         {
           id: 'receipts',
@@ -414,7 +414,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: FolderIcon,
           path: '/procurement/receipts',
           description: 'Goods receipt',
-          moduleCode: 'procurement'
+          moduleCode: 'procurement_receipts'      // granular: goods receipt
         }
       ]
     },
