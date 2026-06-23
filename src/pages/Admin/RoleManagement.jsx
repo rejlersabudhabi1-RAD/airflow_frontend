@@ -51,6 +51,11 @@ const USER_SEARCH_MIN_CHARS   = 2;
 const USER_SEARCH_DEBOUNCE_MS = 350;
 const USER_SEARCH_PAGE_SIZE   = 20;
 
+// SOFT-CODED: page size for the Users tab user list (role-user listing)
+const ROLE_USERS_PAGE_SIZE    = 20;
+// Debounce for the search bar inside the Users tab
+const ROLE_USERS_SEARCH_DEBOUNCE_MS = 350;
+
 const EMPTY_FORM = { name: '', code: '', level: 3, description: '' };
 
 const AR_STATUS_FILTERS = [
@@ -471,6 +476,9 @@ function RoleManagement() {
   const [editingUser,     setEditingUser]     = useState(null);    // UserProfile being edited
   const [setPrimaryLoading, setSetPrimaryLoading] = useState(false);
   const [syncing,       setSyncing]       = useState(false);   // sync role-less users → Default
+  const [userListSearch, setUserListSearch] = useState('');    // search within Users tab
+  const [userListPage,   setUserListPage]   = useState(1);     // current page in Users tab
+  const [userListMeta,   setUserListMeta]   = useState(null);  // {count, total_pages}
   const [showCreate,    setShowCreate]    = useState(false);
   const [creating,      setCreating]      = useState(false);
   const [createForm,    setCreateForm]    = useState(EMPTY_FORM);
@@ -499,10 +507,30 @@ function RoleManagement() {
     })();
   }, []);
 
-  const loadRoleUsers = useCallback(async (code) => {
-    try { setLoadingUsers(true); setRoleUsers(toArray(await rbacService.getUsers({ role: code }))); }
-    catch { setRoleUsers([]); }
-    finally { setLoadingUsers(false); }
+  const loadRoleUsers = useCallback(async (code, page = 1, search = '') => {
+    try {
+      setLoadingUsers(true);
+      const res = await rbacService.getUsers({
+        role: code,
+        page,
+        page_size: ROLE_USERS_PAGE_SIZE,
+        ...(search.trim() ? { search: search.trim() } : {}),
+      });
+      const d = res?.data;
+      if (d?.results) {
+        setRoleUsers(d.results);
+        setUserListMeta({ count: d.count, total_pages: d.total_pages, current_page: d.current_page });
+      } else {
+        // Fallback for non-paginated shape
+        setRoleUsers(Array.isArray(d) ? d : []);
+        setUserListMeta(null);
+      }
+    } catch {
+      setRoleUsers([]);
+      setUserListMeta(null);
+    } finally {
+      setLoadingUsers(false);
+    }
   }, []);
 
   const refreshRoles = useCallback(async () => {
@@ -514,7 +542,8 @@ function RoleManagement() {
   const handleSelectRole = useCallback((role) => {
     setSelectedRole(role); setAssignSearch(''); setAssignResults([]);
     setShowAddPanel(false); setEditingUser(null);
-    loadRoleUsers(role.code); setDetailTab('modules');
+    setUserListSearch(''); setUserListPage(1); setUserListMeta(null);
+    loadRoleUsers(role.code, 1, ''); setDetailTab('modules');
   }, [loadRoleUsers]);
 
   const handleModuleToggle = useCallback(async (module, checked) => {
@@ -545,12 +574,23 @@ function RoleManagement() {
     return () => clearTimeout(t);
   }, [assignSearch, roleUsers]);
 
+  // Debounce-driven reload when userListSearch changes — resets to page 1
+  useEffect(() => {
+    if (!selectedRole) return;
+    const t = setTimeout(() => {
+      setUserListPage(1);
+      loadRoleUsers(selectedRole.code, 1, userListSearch);
+    }, ROLE_USERS_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [userListSearch, selectedRole, loadRoleUsers]);
+
   const handleAssignUser = useCallback(async (u) => {
     if (!selectedRole || assigning) return;
     setAssigning(true); setAssignSearch(''); setAssignResults([]);
     try {
       await rbacService.assignRole(u.id, selectedRole.id);
-      await loadRoleUsers(selectedRole.code);
+      await loadRoleUsers(selectedRole.code, 1, userListSearch);
+      setUserListPage(1);
       const arr = await refreshRoles();
       const r   = arr.find((x) => x.id === selectedRole.id);
       if (r) setSelectedRole(r);
@@ -558,20 +598,20 @@ function RoleManagement() {
       notify('success', `${name} assigned to ${selectedRole.name}.`);
     } catch (err) { notify('error', err?.response?.data?.error || err?.response?.data?.detail || 'Failed to assign.'); }
     finally { setAssigning(false); }
-  }, [selectedRole, assigning, loadRoleUsers, refreshRoles, notify]);
+  }, [selectedRole, assigning, userListSearch, loadRoleUsers, refreshRoles, notify]);
 
   const handleSetPrimary = useCallback(async (u) => {
     if (!selectedRole || setPrimaryLoading) return;
     setSetPrimaryLoading(true);
     try {
       await rbacService.setPrimaryRole(u.id, selectedRole.id);
-      await loadRoleUsers(selectedRole.code);
+      await loadRoleUsers(selectedRole.code, userListPage, userListSearch);
       setEditingUser(null);
       const name = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || u.user?.email;
       notify('success', `${name}'s primary role set to ${selectedRole.name}.`);
     } catch (err) { notify('error', err?.response?.data?.error || err?.response?.data?.detail || 'Failed to set primary role.'); }
     finally { setSetPrimaryLoading(false); }
-  }, [selectedRole, setPrimaryLoading, loadRoleUsers, notify]);
+  }, [selectedRole, setPrimaryLoading, userListPage, userListSearch, loadRoleUsers, notify]);
 
   const handleRemoveUser = useCallback(async (u) => {
     if (!selectedRole || removingId) return;
@@ -595,7 +635,8 @@ function RoleManagement() {
     try {
       const res = await rbacService.syncDefaultRole();
       const data = res?.data ?? res;
-      await loadRoleUsers(selectedRole.code);
+      setUserListSearch(''); setUserListPage(1);
+      await loadRoleUsers(selectedRole.code, 1, '');
       const arr = await refreshRoles();
       const r   = arr.find((x) => x.id === selectedRole.id);
       if (r) setSelectedRole(r);
@@ -926,7 +967,12 @@ function RoleManagement() {
                       {/* ── Section header + Add User button ── */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                          {loadingUsers ? 'Loading…' : `${roleUsers.length} user${roleUsers.length !== 1 ? 's' : ''} assigned`}
+                          {loadingUsers
+                            ? 'Loading…'
+                            : userListMeta
+                              ? `${userListMeta.count} user${userListMeta.count !== 1 ? 's' : ''} assigned`
+                              : `${roleUsers.length} user${roleUsers.length !== 1 ? 's' : ''} assigned`
+                          }
                         </p>
                         <div className="flex items-center gap-2">
                           {/* Sync button — only visible on the Default role for super admins */}
@@ -1035,6 +1081,30 @@ function RoleManagement() {
                         </div>
                       )}
 
+                      {/* ── User list search bar ── */}
+                      <div className="relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Filter users by name or email…"
+                          value={userListSearch}
+                          onChange={(e) => setUserListSearch(e.target.value)}
+                          className="w-full pl-10 pr-8 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                        />
+                        {userListSearch && (
+                          <button
+                            onClick={() => setUserListSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
                       {/* ── User list ── */}
                       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                         {loadingUsers ? (
@@ -1048,8 +1118,10 @@ function RoleManagement() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                                 d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            <p className="text-sm text-gray-400">No users have been assigned this role yet.</p>
-                            {canManageRoleUsers && (
+                            <p className="text-sm text-gray-400">
+                              {userListSearch ? 'No users match your search.' : 'No users have been assigned this role yet.'}
+                            </p>
+                            {!userListSearch && canManageRoleUsers && (
                               <button onClick={() => setShowAddPanel(true)} className="mt-2 text-xs text-blue-500 underline">
                                 Add the first user
                               </button>
@@ -1083,6 +1155,16 @@ function RoleManagement() {
                                         )}
                                       </div>
                                       <p className="text-xs text-gray-400 truncate">{email}{meta ? ` · ${meta}` : ''}</p>
+                                      {/* Other roles the user holds — shown as small badges */}
+                                      {Array.isArray(u.roles) && u.roles.filter((r) => r.code !== selectedRole?.code).length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {u.roles.filter((r) => r.code !== selectedRole?.code).map((r) => (
+                                            <span key={r.id} className="inline-block text-xs text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                                              {r.name}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                     {canManageRoleUsers && (
                                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1173,6 +1255,49 @@ function RoleManagement() {
                           </ul>
                         )}
                       </div>
+
+                      {/* ── Pagination controls ── */}
+                      {userListMeta && userListMeta.total_pages > 1 && (
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>
+                            Page {userListMeta.current_page} of {userListMeta.total_pages}
+                            {' '}({userListMeta.count} user{userListMeta.count !== 1 ? 's' : ''})
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { const p = userListPage - 1; setUserListPage(p); loadRoleUsers(selectedRole.code, p, userListSearch); }}
+                              disabled={userListPage <= 1 || loadingUsers}
+                              className="px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                              ‹ Prev
+                            </button>
+                            {/* Page number pills — show up to 5 around current page */}
+                            {Array.from({ length: userListMeta.total_pages }, (_, i) => i + 1)
+                              .filter((p) => Math.abs(p - userListPage) <= 2)
+                              .map((p) => (
+                                <button
+                                  key={p}
+                                  onClick={() => { setUserListPage(p); loadRoleUsers(selectedRole.code, p, userListSearch); }}
+                                  disabled={loadingUsers}
+                                  className={`w-7 h-7 rounded-lg border text-xs font-medium transition-all disabled:opacity-50 ${
+                                    p === userListPage
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                      : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              ))}
+                            <button
+                              onClick={() => { const p = userListPage + 1; setUserListPage(p); loadRoleUsers(selectedRole.code, p, userListSearch); }}
+                              disabled={userListPage >= userListMeta.total_pages || loadingUsers}
+                              className="px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                              Next ›
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
