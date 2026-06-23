@@ -151,6 +151,12 @@ class RBACService {
     });
   }
 
+  async revokeModuleFromRole(roleId, moduleId) {
+    return apiService.post(`${RBAC_BASE_URL}/roles/${roleId}/revoke_module/`, {
+      module_id: moduleId
+    });
+  }
+
   // ==================== Permissions ====================
   async getPermissions() {
     return apiService.get(`${RBAC_BASE_URL}/permissions/`);

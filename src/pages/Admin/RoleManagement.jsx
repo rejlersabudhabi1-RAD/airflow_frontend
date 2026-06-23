@@ -36,8 +36,19 @@ const SENSITIVE_ROLE_CODES = ['hr_admin'];
 // These module codes are also flagged as sensitive
 const SENSITIVE_MODULE_CODES = ['hr_management', 'payroll', 'timesheet'];
 
-// Custom-role level choices (system level 1 is excluded — only Django super-users)
-const CUSTOM_ROLE_LEVEL_OPTIONS = [2, 3, 4, 5, 6];
+// Role code whose assignment/revocation requires Super Admin privileges
+const SUPER_ADMIN_ROLE_CODE = 'super_admin';
+
+// Custom-role level choices — super_admin level (1) included for Super Admins
+const CUSTOM_ROLE_LEVEL_OPTIONS_ADMIN  = [2, 3, 4, 5, 6];
+const CUSTOM_ROLE_LEVEL_OPTIONS_SUPER  = [1, 2, 3, 4, 5, 6];
+
+// Minimum query length before triggering user search
+const USER_SEARCH_MIN_CHARS = 2;
+// Debounce delay (ms) for user search field
+const USER_SEARCH_DEBOUNCE_MS = 350;
+// Maximum results shown in the assign-user dropdown
+const USER_SEARCH_PAGE_SIZE = 20;
 
 const EMPTY_FORM = { name: '', code: '', level: 3, description: '' };
 
@@ -134,6 +145,24 @@ function RoleManagement() {
     return hasSuperRole || isDjangoSuperuser;
   }, [currentUser, authUser]);
 
+  // Admin = super_admin OR admin role (or Django staff/superuser)
+  const isAdmin = useMemo(() => {
+    if (isSuperAdmin) return true;
+    const hasAdminRole = currentUser?.roles?.some(
+      (r) => ['admin'].includes(r.code)
+    );
+    const isDjangoStaff = authUser?.is_staff === true || authUser?.user?.is_staff === true;
+    return hasAdminRole || isDjangoStaff;
+  }, [isSuperAdmin, currentUser, authUser]);
+
+  // Can this user assign/remove from the currently selected role?
+  // Admins can manage all roles EXCEPT super_admin (that requires super_admin privileges)
+  const canManageRoleUsers = useMemo(() => {
+    if (!isAdmin || !selectedRole) return false;
+    if (selectedRole.code === SUPER_ADMIN_ROLE_CODE) return isSuperAdmin;
+    return true;
+  }, [isAdmin, isSuperAdmin, selectedRole]);
+
   // ── Data state ─────────────────────────────────────────────────────────
   const [roles, setRoles]     = useState([]);
   const [modules, setModules] = useState([]);
@@ -147,6 +176,13 @@ function RoleManagement() {
   const [searchTerm,    setSearchTerm]    = useState('');
   const [savingModule,  setSavingModule]  = useState(false);
   const [notification,  setNotification]  = useState({ show: false, type: '', message: '' });
+
+  // ── User-assignment state ──────────────────────────────────────────────
+  const [assignSearch,   setAssignSearch]   = useState('');
+  const [assignResults,  setAssignResults]  = useState([]);
+  const [searchLoading,  setSearchLoading]  = useState(false);
+  const [assigning,      setAssigning]      = useState(false);
+  const [removingUserId, setRemovingUserId] = useState(null);
 
   // ── Create Role modal state ────────────────────────────────────────────
   const [showCreate,  setShowCreate]  = useState(false);
@@ -207,6 +243,8 @@ function RoleManagement() {
 
   const handleSelectRole = useCallback((role) => {
     setSelectedRole(role);
+    setAssignSearch('');
+    setAssignResults([]);
     loadRoleUsers(role.code);
   }, [loadRoleUsers]);
 
@@ -218,11 +256,8 @@ function RoleManagement() {
       if (checked) {
         await rbacService.assignModuleToRole(selectedRole.id, module.id);
       } else {
-        // Use generic updateRole PATCH with modules array minus this module
-        const currentModuleIds = (selectedRole.modules || [])
-          .filter((m) => m.id !== module.id)
-          .map((m) => m.id);
-        await rbacService.updateRole(selectedRole.id, { modules: currentModuleIds });
+        // Use the dedicated revoke_module endpoint (correct key: module_id in body)
+        await rbacService.revokeModuleFromRole(selectedRole.id, module.id);
       }
       // Refresh roles to get updated module list
       const data = await rbacService.getRoles();
@@ -237,6 +272,82 @@ function RoleManagement() {
       setSavingModule(false);
     }
   }, [isSuperAdmin, selectedRole, notify]);
+
+  // ── User search (debounced) ────────────────────────────────────────────
+  useEffect(() => {
+    if (!assignSearch || assignSearch.length < USER_SEARCH_MIN_CHARS) {
+      setAssignResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await rbacService.getUsers({
+          search: assignSearch,
+          page_size: USER_SEARCH_PAGE_SIZE,
+        });
+        const list = Array.isArray(data) ? data : data?.results ?? [];
+        // Exclude users already in this role
+        const existingIds = new Set(roleUsers.map((u) => u.id));
+        setAssignResults(list.filter((u) => !existingIds.has(u.id)));
+      } catch {
+        setAssignResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, USER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [assignSearch, roleUsers]);
+
+  // ── Assign user to selected role ───────────────────────────────────────
+  const handleAssignUser = useCallback(async (userProfile) => {
+    if (!selectedRole || assigning) return;
+    setAssigning(true);
+    setAssignSearch('');
+    setAssignResults([]);
+    try {
+      await rbacService.assignRole(userProfile.id, selectedRole.id);
+      await loadRoleUsers(selectedRole.code);
+      // Refresh role list to update user_count badge
+      const data = await rbacService.getRoles();
+      const updated = Array.isArray(data) ? data : data?.results ?? [];
+      setRoles(updated);
+      const refreshed = updated.find((r) => r.id === selectedRole.id);
+      if (refreshed) setSelectedRole(refreshed);
+      const name = [userProfile.user?.first_name, userProfile.user?.last_name]
+        .filter(Boolean).join(' ') || userProfile.user?.email || 'User';
+      notify('success', `${name} assigned to ${selectedRole.name}.`);
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || 'Failed to assign role.';
+      notify('error', msg);
+    } finally {
+      setAssigning(false);
+    }
+  }, [selectedRole, assigning, loadRoleUsers, notify]);
+
+  // ── Remove user from selected role ────────────────────────────────────
+  const handleRemoveUser = useCallback(async (userProfile) => {
+    if (!selectedRole || removingUserId) return;
+    setRemovingUserId(userProfile.id);
+    try {
+      await rbacService.revokeRole(userProfile.id, selectedRole.id);
+      setRoleUsers((prev) => prev.filter((u) => u.id !== userProfile.id));
+      // Refresh role list to update user_count badge
+      const data = await rbacService.getRoles();
+      const updated = Array.isArray(data) ? data : data?.results ?? [];
+      setRoles(updated);
+      const refreshed = updated.find((r) => r.id === selectedRole.id);
+      if (refreshed) setSelectedRole(refreshed);
+      const name = [userProfile.user?.first_name, userProfile.user?.last_name]
+        .filter(Boolean).join(' ') || userProfile.user?.email || 'User';
+      notify('success', `${name} removed from ${selectedRole.name}.`);
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || 'Failed to remove role.';
+      notify('error', msg);
+    } finally {
+      setRemovingUserId(null);
+    }
+  }, [selectedRole, removingUserId, notify]);
 
   // ── Create role ────────────────────────────────────────────────────────
   const handleCreateRole = useCallback(async () => {
@@ -463,25 +574,112 @@ function RoleManagement() {
                       ({loadingUsers ? '…' : roleUsers.length})
                     </span>
                   </h3>
+
+                  {/* Assign-user search (admin+) */}
+                  {canManageRoleUsers && (
+                    <div className="mb-3 relative">
+                      <div className="relative">
+                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search users to assign…"
+                          value={assignSearch}
+                          onChange={(e) => setAssignSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        />
+                        {assigning && (
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-blue-500 animate-pulse">Assigning…</span>
+                        )}
+                      </div>
+                      {/* Search dropdown */}
+                      {assignSearch.length >= USER_SEARCH_MIN_CHARS && (
+                        <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-52 overflow-y-auto">
+                          {searchLoading ? (
+                            <p className="text-xs text-gray-400 px-3 py-3">Searching…</p>
+                          ) : assignResults.length === 0 ? (
+                            <p className="text-xs text-gray-400 px-3 py-3">No users found or all matching users already have this role.</p>
+                          ) : (
+                            assignResults.map((u) => {
+                              const email = u.user?.email || '—';
+                              const name = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || email;
+                              const initials = name.charAt(0).toUpperCase();
+                              return (
+                                <button
+                                  key={u.id}
+                                  onClick={() => handleAssignUser(u)}
+                                  disabled={assigning}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2.5 transition-colors border-b border-gray-50 last:border-0 disabled:opacity-50"
+                                >
+                                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white text-xs font-bold">{initials}</span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-gray-900 truncate">{name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{email}</p>
+                                  </div>
+                                  <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Lock notice — admin cannot manage super_admin role users */}
+                  {isAdmin && !isSuperAdmin && selectedRole?.code === SUPER_ADMIN_ROLE_CODE && (
+                    <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-700">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                      </svg>
+                      Only Super Administrators can assign or remove the Super Admin role.
+                    </div>
+                  )}
+
                   {loadingUsers ? (
                     <p className="text-xs text-gray-400">Loading users…</p>
                   ) : roleUsers.length === 0 ? (
                     <p className="text-xs text-gray-400">No users currently hold this role.</p>
                   ) : (
-                    <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {roleUsers.map((u) => {
                         const email = u.user?.email || u.email || '—';
                         const name = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || email;
                         const initials = name.charAt(0).toUpperCase();
+                        const isRemoving = removingUserId === u.id;
                         return (
-                          <li key={u.id} className="flex items-center gap-2">
+                          <li key={u.id} className="flex items-center gap-2 group">
                             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
                               <span className="text-white text-xs font-bold">{initials}</span>
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className="text-sm text-gray-900 truncate">{name}</p>
                               <p className="text-xs text-gray-400 truncate">{email}</p>
                             </div>
+                            {canManageRoleUsers && (
+                              <button
+                                onClick={() => handleRemoveUser(u)}
+                                disabled={!!removingUserId}
+                                title="Remove from role"
+                                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-all flex-shrink-0 disabled:opacity-30"
+                              >
+                                {isRemoving ? (
+                                  <svg className="w-3.5 h-3.5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
                           </li>
                         );
                       })}
@@ -530,7 +728,7 @@ function RoleManagement() {
                   onChange={(e) => setCreateForm((f) => ({ ...f, level: Number(e.target.value) }))}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
                 >
-                  {CUSTOM_ROLE_LEVEL_OPTIONS.map((lvl) => (
+                  {(isSuperAdmin ? CUSTOM_ROLE_LEVEL_OPTIONS_SUPER : CUSTOM_ROLE_LEVEL_OPTIONS_ADMIN).map((lvl) => (
                     <option key={lvl} value={lvl}>
                       Level {lvl} — {getLevelLabel(lvl)}
                     </option>
