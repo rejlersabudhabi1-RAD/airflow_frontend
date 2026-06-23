@@ -1183,11 +1183,7 @@ function App() {
         />
         <Route
           path="admin/access-requests"
-          element={
-            <ProtectedRoute>
-              <AccessRequests />
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/admin/roles" replace />}
         />
         <Route
           path="request-access"

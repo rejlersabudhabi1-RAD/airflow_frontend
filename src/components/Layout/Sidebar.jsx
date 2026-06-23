@@ -579,28 +579,21 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'roleManagement',
-          title: '9.3 Role Management',
+          title: '9.3 Role & Access Management',
           icon: ShieldCheckIcon,
           path: '/admin/roles',
-          description: 'Define roles, module access & sensitive permissions'
-        },
-        {
-          id: 'accessRequests',
-          title: '9.4 Access Requests',
-          icon: ShieldCheckIcon,
-          path: '/admin/access-requests',
-          description: 'Review and approve module access requests from users'
+          description: 'Roles, module permissions & access request approvals'
         },
         {
           id: 'wrenchIntegration',
-          title: '9.5 Wrench Integration',
+          title: '9.4 Wrench Integration',
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
           description: 'Wrench Project Platform sync'
         },
         {
           id: 'aiChampion',
-          title: '9.6 AI Champion',
+          title: '9.5 AI Champion',
           icon: SparklesIcon,
           path: '/admin/ai-champion',
           description: 'Top AI users leaderboard & badges'
