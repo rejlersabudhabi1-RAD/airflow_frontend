@@ -109,7 +109,7 @@ export const ENGINEERING_DISCIPLINES = {
         icon: TableCellsIcon,
         path: '/engineering/process/line-list',
         description: 'Extract 8 base columns from P&ID (P&ID-only, no enrichment)',
-        moduleCode: 'pid_analysis'
+        moduleCode: 'pid_line_list'
       }
       ,
       {
@@ -119,7 +119,7 @@ export const ENGINEERING_DISCIPLINES = {
         icon: TableCellsIcon,
         path: '/engineering/process/equipment-list',
         description: 'Extract equipment tags (Vessels, Pumps, HE, Reactors…) from P&ID with type classification and line connections',
-        moduleCode: 'pid_analysis',
+        moduleCode: 'pid_equipment_list',
         badge: 'NEW'
       }
     ]
@@ -142,7 +142,7 @@ export const ENGINEERING_DISCIPLINES = {
         icon: TableCellsIcon,
         path: '/engineering/piping/critical-line-list',
         description: '5-document upload (P&ID+PFD+HMB+PMS+NACE) for full 35-column extraction with enrichment',
-        moduleCode: 'designiq',
+        moduleCode: 'piping_critical_line_list',
         badge: 'FULL'
       },
       {
@@ -197,7 +197,7 @@ export const ENGINEERING_DISCIPLINES = {
         icon: CircleStackIcon,
         path: '/engineering/instrument/datasheet/io-list',
         description: 'Generate a canonical Input/Output list from the instrument register, or run a deterministic QC on an existing list',
-        moduleCode: 'instrument_datasheet',
+        moduleCode: 'instrument_io_list',
         badge: 'Generator + QC'
       },
       {
