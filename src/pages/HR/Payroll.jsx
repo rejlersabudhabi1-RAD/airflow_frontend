@@ -5,13 +5,14 @@
  * Tab container for all 6 payroll modules.
  * Hoists shared state (activeRunId, selectedEmployee) and passes down as props.
  */
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
   PAYROLL_TABS,
   PAYROLL_DEFAULT_TAB,
   PAYROLL_COPY,
+  PAYROLL_FULLSCREEN_ENABLED,
 } from '../../config/hrPayroll.config'
 
 // Lazy-import modules (all exist in the payroll/ subfolder)
@@ -22,6 +23,7 @@ import PayrollEngine         from './payroll/PayrollEngine'
 import SalaryManagement      from './payroll/SalaryManagement'
 import PayrollAuditor        from './payroll/PayrollAuditor'
 import PayrollChatbot        from './payroll/PayrollChatbot'
+import ApprovalTracker       from './payroll/ApprovalTracker'
 
 const TAB_COMPONENTS = {
   dashboard:  PayrollDashboard,
@@ -31,11 +33,28 @@ const TAB_COMPONENTS = {
   salary:     SalaryManagement,
   auditor:    PayrollAuditor,
   assistant:  PayrollChatbot,
+  tracker:    ApprovalTracker,
 }
 
 export default function Payroll() {
   const [activeTab,    setActiveTab]    = useState(PAYROLL_DEFAULT_TAB)
   const [activeRunId,  setActiveRunId]  = useState(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Sync state with native fullscreenchange so the button icon stays accurate
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }, [])
 
   // ── Role-based tab visibility ────────────────────────────────────────────
   const rbacUser   = useSelector(s => s.rbac?.currentUser)
@@ -47,7 +66,14 @@ export default function Payroll() {
       r.code?.startsWith('hr') || r.code === 'admin' || r.code === 'superadmin'
     )
   ) ?? false
-  const visibleTabs = PAYROLL_TABS.filter(tab => !tab.hrOnly || isHRManager)
+  // Approval Tracker is restricted to super-admins and platform admins
+  const isSuperAdmin = (
+    authUser?.is_superuser ||
+    rbacUser?.roles?.some(r => r.code === 'superadmin' || r.code === 'admin')
+  ) ?? false
+  const visibleTabs = PAYROLL_TABS.filter(tab =>
+    (!tab.hrOnly || isHRManager) && (!tab.adminOnly || isSuperAdmin)
+  )
 
   const ActiveModule = TAB_COMPONENTS[activeTab]
 
@@ -64,9 +90,25 @@ export default function Payroll() {
               </h1>
               <p className="text-sm text-slate-500 mt-0.5">{PAYROLL_COPY.pageSubtitle}</p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
-              <HeroIcons.ShieldCheckIcon className="w-4 h-4 text-emerald-500" />
-              PostgreSQL · AWS S3 · Rule-based AI
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                <HeroIcons.ShieldCheckIcon className="w-4 h-4 text-emerald-500" />
+                PostgreSQL · AWS S3 · Rule-based AI
+              </div>
+              {PAYROLL_FULLSCREEN_ENABLED && (
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  title={PAYROLL_COPY.fullscreenTitle}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors"
+                >
+                  {isFullscreen
+                    ? <HeroIcons.ArrowsPointingInIcon  className="w-4 h-4" />
+                    : <HeroIcons.ArrowsPointingOutIcon className="w-4 h-4" />
+                  }
+                  {isFullscreen ? PAYROLL_COPY.fullscreenExit : PAYROLL_COPY.fullscreenEnter}
+                </button>
+              )}
             </div>
           </div>
 

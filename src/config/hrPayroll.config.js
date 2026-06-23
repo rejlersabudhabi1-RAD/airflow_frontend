@@ -19,6 +19,7 @@ export const PAYROLL_TABS = [
   { id: 'salary',     label: 'Salary Management', icon: 'BanknotesIcon',              description: 'Employee salary structures & history' },
   { id: 'auditor',    label: 'AI Auditor',         icon: 'MagnifyingGlassIcon',        description: 'Anomaly detection' },
   { id: 'assistant',  label: 'AI Assistant',       icon: 'ChatBubbleLeftIcon',         description: 'Payroll chatbot' },
+  { id: 'tracker',    label: 'Approval Tracker',   icon: 'ClipboardDocumentListIcon',  description: 'Super-admin workflow status — all payroll approval pipelines', adminOnly: true },
 ]
 export const PAYROLL_DEFAULT_TAB = 'dashboard'
 
@@ -521,9 +522,125 @@ export const PAYROLL_CHATBOT_PATTERNS = [
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. COPY
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Full-screen toggle — set to false to hide the button globally
+// ─────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_FULLSCREEN_ENABLED = true
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL TRACKER — Workflow Stage Definitions
+// Each entry drives both the visual stepper and the expanded timeline cards.
+// To rename a stage label or change its color: edit only this file.
+// ─────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_WORKFLOW_STAGES = [
+  {
+    key:          'draft',
+    label:        'Draft',
+    description:  'HR is editing / generating the master payroll file',
+    icon:         'PencilSquareIcon',
+    role:         'HR Manager',
+    activeBg:     'bg-slate-100',
+    activeText:   'text-slate-700',
+    activeBorder: 'border-slate-300',
+    doneBg:       'bg-slate-50',
+    doneText:     'text-slate-500',
+    doneBorder:   'border-slate-200',
+  },
+  {
+    key:          'frozen',
+    label:        'Frozen',
+    description:  'HR has locked the file — awaiting HR Manager approval',
+    icon:         'LockClosedIcon',
+    role:         'HR Manager',
+    activeBg:     'bg-blue-100',
+    activeText:   'text-blue-700',
+    activeBorder: 'border-blue-300',
+    doneBg:       'bg-blue-50',
+    doneText:     'text-blue-600',
+    doneBorder:   'border-blue-200',
+  },
+  {
+    key:          'hr_approved',
+    label:        'HR Approved',
+    description:  'HR Manager approved — sent to Finance',
+    icon:         'CheckBadgeIcon',
+    role:         'Finance Team',
+    activeBg:     'bg-violet-100',
+    activeText:   'text-violet-700',
+    activeBorder: 'border-violet-300',
+    doneBg:       'bg-violet-50',
+    doneText:     'text-violet-600',
+    doneBorder:   'border-violet-200',
+  },
+  {
+    key:          'finance_review',
+    label:        'Finance Review',
+    description:  'Finance team is reviewing the payroll data',
+    icon:         'DocumentMagnifyingGlassIcon',
+    role:         'Finance Team',
+    activeBg:     'bg-amber-100',
+    activeText:   'text-amber-700',
+    activeBorder: 'border-amber-300',
+    doneBg:       'bg-amber-50',
+    doneText:     'text-amber-600',
+    doneBorder:   'border-amber-200',
+  },
+  {
+    key:          'finance_approved',
+    label:        'Finance Approved',
+    description:  'Finance confirmed — sent to Accounts for release',
+    icon:         'ShieldCheckIcon',
+    role:         'Accounts Team',
+    activeBg:     'bg-emerald-100',
+    activeText:   'text-emerald-700',
+    activeBorder: 'border-emerald-300',
+    doneBg:       'bg-emerald-50',
+    doneText:     'text-emerald-600',
+    doneBorder:   'border-emerald-200',
+  },
+  {
+    key:          'released',
+    label:        'Released',
+    description:  'Salary disbursed — workflow complete',
+    icon:         'BanknotesIcon',
+    role:         null,
+    activeBg:     'bg-green-100',
+    activeText:   'text-green-700',
+    activeBorder: 'border-green-300',
+    doneBg:       'bg-green-50',
+    doneText:     'text-green-600',
+    doneBorder:   'border-green-200',
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL TRACKER — Behaviour / Polling / Display Config
+// ─────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_TRACKER_CONFIG = {
+  pollIntervalMs:  60_000,  // auto-refresh every 60 s (0 = disabled)
+  slaWarningRatio: 0.7,     // show "At Risk" badge at 70 % of SLA days consumed
+  pageSize:        25,      // rows per page in tracker table
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPROVAL TRACKER — Front-end SLA labels (must match Django settings)
+// These are purely for display; the backend is the source of truth for alerts.
+// ─────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_TRACKER_SLA = {
+  draft:            3,   // days
+  frozen:           2,
+  hr_approved:      3,
+  finance_review:   3,
+  finance_approved: 2,
+  released:         null,
+}
+
 export const PAYROLL_COPY = {
   pageTitle:            'Payroll Intelligence',
   pageSubtitle:         'AI-powered payroll management — validation, auditing, and real-time insights.',
+  fullscreenEnter:      'Full Screen',
+  fullscreenExit:       'Exit Full Screen',
+  fullscreenTitle:      'Toggle full screen',
   noRunSelected:        'Select a payroll run to view salary slips.',
   noSlipsFound:         'No salary slips found for this run.',
   noEmployeeSelected:   'Select an employee to view their Digital Twin.',
@@ -532,6 +649,16 @@ export const PAYROLL_COPY = {
   projectsComingSoon:   'Project Costing requires Valueframe integration.',
   chatWelcome:          'Hello! I\'m your Payroll Assistant. Ask me anything about your salary, overtime, or payroll status.',
   searchEmployeePlaceholder: 'Search employee name, code, email…',
+  // Approval Tracker
+  trackerTitle:         'Approval Tracker',
+  trackerSubtitle:      'Real-time status of all master payroll approval pipelines.',
+  trackerNoData:        'No payroll files match the current filter.',
+  trackerOverdue:       'Overdue',
+  trackerWarning:       'At Risk',
+  trackerOnTrack:       'On Track',
+  trackerComplete:      'Complete',
+  trackerLastUpdated:   'Updated',
+  trackerPendingLabel:  'Awaiting',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

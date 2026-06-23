@@ -283,6 +283,10 @@ const payrollService = {
       return r.data   // Blob (on-the-fly Excel)
     }),
 
+  // Super-admin approval tracker — all master payroll files with SLA status.
+  getApprovalTracker: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/approval-tracker/`, { params })),
+
   // ── Salary Components ──────────────────────────────────────────────────────
   getSalaryComponents: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/salary-components/`, { params })),

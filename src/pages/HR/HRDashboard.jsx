@@ -21,9 +21,8 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 
 import rbacService from '../../services/rbac.service'
 import timesheetService from '../../services/timesheet.service'
-import analyticsService from '../../services/analyticsService'
 import payrollService from '../../services/payroll.service'
-import { fmtCurrency } from '../../config/hrPayroll.config'
+import { fmtCurrency, PAYROLL_WORKFLOW_STAGES } from '../../config/hrPayroll.config'
 
 import {
   HR_DASHBOARD_POLL_MS,
@@ -33,13 +32,9 @@ import {
   HR_DASHBOARD_PAYROLL_KPIS,
   HR_DASHBOARD_SECTIONS,
   HR_DASHBOARD_QUICK_LINKS,
-  HR_DASHBOARD_AI_CHAMPION,
   HR_DASHBOARD_PENDING_TYPES,
   HR_DASHBOARD_KPI_REPORTS,
-  getAIChampionTierStyle,
-  buildAIChampionPodium,
   buildTotalPending,
-  formatAICost,
   buildDepartmentBreakdown,
   buildDisciplineBreakdown,
   buildTodayPunctuality,
@@ -629,74 +624,135 @@ const NotifDropdown = ({ pending, total, navigate, onClose }) => (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-component: AI Champion podium card
-// Pure presentational — receives already-shaped rows from buildAIChampionPodium
+// Approval Pipeline Widget — compact tracker embedded in the HR Dashboard.
+// Gated by isSuperAdmin; clicking "Full Tracker" navigates to /hr/payroll.
 // ─────────────────────────────────────────────────────────────────────────────
-const PodiumCard = ({ row, highlight }) => {
-  const style = getAIChampionTierStyle(row.tier)
-  const isFirst = row.rank === 1
+const PIPELINE_STAGE_KPIS = [
+  { key: 'draft',            label: 'Draft',         cls: 'bg-slate-100  text-slate-700  border-slate-200'  },
+  { key: 'frozen',           label: 'Frozen',        cls: 'bg-blue-100   text-blue-700   border-blue-200'   },
+  { key: 'hr_approved',      label: 'HR Approved',   cls: 'bg-violet-100 text-violet-700 border-violet-200' },
+  { key: 'finance_review',   label: 'In Finance',    cls: 'bg-amber-100  text-amber-700  border-amber-200'  },
+  { key: 'finance_approved', label: 'Fin. Approved', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { key: 'released',         label: 'Released',      cls: 'bg-green-100  text-green-700  border-green-200'  },
+]
+
+function ApprovalPipelineWidget({ data, onViewAll }) {
+  const { summary = {}, results = [] } = data
+  const active = [...results]
+    .filter(r => r.workflow_stage !== 'released')
+    .sort((a, b) => {
+      const rank = { overdue: 0, warning: 1, ok: 2 }
+      return (rank[a.current_sla_status] ?? 2) - (rank[b.current_sla_status] ?? 2)
+    })
+    .slice(0, 5)
+  const overdueCount = summary.overdue_count ?? 0
+  const warningCount = summary.warning_count ?? 0
+
   return (
-    <div
-      className={`relative rounded-2xl border bg-white p-4 transition-shadow ${
-        isFirst || highlight
-          ? 'border-amber-200 shadow-lg ring-2 ring-amber-100'
-          : 'border-slate-200 hover:shadow-md'
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        {/* Rank badge */}
-        <div className="flex flex-col items-center flex-shrink-0">
-          <div
-            className={`w-12 h-12 rounded-full bg-gradient-to-br ${style.ring} flex items-center justify-center text-white font-bold text-lg shadow-md`}
-            title={`${row.tier} tier`}
-          >
-            {row.avatar ? (
-              <img src={row.avatar} alt={row.name} className="w-full h-full rounded-full object-cover" />
-            ) : (
-              <span>{(row.name || '?').slice(0, 1).toUpperCase()}</span>
-            )}
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+            <HeroIcons.ClipboardDocumentListIcon className="w-4 h-4 text-blue-600" />
           </div>
-          <span className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
-            #{row.rank}
-          </span>
-        </div>
-        {/* Identity */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-900 truncate">{row.name}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-md border font-semibold ${style.pill}`}
-              title={`Tier: ${row.tier}`}
-            >
-              {style.emoji} {row.tier}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">Payroll Approval Pipeline</h3>
+            <p className="text-[10px] text-slate-400">{summary.total ?? 0} master payroll file{(summary.total ?? 0) !== 1 ? 's' : ''}</p>
+          </div>
+          {overdueCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 border border-rose-200">
+              <HeroIcons.ExclamationCircleIcon className="w-3.5 h-3.5" />
+              {overdueCount} overdue
             </span>
-          </div>
-          {row.department && (
-            <div className="text-xs text-slate-500 truncate">{row.department}</div>
           )}
-          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-600">
-            <span className="inline-flex items-center gap-1">
-              <Icon name="BoltIcon" className="w-3 h-3 text-amber-500" />
-              {row.activityCount.toLocaleString()} actions
+          {warningCount > 0 && overdueCount === 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+              <HeroIcons.ExclamationTriangleIcon className="w-3.5 h-3.5" />
+              {warningCount} at risk
             </span>
-            <span className="inline-flex items-center gap-1">
-              <Icon name="SparklesIcon" className="w-3 h-3 text-purple-500" />
-              {row.aiInteractions.toLocaleString()} AI
-            </span>
-          </div>
+          )}
         </div>
-        {/* Score */}
-        <div className="text-right flex-shrink-0">
-          <div className="text-xl font-bold text-slate-900">
-            {Math.round(row.score).toLocaleString()}
-          </div>
-          <div className="text-[10px] text-slate-500 uppercase tracking-wider">score</div>
-        </div>
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+        >
+          Full Tracker
+          <HeroIcons.ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+        </button>
       </div>
-      {isFirst && (
-        <div className="absolute -top-2 -right-2 bg-gradient-to-br from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-          👑 CHAMPION
+
+      {/* Stage KPI mini-bar */}
+      <div className="grid grid-cols-6 gap-2 mb-4">
+        {PIPELINE_STAGE_KPIS.map(({ key, label, cls }) => (
+          <div key={key} className={`rounded-lg border px-2 py-2 text-center ${cls}`}>
+            <div className="text-lg font-bold leading-tight">{summary.by_stage?.[key] ?? 0}</div>
+            <div className="text-[10px] font-medium opacity-70 leading-tight mt-0.5 truncate">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Active files list */}
+      {active.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Active Files</p>
+          {active.map(row => {
+            const stageDef = PAYROLL_WORKFLOW_STAGES.find(s => s.key === row.workflow_stage)
+            const StagIcon = stageDef ? (HeroIcons[stageDef.icon] || HeroIcons.DocumentTextIcon) : HeroIcons.DocumentTextIcon
+            const isOverdue = row.current_sla_status === 'overdue'
+            const isWarning = row.current_sla_status === 'warning'
+            return (
+              <div
+                key={row.id}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                  isOverdue ? 'bg-rose-50/60 border-rose-200'
+                  : isWarning ? 'bg-amber-50/60 border-amber-200'
+                  : 'bg-slate-50 border-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {stageDef && (
+                    <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center ${stageDef.activeBg} border ${stageDef.activeBorder}`}>
+                      <StagIcon className={`w-3 h-3 ${stageDef.activeText}`} />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-700 leading-tight">{row.period}</p>
+                    <p className="text-[10px] text-slate-400">{row.total_rows} employees</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {stageDef && (
+                    <span className={`hidden sm:inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full border ${stageDef.activeBg} ${stageDef.activeText} ${stageDef.activeBorder}`}>
+                      {stageDef.label}
+                    </span>
+                  )}
+                  {row.days_in_current_stage != null && (
+                    <span className={`text-[10px] font-medium ${
+                      isOverdue ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-slate-400'
+                    }`}>
+                      {row.days_in_current_stage}d{row.current_sla_days ? `/${row.current_sla_days}d` : ''}
+                    </span>
+                  )}
+                  {row.pending_role && (
+                    <span className="hidden md:inline-flex items-center gap-0.5 text-[10px] text-slate-400">
+                      <HeroIcons.UserIcon className="w-3 h-3" />
+                      {row.pending_role}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
+      ) : summary.total > 0 ? (
+        <p className="text-xs text-emerald-600 text-center py-3 flex items-center justify-center gap-1.5">
+          <HeroIcons.CheckCircleIcon className="w-4 h-4" />
+          All payroll files have been released.
+        </p>
+      ) : (
+        <p className="text-xs text-slate-400 text-center py-4">No master payroll files yet.</p>
       )}
     </div>
   )
@@ -737,12 +793,14 @@ export default function HRDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [now, setNow] = useState(new Date())
 
-  // AI Champion spotlight state (gracefully optional — never blocks the page)
-  const [aiChampion, setAiChampion] = useState(null)
-  const [aiLeaderboard, setAiLeaderboard] = useState([])
-  const [aiCost, setAiCost] = useState(null)
-  const [aiForbidden, setAiForbidden] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
+  // Approval Tracker widget (super-admin only, non-blocking)
+  const [trackerData, setTrackerData] = useState(null)
+  const userData = currentUser?.user || currentUser
+  const isSuperAdmin = !!(
+    userData?.is_staff ||
+    userData?.is_superuser ||
+    currentUser?.roles?.some(r => r.code === 'super_admin' || r.name === 'Super Administrator')
+  )
 
   // Close notif dropdown when clicking outside
   useEffect(() => {
@@ -866,41 +924,14 @@ export default function HRDashboard() {
     return () => clearInterval(id)
   }, [])
 
-  // ── AI Champion spotlight (read-only, optional, never blocks the page)
-  const loadAIChampion = useCallback(async () => {
-    if (!HR_DASHBOARD_SECTIONS.aiChampion) return
-    setAiLoading(true)
-    try {
-      const days = HR_DASHBOARD_AI_CHAMPION.windowDays
-      const [champRes, lbRes, costRes] = await Promise.allSettled([
-        analyticsService.getCurrentChampion(),
-        analyticsService.getChampionLeaderboard(days, HR_DASHBOARD_AI_CHAMPION.podiumSize),
-        analyticsService.getCostReport(days),
-      ])
-      // Detect 403 across any call — fold into a single "forbidden" flag
-      const forbidden = [champRes, lbRes, costRes].some(
-        (r) => r.status === 'rejected' && (r.reason?.response?.status === 403 || r.reason?.status === 403)
-      )
-      setAiForbidden(forbidden)
-      if (champRes.status === 'fulfilled') setAiChampion(champRes.value)
-      if (lbRes.status === 'fulfilled') setAiLeaderboard(buildAIChampionPodium(lbRes.value))
-      if (costRes.status === 'fulfilled') setAiCost(costRes.value)
-    } catch (err) {
-      console.warn('[HRDashboard] AI champion load failed', err)
-    } finally {
-      setAiLoading(false)
-    }
-  }, [])
-
+  // ── Approval tracker (super-admin only, non-blocking, one-time on mount)
   useEffect(() => {
-    loadAIChampion()
-  }, [loadAIChampion])
+    if (!isSuperAdmin) return
+    payrollService.getApprovalTracker()
+      .then(data => setTrackerData(data))
+      .catch(() => { /* non-fatal — widget stays hidden */ })
+  }, [isSuperAdmin])
 
-  useEffect(() => {
-    if (!autoRefresh || !HR_DASHBOARD_SECTIONS.aiChampion) return undefined
-    const id = setInterval(loadAIChampion, HR_DASHBOARD_AI_CHAMPION.pollMs)
-    return () => clearInterval(id)
-  }, [autoRefresh, loadAIChampion])
   // ── Derived data (memoised so re-renders stay cheap)
   const ctx = useMemo(
     () => ({ workforce, live, daily, monthly }),
@@ -1095,6 +1126,14 @@ export default function HRDashboard() {
           </div>
         )}
 
+        {/* ── Approval Pipeline Tracker (super-admin only) ─────────────── */}
+        {isSuperAdmin && trackerData && (
+          <ApprovalPipelineWidget
+            data={trackerData}
+            onViewAll={() => navigate('/hr/payroll')}
+          />
+        )}
+
         {/* ── Pending Actions inbox ────────────────────────────────────── */}
         {HR_DASHBOARD_SECTIONS.pendingActions && (
           <div>
@@ -1278,99 +1317,6 @@ export default function HRDashboard() {
             </Section>
           )}
         </div>
-
-        {/* ── AI Champion spotlight ───────────────────────────────────── */}
-        {HR_DASHBOARD_SECTIONS.aiChampion && (
-          <Section
-            title={HR_DASHBOARD_COPY.sectionAIChampion}
-            hint={HR_DASHBOARD_COPY.sectionAIChampionHint}
-            icon="TrophyIcon"
-            action={
-              <Link
-                to={HR_DASHBOARD_AI_CHAMPION.fullConsoleRoute}
-                className="text-xs font-semibold text-amber-700 hover:underline inline-flex items-center gap-1"
-              >
-                {HR_DASHBOARD_COPY.aiChampionLinkLabel} →
-              </Link>
-            }
-          >
-            {aiForbidden ? (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4">
-                <div className="flex items-start gap-3 min-w-0">
-                  <Icon name="TrophyIcon" className="w-6 h-6 text-amber-600 flex-shrink-0" />
-                  <div className="text-sm text-amber-800 min-w-0">
-                    {HR_DASHBOARD_COPY.aiChampionForbidden}
-                  </div>
-                </div>
-                <Link
-                  to={HR_DASHBOARD_AI_CHAMPION.fullConsoleRoute}
-                  className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 flex-shrink-0"
-                >
-                  Open console
-                </Link>
-              </div>
-            ) : aiLoading && aiLeaderboard.length === 0 ? (
-              <div className="text-sm text-slate-500 italic py-6 text-center">
-                {HR_DASHBOARD_COPY.loading}
-              </div>
-            ) : aiLeaderboard.length === 0 ? (
-              <div className="text-sm text-slate-500 italic py-6 text-center">
-                {HR_DASHBOARD_COPY.emptyAIChampion}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Mini KPI strip */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {HR_DASHBOARD_AI_CHAMPION.kpis.map((kpi) => {
-                    let value = '—'
-                    if (kpi.id === 'champion') {
-                      const c =
-                        aiChampion?.user_full_name ||
-                        aiChampion?.full_name ||
-                        aiLeaderboard[0]?.name ||
-                        '—'
-                      value = c.split(/\s+/).slice(0, 2).join(' ')
-                    } else if (kpi.id === 'players') {
-                      value = (aiChampion?.total_participants ?? aiLeaderboard.length ?? 0).toLocaleString()
-                    } else if (kpi.id === 'activity') {
-                      value = aiLeaderboard
-                        .reduce((acc, r) => acc + (r.activityCount || 0), 0)
-                        .toLocaleString()
-                    } else if (kpi.id === 'savings') {
-                      value = formatAICost(aiCost)
-                    }
-                    return (
-                      <div
-                        key={kpi.id}
-                        className={`rounded-xl bg-gradient-to-br ${kpi.accent} text-white p-3 shadow-sm`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <Icon name={kpi.icon} className="w-5 h-5 opacity-90" />
-                          <span className="text-[10px] uppercase tracking-wider opacity-80">
-                            {kpi.label}
-                          </span>
-                        </div>
-                        <div className="mt-2 text-lg font-bold truncate" title={String(value)}>
-                          {value}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                {/* Podium */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {aiLeaderboard.map((row) => (
-                    <PodiumCard key={row.email || row.rank} row={row} />
-                  ))}
-                </div>
-                <div className="text-[11px] text-slate-400 text-right">
-                  Rolling window: last {HR_DASHBOARD_AI_CHAMPION.windowDays} days · auto-refresh
-                  every {Math.round(HR_DASHBOARD_AI_CHAMPION.pollMs / 60000)} min
-                </div>
-              </div>
-            )}
-          </Section>
-        )}
 
         {/* ── Recent joiners ─────────────────────────────────────────── */}
         {HR_DASHBOARD_SECTIONS.recentJoiners && (

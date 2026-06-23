@@ -4,6 +4,7 @@
  * Every KPI tile is clickable — opens a live drill-down report modal.
  */
 import { useEffect, useState } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import payrollService from '../../../services/payroll.service'
@@ -12,6 +13,7 @@ import {
   PAYROLL_KPIS, ATT_KPIS, PAYROLL_RUN_COLUMNS, PAYROLL_COPY,
   PAYROLL_KPI_REPORTS, PAYROLL_SLIP_STATUS, PAYROLL_ALERT_SEVERITY,
   PAYROLL_RUN_COPY, PAYROLL_RUN_MONTHS,
+  PAYROLL_WORKFLOW_STAGES,
   runStatusMeta, fmtCurrency,
 } from '../../../config/hrPayroll.config'
 
@@ -26,6 +28,150 @@ const Spinner = () => (
 )
 
 const PIE_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Approval Pipeline Widget — compact summary embedded in the main dashboard.
+// Only rendered for admins / super-admins (gated by isSuperAdmin prop).
+// Full tracker is on the "Approval Tracker" tab; this is a heads-up widget.
+// ─────────────────────────────────────────────────────────────────────────────
+const PIPELINE_STAGE_KPIS = [
+  { key: 'draft',            label: 'Draft',          cls: 'bg-slate-100  text-slate-700  border-slate-200'  },
+  { key: 'frozen',           label: 'Frozen',         cls: 'bg-blue-100   text-blue-700   border-blue-200'   },
+  { key: 'hr_approved',      label: 'HR Approved',    cls: 'bg-violet-100 text-violet-700 border-violet-200' },
+  { key: 'finance_review',   label: 'In Finance',     cls: 'bg-amber-100  text-amber-700  border-amber-200'  },
+  { key: 'finance_approved', label: 'Fin. Approved',  cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { key: 'released',         label: 'Released',       cls: 'bg-green-100  text-green-700  border-green-200'  },
+]
+
+function ApprovalPipelineWidget({ data, onViewAll }) {
+  const { summary = {}, results = [] } = data
+
+  // Show up to 5 active (non-released) files sorted most-critical first
+  const active = [...results]
+    .filter(r => r.workflow_stage !== 'released')
+    .sort((a, b) => {
+      const rank = { overdue: 0, warning: 1, ok: 2 }
+      return (rank[a.current_sla_status] ?? 2) - (rank[b.current_sla_status] ?? 2)
+    })
+    .slice(0, 5)
+
+  const overdueCount = summary.overdue_count ?? 0
+  const warningCount = summary.warning_count ?? 0
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+            <HeroIcons.ClipboardDocumentListIcon className="w-4 h-4 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700">Approval Pipeline</h3>
+            <p className="text-[10px] text-slate-400">{summary.total ?? 0} master payroll file{(summary.total ?? 0) !== 1 ? 's' : ''}</p>
+          </div>
+          {overdueCount > 0 && (
+            <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 border border-rose-200">
+              <HeroIcons.ExclamationCircleIcon className="w-3.5 h-3.5" />
+              {overdueCount} overdue
+            </span>
+          )}
+          {warningCount > 0 && overdueCount === 0 && (
+            <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+              <HeroIcons.ExclamationTriangleIcon className="w-3.5 h-3.5" />
+              {warningCount} at risk
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+        >
+          Full Tracker
+          <HeroIcons.ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Stage KPI mini-bar */}
+      <div className="grid grid-cols-6 gap-2 mb-4">
+        {PIPELINE_STAGE_KPIS.map(({ key, label, cls }) => (
+          <div key={key} className={`rounded-lg border px-2 py-2 text-center ${cls}`}>
+            <div className="text-lg font-bold leading-tight">{summary.by_stage?.[key] ?? 0}</div>
+            <div className="text-[10px] font-medium opacity-70 leading-tight mt-0.5 truncate">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Active files — sorted most-critical first */}
+      {active.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Active Files</p>
+          {active.map(row => {
+            const stageDef = PAYROLL_WORKFLOW_STAGES.find(s => s.key === row.workflow_stage)
+            const Icon     = stageDef ? (HeroIcons[stageDef.icon] || HeroIcons.DocumentTextIcon) : HeroIcons.DocumentTextIcon
+            const isOverdue = row.current_sla_status === 'overdue'
+            const isWarning = row.current_sla_status === 'warning'
+
+            return (
+              <div
+                key={row.id}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                  isOverdue ? 'bg-rose-50/60 border-rose-200'
+                  : isWarning ? 'bg-amber-50/60 border-amber-200'
+                  : 'bg-slate-50 border-slate-100'
+                }`}
+              >
+                {/* Left: icon + period */}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {stageDef && (
+                    <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center ${stageDef.activeBg} border ${stageDef.activeBorder}`}>
+                      <Icon className={`w-3 h-3 ${stageDef.activeText}`} />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-700 leading-tight">{row.period}</p>
+                    <p className="text-[10px] text-slate-400">{row.total_rows} employees</p>
+                  </div>
+                </div>
+
+                {/* Right: stage chip + days + pending role */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {stageDef && (
+                    <span className={`hidden sm:inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full border ${stageDef.activeBg} ${stageDef.activeText} ${stageDef.activeBorder}`}>
+                      {stageDef.label}
+                    </span>
+                  )}
+                  {row.days_in_current_stage != null && (
+                    <span className={`text-[10px] font-medium ${
+                      isOverdue ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-slate-400'
+                    }`}>
+                      {row.days_in_current_stage}d
+                      {row.current_sla_days ? `/${row.current_sla_days}d` : ''}
+                    </span>
+                  )}
+                  {row.pending_role && (
+                    <span className="hidden md:inline-flex items-center gap-0.5 text-[10px] text-slate-400">
+                      <HeroIcons.UserIcon className="w-3 h-3" />
+                      {row.pending_role}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : summary.total > 0 ? (
+        <p className="text-xs text-emerald-600 text-center py-3 flex items-center justify-center gap-1.5">
+          <HeroIcons.CheckCircleIcon className="w-4 h-4" />
+          All payroll files have been released.
+        </p>
+      ) : (
+        <p className="text-xs text-slate-400 text-center py-4">No master payroll files yet.</p>
+      )}
+    </div>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Report fetchers — one per KPI id.  Runs only when the modal opens.
@@ -570,16 +716,25 @@ function DeleteConfirmModal({ run, onClose, onDeleted }) {
   )
 }
 
-export default function PayrollDashboard({ onSelectRun }) {
-  const [summary,    setSummary]    = useState(null)
-  const [runs,       setRuns]       = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState(null)
-  const [processing, setProcessing] = useState(null)
-  const [reportId,   setReportId]   = useState(null)
-  const [editRun,    setEditRun]    = useState(null)   // run being edited
-  const [deleteRun,  setDeleteRun]  = useState(null)   // run pending deletion
-  const [attStats,   setAttStats]   = useState(null)   // live biometric stats
+export default function PayrollDashboard({ onSelectRun, onSwitchTab }) {
+  const [summary,      setSummary]      = useState(null)
+  const [runs,         setRuns]         = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState(null)
+  const [processing,   setProcessing]   = useState(null)
+  const [reportId,     setReportId]     = useState(null)
+  const [editRun,      setEditRun]      = useState(null)
+  const [deleteRun,    setDeleteRun]    = useState(null)
+  const [attStats,     setAttStats]     = useState(null)
+  const [trackerData,  setTrackerData]  = useState(null)   // approval pipeline widget
+
+  // Role — used to gate the Approval Pipeline widget
+  const rbacUser    = useSelector(s => s.rbac?.currentUser)
+  const authUser    = useSelector(s => s.auth?.user)
+  const isSuperAdmin = (
+    authUser?.is_superuser ||
+    rbacUser?.roles?.some(r => r.code === 'superadmin' || r.code === 'admin')
+  ) ?? false
 
   useEffect(() => {
     setLoading(true)
@@ -613,6 +768,14 @@ export default function PayrollDashboard({ onSelectRun }) {
       })
       .catch(() => {}) // biometric tile degrades gracefully
   }, [])
+
+  // Approval tracker — loaded separately; only for super-admins
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    payrollService.getApprovalTracker().catch(() => null).then(d => {
+      if (d) setTrackerData(d)
+    })
+  }, [isSuperAdmin])
 
   // Build trend data from runs list
   const trendData = [...runs].reverse().slice(0, 6).map((r) => ({
@@ -748,6 +911,14 @@ export default function PayrollDashboard({ onSelectRun }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Approval Pipeline Widget — super-admin only, non-blocking */}
+      {isSuperAdmin && trackerData && (
+        <ApprovalPipelineWidget
+          data={trackerData}
+          onViewAll={() => onSwitchTab?.('tracker')}
+        />
       )}
 
       {/* Charts row */}
