@@ -118,7 +118,10 @@ class RBACService {
 
   // ==================== Roles ====================
   async getRoles() {
-    return apiService.get(`${RBAC_BASE_URL}/roles/`);
+    // SOFT-CODED: is_active=true ensures deactivated roles never appear in the
+    // Role Management UI.  The backend queryset also enforces this server-side;
+    // this param is a defensive client-side guard.
+    return apiService.get(`${RBAC_BASE_URL}/roles/?is_active=true`);
   }
 
   async createRole(data) {
