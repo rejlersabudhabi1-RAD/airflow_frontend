@@ -542,16 +542,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const filteredMenu = filterMenuByModules(menuStructure)
 
-  // Request Access link — visible to all authenticated users
-  filteredMenu.push({
-    id: 'requestAccess',
-    title: 'Request Access',
-    icon: ShieldCheckIcon,
-    path: '/request-access',
-    type: 'single',
-    requiresModule: false,
-    description: 'Request access to additional modules',
-  })
+  // SOFT-CODED: Request Access link disabled — remove the push() block to re-enable
+  // filteredMenu.push({
+  //   id: 'requestAccess',
+  //   title: 'Request Access',
+  //   icon: ShieldCheckIcon,
+  //   path: '/request-access',
+  //   type: 'single',
+  //   requiresModule: false,
+  //   description: 'Request access to additional modules',
+  // })
 
   // Add admin section if user is admin
   if (isAdmin) {
