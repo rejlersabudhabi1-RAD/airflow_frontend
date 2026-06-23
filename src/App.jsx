@@ -146,6 +146,8 @@ import ReportGenerator from './pages/Admin/ReportGenerator'
 import PredictiveInsights from './pages/Admin/PredictiveInsights'
 import AdvancedAnalytics from './pages/Admin/AdvancedAnalytics'
 import RoleManagement from './pages/Admin/RoleManagement'
+import AccessRequests from './pages/Admin/AccessRequests'
+import RequestAccess from './pages/RequestAccess'
 // Debug Components
 import FeaturesDebug from './pages/FeaturesDebug'
 // AI Champion telemetry — fires per-route activity events to keep
@@ -1176,6 +1178,22 @@ function App() {
           element={
             <ProtectedRoute>
               <RoleManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/access-requests"
+          element={
+            <ProtectedRoute>
+              <AccessRequests />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="request-access"
+          element={
+            <ProtectedRoute>
+              <RequestAccess />
             </ProtectedRoute>
           }
         />

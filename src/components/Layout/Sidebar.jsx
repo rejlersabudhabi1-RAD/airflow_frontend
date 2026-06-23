@@ -337,7 +337,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             icon: SparklesIcon,
             path: '/hr/leave',
             description: 'My leave, attendance, timesheet & payroll',
-            moduleCode: 'hr_management'
+            moduleCode: 'hr_self_service'
           }
         ]
       },
@@ -542,6 +542,17 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   const filteredMenu = filterMenuByModules(menuStructure)
 
+  // Request Access link — visible to all authenticated users
+  filteredMenu.push({
+    id: 'requestAccess',
+    title: 'Request Access',
+    icon: ShieldCheckIcon,
+    path: '/request-access',
+    type: 'single',
+    requiresModule: false,
+    description: 'Request access to additional modules',
+  })
+
   // Add admin section if user is admin
   if (isAdmin) {
     filteredMenu.push({
@@ -574,15 +585,22 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           description: 'Define roles, module access & sensitive permissions'
         },
         {
+          id: 'accessRequests',
+          title: '9.4 Access Requests',
+          icon: ShieldCheckIcon,
+          path: '/admin/access-requests',
+          description: 'Review and approve module access requests from users'
+        },
+        {
           id: 'wrenchIntegration',
-          title: '9.4 Wrench Integration',
+          title: '9.5 Wrench Integration',
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
           description: 'Wrench Project Platform sync'
         },
         {
           id: 'aiChampion',
-          title: '9.5 AI Champion',
+          title: '9.6 AI Champion',
           icon: SparklesIcon,
           path: '/admin/ai-champion',
           description: 'Top AI users leaderboard & badges'

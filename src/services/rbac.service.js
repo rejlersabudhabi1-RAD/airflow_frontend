@@ -242,6 +242,29 @@ class RBACService {
   async bulkAssignModules(data) {
     return apiService.post(`${RBAC_BASE_URL}/users/bulk-assign-modules/`, data);
   }
+
+  // ── Access Requests ────────────────────────────────────────────────
+  async getAccessRequests(params = {}) {
+    return apiService.get(`${RBAC_BASE_URL}/access-requests/`, { params });
+  }
+
+  async createAccessRequest(data) {
+    return apiService.post(`${RBAC_BASE_URL}/access-requests/`, data);
+  }
+
+  async approveAccessRequest(id, adminNote = '') {
+    return apiService.post(
+      `${RBAC_BASE_URL}/access-requests/${id}/approve/`,
+      { admin_note: adminNote }
+    );
+  }
+
+  async denyAccessRequest(id, adminNote = '') {
+    return apiService.post(
+      `${RBAC_BASE_URL}/access-requests/${id}/deny/`,
+      { admin_note: adminNote }
+    );
+  }
 }
 
 export default new RBACService();
