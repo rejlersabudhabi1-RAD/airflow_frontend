@@ -136,6 +136,13 @@ class RBACService {
     return apiService.post(`${RBAC_BASE_URL}/roles/sync-default-role/`);
   }
 
+  // Flush cached module/permission lists for all users.
+  // Call after deactivating roles or deploying RBAC fixes so every user's
+  // next sidebar load reflects the correct role-based module set.
+  async flushModuleCaches() {
+    return apiService.post(`${RBAC_BASE_URL}/roles/flush-module-caches/`);
+  }
+
   async createRole(data) {
     return apiService.post(`${RBAC_BASE_URL}/roles/`, data);
   }

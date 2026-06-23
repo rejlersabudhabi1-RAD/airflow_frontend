@@ -476,6 +476,7 @@ function RoleManagement() {
   const [editingUser,     setEditingUser]     = useState(null);    // UserProfile being edited
   const [setPrimaryLoading, setSetPrimaryLoading] = useState(false);
   const [syncing,       setSyncing]       = useState(false);   // sync role-less users → Default
+  const [flushingCaches, setFlushingCaches] = useState(false); // flush all user module caches
   const [userListSearch, setUserListSearch] = useState('');    // search within Users tab
   const [userListPage,   setUserListPage]   = useState(1);     // current page in Users tab
   const [userListMeta,   setUserListMeta]   = useState(null);  // {count, total_pages}
@@ -652,6 +653,23 @@ function RoleManagement() {
       setSyncing(false);
     }
   }, [syncing, selectedRole, loadRoleUsers, refreshRoles, notify]);
+
+  // Flush cached module/permission lists for every user (super-admin only).
+  // Fixes stale sidebar access that persists after a role deactivation or RBAC fix
+  // because Redis still holds the old module list (5-min TTL).
+  const handleFlushModuleCaches = useCallback(async () => {
+    if (flushingCaches) return;
+    setFlushingCaches(true);
+    try {
+      const res = await rbacService.flushModuleCaches();
+      const data = res?.data ?? res;
+      notify('success', data.message || `Module caches cleared for ${data.profiles_cleared ?? 0} user(s).`);
+    } catch (err) {
+      notify('error', err?.response?.data?.error || 'Failed to flush module caches.');
+    } finally {
+      setFlushingCaches(false);
+    }
+  }, [flushingCaches, notify]);
 
   const handleCreateRole = useCallback(async () => {
     if (!createForm.name.trim() || !createForm.code.trim()) { setCreateError('Name and Code are required.'); return; }
@@ -1001,7 +1019,30 @@ function RoleManagement() {
                               {syncing ? 'Syncing…' : 'Sync Role-less Users'}
                             </button>
                           )}
-                        {canManageRoleUsers && (
+                          {/* Flush Caches — visible to super admins on any role.
+                              Clears stale Redis module/permission caches so every user's
+                              next login reflects the correct role-based module set. */}
+                          {isSuperAdmin && (
+                            <button
+                              onClick={handleFlushModuleCaches}
+                              disabled={flushingCaches}
+                              title="Clear cached module lists for all users — fixes stale sidebar access after role changes"
+                              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {flushingCaches ? (
+                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              )}
+                              {flushingCaches ? 'Flushing…' : 'Flush Module Caches'}
+                            </button>
+                          )}
+                          {canManageRoleUsers && (
                           <button
                             onClick={() => { setShowAddPanel((v) => !v); setAssignSearch(''); setAssignResults([]); setEditingUser(null); }}
                             className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
