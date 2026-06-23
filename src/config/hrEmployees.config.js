@@ -222,12 +222,12 @@ export const HR_FILTERS = [
 // 6. VIEW MODES
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_VIEW_MODES = [
-  { id: 'cards',     label: 'Cards',          icon: 'Squares2X2Icon' },
+  // 'cards' view intentionally removed — toggle this entry back to re-enable it.
   { id: 'table',     label: 'Table',          icon: 'TableCellsIcon' },
   { id: 'dept',      label: 'Departments',    icon: 'BuildingOffice2Icon' },
   { id: 'timesheet', label: 'Time Sheet',     icon: 'ClockIcon' },
 ]
-export const HR_DEFAULT_VIEW_MODE = 'cards'
+export const HR_DEFAULT_VIEW_MODE = 'table'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UI simplification toggles — tweak here to declutter or re-enrich the page
