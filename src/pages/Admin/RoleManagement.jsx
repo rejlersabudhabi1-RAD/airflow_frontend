@@ -516,13 +516,22 @@ function RoleManagement() {
         page_size: ROLE_USERS_PAGE_SIZE,
         ...(search.trim() ? { search: search.trim() } : {}),
       });
-      const d = res?.data;
-      if (d?.results) {
-        setRoleUsers(d.results);
-        setUserListMeta({ count: d.count, total_pages: d.total_pages, current_page: d.current_page });
+      // Defensively handle both Axios (.data) and plain-data response shapes
+      // Shape A: axios response  → res.data = { count, results, total_pages, ... }
+      // Shape B: interceptor unwrapped → res = { count, results, total_pages, ... }
+      const body = res?.data?.results !== undefined ? res.data
+                 : res?.results        !== undefined ? res
+                 : null;
+      if (body) {
+        setRoleUsers(Array.isArray(body.results) ? body.results : []);
+        setUserListMeta({
+          count:       body.count       ?? 0,
+          total_pages: body.total_pages ?? 1,
+          current_page: body.current_page ?? page,
+        });
       } else {
-        // Fallback for non-paginated shape
-        setRoleUsers(Array.isArray(d) ? d : []);
+        // Final fallback: plain array
+        setRoleUsers(Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []);
         setUserListMeta(null);
       }
     } catch {
@@ -560,6 +569,12 @@ function RoleManagement() {
     finally { setSavingModule(false); }
   }, [isSuperAdmin, selectedRole, refreshRoles, notify]);
 
+  // Timer ref for debouncing the user-list search input.
+  // SOFT-CODED: delay is ROLE_USERS_SEARCH_DEBOUNCE_MS.
+  // Using a ref (not useEffect) keeps the debounce isolated to explicit
+  // user typing and prevents spurious reloads when selectedRole changes.
+  const userListSearchTimerRef = useRef(null);
+
   useEffect(() => {
     if (!assignSearch || assignSearch.length < USER_SEARCH_MIN_CHARS) { setAssignResults([]); return; }
     const t = setTimeout(async () => {
@@ -573,16 +588,6 @@ function RoleManagement() {
     }, USER_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [assignSearch, roleUsers]);
-
-  // Debounce-driven reload when userListSearch changes — resets to page 1
-  useEffect(() => {
-    if (!selectedRole) return;
-    const t = setTimeout(() => {
-      setUserListPage(1);
-      loadRoleUsers(selectedRole.code, 1, userListSearch);
-    }, ROLE_USERS_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [userListSearch, selectedRole, loadRoleUsers]);
 
   const handleAssignUser = useCallback(async (u) => {
     if (!selectedRole || assigning) return;
@@ -1090,12 +1095,28 @@ function RoleManagement() {
                           type="text"
                           placeholder="Filter users by name or email…"
                           value={userListSearch}
-                          onChange={(e) => setUserListSearch(e.target.value)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setUserListSearch(v);
+                            // Debounce: fire API call after ROLE_USERS_SEARCH_DEBOUNCE_MS
+                            clearTimeout(userListSearchTimerRef.current);
+                            userListSearchTimerRef.current = setTimeout(() => {
+                              if (selectedRole) {
+                                setUserListPage(1);
+                                loadRoleUsers(selectedRole.code, 1, v);
+                              }
+                            }, ROLE_USERS_SEARCH_DEBOUNCE_MS);
+                          }}
                           className="w-full pl-10 pr-8 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
                         />
                         {userListSearch && (
                           <button
-                            onClick={() => setUserListSearch('')}
+                            onClick={() => {
+                              clearTimeout(userListSearchTimerRef.current);
+                              setUserListSearch('');
+                              setUserListPage(1);
+                              if (selectedRole) loadRoleUsers(selectedRole.code, 1, '');
+                            }}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
