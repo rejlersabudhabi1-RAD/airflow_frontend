@@ -39,6 +39,8 @@ const ROLE_LEVEL_LABELS = {
 const CUSTOM_ROLE_PREFIX = 'custom_';
 
 const SUPER_ADMIN_ROLE_CODE  = 'super_admin';
+// SOFT-CODED: keep in sync with rbac_config.DEFAULT_ROLE_CONFIG['code']
+const DEFAULT_ROLE_CODE      = 'default';
 const SENSITIVE_ROLE_CODES   = ['hr_admin'];
 const SENSITIVE_MODULE_CODES = ['hr_management', 'payroll', 'timesheet'];
 
@@ -468,6 +470,7 @@ function RoleManagement() {
   const [showAddPanel,    setShowAddPanel]    = useState(false);   // 'Add User' inline panel
   const [editingUser,     setEditingUser]     = useState(null);    // UserProfile being edited
   const [setPrimaryLoading, setSetPrimaryLoading] = useState(false);
+  const [syncing,       setSyncing]       = useState(false);   // sync role-less users → Default
   const [showCreate,    setShowCreate]    = useState(false);
   const [creating,      setCreating]      = useState(false);
   const [createForm,    setCreateForm]    = useState(EMPTY_FORM);
@@ -584,6 +587,25 @@ function RoleManagement() {
     } catch (err) { notify('error', err?.response?.data?.error || err?.response?.data?.detail || 'Failed to remove.'); }
     finally { setRemovingId(null); }
   }, [selectedRole, removingId, refreshRoles, notify]);
+
+  // Assign the Default role to every user that has no active role
+  const handleSyncDefaultRole = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const res = await rbacService.syncDefaultRole();
+      const data = res?.data ?? res;
+      await loadRoleUsers(selectedRole.code);
+      const arr = await refreshRoles();
+      const r   = arr.find((x) => x.id === selectedRole.id);
+      if (r) setSelectedRole(r);
+      notify('success', data.message || `Assigned Default role to ${data.assigned ?? 0} user(s).`);
+    } catch (err) {
+      notify('error', err?.response?.data?.error || 'Failed to sync role-less users.');
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing, selectedRole, loadRoleUsers, refreshRoles, notify]);
 
   const handleCreateRole = useCallback(async () => {
     if (!createForm.name.trim() || !createForm.code.trim()) { setCreateError('Name and Code are required.'); return; }
@@ -906,6 +928,28 @@ function RoleManagement() {
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                           {loadingUsers ? 'Loading…' : `${roleUsers.length} user${roleUsers.length !== 1 ? 's' : ''} assigned`}
                         </p>
+                        <div className="flex items-center gap-2">
+                          {/* Sync button — only visible on the Default role for super admins */}
+                          {isSuperAdmin && selectedRole?.code === DEFAULT_ROLE_CODE && (
+                            <button
+                              onClick={handleSyncDefaultRole}
+                              disabled={syncing}
+                              title="Assign the Default role to every user that currently has no role"
+                              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {syncing ? (
+                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                              )}
+                              {syncing ? 'Syncing…' : 'Sync Role-less Users'}
+                            </button>
+                          )}
                         {canManageRoleUsers && (
                           <button
                             onClick={() => { setShowAddPanel((v) => !v); setAssignSearch(''); setAssignResults([]); setEditingUser(null); }}
@@ -932,6 +976,7 @@ function RoleManagement() {
                             )}
                           </button>
                         )}
+                        </div>{/* end flex gap-2 buttons row */}
                       </div>
 
                       {/* ── Add User inline panel ── */}

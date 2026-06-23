@@ -130,6 +130,12 @@ class RBACService {
     return apiService.get(`${RBAC_BASE_URL}/roles/?is_active=true`);
   }
 
+  // SOFT-CODED: calls the sync-default-role action on the RoleViewSet.
+  // Assigns the Default role to every UserProfile that has no active role.
+  async syncDefaultRole() {
+    return apiService.post(`${RBAC_BASE_URL}/roles/sync-default-role/`);
+  }
+
   async createRole(data) {
     return apiService.post(`${RBAC_BASE_URL}/roles/`, data);
   }
