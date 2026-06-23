@@ -2151,9 +2151,42 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
       />
 
       {!selRunId ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-2">
-          <Icon name="CpuChipIcon" className="w-10 h-10 mx-auto text-slate-200" />
-          <p className="text-slate-400 text-sm">{ENGINE_COPY.noRunSelected}</p>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Icon name="CpuChipIcon" className="w-4 h-4" />
+              Getting Started with Payroll Engine
+            </h3>
+            <p className="text-xs text-blue-200 mt-0.5">Follow these steps to generate and manage salary slips</p>
+          </div>
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-bold text-sm">1</div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Create a Payroll Run</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click <strong>New Payroll Run</strong> above to create a run for the target month and year.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-bold text-sm">2</div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Run the Engine</p>
+                <p className="text-xs text-slate-500 mt-0.5">Select the run from the dropdown, then click <strong>Run Engine</strong> to generate salary slips for all active employees.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-bold text-sm">3</div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Review &amp; Approve</p>
+                <p className="text-xs text-slate-500 mt-0.5">Use the <strong>Overview</strong>, <strong>Slips</strong>, and <strong>Analytics</strong> tabs to review AI-detected anomalies, approve slips, and send emails.</p>
+              </div>
+            </div>
+          </div>
+          {runsLoading && (
+            <div className="px-6 pb-4 text-xs text-slate-400 flex items-center gap-1.5">
+              <Spinner size={3} /> Loading payroll runs…
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -2189,7 +2222,46 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
 
               {loading && (
                 <div className="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
-                  <Spinner /> Analysing payroll dataâ€¦
+                  <Spinner /> Analysing payroll data…
+                </div>
+              )}
+
+              {/* Smart empty state when run is in draft or has no slips */}
+              {!loading && slips.length === 0 && selRun && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Icon name="ExclamationTriangleIcon" className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-900">
+                      {selRun.status === 'draft'
+                        ? 'This run has not been processed yet'
+                        : selRun.status === 'failed'
+                        ? 'This payroll run failed — check the error log'
+                        : 'No salary slips found for this run'}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      {selRun.status === 'draft'
+                        ? 'Click \u25b6 Run Engine in the control panel above to generate salary slips for all active employees. Make sure employee salary structures are configured in Salary Management first.'
+                        : selRun.status === 'failed'
+                        ? 'The run encountered an error during processing. Review the error log and retry.'
+                        : 'The run completed but generated no slips. Verify employee salary structures are set up in the Salary Management tab.'}
+                    </p>
+                    {selRun.status === 'draft' && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button"
+                          onClick={() => onSwitchTab?.('salary')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition">
+                          <Icon name="BanknotesIcon" className="w-3.5 h-3.5" />
+                          Set Up Salary Structures
+                        </button>
+                        <span className="text-xs text-amber-600 flex items-center gap-1">
+                          <Icon name="ArrowRightIcon" className="w-3 h-3" />
+                          Then click Run Engine above
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

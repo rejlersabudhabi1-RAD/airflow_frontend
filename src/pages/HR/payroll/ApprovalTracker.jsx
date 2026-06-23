@@ -15,15 +15,12 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
-import axios from 'axios'
+import payrollService from '../../../services/payroll.service'
 import {
   PAYROLL_WORKFLOW_STAGES,
   PAYROLL_TRACKER_CONFIG,
   PAYROLL_COPY,
 } from '../../../config/hrPayroll.config'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const API_URL  = `${API_BASE}/api/v1/payroll/approval-tracker/`
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -285,8 +282,8 @@ export default function ApprovalTracker() {
       if (filter.stage) params.stage = filter.stage
       if (filter.year)  params.year  = filter.year
       if (filter.month) params.month = filter.month
-      const res = await axios.get(API_URL, { params, withCredentials: true })
-      setData(res.data)
+      const res = await payrollService.getApprovalTracker(params)
+      setData(res)
       setLastFetch(new Date())
       setError(null)
     } catch (err) {
