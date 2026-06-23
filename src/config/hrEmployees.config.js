@@ -468,16 +468,86 @@ export const HR_DEPT_TABLE_COLUMNS = [
   { id: 'last_login',  label: 'Last Login',  type: 'datetime', minWidth: 'min-w-[140px]', accessor: (e) => e.last_login_at || e.user?.last_login },
 ]
 
-// Accent palette for department header rows (cycles through the list).
+// Accent palette for department cards (cycles through the list).
+// Each entry drives: gradient header, employee card hover, pill badge, stat strip.
+// Add or reorder entries here to change the department colour theme.
 export const HR_DEPT_ACCENT_PALETTE = [
-  { bg: 'from-blue-600 to-indigo-700',      pill: 'bg-blue-100 text-blue-800' },
-  { bg: 'from-violet-600 to-purple-700',    pill: 'bg-violet-100 text-violet-800' },
-  { bg: 'from-emerald-600 to-teal-700',     pill: 'bg-emerald-100 text-emerald-800' },
-  { bg: 'from-rose-600 to-pink-700',        pill: 'bg-rose-100 text-rose-800' },
-  { bg: 'from-amber-500 to-orange-600',     pill: 'bg-amber-100 text-amber-800' },
-  { bg: 'from-sky-600 to-cyan-700',         pill: 'bg-sky-100 text-sky-800' },
-  { bg: 'from-slate-600 to-gray-700',       pill: 'bg-slate-100 text-slate-800' },
+  {
+    headerBg:  'from-blue-600 via-blue-700 to-indigo-800',
+    pill:      'bg-white/90 text-blue-700',
+    statBg:    'bg-blue-50 border-blue-100',
+    empCard:   'hover:border-blue-300 hover:shadow-blue-100',
+    empAccent: 'bg-blue-600',
+    iconBg:    'bg-blue-100 text-blue-600',
+  },
+  {
+    headerBg:  'from-violet-600 via-purple-700 to-fuchsia-800',
+    pill:      'bg-white/90 text-violet-700',
+    statBg:    'bg-violet-50 border-violet-100',
+    empCard:   'hover:border-violet-300 hover:shadow-violet-100',
+    empAccent: 'bg-violet-600',
+    iconBg:    'bg-violet-100 text-violet-600',
+  },
+  {
+    headerBg:  'from-emerald-600 via-teal-700 to-cyan-800',
+    pill:      'bg-white/90 text-emerald-700',
+    statBg:    'bg-emerald-50 border-emerald-100',
+    empCard:   'hover:border-emerald-300 hover:shadow-emerald-100',
+    empAccent: 'bg-emerald-600',
+    iconBg:    'bg-emerald-100 text-emerald-600',
+  },
+  {
+    headerBg:  'from-rose-600 via-pink-700 to-fuchsia-800',
+    pill:      'bg-white/90 text-rose-700',
+    statBg:    'bg-rose-50 border-rose-100',
+    empCard:   'hover:border-rose-300 hover:shadow-rose-100',
+    empAccent: 'bg-rose-600',
+    iconBg:    'bg-rose-100 text-rose-600',
+  },
+  {
+    headerBg:  'from-amber-500 via-orange-600 to-red-700',
+    pill:      'bg-white/90 text-amber-700',
+    statBg:    'bg-amber-50 border-amber-100',
+    empCard:   'hover:border-amber-300 hover:shadow-amber-100',
+    empAccent: 'bg-amber-500',
+    iconBg:    'bg-amber-100 text-amber-600',
+  },
+  {
+    headerBg:  'from-sky-600 via-cyan-700 to-teal-800',
+    pill:      'bg-white/90 text-sky-700',
+    statBg:    'bg-sky-50 border-sky-100',
+    empCard:   'hover:border-sky-300 hover:shadow-sky-100',
+    empAccent: 'bg-sky-600',
+    iconBg:    'bg-sky-100 text-sky-600',
+  },
+  {
+    headerBg:  'from-slate-600 via-gray-700 to-zinc-800',
+    pill:      'bg-white/90 text-slate-700',
+    statBg:    'bg-slate-50 border-slate-200',
+    empCard:   'hover:border-slate-300 hover:shadow-slate-100',
+    empAccent: 'bg-slate-600',
+    iconBg:    'bg-slate-100 text-slate-600',
+  },
 ]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Department card display config — change values here to adjust the new card UI
+// without touching any JSX.
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DEPT_CARD_CONFIG = {
+  // Max avatars shown in the department header cluster before a "+N" overflow badge
+  avatarClusterMax: 5,
+  // Columns in the employee grid inside an expanded department card.
+  // Use Tailwind responsive prefix strings, e.g. 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'
+  employeeGridCols: 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3',
+  // Fields shown on each employee mini-card inside the grid.
+  // Remove an id to hide that field without any JSX change.
+  employeeCardFields: ['designation', 'email', 'employee_id', 'location', 'status'],
+  // Show the "size vs largest dept" progress bar in the header
+  showProgressBar: true,
+  // Show the numeric stats strip (active count, designations) in the header
+  showStatsBadges: true,
+}
 
 export const HR_DEPT_COPY = {
   expandAll:          'Expand all',
@@ -689,6 +759,7 @@ export default {
   HR_ADMIN_USERS_LIST_LINK,
   HR_DEPT_TABLE_COLUMNS,
   HR_DEPT_ACCENT_PALETTE,
+  HR_DEPT_CARD_CONFIG,
   HR_DEPT_COPY,
   HR_DEPT_ACTIONS,
   formatYearsOfService,
