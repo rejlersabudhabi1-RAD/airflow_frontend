@@ -155,14 +155,6 @@ function RoleManagement() {
     return hasAdminRole || isDjangoStaff;
   }, [isSuperAdmin, currentUser, authUser]);
 
-  // Can this user assign/remove from the currently selected role?
-  // Admins can manage all roles EXCEPT super_admin (that requires super_admin privileges)
-  const canManageRoleUsers = useMemo(() => {
-    if (!isAdmin || !selectedRole) return false;
-    if (selectedRole.code === SUPER_ADMIN_ROLE_CODE) return isSuperAdmin;
-    return true;
-  }, [isAdmin, isSuperAdmin, selectedRole]);
-
   // ── Data state ─────────────────────────────────────────────────────────
   const [roles, setRoles]     = useState([]);
   const [modules, setModules] = useState([]);
@@ -176,6 +168,14 @@ function RoleManagement() {
   const [searchTerm,    setSearchTerm]    = useState('');
   const [savingModule,  setSavingModule]  = useState(false);
   const [notification,  setNotification]  = useState({ show: false, type: '', message: '' });
+
+  // Can this user assign/remove from the currently selected role?
+  // Admins can manage all roles EXCEPT super_admin (that requires super_admin privileges)
+  const canManageRoleUsers = useMemo(() => {
+    if (!isAdmin || !selectedRole) return false;
+    if (selectedRole.code === SUPER_ADMIN_ROLE_CODE) return isSuperAdmin;
+    return true;
+  }, [isAdmin, isSuperAdmin, selectedRole]);
 
   // ── User-assignment state ──────────────────────────────────────────────
   const [assignSearch,   setAssignSearch]   = useState('');
