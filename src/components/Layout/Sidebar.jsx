@@ -439,7 +439,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: TableCellsIcon,
           path: '/qhse/general/detailed',
           description: 'Detailed project quality view',
-          moduleCode: 'qhse'
+          moduleCode: 'qhse_detailed'
         },
         {
           id: 'qualityManagement',
@@ -447,7 +447,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: ChartBarIcon,
           path: '/qhse/general/quality',
           description: 'Quality metrics and audits',
-          moduleCode: 'qhse'
+          moduleCode: 'qhse_quality'
         },
         {
           id: 'healthSafety',
@@ -455,7 +455,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: ShieldCheckIcon,
           path: '/qhse/general/health-safety',
           description: 'Health and safety management',
-          moduleCode: 'qhse'
+          moduleCode: 'qhse_health_safety'
         },
         {
           id: 'environmental',
@@ -463,7 +463,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: DocumentTextIcon,
           path: '/qhse/general/environmental',
           description: 'Environmental management',
-          moduleCode: 'qhse'
+          moduleCode: 'qhse_environmental'
         },
         {
           id: 'energy',
@@ -471,7 +471,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: ChartBarIcon,
           path: '/qhse/general/energy',
           description: 'Energy management',
-          moduleCode: 'qhse'
+          moduleCode: 'qhse_energy'
         }
         // SOFT-CODED: AI Interconnected System demo removed (not needed)
         // {

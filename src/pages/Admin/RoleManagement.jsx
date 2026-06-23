@@ -31,8 +31,12 @@ const ROLE_LEVEL_COLORS = {
 const DEFAULT_LEVEL_COLOR = { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-400' };
 
 const ROLE_LEVEL_LABELS = {
-  1: 'Super Admin', 2: 'Admin', 3: 'Manager', 4: 'Engineer', 5: 'Reviewer', 6: 'Viewer',
+  1: 'Super Administrator', 2: 'Admin', 3: 'Manager', 4: 'Engineer', 5: 'Reviewer', 6: 'Viewer',
 };
+// Custom roles (auto-created per user for module assignments) are excluded
+// from the Role Management UI at the API level; this prefix constant is a
+// defensive client-side guard that mirrors rbac_config.MODULE_ASSIGNMENT_CONFIG.
+const CUSTOM_ROLE_PREFIX = 'custom_';
 
 const SUPER_ADMIN_ROLE_CODE  = 'super_admin';
 const SENSITIVE_ROLE_CODES   = ['hr_admin'];
@@ -94,7 +98,7 @@ const NON_ENGINEERING_GROUPS = [
     label: 'QHSE',
     color: 'red',
     description: 'Quality, Health, Safety & Environment',
-    moduleCodes: ['qhse'],
+    moduleCodes: ['qhse', 'qhse_detailed', 'qhse_quality', 'qhse_health_safety', 'qhse_environmental', 'qhse_energy'],
   },
   {
     id: 'finance',
@@ -591,8 +595,11 @@ function RoleManagement() {
   }, [selectedRole, notify]);
 
   const filteredRoles = useMemo(() => {
+    // Guard: exclude auto-generated per-user custom roles (API already filters them,
+    // this is a defensive client-side check in case an older API version returns them).
+    const visible = roles.filter((r) => !r.code.startsWith(CUSTOM_ROLE_PREFIX));
     const t = roleSearch.toLowerCase();
-    return t ? roles.filter((r) => r.name.toLowerCase().includes(t) || r.code.toLowerCase().includes(t)) : roles;
+    return t ? visible.filter((r) => r.name.toLowerCase().includes(t) || r.code.toLowerCase().includes(t)) : visible;
   }, [roles, roleSearch]);
 
   const assignedModuleIds = useMemo(() => new Set((selectedRole?.modules || []).map((m) => m.id)), [selectedRole]);
