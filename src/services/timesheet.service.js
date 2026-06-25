@@ -18,7 +18,8 @@ export const previewTable    = (database, table, limit = 5) =>
   unwrap(apiClient.get(TIMESHEET_ENDPOINTS.preview, { params: { database, table, limit } }))
 
 // Reports ----------------------------------------------------------------------
-export const fetchLive       = ()                  => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.live))
+// Soft-coded: fetchLive accepts optional cacheBuster to force bypass cache
+export const fetchLive       = (cacheBuster)       => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.live, cacheBuster ? { params: { _t: cacheBuster } } : {}))
 export const fetchDaily      = (date)              => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.daily,   { params: date ? { date } : {} }))
 export const fetchMonthly    = (year, month)       => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.monthly, { params: { year, month } }))
 export const fetchUserHistory = (params)           => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.user,    { params }))

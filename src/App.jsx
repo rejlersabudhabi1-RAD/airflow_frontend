@@ -95,6 +95,8 @@ import VendorManagement from './pages/Procurement/VendorManagement'
 import RequisitionManagement from './pages/Procurement/RequisitionManagement'
 import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
+import ProjectDashboard from './pages/Procurement/ProjectDashboard'
+import ProjectDetail from './pages/Procurement/ProjectDetail'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
@@ -727,6 +729,22 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="procurement">
               <ReceiptManagement />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/projects"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <ProjectDashboard />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/projects/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <ProjectDetail />
             </ModuleProtectedRoute>
           }
         />

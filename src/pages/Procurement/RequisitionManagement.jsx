@@ -14,7 +14,7 @@ import {
   CalendarIcon,
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PROCUREMENT_CONFIG, getCategoryByCode, getStatusConfig, getPriorityConfig } from '../../config/procurement.config';
@@ -40,41 +40,9 @@ const RequisitionManagement = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('access_token');
-      
-      // Soft-coded request configuration
-      const requestConfig = {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      };
 
-      console.log('[API Request] Headers:', Object.keys(requestConfig.headers));
-      
-      const response = await fetch(`${API_BASE_URL}/procurement/requisitions/`, requestConfig);
-      
-      // Handle authentication errors
-      if (response.status === 401) {
-        setError({ 
-          type: 'auth', 
-          message: 'Authentication required. Please log in again.',
-          action: () => {
-            localStorage.removeItem('access_token');
-            window.location.href = '/login';
-          }
-        });
-        setRequisitions([]);
-        return;
-      }
-
-      // Handle other HTTP errors
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get('/procurement/requisitions/');
+      const data = response.data;
       
       // Soft-coded data normalization - ensure array
       let normalizedData = [];

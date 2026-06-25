@@ -385,8 +385,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           moduleCode: 'procurement'              // root access / dashboard
         },
         {
+          id: 'projects',
+          title: '7.2 Projects',
+          icon: FolderIcon,
+          path: '/procurement/projects',
+          description: 'Project portfolio management',
+          moduleCode: 'procurement'              // project-based procurement
+        },
+        {
           id: 'vendors',
-          title: '7.2 Vendors',
+          title: '7.3 Vendors',
           icon: UsersIcon,
           path: '/procurement/vendors',
           description: 'Vendor management',
@@ -394,7 +402,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'requisitions',
-          title: '7.3 Recommendations',
+          title: '7.4 Recommendations',
           icon: DocumentTextIcon,
           path: '/procurement/requisitions',
           description: 'Purchase recommendations',
@@ -402,7 +410,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'purchaseOrders',
-          title: '7.4 Purchase Orders',
+          title: '7.5 Purchase Orders',
           icon: DocumentPlusIcon,
           path: '/procurement/orders',
           description: 'PO management',
@@ -410,7 +418,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
         },
         {
           id: 'receipts',
-          title: '7.5 Receipts',
+          title: '7.6 Receipts',
           icon: FolderIcon,
           path: '/procurement/receipts',
           description: 'Goods receipt',

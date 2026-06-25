@@ -9,7 +9,7 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import { PROCUREMENT_CONFIG, getCertificationsList, getQualityStandardsList } from '../../config/procurement.config';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../../services/api.service';
 
 const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
   const [formData, setFormData] = useState({
@@ -385,8 +385,6 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
     e.preventDefault();
     
     try {
-      const token = localStorage.getItem('access_token');
-      
       // Prepare data for API
       const submitData = {
         ...formData,
@@ -394,25 +392,11 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
         quality_standards: formData.quality_standards || []
       };
       
-      const response = await fetch(`${API_BASE_URL}/procurement/vendors/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(submitData)
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Vendor created successfully:', data);
-        onVendorCreated(data);
-        onClose();
-      } else {
-        const error = await response.json();
-        console.error('Error creating vendor:', error);
-        alert(`Failed to create vendor: ${error.detail || 'Unknown error'}`);
-      }
+      const response = await apiClient.post('/procurement/vendors/', submitData);
+      const data = response.data;
+      console.log('Vendor created successfully:', data);
+      onVendorCreated(data);
+      onClose();
     } catch (error) {
       console.error('Network error:', error);
       alert('Network error while creating vendor. Please try again.');

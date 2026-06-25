@@ -15,7 +15,7 @@ import {
   TruckIcon
 } from '@heroicons/react/24/outline';
 import { PROCUREMENT_CONFIG, getCategoryByCode } from '../../config/procurement.config';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../../services/api.service';
 
 const AIReceiptCreator = ({ isOpen, onClose, onReceiptCreated, orders }) => {
   const [formData, setFormData] = useState({
@@ -733,8 +733,6 @@ const AIReceiptCreator = ({ isOpen, onClose, onReceiptCreated, orders }) => {
     e.preventDefault();
     
     try {
-      const token = localStorage.getItem('access_token');
-      
       // Prepare data for API
       const submitData = {
         ...formData,
@@ -746,27 +744,14 @@ const AIReceiptCreator = ({ isOpen, onClose, onReceiptCreated, orders }) => {
         quality_check_passed: formData.quality_check_passed
       };
       
-      const response = await fetch(`${API_BASE_URL}/procurement/receipts/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(submitData)
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        onReceiptCreated(data);
-        handleClose();
-        addAiInsight('success', 'Receipt Recorded', 'Goods receipt created successfully with AI quality analysis');
-      } else {
-        const error = await response.json();
-        addAiInsight('error', 'Submission Failed', error.detail || 'Failed to create receipt');
-      }
+      const response = await apiClient.post('/procurement/receipts/', submitData);
+      const data = response.data;
+      onReceiptCreated(data);
+      handleClose();
+      addAiInsight('success', 'Receipt Recorded', 'Goods receipt created successfully with AI quality analysis');
     } catch (error) {
       console.error('Error creating receipt:', error);
-      addAiInsight('error', 'Error', 'Network error while creating receipt');
+      addAiInsight('error', 'Error', error.response?.data?.detail || 'Failed to create receipt');
     }
   };
 

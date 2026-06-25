@@ -18,7 +18,7 @@ import {
   ArrowPathIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PROCUREMENT_CONFIG, getCategoryByCode } from '../../config/procurement.config';
@@ -42,32 +42,21 @@ const ProcurementDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('access_token');
-      
-      if (!token) {
-        setError({ 
-          type: 'auth', 
-          message: 'Authentication required. Please log in.',
-          action: () => window.location.href = '/login'
-        });
-        return;
-      }
 
-      const headers = { 
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      // Fetch all dashboard data in parallel with error handling
+      // Fetch all dashboard data in parallel with error handling using apiClient
       const [prData, poData, receiptData, vendorData] = await Promise.allSettled([
-        fetch(`${API_BASE_URL}/procurement/requisitions/dashboard/`, { headers })
-          .then(r => r.ok ? r.json() : Promise.reject(`PR: ${r.status}`)),
-        fetch(`${API_BASE_URL}/procurement/orders/dashboard/`, { headers })
-          .then(r => r.ok ? r.json() : Promise.reject(`PO: ${r.status}`)),
-        fetch(`${API_BASE_URL}/procurement/receipts/dashboard/`, { headers })
-          .then(r => r.ok ? r.json() : Promise.reject(`Receipt: ${r.status}`)),
-        fetch(`${API_BASE_URL}/procurement/vendors/`, { headers })
-          .then(r => r.ok ? r.json() : Promise.reject(`Vendor: ${r.status}`))
+        apiClient.get('/procurement/requisitions/dashboard/')
+          .then(r => r.data)
+          .catch(err => Promise.reject(`PR: ${err.message}`)),
+        apiClient.get('/procurement/orders/dashboard/')
+          .then(r => r.data)
+          .catch(err => Promise.reject(`PO: ${err.message}`)),
+        apiClient.get('/procurement/receipts/dashboard/')
+          .then(r => r.data)
+          .catch(err => Promise.reject(`Receipt: ${err.message}`)),
+        apiClient.get('/procurement/vendors/')
+          .then(r => r.data)
+          .catch(err => Promise.reject(`Vendor: ${err.message}`))
       ]);
 
       // Soft-coded data extraction with fallbacks

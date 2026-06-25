@@ -17,7 +17,7 @@ import {
   ArrowPathIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import { API_BASE_URL } from '../../config/api.config';
+import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PROCUREMENT_CONFIG, getCategoryByCode, getStatusConfig } from '../../config/procurement.config';
@@ -43,52 +43,9 @@ const ReceiptManagement = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('access_token');
-      
-      if (!token) {
-        setError({ 
-          type: 'auth', 
-          message: 'Authentication required. Please log in again.',
-          action: () => {
-            localStorage.removeItem('access_token');
-            window.location.href = '/login';
-          }
-        });
-        setReceipts([]);
-        return;
-      }
 
-      // Soft-coded request configuration
-      const requestConfig = {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      const response = await fetch(`${API_BASE_URL}/procurement/receipts/`, requestConfig);
-      
-      // Handle authentication errors
-      if (response.status === 401) {
-        setError({ 
-          type: 'auth', 
-          message: 'Authentication required. Please log in again.',
-          action: () => {
-            localStorage.removeItem('access_token');
-            window.location.href = '/login';
-          }
-        });
-        setReceipts([]);
-        return;
-      }
-
-      // Handle other HTTP errors
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get('/procurement/receipts/');
+      const data = response.data;
       
       // Soft-coded data normalization - ensure array
       let normalizedData = [];
@@ -119,21 +76,12 @@ const ReceiptManagement = () => {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${API_BASE_URL}/procurement/orders/`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Filter only sent/acknowledged orders (ready for receipt)
-        const readyOrders = (Array.isArray(data.results) ? data.results : [])
-          .filter(o => o.status === 'sent' || o.status === 'acknowledged');
-        setOrders(readyOrders);
-      }
+      const response = await apiClient.get('/procurement/orders/');
+      const data = response.data;
+      // Filter only sent/acknowledged orders (ready for receipt)
+      const readyOrders = (Array.isArray(data.results) ? data.results : [])
+        .filter(o => o.status === 'sent' || o.status === 'acknowledged');
+      setOrders(readyOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
     }

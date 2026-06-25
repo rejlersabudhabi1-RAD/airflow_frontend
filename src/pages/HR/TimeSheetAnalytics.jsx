@@ -316,22 +316,33 @@ const HealthBanner = ({ health, onOpenSetup }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab: Live
 // ─────────────────────────────────────────────────────────────────────────────
-const LiveTab = ({ refreshTick }) => {
+const LiveTab = ({ refreshTick, onManualRefresh }) => {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeFilter, setActiveFilter] = useState(null)
   const [rowSearch, setRowSearch] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    timesheetService.fetchLive()
+    // Soft-coded: add cache-busting timestamp to force fresh data
+    const cacheBuster = Date.now()
+    timesheetService.fetchLive(cacheBuster)
       .then(d => { if (!cancelled) { setData(d); setError(null) } })
       .catch(e => { if (!cancelled) setError(fmtError(e)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [refreshTick])
+
+  // Manual refresh handler - bypasses cache
+  const handleManualRefresh = useCallback(() => {
+    setIsRefreshing(true)
+    onManualRefresh()
+    // Reset refreshing state after animation
+    setTimeout(() => setIsRefreshing(false), 1000)
+  }, [onManualRefresh])
 
   const allRows = data?.rows || []
   const filterFn = activeFilter ? LIVE_FILTER_FNS[activeFilter] : null
@@ -360,17 +371,39 @@ const LiveTab = ({ refreshTick }) => {
 
   return (
     <div className="space-y-4">
-      {/* ── Soft-coded window label — always show what time range is covered ── */}
-      {fmtWindowFrom && (
+      {/* ── Soft-coded window label + Refresh button ── */}
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
           <HeroIcons.ClockIcon className="w-3.5 h-3.5 text-slate-400" />
-          {TIMESHEET_COPY.liveWindowPrefix}{' '}
-          <span className="font-semibold text-slate-700">{fmtWindowFrom}</span>
-          {data?.lookback_hours && (
-            <span className="ml-1 text-slate-400">({data.lookback_hours} h window)</span>
+          {fmtWindowFrom && (
+            <>
+              {TIMESHEET_COPY.liveWindowPrefix}{' '}
+              <span className="font-semibold text-slate-700">{fmtWindowFrom}</span>
+              {data?.lookback_hours && (
+                <span className="ml-1 text-slate-400">({data.lookback_hours} h window)</span>
+              )}
+            </>
           )}
+          {!fmtWindowFrom && <span className="text-slate-400">Loading...</span>}
         </div>
-      )}
+        
+        {/* Soft-coded: Manual refresh button - bypasses cache and triggers sync */}
+        <button
+          type="button"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing || loading}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
+            isRefreshing || loading
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+          }`}
+          title="Fetch latest punch data from server (bypasses cache)"
+        >
+          <HeroIcons.ArrowPathIcon className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+        </button>
+      </div>
+      
       <LiveKpis
         summary={data?.summary}
         asOf={data?.as_of}
@@ -822,6 +855,11 @@ const TimeSheetAnalytics = () => {
     }
   }, [])
 
+  // Soft-coded: manual refresh handler for Live tab
+  const refreshLiveData = useCallback(() => {
+    setLiveTick(t => t + 1)
+  }, [])
+
   useEffect(() => { loadHealth() }, [loadHealth])
 
   // Live tab auto-refresh
@@ -886,7 +924,7 @@ const TimeSheetAnalytics = () => {
 
       {/* Tab body */}
       <div>
-        {activeTab === 'live'    && <LiveTab refreshTick={liveTick} />}
+        {activeTab === 'live'    && <LiveTab refreshTick={liveTick} onManualRefresh={refreshLiveData} />}
         {activeTab === 'daily'   && <DailyTab />}
         {activeTab === 'monthly' && <MonthlyTab />}
         {activeTab === 'reports' && <ReportsTab />}
