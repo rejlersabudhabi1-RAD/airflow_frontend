@@ -47,6 +47,7 @@ const ESS_TABS = [
   { id: 'payroll',     label: 'Payroll',         icon: 'BanknotesIcon' },
   { id: 'team',          label: 'Team',            icon: 'UserGroupIcon' },
   { id: 'daily_tracker', label: 'Daily Tracker',   icon: 'ClipboardDocumentListIcon' },
+  { id: 'site_visits', label: 'Site Visits',    icon: 'MapPinIcon' },
   { id: 'twin',        label: 'Digital Twin',    icon: 'SparklesIcon' },
   { id: 'notifications', label: 'Notifications', icon: 'BellIcon' },
 ]
@@ -3036,6 +3037,23 @@ export default function EmployeeSelfService() {
 
       case 'notifications':
         return <NotificationsCenter requests={leaveRequests} loading={loadingLeave} />
+
+      case 'site_visits':
+        return (
+          <div className="bg-white p-6 rounded-lg shadow-sm">
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>GPS-Based Site Visit Tracking</strong> - Request site visits, check-in/out with GPS, and track off-site attendance.
+              </p>
+              <a href="/hr/site-visits" className="mt-2 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                Open Site Visit Tracker →
+              </a>
+            </div>
+            <p className="text-sm text-slate-500">
+              Note: Site visit feature is available at <a href="/hr/site-visits" className="text-blue-600 underline">/hr/site-visits</a>
+            </p>
+          </div>
+        )
 
       default:
         return null

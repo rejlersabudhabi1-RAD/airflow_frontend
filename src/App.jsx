@@ -57,6 +57,7 @@ import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
 import Payroll from './pages/HR/Payroll'
 import EmployeeSelfService from './pages/HR/EmployeeSelfService'
+import SiteVisits from './pages/HR/SiteVisits'
 // import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
 import FinanceHub from './pages/Finance/FinanceHub'
@@ -660,6 +661,14 @@ function App() {
           element={
             <ProtectedRoute>
               <EmployeeSelfService />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="hr/site-visits"
+          element={
+            <ProtectedRoute>
+              <SiteVisits />
             </ProtectedRoute>
           }
         />
