@@ -435,7 +435,7 @@ const EmployeeProfileHeader = ({ profile, leaveRecord, monthlyTs, salaryInfo, lo
               <Icon name="SparklesIcon" className="w-5 h-5 text-blue-200" />
               <div>
                 <div className="text-white font-semibold text-sm">My Workspace</div>
-                <div className="text-blue-200 text-xs">Employee Self-Service</div>
+                <div className="text-blue-200 text-xs">My Profile</div>
               </div>
             </div>
           </div>
@@ -2884,10 +2884,32 @@ export default function EmployeeSelfService() {
 
   // -- Section renders ---------------------------------------------------------
   const renderSection = () => {
+    // Check if profile is incomplete (missing employee_id or has placeholder)
+    const empId = profile?.employee_id
+    const needsConfig = !empId || empId === '' || empId.includes('@') || empId.startsWith('EMP')
+    
     switch (activeTab) {
       case 'overview':
         return (
           <div className="space-y-5">
+            {/* Profile Configuration Alert */}
+            {needsConfig && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Icon name="ExclamationTriangleIcon" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-amber-900 text-sm mb-1">
+                      Profile Configuration Required
+                    </div>
+                    <div className="text-amber-700 text-sm leading-relaxed">
+                      Your employee ID is not configured. Attendance and leave data require a valid employee ID linked to the biometric system.
+                      Please contact HR (<a href="mailto:hr@rejlers.ae" className="underline hover:text-amber-900">hr@rejlers.ae</a>) to complete your profile setup.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
               <div className="xl:col-span-2">
                 <TodayStatusCard todayData={todayTs} loading={loadingTs} />
@@ -2916,6 +2938,23 @@ export default function EmployeeSelfService() {
       case 'leave':
         return (
           <div className="space-y-5">
+            {/* Profile Configuration Alert */}
+            {needsConfig && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Icon name="ExclamationTriangleIcon" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-amber-900 text-sm mb-1">
+                      Employee ID Required
+                    </div>
+                    <div className="text-amber-700 text-sm">
+                      To view leave records, please contact HR to configure your employee ID. Current value: <code className="bg-amber-100 px-1 rounded">{empId || 'Not Set'}</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <LeaveBalanceSection
               leaveRecord={leaveRecord}
               requests={leaveRequests}

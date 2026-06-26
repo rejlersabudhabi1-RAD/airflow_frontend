@@ -333,7 +333,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           },
           {
             id: 'hrLeave',
-            title: '4.3 Self-Service',
+            title: '4.3 My Profile',
             icon: SparklesIcon,
             path: '/hr/leave',
             description: 'My leave, attendance, timesheet & payroll',
