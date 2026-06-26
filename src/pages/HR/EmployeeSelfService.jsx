@@ -1511,7 +1511,7 @@ const ESSTimesheetView = ({ profile }) => {
                 <KpiCard icon="ClockIcon" label="Total Hours" value={`${Number(monthlyData.data.total_hours || 0).toFixed(1)} h`} sub={`${MONTH_SHORT[selectedMonth-1]} ${selectedYear}`} tone="blue" />
                 <KpiCard icon="CheckCircleIcon" label="Days Present" value={monthlyData.data.days_present || 0} sub={`of ${monthlyData.data.working_days || ESS_ATT_STANDARD_WORKING_DAYS} working days`} tone="green" />
                 <KpiCard icon="ChartBarIcon" label="Avg Hours/Day" value={monthlyData.data.avg_hours_per_day ? `${Number(monthlyData.data.avg_hours_per_day).toFixed(1)} h` : EMPTY_DISPLAY} sub="Average" tone="purple" />
-                <KpiCard icon="CalendarDaysIcon" label="Full Days" value={monthlyData.data.days_full || 0} sub="Full attendance" tone="emerald" />
+                <KpiCard icon="CalendarDaysIcon" label="Full Days" value={monthlyData.data.full_days || 0} sub="Full attendance" tone="emerald" />
               </div>
               {monthlyData.data.days_detail && monthlyData.data.days_detail.length > 0 && (
                 <SectionCard title="Daily Breakdown" subtitle={`${MONTH_SHORT[selectedMonth-1]} ${selectedYear}`} icon="TableCellsIcon">
@@ -1528,7 +1528,7 @@ const ESSTimesheetView = ({ profile }) => {
                           <tr key={i} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                             <td className="px-4 py-2 text-slate-800 font-medium">{day.date || day.day}</td>
                             <td className="px-3 py-2 text-right text-slate-700">
-                              {day.hours_worked != null ? `${Number(day.hours_worked).toFixed(1)} h` : EMPTY_DISPLAY}
+                              {day.hours != null ? `${Number(day.hours).toFixed(1)} h` : EMPTY_DISPLAY}
                             </td>
                           </tr>
                         ))}
