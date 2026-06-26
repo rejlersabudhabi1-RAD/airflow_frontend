@@ -2878,9 +2878,10 @@ export default function EmployeeSelfService() {
 
   // -- Section renders ---------------------------------------------------------
   const renderSection = () => {
-    // Check if profile is incomplete (missing employee_id or has placeholder)
+    // Check if profile is incomplete (missing employee_id or has placeholder/marker)
     const empId = profile?.employee_id
-    const needsConfig = !empId || empId === '' || empId.includes('@') || empId.startsWith('EMP')
+    const invalidMarkers = ['DELETED', 'TEST_ACCOUNT', 'EXTERNAL']
+    const needsConfig = !empId || empId === '' || empId.includes('@') || empId.startsWith('EMP') || invalidMarkers.includes(empId)
     
     switch (activeTab) {
       case 'overview':
