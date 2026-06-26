@@ -356,6 +356,11 @@ export const DAILY_TRACKER_SUBMIT_TO_OPTIONS = [
 // ─────────────────────────────────────────────────────────────────────────────
 // 15. ESS ATTENDANCE TAB — soft-coded configuration
 //     Controls the individual employee attendance tracking panel in /hr/leave.
+//     
+//     ⚠️  PRODUCTION ACTIVE SETTINGS (user-approved, 2026-06-26):
+//         - Max daily hours capped at 9 hours (FIXED, non-negotiable)
+//         - Overtime tracking DISABLED (hidden from UI)
+//         - All hour calculations automatically capped at maximum
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** How many past months the employee can scroll back to */
@@ -363,6 +368,9 @@ export const ESS_ATT_MONTHS_BACK = 12
 
 /** Standard working hours per day (used to classify a day as full/partial) */
 export const ESS_ATT_STANDARD_DAY_HRS = 9
+
+/** Maximum daily hours — hours exceeding this value are CAPPED to this limit */
+export const ESS_ATT_MAX_DAILY_HRS = 9
 
 /** Standard working days in a month (fallback when API doesn't return it) */
 export const ESS_ATT_STANDARD_WORKING_DAYS = 22
@@ -373,7 +381,13 @@ export const ESS_ATT_RATE_WARN = 80   // >= warn → amber, else → rose
 
 /** Day-level classification thresholds (hours) */
 export const ESS_ATT_PARTIAL_DAY_HRS = 4   // < this → partial day, else full
-export const ESS_ATT_OVERTIME_HRS    = 9   // > this → overtime flag
+export const ESS_ATT_OVERTIME_HRS    = 9   // > this → overtime flag (DEPRECATED — overtime disabled)
+
+/** Feature toggles for attendance display */
+export const ESS_ATT_FEATURES = {
+  showOvertime: false,  // Hide overtime column and KPI (disabled per user request 2026-06-26)
+  capHoursAtMax: true,  // Enforce max hours cap in all calculations
+}
 
 /**
  * Day-status style map (used in the per-day attendance table in ESS).

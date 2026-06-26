@@ -33,7 +33,7 @@ import rbacService   from '../../services/rbac.service'
 import payrollService from '../../services/payroll.service'
 import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
-import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
+import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_FEATURES, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
 
 // -----------------------------------------------------------------------------
 // Soft-coded configuration
@@ -952,7 +952,11 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
       const date   = d.date || d.day || ''
       const dt     = date ? new Date(date) : null
       const dow    = dt ? ESS_ATT_DOW[dt.getDay()] : ''
-      const hours  = Number(d.hours_worked ?? d.hours ?? 0)
+      // Cap hours at configured maximum (default: 9 hours fixed)
+      const rawHours = Number(d.hours_worked ?? d.hours ?? 0)
+      const hours    = ESS_ATT_FEATURES.capHoursAtMax 
+        ? Math.min(rawHours, ESS_ATT_MAX_DAILY_HRS)
+        : rawHours
       const isWknd = dt ? (dt.getDay() === 0 || dt.getDay() === 6) : false
       const isFut  = dt ? dt > today : false
       let status
@@ -961,7 +965,11 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
       else if (hours >= ESS_ATT_PARTIAL_DAY_HRS) status = 'worked'
       else if (hours > 0) status = 'partial'
       else              status = 'absent'
-      return { date, dow, hours, status, ot: Math.max(0, hours - ESS_ATT_STANDARD_DAY_HRS) }
+      // Overtime calculation (only used if showOvertime is enabled)
+      const ot = ESS_ATT_FEATURES.showOvertime 
+        ? Math.max(0, rawHours - ESS_ATT_STANDARD_DAY_HRS)
+        : 0
+      return { date, dow, hours, status, ot }
     }).sort((a, b) => (a.date > b.date ? 1 : -1))
   }, [data])
 
@@ -1043,7 +1051,9 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
         <KpiCard icon="CheckCircleIcon"     label={ESS_ATT_COPY.kpiPresent}  value={loading ? EMPTY_DISPLAY : presentDays}          sub={`of ${workingDays} working days`}  tone="green" />
         <KpiCard icon="XCircleIcon"         label={ESS_ATT_COPY.kpiAbsent}   value={loading ? EMPTY_DISPLAY : absentDays}            sub={selectedLabel}                     tone={absentDays > 3 ? 'rose' : 'slate'} />
         <KpiCard icon="ChartBarIcon"        label={ESS_ATT_COPY.kpiRate}     value={loading ? EMPTY_DISPLAY : `${attRate}%`}         sub={rateLabel}                         tone={rateTone} />
-        <KpiCard icon="ArrowTrendingUpIcon" label={ESS_ATT_COPY.kpiOvertime} value={loading ? EMPTY_DISPLAY : fmtHours(overtime)}    sub={selectedLabel}                     tone="amber" />
+        {ESS_ATT_FEATURES.showOvertime && (
+          <KpiCard icon="ArrowTrendingUpIcon" label={ESS_ATT_COPY.kpiOvertime} value={loading ? EMPTY_DISPLAY : fmtHours(overtime)}    sub={selectedLabel}                     tone="amber" />
+        )}
       </div>
       )}
 
@@ -1061,7 +1071,9 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
                   <YAxis tick={{ fontSize: 10 }} domain={[0, 14]} />
                   <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} h`]} />
                   <Area type="monotone" dataKey="hours" stroke="#3b82f6" fill="#dbeafe" name="Hours Worked" strokeWidth={2} />
-                  <Area type="monotone" dataKey="ot"    stroke="#f59e0b" fill="#fef3c7" name="Overtime"     strokeWidth={2} />
+                  {ESS_ATT_FEATURES.showOvertime && (
+                    <Area type="monotone" dataKey="ot"    stroke="#f59e0b" fill="#fef3c7" name="Overtime"     strokeWidth={2} />
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -1119,7 +1131,9 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
                   <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">Day</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wide">Status</th>
                   <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Hours</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Overtime</th>
+                  {ESS_ATT_FEATURES.showOvertime && (
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">Overtime</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1139,12 +1153,14 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
                       <td className="px-3 py-2 text-right tabular-nums text-slate-700">
                         {row.status === 'weekend' || row.status === 'future' ? EMPTY_DISPLAY : `${row.hours.toFixed(1)} h`}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {row.ot > 0
-                          ? <span className="text-amber-600 font-medium">{row.ot.toFixed(1)} h</span>
-                          : <span className="text-slate-300">{EMPTY_DISPLAY}</span>
-                        }
-                      </td>
+                      {ESS_ATT_FEATURES.showOvertime && (
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {row.ot > 0
+                            ? <span className="text-amber-600 font-medium">{row.ot.toFixed(1)} h</span>
+                            : <span className="text-slate-300">{EMPTY_DISPLAY}</span>
+                          }
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -1155,7 +1171,9 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
                   <td className="px-4 py-2 text-slate-700" colSpan={2}>Total</td>
                   <td className="px-3 py-2 text-center text-slate-600">{presentDays} days present</td>
                   <td className="px-3 py-2 text-right text-slate-700">{fmtHours(computedTotalHours)}</td>
-                  <td className="px-3 py-2 text-right text-amber-600">{computedOvertimeHrs > 0 ? fmtHours(computedOvertimeHrs) : EMPTY_DISPLAY}</td>
+                  {ESS_ATT_FEATURES.showOvertime && (
+                    <td className="px-3 py-2 text-right text-amber-600">{computedOvertimeHrs > 0 ? fmtHours(computedOvertimeHrs) : EMPTY_DISPLAY}</td>
+                  )}
                 </tr>
               </tfoot>
             </table>
@@ -1174,9 +1192,13 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
 
 const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
   const totalHrs    = Number(monthlyTs?.total_hours) || 0
+  // Cap total hours at max (configured max daily hours × working days)
+  const cappedHrs   = ESS_ATT_FEATURES.capHoursAtMax 
+    ? Math.min(totalHrs, ESS_ATT_MAX_DAILY_HRS * ESS_ATT_STANDARD_WORKING_DAYS)
+    : totalHrs
   const totalOt     = Number(monthlyTs?.total_overtime) || 0
   const billable    = Number(monthlyTs?.billable_hours) || 0
-  const utilPct     = STANDARD_MONTHLY_HOURS > 0 ? Math.min(100, Math.round((totalHrs / STANDARD_MONTHLY_HOURS) * 100)) : 0
+  const utilPct     = STANDARD_MONTHLY_HOURS > 0 ? Math.min(100, Math.round((cappedHrs / STANDARD_MONTHLY_HOURS) * 100)) : 0
 
   // Weekly trend from user history
   const weeklyData = useMemo(() => {
@@ -1190,8 +1212,10 @@ const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiCard icon="ClockIcon" label="Total Hours" value={fmtHours(totalHrs)} sub={`of ~${fmtHours(STANDARD_MONTHLY_HOURS)} expected`} tone="blue" />
-        <KpiCard icon="ArrowTrendingUpIcon" label="Overtime" value={fmtHours(totalOt)} sub="This month" tone="amber" />
+        <KpiCard icon="ClockIcon" label="Total Hours" value={fmtHours(cappedHrs)} sub={`of ~${fmtHours(STANDARD_MONTHLY_HOURS)} expected`} tone="blue" />
+        {ESS_ATT_FEATURES.showOvertime && (
+          <KpiCard icon="ArrowTrendingUpIcon" label="Overtime" value={fmtHours(totalOt)} sub="This month" tone="amber" />
+        )}
         <KpiCard icon="CurrencyDollarIcon" label="Billable Hours" value={billable > 0 ? fmtHours(billable) : EMPTY_DISPLAY} sub="Chargeable to projects" tone="green" />
         <KpiCard icon="ChartBarIcon" label="Utilization" value={`${utilPct}%`} sub={utilPct >= 90 ? 'On track' : 'Below target'} tone={utilPct >= 90 ? 'green' : utilPct >= 70 ? 'amber' : 'rose'} />
       </div>
@@ -1287,7 +1311,9 @@ const PayrollSnapshot = ({ salaryInfo, slips, loading }) => {
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         <KpiCard icon="BanknotesIcon"     label="Basic Salary"    value={basic > 0 ? fmtCurrency(basic) : EMPTY_DISPLAY} sub="Monthly" tone="blue" />
         <KpiCard icon="ArrowUpIcon"       label="Gross Earnings"  value={gross > 0 ? fmtCurrency(gross) : EMPTY_DISPLAY} sub={latest ? `${MONTH_SHORT[(latest.month||1)-1]} ${latest.year}` : 'Latest'} tone="green" />
-        <KpiCard icon="ArrowTrendingUpIcon" label="Overtime Pay"  value={ot > 0 ? fmtCurrency(ot) : EMPTY_DISPLAY} sub="Included in gross" tone="amber" />
+        {ESS_ATT_FEATURES.showOvertime && (
+          <KpiCard icon="ArrowTrendingUpIcon" label="Overtime Pay"  value={ot > 0 ? fmtCurrency(ot) : EMPTY_DISPLAY} sub="Included in gross" tone="amber" />
+        )}
         <KpiCard icon="MinusCircleIcon"   label="Deductions"      value={deductions > 0 ? fmtCurrency(deductions) : EMPTY_DISPLAY} sub="This month" tone="rose" />
         <KpiCard icon="CurrencyDollarIcon" label="Net Salary"     value={net > 0 ? fmtCurrency(net) : EMPTY_DISPLAY} sub={latest?.status || EMPTY_DISPLAY} tone="purple" />
       </div>
