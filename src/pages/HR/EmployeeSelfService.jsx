@@ -467,9 +467,15 @@ const TodayStatusCard = ({ todayData, loading }) => {
   const sm = ATTENDANCE_STATUS_MAP[status] || ATTENDANCE_STATUS_MAP.missing
   const checkin  = todayData?.check_in_time  || todayData?.first_in
   const checkout = todayData?.check_out_time || todayData?.last_out
-  const hours    = Number(todayData?.total_hours) || 0
-  const ot       = Number(todayData?.overtime_hours) || 0
-  const utilPct  = hours > 0 ? Math.min(100, Math.round((hours / STANDARD_DAILY_HOURS) * 100)) : 0
+  // Backend returns 'hours_worked' from daily_report
+  const rawHours = Number(todayData?.hours_worked || todayData?.total_hours) || 0
+  // Apply max daily hours cap (soft-coded)
+  const hours = Math.min(rawHours, ESS_ATT_MAX_DAILY_HRS)
+  // Calculate overtime (hours beyond standard day, capped at max)
+  const ot = ESS_ATT_FEATURES.showOvertime 
+    ? Math.max(0, Math.min(rawHours - ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS - ESS_ATT_STANDARD_DAY_HRS))
+    : 0
+  const utilPct  = hours > 0 ? Math.min(100, Math.round((hours / ESS_ATT_STANDARD_DAY_HRS) * 100)) : 0
 
   return (
     <SectionCard
