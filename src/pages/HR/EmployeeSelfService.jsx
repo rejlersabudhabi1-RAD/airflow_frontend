@@ -2810,7 +2810,17 @@ export default function EmployeeSelfService() {
       // No need to pass employee_code or search - backend detects from auth user
       payrollService.getLeaveRecords({ page_size: 5 }).catch(() => ({ results: [] })),
     ]).then(([types, reqRes, recRes]) => {
-      setLeaveTypes(Array.isArray(types) ? types : types?.results || [])
+      // Filter leave types to only show enabled types from ESS_LEAVE_TYPE_CONFIG
+      // Enabled categories: annual, compensatory, unpaid (sick, emergency disabled per user request 2026-06-26)
+      const enabledCategories = Object.keys(LEAVE_TYPE_CONFIG).filter(
+        key => LEAVE_TYPE_CONFIG[key].enabled !== false
+      )
+      const apiTypes = Array.isArray(types) ? types : types?.results || []
+      const filteredTypes = apiTypes.filter(t => {
+        const category = (t.category || t.code || '').toLowerCase()
+        return enabledCategories.includes(category)
+      })
+      setLeaveTypes(filteredTypes)
 
       const reqs = Array.isArray(reqRes) ? reqRes : reqRes?.results || []
       // Backend scopes leave requests to the current user. As a safety net, also
