@@ -2763,24 +2763,18 @@ export default function EmployeeSelfService() {
   // -- Load leave data ---------------------------------------------------------
   useEffect(() => {
     setLoadingLeave(true)
-    const employeeName = profile
-      ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username
-      : null
 
     // employee.id from backend = Django User.id (not UserProfile.id)
     // employee_id on UserProfile = biometric employee code
-    const userId     = profile?.user?.id    // Django User UUID — matches LeaveRequest.employee FK
-    const empCode    = profile?.employee_id // biometric code — matches employee_code on leave records
+    const userId = profile?.user?.id // Django User UUID — matches LeaveRequest.employee FK
 
     Promise.all([
       payrollService.getLeaveTypes().catch(() => []),
-      // Backend now auto-scopes to current user (via perform_create + get_queryset fix)
+      // Backend auto-scopes to current user (via perform_create + get_queryset fix)
       payrollService.getLeaveRequests({ page_size: 50 }).catch(() => ({ results: [] })),
-      empCode
-        ? payrollService.getLeaveRecords({ employee_code: empCode, page_size: 5 }).catch(() => ({ results: [] }))
-        : employeeName
-          ? payrollService.getLeaveRecords({ search: employeeName, page_size: 5 }).catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
+      // Backend auto-scopes to current user's employee_id with intelligent fallback
+      // No need to pass employee_code or search - backend detects from auth user
+      payrollService.getLeaveRecords({ page_size: 5 }).catch(() => ({ results: [] })),
     ]).then(([types, reqRes, recRes]) => {
       setLeaveTypes(Array.isArray(types) ? types : types?.results || [])
 
