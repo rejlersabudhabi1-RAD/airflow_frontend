@@ -33,7 +33,7 @@ import rbacService   from '../../services/rbac.service'
 import payrollService from '../../services/payroll.service'
 import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
-import { ESS_LEAVE_TYPE_CONFIG, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
+import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
 
 // -----------------------------------------------------------------------------
 // Soft-coded configuration
@@ -581,12 +581,15 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
   const encashed  = Number(leaveRecord?.total_encashed) || 0
   const balance   = Number(leaveRecord?.leave_balance)  || 0
 
-  const leaveTypes = Object.entries(LEAVE_TYPE_CONFIG).map(([key, cfg]) => ({
-    ...cfg,
-    key,
-    balance: key === 'annual' ? balance : 0,
-    taken:   key === 'annual' ? taken : 0,
-  }))
+  // Filter to only show enabled leave types (soft-coded control)
+  const leaveTypes = Object.entries(LEAVE_TYPE_CONFIG)
+    .filter(([key, cfg]) => cfg.enabled !== false)  // Default to true if enabled flag not set
+    .map(([key, cfg]) => ({
+      ...cfg,
+      key,
+      balance: key === 'annual' ? balance : 0,
+      taken:   key === 'annual' ? taken : 0,
+    }))
 
   const pieData = [
     { name: 'Taken',    value: taken,   fill: '#3b82f6' },
@@ -598,15 +601,36 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
   const approved = (requests || []).filter(r => r.status?.toUpperCase() === 'APPROVED')
   const upcoming = approved.filter(r => new Date(r.start_date) >= new Date())
 
+  // Check if we have leave data (for production data availability check)
+  const hasLeaveData = leaveRecord && (balance > 0 || taken > 0 || earned > 0 || encashed > 0)
+
   return (
     <div className="space-y-5">
-      {/* Balance Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard icon="CalendarDaysIcon" label="Annual Balance"  value={`${balance.toFixed(1)} d`}  sub={`${earned.toFixed(1)} earned`} tone="blue" />
-        <KpiCard icon="ClipboardDocumentCheckIcon" label="Days Taken" value={`${taken.toFixed(1)} d`} sub="This year" tone="green" />
-        <KpiCard icon="BanknotesIcon" label="Encashed" value={`${encashed.toFixed(1)} d`} sub="Leave encashment" tone="amber" />
-        <KpiCard icon="ClockIcon" label="Pending Requests" value={pending.length} sub="Awaiting approval" tone={pending.length > 0 ? 'rose' : 'slate'} />
-      </div>
+      {/* Leave Balance Snapshot */}
+      {ESS_FEATURES.showLeaveBalanceSnapshot && (
+        <>
+          {(!hasLeaveData && ESS_FEATURES.requireLeaveDataForSnapshot) ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+              <div className="flex items-center gap-2">
+                <Icon name="ExclamationTriangleIcon" className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Leave data not available</div>
+                  <div className="text-xs text-amber-600 mt-1">
+                    Leave balance records will appear here once your HR administrator configures your leave entitlement.
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <KpiCard icon="CalendarDaysIcon" label="Annual Balance"  value={`${balance.toFixed(1)} d`}  sub={`${earned.toFixed(1)} earned`} tone="blue" />
+              <KpiCard icon="ClipboardDocumentCheckIcon" label="Days Taken" value={`${taken.toFixed(1)} d`} sub="This year" tone="green" />
+              <KpiCard icon="BanknotesIcon" label="Encashed" value={`${encashed.toFixed(1)} d`} sub="Leave encashment" tone="amber" />
+              <KpiCard icon="ClockIcon" label="Pending Requests" value={pending.length} sub="Awaiting approval" tone={pending.length > 0 ? 'rose' : 'slate'} />
+            </div>
+          )}
+        </>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Leave type cards */}
@@ -737,12 +761,12 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
 
   const insufficient = form.leave_type === 'annual' && calcDays !== null && calcDays > balance
 
+  // Default leave types (filtered to match ESS_LEAVE_TYPE_CONFIG enabled types)
+  // Only Annual, Compensatory, and Unpaid are enabled per user request (2026-06-26)
   const defaultTypes = [
-    { id: 'annual', name: 'Annual Leave' },
-    { id: 'sick',   name: 'Sick Leave' },
-    { id: 'emergency', name: 'Emergency Leave' },
+    { id: 'annual',       name: 'Annual Leave' },
     { id: 'compensatory', name: 'Compensatory Leave' },
-    { id: 'unpaid', name: 'Unpaid Leave' },
+    { id: 'unpaid',       name: 'Unpaid Leave' },
   ]
   const types = leaveTypes?.length > 0 ? leaveTypes : defaultTypes
 
@@ -1206,23 +1230,33 @@ const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
         </SectionCard>
 
         {/* Weekly trend */}
-        <SectionCard title="Weekly Hours Trend" subtitle="Last 8 weeks" icon="CalendarIcon">
-          {loading ? (
-            <SkeletonBox className="h-52 w-full" />
-          ) : weeklyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={weeklyData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} h`, 'Hours']} />
-                <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyNotice icon="CalendarIcon" message="Weekly data not available" />
-          )}
-        </SectionCard>
+        {ESS_FEATURES.showWeeklyHoursTrend && (
+          <SectionCard title="Weekly Hours Trend" subtitle="Last 8 weeks" icon="CalendarIcon">
+            {loading ? (
+              <SkeletonBox className="h-52 w-full" />
+            ) : weeklyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={weeklyData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => [`${Number(v).toFixed(1)} h`, 'Hours']} />
+                  <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : ESS_FEATURES.requireTimesheetDataForTrend ? (
+              <div className="h-52 flex items-center justify-center">
+                <div className="text-center">
+                  <Icon name="ClockIcon" className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                  <div className="text-sm text-slate-500">Timesheet data not available</div>
+                  <div className="text-xs text-slate-400 mt-1">Weekly hours will appear once attendance is tracked</div>
+                </div>
+              </div>
+            ) : (
+              <EmptyNotice icon="CalendarIcon" message="Weekly data not available" />
+            )}
+          </SectionCard>
+        )}
       </div>
     </div>
   )
@@ -1367,7 +1401,7 @@ const TeamCalendar = ({ calendarData, loading }) => {
   return (
     <SectionCard
       title="Team Availability Calendar"
-      subtitle="Who's on leave this month"
+      subtitle={ESS_FEATURES.teamCalendarDescription || "Who's on leave this month"}
       icon="CalendarDaysIcon"
       action={
         <div className="flex items-center gap-1">

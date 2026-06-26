@@ -196,17 +196,40 @@ export const DEFAULT_ANNUAL_ENTITLEMENT = Number(
 //     portal. Keyed by canonical leave category (matches API category field).
 //     Colours here use a distinct palette from DEFAULT_LEAVE_TYPES so that
 //     the bar-chart view stays visually separate from the badge/table views.
+//
+//     ⚠️  PRODUCTION ACTIVE LEAVE TYPES (user-approved, 2026-06-26):
+//         Only Annual, Compensatory, and Unpaid leave types are enabled.
+//         Sick, Emergency, Maternity, Paternity, Work off = DISABLED per user request.
 // ─────────────────────────────────────────────────────────────────────────────
 export const ESS_LEAVE_TYPE_CONFIG = {
-  annual:       { label: 'Annual Leave',       color: '#3b82f6', bg: 'bg-blue-50',    text: 'text-blue-700',    bar: 'bg-blue-500',    entitlement: DEFAULT_ANNUAL_ENTITLEMENT },
-  sick:         { label: 'Sick Leave',         color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', entitlement: 15 },
-  emergency:    { label: 'Emergency Leave',    color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500',   entitlement: 3  },
-  compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5  },
-  unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0  },
+  annual:       { label: 'Annual Leave',       color: '#3b82f6', bg: 'bg-blue-50',    text: 'text-blue-700',    bar: 'bg-blue-500',    entitlement: DEFAULT_ANNUAL_ENTITLEMENT, enabled: true },
+  compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5,  enabled: true },
+  unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0,  enabled: true },
+  // Disabled leave types (can be re-enabled by setting enabled: true)
+  // sick:         { label: 'Sick Leave',         color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', entitlement: 15, enabled: false },
+  // emergency:    { label: 'Emergency Leave',    color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500',   entitlement: 3,  enabled: false },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 11. DAILY TRACKER CONFIG — soft-coded labels, icons and thresholds
+// 11. ESS FEATURE VISIBILITY — soft-coded flags to enable/disable sections
+//     Control which sections appear in Employee Self-Service portal.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ESS_FEATURES = {
+  // Overview section features
+  showLeaveBalanceSnapshot:    true,  // Leave balance cards (annual, taken, encashed, pending)
+  requireLeaveDataForSnapshot: false, // If true, hide snapshot when no leave data; if false, show zeros
+  
+  // Timesheet section features
+  showWeeklyHoursTrend:        true,  // Weekly hours bar chart (last 8 weeks)
+  requireTimesheetDataForTrend: false, // If true, hide trend when no data; if false, show "No data"
+  
+  // Team section features
+  showTeamCalendar:            true,  // Team availability calendar
+  teamCalendarDescription:     'Shows which team members are on approved leave this month. Helps plan meetings and workload distribution.', // Explanation text
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. DAILY TRACKER CONFIG — soft-coded labels, icons and thresholds
 //     for the Daily Work Log feature in Employee Self-Service.
 // ─────────────────────────────────────────────────────────────────────────────
 
