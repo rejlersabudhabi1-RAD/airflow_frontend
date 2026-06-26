@@ -3,7 +3,7 @@
  * Handles GPS-based attendance tracking for off-site engineers
  */
 
-import apiClient from './api.client';
+import apiClient from './api.service';
 
 const BASE_URL = '/api/v1/site-visits';
 

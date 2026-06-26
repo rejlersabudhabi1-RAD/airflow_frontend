@@ -896,17 +896,15 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
     const code = profile?.employee_id || profile?.engineer_profile?.employee_code
     if (!code) return
     setFetching(true)
-    timesheetSvc.fetchMonthly(selYear, selMonth)
+    // Use new self-service endpoint that auto-filters by logged-in user
+    timesheetSvc.fetchMyMonthlyAttendance(selYear, selMonth)
       .then(res => {
-        // Handle both { rows, working_days_in_month } and plain array responses
-        const rows    = Array.isArray(res) ? res : (res?.rows || [])
-        const wdInMth = res?.working_days_in_month || null
-        const lc      = code.toString().toLowerCase()
-        const match   = rows.find(e =>
-          e.employee_code?.toString().toLowerCase() === lc ||
-          e.code?.toString().toLowerCase() === lc
-        )
-        setSelData(match ? { ...match, working_days: wdInMth || match.working_days } : null)
+        // New endpoint returns { data: {...}, employee_code, email, year, month }
+        if (res?.data) {
+          setSelData(res.data)
+        } else {
+          setSelData(null)
+        }
       })
       .catch(() => setSelData(null))
       .finally(() => setFetching(false))
@@ -2728,50 +2726,32 @@ export default function EmployeeSelfService() {
   // -- Load timesheet data for current user ------------------------------------
   useEffect(() => {
     setLoadingTs(true)
-    // profile.employee_id is the biometric employee code stored on UserProfile
+    // Use new self-service endpoints that automatically filter by logged-in user
+    const now = new Date()
     const employeeCode = profile?.employee_id || profile?.engineer_profile?.employee_code
 
     Promise.all([
-      timesheetSvc.fetchMonthly(now.getFullYear(), now.getMonth() + 1).catch(() => null),
-      timesheetSvc.fetchDaily(todayStr()).catch(() => null),
+      timesheetSvc.fetchMyMonthlyAttendance(now.getFullYear(), now.getMonth() + 1).catch(() => null),
+      timesheetSvc.fetchMyDailyAttendance(todayStr()).catch(() => null),
       employeeCode
         ? timesheetSvc.fetchUserHistory({ code: employeeCode, limit: 60 }).catch(() => null)
         : Promise.resolve(null),
     ]).then(([monthly, daily, history]) => {
-      // fetchMonthly returns { rows: [...], working_days_in_month: N } OR a plain array
-      const monthlyRows      = Array.isArray(monthly) ? monthly : (monthly?.rows || [])
-      const workingDaysInMth = monthly?.working_days_in_month || null
-
-      if (monthlyRows.length > 0) {
-        const code = employeeCode?.toString().toLowerCase()
-        const match = code
-          ? monthlyRows.find(e =>
-              e.employee_code?.toString().toLowerCase() === code ||
-              e.code?.toString().toLowerCase() === code
-            )
-          : null
-        // Enrich row with response-level working_days so components can use it
-        setMonthlyTs(match ? { ...match, working_days: workingDaysInMth || match.working_days } : null)
-      } else if (!Array.isArray(monthly) && monthly && !monthly?.rows) {
-        // Backend returned a single employee object directly (role-scoped endpoint)
-        setMonthlyTs(monthly)
+      // New self-service endpoints return { data: {...}, employee_code, email }
+      // where data is the user's record directly, not an array to filter
+      if (monthly?.data) {
+        setMonthlyTs(monthly.data)
+      } else if (monthly && !monthly.configured) {
+        setMonthlyTs(null)
       } else {
         setMonthlyTs(null)
       }
 
-      // Today's record — same dual-format handling
-      const dailyRows = Array.isArray(daily) ? daily : (daily?.rows || [])
-      if (dailyRows.length > 0) {
-        const code = employeeCode?.toString().toLowerCase()
-        const todayRec = code
-          ? dailyRows.find(e =>
-              e.employee_code?.toString().toLowerCase() === code ||
-              e.code?.toString().toLowerCase() === code
-            )
-          : null
-        setTodayTs(todayRec || null)
-      } else if (!Array.isArray(daily) && daily && !daily?.rows) {
-        setTodayTs(daily)
+      // Same for daily
+      if (daily?.data) {
+        setTodayTs(daily.data)
+      } else if (daily && !daily.configured) {
+        setTodayTs(null)
       } else {
         setTodayTs(null)
       }
