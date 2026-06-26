@@ -31,6 +31,7 @@ export const TIMESHEET_ENDPOINTS = {
   exportYearly:      '/timesheet/export/yearly/',
   exportYearlyPdf:   '/timesheet/export/yearly/pdf/',
   // Self-Service (role-based, auto-scoped to current user)
+  myLiveAttendance:    '/timesheet/my-attendance/live/',
   myMonthlyAttendance: '/timesheet/my-attendance/monthly/',
   myDailyAttendance:   '/timesheet/my-attendance/daily/',
 }

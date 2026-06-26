@@ -26,6 +26,7 @@ export const fetchUserHistory = (params)           => unwrap(apiClient.get(TIMES
 export const lookupByCode     = (code)             => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.lookupByCode, { params: { code } }))
 
 // Self-Service (role-based, auto-scoped to current user) ----------------------
+export const fetchMyLiveAttendance    = ()             => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.myLiveAttendance))
 export const fetchMyMonthlyAttendance = (year, month) => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.myMonthlyAttendance, { params: { year, month } }))
 export const fetchMyDailyAttendance   = (date)        => unwrap(apiClient.get(TIMESHEET_ENDPOINTS.myDailyAttendance,   { params: date ? { date } : {} }))
 
@@ -54,7 +55,7 @@ export const downloadYearlyPdf     = (year)        => downloadBlob(TIMESHEET_END
 export default {
   fetchHealth, listDatabases, listTables, listColumns, previewTable,
   fetchLive, fetchDaily, fetchMonthly, fetchUserHistory, lookupByCode,
-  fetchMyMonthlyAttendance, fetchMyDailyAttendance,
+  fetchMyLiveAttendance, fetchMyMonthlyAttendance, fetchMyDailyAttendance,
   downloadDailyExcel, downloadMonthlyExcel, downloadMonthlyPdf,
   downloadSummaryExcel, downloadSummaryPdf,
   downloadYearlyExcel, downloadYearlyPdf,

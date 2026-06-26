@@ -33,7 +33,7 @@ import rbacService   from '../../services/rbac.service'
 import payrollService from '../../services/payroll.service'
 import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
-import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_FEATURES, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY } from '../../config/hrLeave.config'
+import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_FEATURES, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY, ESS_TIMESHEET_TABS, ESS_TIMESHEET_DEFAULT_TAB, ESS_TIMESHEET_POLL_MS, ESS_TIMESHEET_COPY, ESS_TIMESHEET_STATUS } from '../../config/hrLeave.config'
 
 // -----------------------------------------------------------------------------
 // Soft-coded configuration
@@ -1187,7 +1187,354 @@ const AttendanceAnalytics = ({ profile, monthlyTs, loading: parentLoading }) => 
 
 
 // -----------------------------------------------------------------------------
-// Section: Timesheet Insights
+// Section: ESS Timesheet (Live / Daily / Monthly tabs)
+// -----------------------------------------------------------------------------
+
+const ESSTimesheetView = ({ profile }) => {
+  const [activeTab, setActiveTab] = useState(ESS_TIMESHEET_DEFAULT_TAB)
+  const [liveData, setLiveData] = useState(null)
+  const [dailyData, setDailyData] = useState(null)
+  const [monthlyData, setMonthlyData] = useState(null)
+  const [loadingLive, setLoadingLive] = useState(false)
+  const [loadingDaily, setLoadingDaily] = useState(false)
+  const [loadingMonthly, setLoadingMonthly] = useState(false)
+  const [error, setError] = useState(null)
+  
+  // Date selectors for Daily and Monthly tabs
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
+
+  // Auto-refresh for Live tab
+  const [lastRefresh, setLastRefresh] = useState(Date.now())
+  
+  useEffect(() => {
+    if (activeTab !== 'live') return
+    const interval = setInterval(() => setLastRefresh(Date.now()), ESS_TIMESHEET_POLL_MS)
+    return () => clearInterval(interval)
+  }, [activeTab])
+
+  // Fetch Live data
+  useEffect(() => {
+    if (activeTab !== 'live') return
+    setLoadingLive(true)
+    setError(null)
+    timesheetSvc.fetchMyLiveAttendance()
+      .then(data => {
+        if (!data.configured) {
+          setError(ESS_TIMESHEET_COPY.notConfigured)
+          setLiveData(null)
+        } else if (data.error) {
+          setError(data.error)
+          setLiveData(null)
+        } else {
+          setLiveData(data)
+          setError(null)
+        }
+      })
+      .catch(err => {
+        console.error('[ESS Timesheet] Live fetch failed:', err)
+        setError(err?.response?.data?.error || err.message || 'Failed to load live data')
+        setLiveData(null)
+      })
+      .finally(() => setLoadingLive(false))
+  }, [activeTab, lastRefresh])
+
+  // Fetch Daily data
+  useEffect(() => {
+    if (activeTab !== 'daily') return
+    setLoadingDaily(true)
+    setError(null)
+    timesheetSvc.fetchMyDailyAttendance(selectedDate)
+      .then(data => {
+        if (!data.configured) {
+          setError(ESS_TIMESHEET_COPY.notConfigured)
+          setDailyData(null)
+        } else if (data.error) {
+          setError(data.error)
+          setDailyData(null)
+        } else {
+          setDailyData(data)
+          setError(null)
+        }
+      })
+      .catch(err => {
+        console.error('[ESS Timesheet] Daily fetch failed:', err)
+        setError(err?.response?.data?.error || err.message || 'Failed to load daily data')
+        setDailyData(null)
+      })
+      .finally(() => setLoadingDaily(false))
+  }, [activeTab, selectedDate])
+
+  // Fetch Monthly data
+  useEffect(() => {
+    if (activeTab !== 'monthly') return
+    setLoadingMonthly(true)
+    setError(null)
+    timesheetSvc.fetchMyMonthlyAttendance(selectedYear, selectedMonth)
+      .then(data => {
+        if (!data.configured) {
+          setError(ESS_TIMESHEET_COPY.notConfigured)
+          setMonthlyData(null)
+        } else if (data.error) {
+          setError(data.error)
+          setMonthlyData(null)
+        } else {
+          setMonthlyData(data)
+          setError(null)
+        }
+      })
+      .catch(err => {
+        console.error('[ESS Timesheet] Monthly fetch failed:', err)
+        setError(err?.response?.data?.error || err.message || 'Failed to load monthly data')
+        setMonthlyData(null)
+      })
+      .finally(() => setLoadingMonthly(false))
+  }, [activeTab, selectedYear, selectedMonth])
+
+  return (
+    <div className="space-y-5">
+      {/* Tab selector */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 p-2 border-b border-slate-100">
+          {ESS_TIMESHEET_TABS.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Icon name={tab.icon} className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="p-4 bg-slate-50 border-b border-slate-100">
+          <div className="text-xs text-slate-500">
+            {ESS_TIMESHEET_TABS.find(t => t.id === activeTab)?.description || ''}
+          </div>
+        </div>
+      </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Icon name="ExclamationTriangleIcon" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-amber-900 text-sm mb-1">
+                Unable to Load Timesheet Data
+              </div>
+              <div className="text-amber-700 text-sm">{error}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Tab */}
+      {activeTab === 'live' && (
+        <div className="space-y-5">
+          {loadingLive ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner />
+              <span className="ml-3 text-sm text-slate-500">{ESS_TIMESHEET_COPY.loading}</span>
+            </div>
+          ) : !liveData?.data ? (
+            <EmptyNotice icon="SignalIcon" message={ESS_TIMESHEET_COPY.liveNoData} />
+          ) : (
+            <SectionCard title="Current Status" subtitle={liveData.as_of ? `As of ${new Date(liveData.as_of).toLocaleString()}` : 'Real-time'} icon="ClockIcon">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="text-xs text-slate-500 mb-1">Employee Code</div>
+                    <div className="text-lg font-semibold text-slate-800">{liveData.employee_code || EMPTY_DISPLAY}</div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="text-xs text-slate-500 mb-1">Status</div>
+                    <div className="flex items-center gap-2">
+                      {liveData.data.is_in ? (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium border ${ESS_TIMESHEET_STATUS.in.bg} ${ESS_TIMESHEET_STATUS.in.text} ${ESS_TIMESHEET_STATUS.in.border}`}>
+                          <span className={`w-2 h-2 rounded-full ${ESS_TIMESHEET_STATUS.in.dot}`} />
+                          {ESS_TIMESHEET_STATUS.in.label}
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium border ${ESS_TIMESHEET_STATUS.out.bg} ${ESS_TIMESHEET_STATUS.out.text} ${ESS_TIMESHEET_STATUS.out.border}`}>
+                          <span className={`w-2 h-2 rounded-full ${ESS_TIMESHEET_STATUS.out.dot}`} />
+                          {ESS_TIMESHEET_STATUS.out.label}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="text-xs text-slate-500 mb-1">First Punch IN</div>
+                    <div className="text-lg font-semibold text-slate-800">
+                      {liveData.data.first_in ? new Date(liveData.data.first_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : EMPTY_DISPLAY}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="text-xs text-slate-500 mb-1">Last Punch</div>
+                    <div className="text-lg font-semibold text-slate-800">
+                      {liveData.data.last_punch ? new Date(liveData.data.last_punch).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : EMPTY_DISPLAY}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <div className="text-xs text-slate-500 mb-1">Hours Today</div>
+                    <div className="text-lg font-semibold text-slate-800">
+                      {liveData.data.hours_today != null ? `${Number(liveData.data.hours_today).toFixed(1)} h` : EMPTY_DISPLAY}
+                    </div>
+                  </div>
+                </div>
+                {liveData.data.is_late && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm text-amber-800">
+                      <Icon name="ClockIcon" className="w-4 h-4" />
+                      <span className="font-medium">Late Arrival</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          )}
+        </div>
+      )}
+
+      {/* Daily Tab */}
+      {activeTab === 'daily' && (
+        <div className="space-y-5">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Icon name="CalendarDaysIcon" className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-medium text-slate-700">Select Date</span>
+            </div>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {loadingDaily ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner />
+              <span className="ml-3 text-sm text-slate-500">{ESS_TIMESHEET_COPY.loading}</span>
+            </div>
+          ) : !dailyData?.data ? (
+            <EmptyNotice icon="CalendarDaysIcon" message={ESS_TIMESHEET_COPY.dailyNoData} />
+          ) : (
+            <SectionCard title="Daily Attendance" subtitle={selectedDate} icon="ClipboardDocumentCheckIcon">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500 mb-1">First IN</div>
+                  <div className="text-lg font-semibold text-slate-800">
+                    {dailyData.data.first_in ? new Date(dailyData.data.first_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : EMPTY_DISPLAY}
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500 mb-1">Last OUT</div>
+                  <div className="text-lg font-semibold text-slate-800">
+                    {dailyData.data.last_out ? new Date(dailyData.data.last_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : EMPTY_DISPLAY}
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500 mb-1">Hours Worked</div>
+                  <div className="text-lg font-semibold text-slate-800">
+                    {dailyData.data.hours_worked != null ? `${Number(dailyData.data.hours_worked).toFixed(1)} h` : EMPTY_DISPLAY}
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500 mb-1">Punches</div>
+                  <div className="text-lg font-semibold text-slate-800">
+                    {dailyData.data.punch_count || 0}
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+        </div>
+      )}
+
+      {/* Monthly Tab */}
+      {activeTab === 'monthly' && (
+        <div className="space-y-5">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Icon name="CalendarIcon" className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-medium text-slate-700">Select Month</span>
+            </div>
+            <select
+              value={`${selectedYear}-${selectedMonth}`}
+              onChange={e => {
+                const [y, m] = e.target.value.split('-').map(Number)
+                setSelectedYear(y)
+                setSelectedMonth(m)
+              }}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              {Array.from({length: 12}, (_, i) => {
+                const d = new Date(new Date().getFullYear(), new Date().getMonth() - i, 1)
+                return (
+                  <option key={i} value={`${d.getFullYear()}-${d.getMonth() + 1}`}>
+                    {MONTH_SHORT[d.getMonth()]} {d.getFullYear()}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+          {loadingMonthly ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner />
+              <span className="ml-3 text-sm text-slate-500">{ESS_TIMESHEET_COPY.loading}</span>
+            </div>
+          ) : !monthlyData?.data ? (
+            <EmptyNotice icon="CalendarIcon" message={ESS_TIMESHEET_COPY.monthlyNoData} />
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <KpiCard icon="ClockIcon" label="Total Hours" value={`${Number(monthlyData.data.total_hours || 0).toFixed(1)} h`} sub={`${MONTH_SHORT[selectedMonth-1]} ${selectedYear}`} tone="blue" />
+                <KpiCard icon="CheckCircleIcon" label="Days Present" value={monthlyData.data.days_present || 0} sub={`of ${monthlyData.data.working_days || ESS_ATT_STANDARD_WORKING_DAYS} working days`} tone="green" />
+                <KpiCard icon="ChartBarIcon" label="Avg Hours/Day" value={monthlyData.data.avg_hours_per_day ? `${Number(monthlyData.data.avg_hours_per_day).toFixed(1)} h` : EMPTY_DISPLAY} sub="Average" tone="purple" />
+                <KpiCard icon="CalendarDaysIcon" label="Full Days" value={monthlyData.data.days_full || 0} sub="Full attendance" tone="emerald" />
+              </div>
+              {monthlyData.data.days_detail && monthlyData.data.days_detail.length > 0 && (
+                <SectionCard title="Daily Breakdown" subtitle={`${MONTH_SHORT[selectedMonth-1]} ${selectedYear}`} icon="TableCellsIcon">
+                  <div className="max-h-96 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase">Date</th>
+                          <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase">Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monthlyData.data.days_detail.slice(0, 31).map((day, i) => (
+                          <tr key={i} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                            <td className="px-4 py-2 text-slate-800 font-medium">{day.date || day.day}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">
+                              {day.hours_worked != null ? `${Number(day.hours_worked).toFixed(1)} h` : EMPTY_DISPLAY}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </SectionCard>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Section: Timesheet Insights (DEPRECATED — replaced by ESSTimesheetView)
 // -----------------------------------------------------------------------------
 
 const TimesheetInsights = ({ monthlyTs, userHistory, loading }) => {
@@ -3097,7 +3444,7 @@ export default function EmployeeSelfService() {
         return <AttendanceAnalytics profile={profile} monthlyTs={monthlyTs} loading={loadingTs} />
 
       case 'timesheet':
-        return <TimesheetInsights monthlyTs={monthlyTs} userHistory={userHistory} loading={loadingTs} />
+        return <ESSTimesheetView profile={profile} />
 
       case 'payroll':
         return <PayrollSnapshot salaryInfo={salaryInfo} slips={slips} loading={loadingPayroll} />

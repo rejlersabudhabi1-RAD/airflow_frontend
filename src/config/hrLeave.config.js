@@ -419,3 +419,46 @@ export const ESS_ATT_COPY = {
   rateGood:        'Good',
   rateNeeds:       'Needs attention',
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. ESS TIMESHEET TAB — soft-coded configuration
+//     Controls the individual employee timesheet tracking panel in /hr/leave.
+//     
+//     Implementation mirrors /hr/employees Timesheet view with Live/Daily/Monthly
+//     tabs, but auto-scoped to the logged-in user (self-service).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Tabs shown in ESS Timesheet section */
+export const ESS_TIMESHEET_TABS = [
+  { id: 'live',    label: 'Live',    icon: 'SignalIcon',       description: 'Current IN/OUT status' },
+  { id: 'daily',   label: 'Daily',   icon: 'CalendarDaysIcon', description: 'Daily attendance record' },
+  { id: 'monthly', label: 'Monthly', icon: 'CalendarIcon',     description: 'Monthly summary' },
+]
+
+/** Default tab when opening ESS Timesheet */
+export const ESS_TIMESHEET_DEFAULT_TAB = 'live'
+
+/** Auto-refresh interval for Live tab (milliseconds) */
+export const ESS_TIMESHEET_POLL_MS = 60000  // 1 minute (less aggressive than admin view)
+
+/** Copy strings for the ESS Timesheet tab */
+export const ESS_TIMESHEET_COPY = {
+  sectionTitle:    'My Timesheet',
+  sectionSubtitle: 'Real-time attendance tracking — punch in/out, hours worked',
+  liveNoData:      'No live attendance data available',
+  dailyNoData:     'No attendance record for this date',
+  monthlyNoData:   'No attendance records for this month',
+  loading:         'Loading timesheet data\u2026',
+  notConfigured:   'Timesheet system not configured. Contact HR if this persists.',
+  needsEmployeeId: 'Your profile needs an employee_id to view timesheet data. Please contact HR.',
+}
+
+/** Status badges for timesheet display */
+export const ESS_TIMESHEET_STATUS = {
+  in:       { label: 'Checked IN',  bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  out:      { label: 'Checked OUT', bg: 'bg-slate-50',   text: 'text-slate-600',   border: 'border-slate-200',   dot: 'bg-slate-400' },
+  late:     { label: 'Late Arrival', bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
+  absent:   { label: 'Absent',      bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-500' },
+  weekend:  { label: 'Day Off',     bg: 'bg-slate-50',   text: 'text-slate-500',   border: 'border-slate-200',   dot: 'bg-slate-300' },
+}
+
