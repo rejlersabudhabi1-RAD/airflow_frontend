@@ -1370,7 +1370,7 @@ const ESSTimesheetView = ({ profile }) => {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                   <div className="bg-slate-50 rounded-lg p-4">
                     <div className="text-xs text-slate-500 mb-1">First Punch IN</div>
                     <div className="text-lg font-semibold text-slate-800">
@@ -1387,6 +1387,18 @@ const ESSTimesheetView = ({ profile }) => {
                     <div className="text-xs text-slate-500 mb-1">Hours Today</div>
                     <div className="text-lg font-semibold text-slate-800">
                       {liveData.data.hours_today != null ? `${Number(liveData.data.hours_today).toFixed(1)} h` : EMPTY_DISPLAY}
+                    </div>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                    <div className="text-xs text-emerald-600 mb-1 font-medium">Punch IN Count</div>
+                    <div className="text-lg font-bold text-emerald-700">
+                      {liveData.data.punch_in_count != null ? liveData.data.punch_in_count : EMPTY_DISPLAY}
+                    </div>
+                  </div>
+                  <div className="bg-rose-50 rounded-lg p-4 border border-rose-200">
+                    <div className="text-xs text-rose-600 mb-1 font-medium">Punch OUT Count</div>
+                    <div className="text-lg font-bold text-rose-700">
+                      {liveData.data.punch_out_count != null ? liveData.data.punch_out_count : EMPTY_DISPLAY}
                     </div>
                   </div>
                 </div>
