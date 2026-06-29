@@ -20,6 +20,8 @@ import {
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollService from '../../../services/payroll.service'
 import timesheetSvc   from '../../../services/timesheet.service'
+import WorkflowStatusPanel from '../../../components/Payroll/WorkflowStatusPanel'
+import WorkflowActionButtons from '../../../components/Payroll/WorkflowActionButtons'
 import {
   ENGINE_ANOMALY_RULES,
   ENGINE_ANOMALY_SEVERITY,
@@ -1317,6 +1319,10 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
   const [workflowAction,   setWorkflowAction]   = useState(null)  // pending action modal
   const [workflowNote,     setWorkflowNote]     = useState('')     // note for the modal
 
+  // PayrollRun Workflow state (new multi-stage approval: Michelle → Sanglin → Aneef → Aleksi)
+  const [runWorkflow,      setRunWorkflow]      = useState(null)  // PayrollWorkflow object from backend
+  const [runWorkflowLoading, setRunWorkflowLoading] = useState(false)
+
   const selRun = useMemo(() => runs.find(r => r.id === selRunId) ?? null, [runs, selRunId])
 
   // Load runs on mount
@@ -1541,6 +1547,68 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
     reloadSlips()
     setDrawer(d => (d?.id === slipId ? null : d))
   }, [toast, reloadSlips])
+
+  // ── PayrollRun Workflow handlers ──────────────────────────────────────────
+  const loadRunWorkflow = useCallback(async (payrollRunId) => {
+    if (!payrollRunId) {
+      setRunWorkflow(null)
+      return
+    }
+    setRunWorkflowLoading(true)
+    try {
+      const workflows = await payrollService.getPayrollWorkflows({ payroll_run: payrollRunId })
+      const list = Array.isArray(workflows) ? workflows : (workflows?.results ?? [])
+      setRunWorkflow(list.length > 0 ? list[0] : null)
+    } catch (err) {
+      console.error('Failed to load workflow:', err)
+      setRunWorkflow(null)
+    } finally {
+      setRunWorkflowLoading(false)
+    }
+  }, [])
+
+  const handleRunWorkflowAction = useCallback(async (action, data) => {
+    if (!runWorkflow) return
+    setRunWorkflowLoading(true)
+    try {
+      const actionMap = {
+        submit: () => payrollService.submitPayrollForReview(runWorkflow.id, data),
+        approve_hr: () => payrollService.approveHR(runWorkflow.id, data),
+        approve_accounting: () => payrollService.approveAccounting(runWorkflow.id, data),
+        approve_finance: () => payrollService.approveFinance(runWorkflow.id, data),
+        reject: () => payrollService.rejectPayrollWorkflow(runWorkflow.id, { rejection_reason: data.comments }),
+      }
+      
+      const successMessages = {
+        submit: 'Payroll submitted for HR review! Notification sent to HR Manager.',
+        approve_hr: 'HR approval complete! Notification sent to Accounting.',
+        approve_accounting: 'Accounting approval complete! Notification sent to Finance.',
+        approve_finance: 'Finance approval complete! Payroll is now approved.',
+        reject: 'Payroll rejected. Notification sent to submitter.',
+      }
+      
+      if (actionMap[action]) {
+        await actionMap[action]()
+        toast(successMessages[action] || 'Action completed successfully!')
+        await loadRunWorkflow(selRunId)
+      }
+    } catch (err) {
+      const errorMsg = err?.response?.data?.error || err?.response?.data?.detail || 'Workflow action failed'
+      toast(errorMsg, false)
+    } finally {
+      setRunWorkflowLoading(false)
+    }
+  }, [runWorkflow, selRunId, toast, loadRunWorkflow])
+
+  // Load workflow when selected run changes
+  useEffect(() => {
+    if (selRunId) {
+      loadRunWorkflow(selRunId)
+    } else {
+      setRunWorkflow(null)
+    }
+  }, [selRunId, loadRunWorkflow])
+
 
   const handleNewRunCreated = useCallback((run) => {
     setRuns(prev => [run, ...prev]); setSelRunId(run.id)
@@ -2310,6 +2378,31 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
         pendingCount={kpiData.pendingCount} approvedCount={kpiData.approvedCount}
         onProcess={handleProcess} onBulkApprove={handleBulkApprove} onBulkSend={handleBulkSend}
       />
+
+      {/* PayrollRun Workflow Panel — Multi-stage approval timeline */}
+      {selRunId && runWorkflow && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <WorkflowStatusPanel workflow={runWorkflow} />
+          </div>
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <h3 className="text-sm font-bold text-slate-800 mb-4">Workflow Actions</h3>
+              <WorkflowActionButtons 
+                workflow={runWorkflow} 
+                onAction={handleRunWorkflowAction}
+                disabled={runWorkflowLoading}
+              />
+              {runWorkflowLoading && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+                  <Spinner size={4} />
+                  Processing workflow action...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {!selRunId ? (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">

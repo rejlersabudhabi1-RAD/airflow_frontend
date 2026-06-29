@@ -198,6 +198,34 @@ const payrollService = {
   triggerAutoRun: () =>
     unwrap(apiClient.post(`${FINANCE}/payroll-schedule/trigger-now/`)),
 
+  // ── Payroll Workflow (Multi-stage approval: Michelle → Sanglin → Aneef → Aleksi) ──
+  getPayrollWorkflows: (params = {}) =>
+    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/`, { params })),
+  
+  getPayrollWorkflow: (id) =>
+    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/${id}/`)),
+  
+  getMyPendingWorkflows: () =>
+    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/my_pending/`)),
+  
+  getWorkflowStakeholders: () =>
+    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/stakeholders/`)),
+  
+  submitPayrollForReview: (workflowId, data = {}) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/submit/`, data)),
+  
+  approveHR: (workflowId, data = {}) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_hr/`, data)),
+  
+  approveAccounting: (workflowId, data = {}) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_accounting/`, data)),
+  
+  approveFinance: (workflowId, data = {}) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_finance/`, data)),
+  
+  rejectPayrollWorkflow: (workflowId, data = {}) =>
+    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/reject/`, data)),
+
   // ── PDF presigned download ────────────────────────────────────────────────
   downloadSlipPdf: (slipId) =>
     unwrap(apiClient.get(`${FINANCE}/salary-slips/${slipId}/download-pdf/`)),

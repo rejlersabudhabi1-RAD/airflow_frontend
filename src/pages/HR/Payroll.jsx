@@ -4,9 +4,14 @@
  *
  * Tab container for all 6 payroll modules.
  * Hoists shared state (activeRunId, selectedEmployee) and passes down as props.
+ * 
+ * Notification Integration:
+ *   When user clicks a workflow notification, they're navigated here with ?run=<id>
+ *   The component auto-switches to the "engine" tab and selects that payroll run.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useSelector } from 'react-redux'
+import { useSearchParams } from 'react-router-dom'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import {
   PAYROLL_TABS,
@@ -37,9 +42,21 @@ const TAB_COMPONENTS = {
 }
 
 export default function Payroll() {
+  const [searchParams] = useSearchParams()
   const [activeTab,    setActiveTab]    = useState(PAYROLL_DEFAULT_TAB)
   const [activeRunId,  setActiveRunId]  = useState(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // ── Notification deep-link handling ────────────────────────────────────────
+  // When user clicks a workflow notification, auto-switch to engine tab and select the run
+  useEffect(() => {
+    const runIdFromUrl = searchParams.get('run')
+    if (runIdFromUrl) {
+      setActiveRunId(runIdFromUrl)
+      setActiveTab('engine')  // Auto-switch to engine tab
+      console.log(`[Payroll] Notification deep-link detected: run=${runIdFromUrl}, switching to engine tab`)
+    }
+  }, [searchParams])
 
   // Sync state with native fullscreenchange so the button icon stays accurate
   useEffect(() => {
