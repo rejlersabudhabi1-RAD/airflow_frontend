@@ -2492,7 +2492,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50">
                       <tr>
-                        {['Employee','Department','Basic','Allowances','Deductions','Net Salary','Attendance','Status','AI Flags','Actions'].map(h => (
+                        {['Employee','Joining Date','Department','Basic','Allowances','Deductions','Net Salary','Attendance','Status','AI Flags','Actions'].map(h => (
                           <th key={h} className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -2503,7 +2503,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                         : filteredSlips.length === 0
                           ? (
                             <tr>
-                              <td colSpan={10} className="px-4 py-10 text-center text-slate-400 text-sm">
+                              <td colSpan={11} className="px-4 py-10 text-center text-slate-400 text-sm">
                                 <Icon name="InboxIcon" className="w-8 h-8 mx-auto mb-2 opacity-30" />
                                 {ENGINE_COPY.noSlipsFound}
                               </td>
@@ -2520,6 +2520,9 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                                 <td className="px-3 py-2.5">
                                   <div className="font-medium text-slate-800 whitespace-nowrap">{slip.employee_name || 'â€”'}</div>
                                   <div className="text-xs text-slate-400 font-mono">{slip.slip_number}</div>
+                                </td>
+                                <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap text-xs">
+                                  {slip.employee_join_date ? new Date(slip.employee_join_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                                 </td>
                                 <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{slip.department || 'â€”'}</td>
                                 <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{fmtCurrency(slip.basic_salary)}</td>
