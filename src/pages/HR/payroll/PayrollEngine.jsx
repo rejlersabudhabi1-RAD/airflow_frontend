@@ -22,6 +22,7 @@ import payrollService from '../../../services/payroll.service'
 import timesheetSvc   from '../../../services/timesheet.service'
 import WorkflowStatusPanel from '../../../components/Payroll/WorkflowStatusPanel'
 import WorkflowActionButtons from '../../../components/Payroll/WorkflowActionButtons'
+import EditSalarySlipModal from '../../../components/Payroll/EditSalarySlipModal'
 import {
   ENGINE_ANOMALY_RULES,
   ENGINE_ANOMALY_SEVERITY,
@@ -874,114 +875,22 @@ function RowEditModal({ row, onClose, onSave, onSuccess }) {
 }
 
 // ─── Slip Edit Modal (existing payroll run slip editor) ───────────────────────
+/**
+ * Slip Edit Modal - Smart salary component editor
+ * Uses comprehensive EditSalarySlipModal component with auto-calculation
+ */
 function SlipEditModal({ slip, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    basic_salary:     String(slip.basic_salary      ?? ''),
-    total_allowances: String(slip.total_allowances  ?? ''),
-    gross_salary:     String(slip.gross_salary      ?? ''),
-    total_deductions: String(slip.total_deductions  ?? ''),
-    net_salary:       String(slip.net_salary        ?? ''),
-    present_days:     String(slip.present_days      ?? ''),
-    absent_days:      String(slip.absent_days       ?? ''),
-    working_days:     String(slip.working_days      ?? ''),
-    remarks:          slip.remarks ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [err,    setErr]    = useState('')
-
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setSaving(true); setErr('')
-    try {
-      const payload = {
-        basic_salary:     parseFloat(form.basic_salary)     || 0,
-        total_allowances: parseFloat(form.total_allowances) || 0,
-        gross_salary:     parseFloat(form.gross_salary)     || 0,
-        total_deductions: parseFloat(form.total_deductions) || 0,
-        net_salary:       parseFloat(form.net_salary)       || 0,
-        present_days:     parseInt(form.present_days,  10)  || 0,
-        absent_days:      parseInt(form.absent_days,   10)  || 0,
-        working_days:     parseInt(form.working_days,  10)  || 0,
-        remarks:          form.remarks.trim(),
-      }
-      await payrollService.updateSalarySlip(slip.id, payload)
-      onSaved(ENGINE_COPY.editSuccess)
-    } catch (ex) {
-      setErr(
-        ex?.response?.data?.detail ||
-        Object.values(ex?.response?.data ?? {})?.[0]?.[0] ||
-        'Failed to save changes.'
-      )
-    } finally { setSaving(false) }
+  const handleUpdate = async (updatedSlip) => {
+    // Success! Notify parent and close
+    onSaved(ENGINE_COPY.editSuccess || 'Salary slip updated successfully')
   }
 
-  const numField = (label, key) => (
-    <label key={key} className="block">
-      <span className="text-xs text-slate-500 font-medium">{label}</span>
-      <input type="number" step="0.01" min="0" value={form[key]} onChange={set(key)}
-        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-    </label>
-  )
-  const intField = (label, key) => (
-    <label key={key} className="block">
-      <span className="text-xs text-slate-500 font-medium">{label}</span>
-      <input type="number" step="1" min="0" value={form[key]} onChange={set(key)}
-        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-    </label>
-  )
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Icon name="PencilSquareIcon" className="w-5 h-5 text-blue-600" />
-              {ENGINE_COPY.editModalTitle}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">{slip.employee_name} · {slip.slip_number}</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1.5">
-            <Icon name="XMarkIcon" className="w-5 h-5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
-          <div className="grid grid-cols-2 gap-3">
-            {numField('Basic Salary (AED)', 'basic_salary')}
-            {numField('Total Allowances (AED)', 'total_allowances')}
-            {numField('Gross Salary (AED)', 'gross_salary')}
-            {numField('Total Deductions (AED)', 'total_deductions')}
-            {numField('Net Salary (AED)', 'net_salary')}
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            {intField('Working Days', 'working_days')}
-            {intField('Present Days', 'present_days')}
-            {intField('Absent Days', 'absent_days')}
-          </div>
-          <label className="block">
-            <span className="text-xs text-slate-500 font-medium">Remarks</span>
-            <textarea value={form.remarks} onChange={set('remarks')} rows={2}
-              placeholder="Optional remarks..."
-              className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
-          </label>
-          {err && <p className="text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">{err}</p>}
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition">
-              {saving ? <Spinner size={3} /> : <Icon name="CheckIcon" className="w-4 h-4" />}
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <EditSalarySlipModal
+      slip={slip}
+      onClose={onClose}
+      onUpdate={handleUpdate}
+    />
   )
 }
 
