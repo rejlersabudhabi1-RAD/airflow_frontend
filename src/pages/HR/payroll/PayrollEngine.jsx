@@ -23,6 +23,7 @@ import timesheetSvc   from '../../../services/timesheet.service'
 import WorkflowStatusPanel from '../../../components/Payroll/WorkflowStatusPanel'
 import WorkflowActionButtons from '../../../components/Payroll/WorkflowActionButtons'
 import EditSalarySlipModal from '../../../components/Payroll/EditSalarySlipModal'
+import DeductionModal from '../../../components/Payroll/DeductionModal'
 import {
   ENGINE_ANOMALY_RULES,
   ENGINE_ANOMALY_SEVERITY,
@@ -1190,6 +1191,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
   const [rowEditTarget,    setRowEditTarget]    = useState(null) // single MasterPayrollRow being edited
   const [runsLoading,  setRunsLoading] = useState(true)
   const [editModal,    setEditModal]   = useState(null)  // slip object | null
+  const [deductionModal, setDeductionModal] = useState(null)  // slip object | null (for percentage deduction)
   const [deleteModal,  setDeleteModal] = useState(null)  // slip object | null
   const [hrModal,      setHrModal]     = useState(null)  // slip object | null
   const [importHistory,   setImportHistory]   = useState([])
@@ -2554,6 +2556,14 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
                                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">
                                       <Icon name="PencilSquareIcon" className="w-4 h-4" />
                                     </button>
+                                    {/* DEDUCTION BUTTON - Only show for draft/pending_review slips */}
+                                    {(slip.status === 'draft' || slip.status === 'pending_review') && (
+                                      <button type="button" title="Apply Percentage Deduction"
+                                        onClick={() => setDeductionModal(slip)}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition">
+                                        <Icon name="CalculatorIcon" className="w-4 h-4" />
+                                      </button>
+                                    )}
                                     <button type="button" title={ENGINE_COPY.hrOverrideBtn}
                                       onClick={() => setHrModal(slip)}
                                       className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition">
@@ -2964,6 +2974,19 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
           slip={editModal}
           onClose={() => setEditModal(null)}
           onSaved={(msg) => { toast(msg); reloadSlips(); setEditModal(null) }}
+        />
+      )}
+
+      {/* Percentage Deduction Modal - AI-driven allowance deduction */}
+      {deductionModal && (
+        <DeductionModal
+          slip={deductionModal}
+          onClose={() => setDeductionModal(null)}
+          onSuccess={(data) => {
+            toast(data.message || 'Deduction applied successfully');
+            reloadSlips();
+            setDeductionModal(null);
+          }}
         />
       )}
 
