@@ -279,7 +279,7 @@ const About = () => {
             <SectionLabel>By the Numbers</SectionLabel>
             <h2 className="text-4xl lg:text-5xl font-black text-white">Field-Proven Impact</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {COMPANY_STATS.map(stat => <GaugeCard key={stat.id} stat={stat} />)}
           </div>
         </div>

@@ -158,20 +158,6 @@ export const COMPANY_STATS = [
     icon: '🏆'
   },
   {
-    id: 'team',
-    value: '2,500+',
-    label: 'Expert Engineers',
-    description: 'Across multiple disciplines',
-    icon: '👥'
-  },
-  {
-    id: 'projects',
-    value: '10,000+',
-    label: 'Projects Delivered',
-    description: 'Successfully completed worldwide',
-    icon: '📊'
-  },
-  {
     id: 'countries',
     value: '12+',
     label: 'Countries',

@@ -8,18 +8,13 @@ import {
   SOLUTIONS_CTA,
   REDIRECT_AFTER_LOGIN_KEY,
   getCategoriesWithSolutions,
-  searchSolutions,
 } from '../config/solutions.config'
 import {
-  MagnifyingGlassIcon,
   SparklesIcon,
   ArrowRightIcon,
-  CheckCircleIcon,
   RocketLaunchIcon,
-  XMarkIcon,
   CpuChipIcon,
   BoltIcon,
-  Squares2X2Icon,
 } from '@heroicons/react/24/outline'
 
 /* ─── Brand palette ─────────────────────────────────────────────────────────── */
@@ -125,7 +120,6 @@ const gc = cat => CAT_COLORS[cat] || CAT_COLORS._default
 const Solutions = () => {
   const { isAuthenticated } = useSelector(s => s.auth)
   const navigate = useNavigate()
-  const [searchQuery, setSearchQuery]     = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [expanded, setExpanded]           = useState(null)
 
@@ -137,17 +131,15 @@ const Solutions = () => {
 
   const categories     = useMemo(() => getCategoriesWithSolutions(), [])
   const engineeringCats = useMemo(() => categories.filter(c => c.group === 'engineering'), [categories])
-  const platformCats    = useMemo(() => categories.filter(c => c.group === 'platform'),    [categories])
 
   const filteredSolutions = useMemo(() => {
-    const list = searchQuery ? searchSolutions(searchQuery) : SOLUTIONS
-    return selectedCategory === 'all' ? list : list.filter(s => s.category === selectedCategory)
-  }, [searchQuery, selectedCategory])
+    return selectedCategory === 'all' ? SOLUTIONS : SOLUTIONS.filter(s => s.category === selectedCategory)
+  }, [selectedCategory])
 
   /* AI spotlight — top 4 AI tools shown above card grid */
   const aiSpotlight = useMemo(() => SOLUTIONS.filter(s => s.isAI).slice(0, 4), [])
 
-  const showSpotlight = !searchQuery && selectedCategory === 'all'
+  const showSpotlight = selectedCategory === 'all'
 
   /* ─── render ─────────────────────────────────────────────────────────────── */
   return (
@@ -225,37 +217,6 @@ const Solutions = () => {
               </div>
             </div>
 
-            {/* right: search */}
-            <div className="lg:w-80 w-full" style={{ animation: 'solFadeUp .8s .18s ease-out both' }}>
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5"
-                  style={{ color: 'rgba(255,255,255,.35)' }} />
-                <input
-                  type="text"
-                  placeholder="Search tools, disciplines, modules…"
-                  value={searchQuery}
-                  onChange={e => { setSearchQuery(e.target.value); setSelectedCategory('all') }}
-                  className="w-full pl-12 pr-10 py-3.5 text-sm font-medium rounded-xl focus:outline-none"
-                  style={{
-                    background: 'rgba(255,255,255,.07)',
-                    border: '1px solid rgba(255,255,255,.12)',
-                    color: '#fff',
-                    backdropFilter: 'blur(8px)',
-                  }}
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <XMarkIcon className="w-4 h-4" style={{ color: 'rgba(255,255,255,.4)' }} />
-                  </button>
-                )}
-              </div>
-              {searchQuery && (
-                <p className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,.4)' }}>
-                  {filteredSolutions.length} result{filteredSolutions.length !== 1 ? 's' : ''} for &ldquo;{searchQuery}&rdquo;
-                </p>
-              )}
-            </div>
           </div>
         </div>
       </section>
@@ -347,19 +308,6 @@ const Solutions = () => {
       <section className="px-6 pb-8">
         <div className="max-w-6xl mx-auto space-y-3">
 
-          {/* All tab */}
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => setSelectedCategory('all')}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl transition-all duration-200"
-              style={selectedCategory === 'all'
-                ? { background: `linear-gradient(135deg,${B.accent},${B.teal})`, color: '#fff', border: '1px solid transparent' }
-                : { background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', color: 'rgba(255,255,255,.6)' }}>
-              <Squares2X2Icon className="w-4 h-4" />
-              All features
-              <span className="opacity-60">({SOLUTIONS.length})</span>
-            </button>
-          </div>
-
           {/* Engineering discipline tabs */}
           {engineeringCats.length > 0 && (
             <div>
@@ -387,230 +335,6 @@ const Solutions = () => {
             </div>
           )}
 
-          {/* Platform category tabs */}
-          {platformCats.length > 0 && (
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-2"
-                style={{ color: 'rgba(255,255,255,.28)' }}>Platform</p>
-              <div className="flex flex-wrap gap-2">
-                {platformCats.map(cat => {
-                  const active = selectedCategory === cat.id
-                  const cs     = gc(cat.id)
-                  const Icon   = cat.icon
-                  const count  = SOLUTIONS.filter(s => s.category === cat.id).length
-                  return (
-                    <button key={cat.id} onClick={() => setSelectedCategory(cat.id)}
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200"
-                      style={active
-                        ? { background: `linear-gradient(135deg,${cs.from},${cs.to})`, color: '#fff', border: '1px solid transparent', boxShadow: `0 4px 16px ${cs.glow}` }
-                        : { background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', color: 'rgba(255,255,255,.55)' }}>
-                      {Icon && <Icon className="w-3.5 h-3.5" />}
-                      {cat.title}
-                      <span className="opacity-55">({count})</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ════════════════ SOLUTION CARDS ════════════════ */}
-      <section className="px-6 pb-20">
-        <div className="max-w-6xl mx-auto">
-          {filteredSolutions.length === 0 ? (
-            <div className="text-center py-24">
-              <div className="text-5xl mb-4">🔍</div>
-              <h3 className="text-xl font-bold text-white mb-2">No tools found</h3>
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,.4)' }}>
-                Try a different search term or category filter
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* group header when filtering by category */}
-              {selectedCategory !== 'all' && (() => {
-                const cat = SOLUTION_CATEGORIES[selectedCategory]
-                const cs  = gc(selectedCategory)
-                const Icon = cat?.icon
-                return cat ? (
-                  <div className="flex items-center gap-3 mb-6 pb-4"
-                    style={{ borderBottom: `1px solid rgba(255,255,255,.07)` }}>
-                    {Icon && (
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                        style={{ background: `linear-gradient(135deg,${cs.from},${cs.to})` }}>
-                        <Icon className="w-5 h-5 text-white" />
-                      </div>
-                    )}
-                    <div>
-                      <h2 className="text-lg font-black text-white">{cat.title}</h2>
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,.4)' }}>
-                        {filteredSolutions.length} feature{filteredSolutions.length !== 1 ? 's' : ''}
-                        {cat.description ? ` — ${cat.description}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                ) : null
-              })()}
-
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredSolutions.map((sol, i) => {
-                  const Icon   = sol.icon
-                  const cs     = gc(sol.category)
-                  const isOpen = expanded === sol.id
-                  const hasDetails = sol.features && sol.features.length > 0
-
-                  return (
-                    <div key={sol.id}
-                      className="group relative overflow-hidden flex flex-col"
-                      style={{
-                        borderRadius: 20,
-                        border: '1px solid rgba(255,255,255,.08)',
-                        background: 'rgba(255,255,255,.04)',
-                        transition: 'all .35s',
-                        animation: `solFadeUp .5s ${(i % 9) * .055}s ease-out both`,
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = `${cs.from}55`
-                        e.currentTarget.style.transform   = 'translateY(-3px)'
-                        e.currentTarget.style.boxShadow   = `0 18px 52px ${cs.glow}`
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'
-                        e.currentTarget.style.transform   = ''
-                        e.currentTarget.style.boxShadow   = ''
-                      }}>
-
-                      {/* scan line animation on hover */}
-                      <div className="absolute left-0 right-0 h-px opacity-0 group-hover:opacity-100 pointer-events-none"
-                        style={{
-                          background: `linear-gradient(90deg,transparent,${cs.from},transparent)`,
-                          animation: 'solScan 2.2s linear infinite',
-                          transition: 'opacity .3s',
-                        }} />
-
-                      {/* ── Card header ── */}
-                      <div className="relative p-5"
-                        style={{
-                          background: `linear-gradient(135deg,${cs.from}22,${cs.to}0d)`,
-                          borderBottom: '1px solid rgba(255,255,255,.06)',
-                        }}>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-lg"
-                            style={{ background: `linear-gradient(135deg,${cs.from},${cs.to})` }}>
-                            {Icon && <Icon className="w-5 h-5 text-white" />}
-                          </div>
-                          <div className="flex flex-col items-end gap-1 ml-2">
-                            {sol.badge ? (
-                              <Bdg badge={sol.badge} />
-                            ) : sol.isPremium ? (
-                              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                style={{ background: 'rgba(97,122,173,.14)', border: '1px solid rgba(97,122,173,.3)', color: 'rgba(97,122,173,.9)' }}>
-                                Module
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <h3 className="text-base font-black text-white mb-0.5 leading-snug">{sol.title}</h3>
-                        {sol.disciplineLabel && (
-                          <p className="text-xs font-semibold mb-1" style={{ color: cs.from }}>
-                            {sol.disciplineLabel} Engineering
-                          </p>
-                        )}
-                        <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,.5)' }}>
-                          {sol.shortDescription}
-                        </p>
-                      </div>
-
-                      {/* ── Card body ── */}
-                      <div className="p-5 flex flex-col flex-1">
-
-                        {/* discipline + tag chips */}
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                          {(sol.tags || []).map(tag => (
-                            <span key={tag} className="px-2.5 py-0.5 text-xs font-semibold rounded-full"
-                              style={{ background: `${cs.from}18`, border: `1px solid ${cs.from}40`, color: cs.from }}>
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* expandable feature list */}
-                        {isOpen && hasDetails && (
-                          <div className="mb-4 space-y-1.5" style={{ animation: 'solFadeUp .22s ease-out' }}>
-                            <p className="text-xs font-bold uppercase tracking-wider mb-2"
-                              style={{ color: cs.from }}>Capabilities</p>
-                            {sol.features.map(f => (
-                              <div key={f} className="flex items-start gap-2 text-xs"
-                                style={{ color: 'rgba(255,255,255,.55)' }}>
-                                <CheckCircleIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
-                                  style={{ color: cs.from }} />
-                                {f}
-                              </div>
-                            ))}
-                            {sol.benefits && sol.benefits.length > 0 && (
-                              <>
-                                <p className="text-xs font-bold uppercase tracking-wider mt-3 mb-1.5"
-                                  style={{ color: cs.to }}>Benefits</p>
-                                {sol.benefits.map(b => (
-                                  <div key={b} className="flex items-start gap-2 text-xs"
-                                    style={{ color: 'rgba(255,255,255,.55)' }}>
-                                    <RocketLaunchIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
-                                      style={{ color: cs.to }} />
-                                    {b}
-                                  </div>
-                                ))}
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* CTA buttons */}
-                        <div className="flex gap-2 mt-auto">
-                          {hasDetails && (
-                            <button onClick={() => setExpanded(isOpen ? null : sol.id)}
-                              className="flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-200"
-                              style={{
-                                background: 'rgba(255,255,255,.07)',
-                                border: '1px solid rgba(255,255,255,.1)',
-                                color: 'rgba(255,255,255,.65)',
-                              }}>
-                              {isOpen ? '↑ Less' : '↓ Details'}
-                            </button>
-                          )}
-
-                          {isAuthenticated ? (
-                            <Link to={sol.link}
-                              className="group/btn flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg"
-                              style={{
-                                background: `linear-gradient(135deg,${cs.from},${cs.to})`,
-                                color: '#fff',
-                                boxShadow: `0 4px 14px ${cs.glow}`,
-                              }}>
-                              Open
-                              <ArrowRightIcon className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-                            </Link>
-                          ) : (
-                            <button onClick={() => handleGetStarted(sol.link)}
-                              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all duration-200"
-                              style={{
-                                background: `linear-gradient(135deg,${cs.from},${cs.to})`,
-                                color: '#fff',
-                              }}>
-                              Get Started
-                              <ArrowRightIcon className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
         </div>
       </section>
 
@@ -648,17 +372,7 @@ const Solutions = () => {
             Join engineering teams using RADAI to accelerate projects, eliminate manual errors,
             and deliver consistent, compliant results — across every discipline.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to={SOLUTIONS_CTA.primary.link}
-              className="group flex items-center justify-center gap-2 font-bold text-sm px-7 py-3.5 rounded-xl transition-all duration-300"
-              style={{
-                background: `linear-gradient(135deg,${B.accent},${B.teal})`,
-                color: '#fff',
-                boxShadow: '0 0 30px rgba(97,122,173,.35)',
-              }}>
-              {SOLUTIONS_CTA.primary.text}
-              <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
+          <div className="flex justify-center">
             <Link to={SOLUTIONS_CTA.secondary.link}
               className="font-bold text-sm px-7 py-3.5 rounded-xl transition-all duration-300"
               style={{

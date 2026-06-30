@@ -28,21 +28,21 @@ const LANDING_CONFIG = {
   particleCount: 22,
   counterDuration: 2200, // ms for number counter animation
   showProductModules: false, // set true to re-enable the Product Suite section
-  // Floating AI keyword chips in the hero — edit labels freely
+  // Floating AI keyword chips in the hero - edit labels freely
   heroTokens: ['LLM', 'SLM', 'ML', 'ADNOC', 'ISA-5.1', 'Quantum', 'P&ID', 'RAG', 'API-520', 'IEC-61511', 'ASME', 'NLP'],
-  // AI Engine section — soft-coded, edit freely
+  // AI Engine section - soft-coded, edit freely
   aiEngine: {
     sectionLabel: 'AI ENGINE',
     headline:     'Multi-Model Intelligence for',
     headlineGrad: 'Engineering Precision',
-    body: 'RADAI orchestrates a layered AI stack — Large Language Models for contextual understanding, Small Language Models for rapid clause-matching, Classical ML for anomaly detection, and Quantum-inspired optimisation for complex constraint solving — all converging on a single verified P&ID finding.',
+    body: 'RADAI orchestrates a layered AI stack â€” Large Language Models for contextual understanding, Small Language Models for rapid clause-matching, Classical ML for anomaly detection, and Quantum-inspired optimisation for complex constraint solving â€” all converging on a single verified P&ID finding.',
     layers: [
       { label:'LLM Layer',     desc:'Contextual P&ID understanding + standard interpretation', color:'#7FCAB5', width:'100%' },
       { label:'SLM Layer',     desc:'High-speed clause extraction + ADNOC rule matching',      color:'#0ea5e9', width:'82%'  },
       { label:'ML / Vision',   desc:'Symbol detection, valve classification, anomaly flags',   color:'#a78bfa', width:'91%'  },
       { label:'Quantum Optim.',desc:'Multi-constraint compliance solving + risk scoring',       color:'#f59e0b', width:'74%'  },
     ],
-    // Radar axes — change labels/values (0–1) freely
+    // Radar axes - change labels/values (0-1) freely
     radar: [
       { axis:'LLM Context',    value: 0.97 },
       { axis:'SLM Speed',      value: 0.91 },
@@ -52,32 +52,7 @@ const LANDING_CONFIG = {
       { axis:'RAG Retrieval',  value: 0.93 },
     ],
   },
-  stats: [
-    {
-      value: 99,  suffix: '%',  label: 'Accuracy Rate',      icon: '?',
-      color: '#7FCAB5', sub: 'LLM + SLM + ML consensus scoring',
-      sparkline: [60,72,78,85,88,91,94,97,98,99],
-      badge: 'AI VERIFIED',
-    },
-    {
-      value: 10,  suffix: 'x',  label: 'Faster Reviews',     icon: '?',
-      color: '#0ea5e9', sub: 'vs manual ADNOC compliance audit',
-      sparkline: [1,1.5,2,3,4,5,6,7,9,10],
-      badge: 'SPEED',
-    },
-    {
-      value: 500, suffix: '+',  label: 'Drawings Analysed',  icon: '¦',
-      color: '#a78bfa', sub: 'P&ID / PFD / isometric sheets',
-      sparkline: [20,60,110,180,240,310,370,420,470,500],
-      badge: 'PROCESSED',
-    },
-    {
-      value: 80,  suffix: '+',  label: 'Years of Expertise', icon: '?',
-      color: '#f59e0b', sub: 'Rejlers Engineering in Abu Dhabi',
-      sparkline: [10,20,30,40,50,55,62,68,75,80],
-      badge: 'TRUSTED',
-    },
-  ],
+  stats: [],
   whyRadai: {
     sectionLabel: 'WHY RADAI',
     headline:     'Engineered for',
@@ -104,7 +79,7 @@ const LANDING_CONFIG = {
     {
       icon: 'AI',
       title: 'Multi-Model AI Stack',
-      desc: 'LLM, SLM, ML Vision and Quantum-inspired optimisation run in parallel — every P&ID finding is consensus-verified before reaching your engineers.',
+      desc: 'LLM, SLM, ML Vision and Quantum-inspired optimisation run in parallel â€” every P&ID finding is consensus-verified before reaching your engineers.',
       color: '#a78bfa',
       tags: ['LLM','SLM','ML Vision','Quantum','RAG'],
       highlight: '99% accuracy',
@@ -140,54 +115,14 @@ const LANDING_CONFIG = {
     headline:     'Ready to Transform Your',
     headlineGrad: 'Engineering Workflow?',
     body: "Join Abu Dhabi's engineering teams already using RADAI to review P&IDs faster, catch compliance issues earlier, and deliver better drawings to their clients.",
-    primaryBtn:   { label: 'Start Free — No Credit Card Required', to: '/register' },
-    secondaryBtn: { label: 'Request a Demo', href: 'mailto:info@radai.ae' },
+    secondaryBtn: { label: 'Request a Demo', to: '/enquiry' },
     trustPills:   ['Free to start', 'Abu Dhabi support', 'ADNOC compliant', 'ISO 27001', 'No lock-in'],
     steps: [
-      { num: '01', icon: '?', label: 'Upload Drawing',   desc: 'Upload any P&ID PDF or image — ADNOC, ISA-5.1 or custom format', color: '#7FCAB5' },
-      { num: '02', icon: '¦', label: 'AI Multi-Pass',    desc: 'LLM + SLM + ML Vision run in parallel — findings in under 60 s',  color: '#0ea5e9' },
-      { num: '03', icon: '?', label: 'Certified Report', desc: 'Standards-cited findings, evidence clips and exportable PDF report', color: '#a78bfa' },
+      { num: '01', icon: 'â†‘', label: 'Upload Drawing',   desc: 'Upload any P&ID PDF or image â€” ADNOC, ISA-5.1 or custom format', color: '#7FCAB5' },
+      { num: '02', icon: 'âœ¦', label: 'AI Multi-Pass',    desc: 'LLM + SLM + ML Vision run in parallel â€” findings in under 60 s',  color: '#0ea5e9' },
+      { num: '03', icon: 'âœ“', label: 'Certified Report', desc: 'Standards-cited findings, evidence clips and exportable PDF report', color: '#a78bfa' },
     ],
     bgWords: ['P&ID','LLM','ADNOC','ISA-5.1','SLM','Quantum','ML','RAG','API-520','NLP','ASME','IEC'],
-  },
-  // -- Abu Dhabi Market section -- edit freely
-  abuDhabiMarket: {
-    sectionLabel: 'REGIONAL EXPERTISE',
-    headline:     'Designed for',
-    headlineGrad: "Abu Dhabi's Energy Future",
-    sub: "The UAE's oil & gas sector produces over 3 million barrels per day. RADAI brings next-generation AI accuracy to every P&ID drawing, every compliance check, and every engineering decision in this critical industry.",
-    keyMetric: { value: 3, suffix: 'M+', label: 'Barrels / Day', sub: 'UAE oil & gas sector daily output' },
-    sectors: [
-      {
-        icon: 'UP', label: 'Upstream',
-        desc: 'E&P field development, wellhead P&IDs, gathering systems — verified against ADNOC drilling and production standards.',
-        orgs: ['ADNOC Upstream','ADNOC Onshore','ADNOC Offshore'],
-        color: '#0ea5e9',
-      },
-      {
-        icon: 'MX', label: 'Midstream',
-        desc: 'Gas processing, LNG, pipelines and storage — automatic compliance checking for gas handling and safety systems.',
-        orgs: ['ADNOC Gas','ADNOC LNG','GASCO'],
-        color: '#7FCAB5',
-      },
-      {
-        icon: 'DS', label: 'Downstream',
-        desc: 'Refineries, petrochemicals and distribution — ADNOC-L&S approved symbol libraries and hazard categorisation.',
-        orgs: ['ADNOC Refining','BOROUGE','TAKREER'],
-        color: '#a78bfa',
-      },
-    ],
-    aiMetrics: [
-      { label: 'P&ID Accuracy',      value: 99, color: '#7FCAB5' },
-      { label: 'Review Speed',        value: 92, color: '#0ea5e9' },
-      { label: 'Standard Coverage',   value: 87, color: '#a78bfa' },
-      { label: 'Issue Detection Rate',value: 95, color: '#f59e0b' },
-    ],
-    pipelineSteps: ['UPLOAD','OCR','LLM','VERIFY','REPORT'],
-    heritage: {
-      text: 'has been delivering engineering excellence in the GCC since 1983 — 80+ years of global expertise, Abu Dhabi roots.',
-      pills: ['1983 — Founded','Abu Dhabi HQ','500+ P&IDs Verified','Engineering Excellence','AI-First Approach'],
-    },
   },
 }
 
@@ -833,7 +768,7 @@ const Home = () => {
                 <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#2AA784', animationDelay: '0.5s' }}/>
               </div>
 
-              {/* Main headline — glitch + scan beam + Abu Dhabi glow */}
+              {/* Main headline - glitch + scan beam + Abu Dhabi glow */}
               <div className="hero-animate-d1 relative">
                 {/* Scan beam sweeping across headline */}
                 <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
@@ -850,7 +785,7 @@ const Home = () => {
                   {/* "Engineering AI" with RGB glitch layers */}
                   <span className="block relative text-5xl sm:text-6xl md:text-7xl lg:text-8xl mb-2" style={{fontWeight:900}}>
                     <span className="gradient-text-animated">Engineering AI</span>
-                    {/* Glitch layer A — cyan offset */}
+                    {/* Glitch layer A - cyan offset */}
                     <span aria-hidden="true" style={{
                       position:'absolute', inset:0, display:'block', fontWeight:900,
                       background:'linear-gradient(90deg,#73BDC8,#7FCAB5,#0ea5e9)',
@@ -858,7 +793,7 @@ const Home = () => {
                       animation:'glitchShiftA 9s ease-in-out 1s infinite',
                       userSelect:'none', pointerEvents:'none',
                     }}>Engineering AI</span>
-                    {/* Glitch layer B — green offset */}
+                    {/* Glitch layer B - green offset */}
                     <span aria-hidden="true" style={{
                       position:'absolute', inset:0, display:'block', fontWeight:900,
                       background:'linear-gradient(90deg,#2AA784,#617AAD,#7FCAB5)',
@@ -917,9 +852,9 @@ const Home = () => {
               {/* Trust strip */}
               <div className="hero-animate-d4 mt-10 flex flex-wrap gap-3">
                 {['ISO 27001','ADNOC Standards','API / ISA / ASME','IEC 61511','Abu Dhabi Based'].map(tag => (
-                  <span key={tag} className="text-xs px-3 py-1.5 rounded-full font-semibold"
+                  <span key={tag} className="text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5"
                     style={{ background: 'rgba(127,202,181,0.1)', border: '1px solid rgba(127,202,181,0.25)', color: '#7FCAB5' }}>
-                    ? {tag}
+                    <span aria-hidden="true">âœ“</span>{tag}
                   </span>
                 ))}
               </div>
@@ -931,124 +866,6 @@ const Home = () => {
             <span className="text-gray-400 text-xs font-medium tracking-widest uppercase">Scroll</span>
             <div className="w-5 h-8 rounded-full border border-gray-600 flex items-start justify-center pt-1.5">
               <div className="w-1 h-2 bg-gray-400 rounded-full animate-bounce"/>
-            </div>
-          </div>
-        </section>
-
-        {/* STATS BAR */}
-        <section className="relative overflow-hidden py-16 lg:py-20"
-          style={{ background: 'linear-gradient(160deg,#0a1628 0%,#0d2a1e 55%,#0a1628 100%)' }}>
-
-          {/* Subtle mesh grid */}
-          <div className="absolute inset-0 pointer-events-none opacity-[0.03]"
-            style={{
-              backgroundImage: 'linear-gradient(rgba(127,202,181,1) 1px,transparent 1px),linear-gradient(90deg,rgba(127,202,181,1) 1px,transparent 1px)',
-              backgroundSize: '32px 32px',
-            }}/>
-
-          {/* Section heading */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center mb-12">
-              <span className="text-[10px] font-bold tracking-[0.22em] uppercase px-3 py-1 rounded-full"
-                style={{ color:'#7FCAB5', background:'rgba(127,202,181,0.08)', border:'1px solid rgba(127,202,181,0.2)' }}>
-                LIVE PLATFORM METRICS
-              </span>
-              <h3 className="text-white font-black text-2xl sm:text-3xl mt-4">
-                AI Performance at a <span className="gradient-text-animated">Glance</span>
-              </h3>
-            </div>
-
-            {/* Stat cards grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
-              {LANDING_CONFIG.stats.map((stat, i) => {
-                const W = 120, H = 36, pts = stat.sparkline
-                const maxV = Math.max(...pts)
-                const polyline = pts.map((v, j) =>
-                  `${(j / (pts.length - 1)) * W},${H - (v / maxV) * (H - 4)}`
-                ).join(' ')
-                return (
-                  <RevealSection key={stat.label} delay={i * 0.12}>
-                    <div className="relative rounded-2xl overflow-hidden p-6 flex flex-col gap-3 cursor-default group"
-                      style={{
-                        background: `linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))`,
-                        border: `1px solid ${stat.color}28`,
-                        '--sg': stat.color,
-                        animation: `statCardIn 0.6s cubic-bezier(.4,0,.2,1) ${0.15 + i * 0.15}s both, statGlow 4s ease-in-out ${i * 0.8}s infinite`,
-                      }}>
-
-                      {/* Scan line sweep */}
-                      <div className="absolute left-0 right-0 h-px pointer-events-none"
-                        style={{
-                          background: `linear-gradient(90deg,transparent,${stat.color}66,transparent)`,
-                          animation: `statScanLine ${3 + i * 0.5}s ease-in-out ${i * 0.9 + 0.5}s infinite`,
-                        }}/>
-
-                      {/* Top row: icon badge + live dot */}
-                      <div className="flex items-center justify-between">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black"
-                          style={{ background: `${stat.color}18`, border: `1px solid ${stat.color}40`, color: stat.color }}>
-                          {stat.icon}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: stat.color, animation: 'statDotBlink 2s ease-in-out infinite' }}/>
-                          <span className="text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-full"
-                            style={{
-                              color: stat.color,
-                              background: `${stat.color}15`,
-                              border: `1px solid ${stat.color}30`,
-                              animation: `statBadgePulse 3s ease-in-out ${i * 0.4}s infinite`,
-                            }}>{stat.badge}</span>
-                        </div>
-                      </div>
-
-                      {/* Counter */}
-                      <div>
-                        <div className="text-4xl lg:text-5xl font-black leading-none mb-0.5"
-                          style={{ color: stat.color, textShadow: `0 0 30px ${stat.color}44` }}>
-                          <AnimatedCounter end={stat.value} suffix={stat.suffix} duration={LANDING_CONFIG.counterDuration}/>
-                        </div>
-                        <div className="text-white font-bold text-sm mt-1">{stat.label}</div>
-                        <div className="text-gray-500 text-[11px] mt-0.5 leading-snug">{stat.sub}</div>
-                      </div>
-
-                      {/* Mini sparkline SVG */}
-                      <div className="mt-1">
-                        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="overflow-visible">
-                          {/* Area fill */}
-                          <defs>
-                            <linearGradient id={`sg${i}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={stat.color} stopOpacity="0.3"/>
-                              <stop offset="100%" stopColor={stat.color} stopOpacity="0"/>
-                            </linearGradient>
-                          </defs>
-                          <polygon
-                            points={`0,${H} ${polyline} ${W},${H}`}
-                            fill={`url(#sg${i})`}/>
-                          <polyline
-                            points={polyline}
-                            fill="none"
-                            stroke={stat.color}
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeDasharray="200"
-                            style={{ animation: `radarDraw 1.8s cubic-bezier(.4,0,.2,1) ${0.6 + i * 0.2}s both` }}/>
-                          {/* End dot */}
-                          {(() => {
-                            const last = pts[pts.length - 1]
-                            const y = H - (last / maxV) * (H - 4)
-                            return <circle cx={W} cy={y} r="3" fill={stat.color} style={{ animation: `statDotBlink 2s ease-in-out ${i * 0.3}s infinite` }}/>
-                          })()}
-                        </svg>
-                      </div>
-
-                      {/* Bottom divider line */}
-                      <div className="absolute bottom-0 left-0 right-0 h-px"
-                        style={{ background: `linear-gradient(90deg,transparent,${stat.color}44,transparent)` }}/>
-                    </div>
-                  </RevealSection>
-                )
-              })}
             </div>
           </div>
         </section>
@@ -1444,7 +1261,7 @@ const Home = () => {
                           <line key={i} x1={CX} y1={CY} x2={p.x} y2={p.y}
                             stroke="rgba(127,202,181,0.18)" strokeWidth="0.8"/>
                         ))}
-                        {/* Value polygon — animated draw */}
+                        {/* Value polygon - animated draw */}
                         <polygon points={valPoly}
                           fill="rgba(127,202,181,0.1)"
                           stroke="#7FCAB5" strokeWidth="1.8"
@@ -1479,267 +1296,6 @@ const Home = () => {
               </RevealSection>
 
             </div>
-          </div>
-        </section>
-
-        {/* ABU DHABI MARKET */}
-        <section className="py-20 lg:py-32 relative overflow-hidden" style={{ background: '#f0f8f5' }}>
-
-          {/* Subtle dot-grid */}
-          <div className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage: 'radial-gradient(circle, rgba(43,58,85,0.09) 1px, transparent 1px)',
-              backgroundSize: '26px 26px',
-            }}/>
-          {/* Glows */}
-          <div className="absolute -top-48 -right-48 w-[560px] h-[560px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(127,202,181,0.13) 0%, transparent 70%)' }}/>
-          <div className="absolute -bottom-48 -left-48 w-[560px] h-[560px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(43,58,85,0.07) 0%, transparent 70%)' }}/>
-
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-
-            {/* Header */}
-            <RevealSection className="text-center mb-16">
-              <span className="inline-block text-[10px] font-bold tracking-[0.22em] uppercase px-4 py-1.5 rounded-full mb-5"
-                style={{ color:'#2AA784', background:'rgba(42,167,132,0.08)', border:'1px solid rgba(42,167,132,0.22)' }}>
-                {LANDING_CONFIG.abuDhabiMarket.sectionLabel}
-              </span>
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#2B3A55] mb-4 leading-tight">
-                {LANDING_CONFIG.abuDhabiMarket.headline}{' '}
-                <span className="gradient-text-animated">{LANDING_CONFIG.abuDhabiMarket.headlineGrad}</span>
-              </h2>
-              <p className="text-gray-600 text-base lg:text-lg max-w-3xl mx-auto leading-relaxed">
-                {LANDING_CONFIG.abuDhabiMarket.sub}
-              </p>
-            </RevealSection>
-
-            {/* Two-column layout */}
-            <div className="grid lg:grid-cols-2 gap-10 mb-12">
-
-              {/* LEFT: Big metric + sector cards */}
-              <RevealSection direction="left" className="flex flex-col gap-5">
-
-                {/* Key metric card (dark) */}
-                <div className="rounded-2xl p-7 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg,#2B3A55,#1a3040)',
-                    border: '1px solid rgba(127,202,181,0.2)',
-                    animation: 'mktCardIn 0.6s cubic-bezier(.4,0,.2,1) 0.1s both',
-                  }}>
-                  {/* Scan sweep */}
-                  <div className="absolute left-0 right-0 h-px pointer-events-none"
-                    style={{
-                      background: 'linear-gradient(90deg,transparent,rgba(127,202,181,0.45),transparent)',
-                      animation: 'statScanLine 4s ease-in-out infinite',
-                    }}/>
-                  <div className="text-[9px] font-mono tracking-[0.2em] mb-3" style={{ color:'rgba(127,202,181,0.55)' }}>
-                    UAE ENERGY OUTPUT
-                  </div>
-                  <div className="flex items-end gap-2 mb-2" style={{ animation:'barrelCount 0.8s cubic-bezier(.4,0,.2,1) 0.4s both' }}>
-                    <span className="text-6xl lg:text-7xl font-black leading-none gradient-text-animated">
-                      <AnimatedCounter
-                        end={LANDING_CONFIG.abuDhabiMarket.keyMetric.value}
-                        suffix={LANDING_CONFIG.abuDhabiMarket.keyMetric.suffix}
-                        duration={LANDING_CONFIG.counterDuration}/>
-                    </span>
-                  </div>
-                  <div className="text-white font-bold text-lg mb-0.5">{LANDING_CONFIG.abuDhabiMarket.keyMetric.label}</div>
-                  <div className="text-gray-400 text-sm mb-4">{LANDING_CONFIG.abuDhabiMarket.keyMetric.sub}</div>
-                  {/* Animated progress bar */}
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background:'rgba(255,255,255,0.07)' }}>
-                    <div className="h-full rounded-full relative overflow-hidden"
-                      style={{
-                        width:'78%',
-                        background:'linear-gradient(90deg,#2AA784,#7FCAB5)',
-                        animation:'barFill 2s cubic-bezier(.4,0,.2,1) 0.8s both',
-                      }}>
-                      <div className="absolute top-0 h-full w-16 pointer-events-none"
-                        style={{
-                          background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent)',
-                          animation:'pipelineFlow 2.5s ease-in-out 1.8s infinite',
-                        }}/>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sector cards */}
-                <div className="flex flex-col gap-4">
-                  {LANDING_CONFIG.abuDhabiMarket.sectors.map((sector, i) => (
-                    <div key={sector.label}
-                      className="group p-5 rounded-2xl relative overflow-hidden cursor-default"
-                      style={{
-                        background: '#ffffff',
-                        border: `1px solid ${sector.color}22`,
-                        boxShadow: '0 2px 12px rgba(43,58,85,0.06)',
-                        animation: `mktCardIn 0.55s cubic-bezier(.4,0,.2,1) ${0.3 + i * 0.12}s both`,
-                        transition: 'border-color 0.3s, box-shadow 0.3s, transform 0.3s',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = `${sector.color}55`
-                        e.currentTarget.style.boxShadow = `0 6px 28px ${sector.color}18`
-                        e.currentTarget.style.transform = 'translateX(4px)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = `${sector.color}22`
-                        e.currentTarget.style.boxShadow = '0 2px 12px rgba(43,58,85,0.06)'
-                        e.currentTarget.style.transform = 'translateX(0)'
-                      }}>
-                      {/* Left accent */}
-                      <div className="absolute left-0 top-0 bottom-0 w-0.5 rounded-l-2xl"
-                        style={{ background:`linear-gradient(180deg,${sector.color},${sector.color}22)` }}/>
-                      <div className="flex items-center gap-4 pl-2">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-[10px] flex-shrink-0"
-                          style={{ background:`${sector.color}14`, border:`1.5px solid ${sector.color}44`, color:sector.color }}>
-                          {sector.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[#2B3A55] font-black text-sm mb-0.5">{sector.label}</div>
-                          <p className="text-gray-500 text-xs leading-relaxed">{sector.desc}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 mt-3 pl-2">
-                        {sector.orgs.map(org => (
-                          <span key={org} className="text-[9px] font-bold px-2 py-0.5 rounded-full"
-                            style={{ color:sector.color, background:`${sector.color}0e`, border:`1px solid ${sector.color}28` }}>
-                            {org}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-              </RevealSection>
-
-              {/* RIGHT: AI dashboard card */}
-              <RevealSection direction="right">
-                <div className="rounded-2xl overflow-hidden h-full flex flex-col"
-                  style={{
-                    background: 'linear-gradient(160deg,#0a1628 0%,#0d2a1e 100%)',
-                    border: '1px solid rgba(127,202,181,0.15)',
-                    animation: 'dashIn 0.6s cubic-bezier(.4,0,.2,1) 0.2s both',
-                  }}>
-
-                  {/* Top bar */}
-                  <div className="flex items-center gap-2.5 px-5 py-3 border-b"
-                    style={{ borderColor:'rgba(127,202,181,0.08)', background:'rgba(0,0,0,0.25)' }}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background:'#10b981', animation:'statDotBlink 2s ease-in-out infinite' }}/>
-                    <span className="text-[10px] font-mono text-gray-400 tracking-widest">RADAI — LIVE AI ANALYSIS</span>
-                  </div>
-
-                  <div className="p-6 flex flex-col gap-5 flex-1">
-
-                    {/* AI metric bars */}
-                    <div>
-                      <div className="text-[9px] font-mono tracking-widest mb-4" style={{ color:'rgba(127,202,181,0.5)' }}>
-                        AI MODEL PERFORMANCE
-                      </div>
-                      <div className="flex flex-col gap-4">
-                        {LANDING_CONFIG.abuDhabiMarket.aiMetrics.map((m, i) => (
-                          <div key={m.label}>
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-xs font-bold text-white">{m.label}</span>
-                              <span className="text-xs font-mono" style={{ color:m.color }}>{m.value}%</span>
-                            </div>
-                            <div className="h-2 rounded-full overflow-hidden" style={{ background:'rgba(255,255,255,0.06)' }}>
-                              <div className="h-full rounded-full relative overflow-hidden"
-                                style={{
-                                  width:`${m.value}%`,
-                                  background:`linear-gradient(90deg,${m.color}88,${m.color})`,
-                                  boxShadow:`0 0 10px ${m.color}55`,
-                                  animation:`barFill 1.4s cubic-bezier(.4,0,.2,1) ${0.7+i*0.18}s both`,
-                                }}>
-                                <div className="absolute top-0 h-full w-1/3 pointer-events-none"
-                                  style={{
-                                    background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)',
-                                    animation:`scanBeam ${3+i}s ease-in-out ${i*0.6}s infinite`,
-                                  }}/>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Pipeline flow mini-viz */}
-                    <div className="rounded-xl p-4 relative overflow-hidden mt-auto"
-                      style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(127,202,181,0.08)' }}>
-                      <div className="text-[9px] font-mono tracking-widest mb-3" style={{ color:'rgba(127,202,181,0.45)' }}>
-                        ACTIVE PROCESSING — P&amp;ID STREAM
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {LANDING_CONFIG.abuDhabiMarket.pipelineSteps.map((step, i) => (
-                          <React.Fragment key={step}>
-                            <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[8px] font-bold"
-                                style={{
-                                  background: i < 3 ? 'rgba(127,202,181,0.12)' : 'rgba(255,255,255,0.04)',
-                                  border: `1px solid ${i < 3 ? 'rgba(127,202,181,0.35)' : 'rgba(255,255,255,0.07)'}`,
-                                  color: i < 3 ? '#7FCAB5' : 'rgba(255,255,255,0.25)',
-                                  animation: i < 3 ? `statDotBlink ${2+i*0.4}s ease-in-out ${i*0.3}s infinite` : 'none',
-                                }}>
-                                {step[0]}
-                              </div>
-                              <span className="text-[7px] font-mono" style={{ color:'rgba(255,255,255,0.25)' }}>{step}</span>
-                            </div>
-                            {i < LANDING_CONFIG.abuDhabiMarket.pipelineSteps.length - 1 && (
-                              <div className="flex-1 h-px relative overflow-hidden" style={{ background:'rgba(255,255,255,0.06)' }}>
-                                {i < 2 && (
-                                  <div className="absolute top-0 h-full w-6"
-                                    style={{
-                                      background:'linear-gradient(90deg,transparent,rgba(127,202,181,0.6),transparent)',
-                                      animation:`pipelineFlow ${1.8+i*0.3}s ease-in-out ${i*0.5}s infinite`,
-                                    }}/>
-                                )}
-                              </div>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                          style={{ background:'#7FCAB5', animation:'statDotBlink 1.5s ease-in-out infinite' }}/>
-                        <span className="text-[9px] font-mono" style={{ color:'rgba(127,202,181,0.55)' }}>
-                          LLM pass 3/4 complete — 2 findings queued for review
-                        </span>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              </RevealSection>
-
-            </div>
-
-            {/* Heritage strip */}
-            <RevealSection>
-              <div className="rounded-2xl p-7 lg:p-8 relative overflow-hidden text-center"
-                style={{
-                  background: 'rgba(255,255,255,0.88)',
-                  border: '1px solid rgba(127,202,181,0.35)',
-                  backdropFilter: 'blur(10px)',
-                }}>
-                <p className="text-gray-700 text-base lg:text-lg leading-relaxed mb-6">
-                  <span className="text-[#2B3A55] font-bold">Rejlers Engineering Solutions</span>{' '}
-                  {LANDING_CONFIG.abuDhabiMarket.heritage.text}
-                </p>
-                <div className="flex flex-wrap justify-center gap-3">
-                  {LANDING_CONFIG.abuDhabiMarket.heritage.pills.map((pill, i) => (
-                    <div key={pill} className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 px-3 py-1.5 rounded-full"
-                      style={{
-                        background: 'rgba(127,202,181,0.08)',
-                        border: '1px solid rgba(127,202,181,0.3)',
-                        animation: `badgePop 0.4s cubic-bezier(.4,0,.2,1) ${0.9+i*0.09}s both`,
-                      }}>
-                      <span style={{ color:'#2AA784' }}>&#10003;</span>{pill}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </RevealSection>
-
           </div>
         </section>
 
@@ -1855,22 +1411,12 @@ const Home = () => {
               </div>
 
               {/* CTA buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-                {/* Primary */}
-                <div className="relative inline-flex">
-                  <Link to={LANDING_CONFIG.cta.primaryBtn.to}
-                    className="relative inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl text-white font-bold text-base transition-all duration-300 hover:scale-105 glow-btn"
-                    style={{ background: 'linear-gradient(135deg,#2AA784,#7FCAB5,#0ea5e9)', backgroundSize: '200%', zIndex: 2 }}>
-                    {LANDING_CONFIG.cta.primaryBtn.label}
-                    <span style={{ fontSize: 18 }}>&#x2192;</span>
-                  </Link>
-                </div>
-                {/* Secondary */}
-                <a href={LANDING_CONFIG.cta.secondaryBtn.href}
+              <div className="flex justify-center mb-10">
+                <Link to={LANDING_CONFIG.cta.secondaryBtn.to}
                   className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-300 hover:scale-105"
                   style={{ background: 'rgba(127,202,181,0.07)', border: '1px solid rgba(127,202,181,0.3)', color: '#7FCAB5' }}>
                   {LANDING_CONFIG.cta.secondaryBtn.label}
-                </a>
+                </Link>
               </div>
 
               {/* Trust pills */}
@@ -1962,7 +1508,7 @@ const Home = () => {
             {/* Bottom bar */}
             <div className="border-t border-gray-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
               <p className="text-gray-500 text-xs text-center md:text-left">
-                {FOOTER_CONFIG.bottomBar?.copyright || `© ${new Date().getFullYear()} Rejlers Engineering Solutions. All rights reserved.`}
+                {FOOTER_CONFIG.bottomBar?.copyright || `Â© ${new Date().getFullYear()} Rejlers Engineering Solutions. All rights reserved.`}
               </p>
               <div className="flex flex-wrap gap-4">
                 {(FOOTER_CONFIG.bottomBar?.links || []).map((link, i) => (

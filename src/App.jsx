@@ -67,6 +67,7 @@ import UserManagement from './pages/UserManagement'
 import UserDetail from './pages/UserDetail'
 import WrenchIntegration from './pages/WrenchIntegration'
 import AIChampion from './pages/Admin/AIChampion'
+import EnquiryManagement from './pages/Admin/EnquiryManagement'
 import ActivityReports from './pages/Admin/ActivityReports'
 // SOFT-CODED: Subscription feature disabled for in-house deployment
 // import SubscriptionManagement from './pages/SubscriptionManagement'
@@ -98,6 +99,7 @@ import OrderManagement from './pages/Procurement/OrderManagement'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 import ProjectDashboard from './pages/Procurement/ProjectDashboard'
 import ProjectDetail from './pages/Procurement/ProjectDetail'
+import ProjectCreator from './pages/Procurement/ProjectCreator'
 // Process Datasheet Components
 import ProcessDatasheetPage from './pages/ProcessDatasheetPage'
 import ComprehensivePumpForm from './pages/ProcessDatasheet/ComprehensivePumpForm'
@@ -750,6 +752,14 @@ function App() {
           }
         />
         <Route
+          path="procurement/projects/new"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <ProjectCreator />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
           path="procurement/projects/:id"
           element={
             <ModuleProtectedRoute moduleCode="procurement">
@@ -1241,6 +1251,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AIChampion />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/enquiries"
+          element={
+            <ProtectedRoute>
+              <EnquiryManagement />
             </ProtectedRoute>
           }
         />

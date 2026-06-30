@@ -27,6 +27,7 @@ import {
   BuildingOffice2Icon,
   RocketLaunchIcon,
   WrenchScrewdriverIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline'
 
 /**
@@ -605,6 +606,13 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           icon: SparklesIcon,
           path: '/admin/ai-champion',
           description: 'Top AI users leaderboard & badges'
+        },
+        {
+          id: 'enquiryManagement',
+          title: '9.6 Enquiry',
+          icon: EnvelopeIcon,
+          path: '/admin/enquiries',
+          description: 'Customer enquiries from public contact form'
         }
         // SOFT-CODED: Subscription feature disabled for in-house deployment
         // {
