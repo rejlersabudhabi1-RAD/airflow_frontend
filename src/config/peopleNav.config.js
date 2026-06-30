@@ -72,7 +72,8 @@ export const PEOPLE_NAV_TABS = [
     description: 'Roles, modules & access control',
     to: '/admin/users',
     icon: 'ShieldCheckIcon',
-    visibility: 'adminOnly',
+    // SOFT-CODED: hidden from My Profile nav — change to 'adminOnly' to re-enable
+    visibility: 'never',
     accent: 'from-purple-500 to-fuchsia-500',
   },
 ]
