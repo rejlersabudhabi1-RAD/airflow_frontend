@@ -16,9 +16,6 @@ export const PAYROLL_TABS = [
   { id: 'attendance', label: 'Attendance',         icon: 'ClipboardDocumentCheckIcon', description: 'HR Attendance — Daily · Monthly · Yearly' },
   { id: 'leave',      label: 'Leave',              icon: 'CalendarDaysIcon',           description: 'Leave approvals — Reporting Manager → HR Manager', hrOnly: true },
   { id: 'engine',     label: 'Payroll Engine',     icon: 'CpuChipIcon',                description: 'Salary slips & approvals' },
-  { id: 'salary',     label: 'Salary Management', icon: 'BanknotesIcon',              description: 'Employee salary structures & history' },
-  { id: 'auditor',    label: 'AI Auditor',         icon: 'MagnifyingGlassIcon',        description: 'Anomaly detection' },
-  { id: 'assistant',  label: 'AI Assistant',       icon: 'ChatBubbleLeftIcon',         description: 'Payroll chatbot' },
   { id: 'tracker',    label: 'Approval Tracker',   icon: 'ClipboardDocumentListIcon',  description: 'Super-admin workflow status — all payroll approval pipelines', adminOnly: true },
 ]
 export const PAYROLL_DEFAULT_TAB = 'dashboard'
@@ -216,25 +213,6 @@ export const ATT_KPIS = [
     sub:     (s) => s ? `${(s.totalHours ?? 0).toFixed(0)} total hrs · biometric` : 'Live biometric data',
   },
 ]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cross-tab connection copy — Engine ↔ Auditor alignment labels
-// ─────────────────────────────────────────────────────────────────────────────
-export const CROSS_TAB_COPY = {
-  // Engine → Auditor button
-  auditRunBtn:      'Audit This Run',
-  auditRunTitle:    'Open this run in the AI Auditor for deep anomaly analysis',
-  // Auditor header
-  syncedBadge:      'Synced with Engine',
-  notSyncedBadge:   'Select a run above to sync with Engine',
-  backToEngine:     '← Back to Engine',
-  backToEngineTitle:'Return to Payroll Engine for this run',
-  autoAuditNote:    'Run selected in Engine — click Run Audit to analyse',
-  autoAuditDone:    'Auto-analysis complete',
-  // Analytics subtab cross-link
-  openAuditorLink:  'Open Full Audit →',
-  openAuditorTitle: 'Switch to AI Auditor for detailed anomaly breakdown',
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. VALIDATION RULES
@@ -448,74 +426,6 @@ export const PAYROLL_AI_INSIGHT_RULES = [
         value: change,
       }
     },
-  },
-]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. CHATBOT PATTERNS (keyword → intent → response generator)
-// ─────────────────────────────────────────────────────────────────────────────
-export const PAYROLL_CHATBOT_PATTERNS = [
-  {
-    id: 'show_payslip',
-    keywords: ['payslip', 'salary slip', 'my slip', 'pay slip'],
-    quickLabel: 'Show my payslip',
-    intent: 'show_payslip',
-    respond: (data) => data?.latestSlip
-      ? `Your latest payslip (${data.latestSlip.slip_number}) for ${data.latestSlip.month}/${data.latestSlip.year}:\n• Gross: ${fmtCurrency(data.latestSlip.gross_salary)}\n• Deductions: ${fmtCurrency(data.latestSlip.total_deductions)}\n• Net: ${fmtCurrency(data.latestSlip.net_salary)}\nStatus: ${PAYROLL_SLIP_STATUS[data.latestSlip.status]?.label ?? data.latestSlip.status}`
-      : 'No salary slip found for the current period.',
-  },
-  {
-    id: 'overtime',
-    keywords: ['overtime', 'over time', 'extra hours'],
-    quickLabel: 'Overtime this month',
-    intent: 'overtime',
-    respond: (data) => {
-      const s = data?.userTs  // summary from fetchUserHistory (per-user)
-      if (!s) return 'Timesheet data is not available right now. Please try again shortly.'
-      const hours = s.total_hours ?? 0
-      const standard = PAYROLL_AUDIT_THRESHOLDS.standardHoursPerDay * (s.days_present ?? 0)
-      const ot = Math.max(0, hours - standard)
-      return ot > 0
-        ? `You have logged ${ot.toFixed(1)} overtime hours this month (${hours.toFixed(1)}h actual vs ${standard}h standard at ${PAYROLL_AUDIT_THRESHOLDS.standardHoursPerDay}h/day × ${s.days_present} days).`
-        : `No overtime this month. Total: ${hours.toFixed(1)}h across ${s.days_present ?? 0} days.`
-    },
-  },
-  {
-    id: 'leave_balance',
-    keywords: ['leave', 'leave balance', 'annual leave', 'vacation'],
-    quickLabel: 'Leave balance',
-    intent: 'leave_balance',
-    respond: (data) => {
-      const rec = data?.leaveRecord
-      if (!rec) return 'Leave balance could not be loaded. Please contact HR.'
-      const balance = parseFloat(rec.leave_balance ?? rec.balance ?? rec.remaining_balance ?? 0)
-      const leaveType = rec.leave_type || 'Annual Leave'
-      const taken = parseFloat(rec.days_taken ?? rec.taken ?? 0)
-      return `Your ${leaveType} balance: ${balance.toFixed(1)} days remaining (${taken.toFixed(1)} days taken this year).`
-    },
-  },
-  {
-    id: 'deduction',
-    keywords: ['deduction', 'why deducted', 'deduct', 'minus'],
-    quickLabel: 'Why was salary deducted',
-    intent: 'deduction',
-    respond: (data) => {
-      const breakdown = data?.latestSlip?.deductions_breakdown
-      if (!breakdown || Object.keys(breakdown).length === 0) return 'No deduction breakdown available for the current period.'
-      const lines = Object.entries(breakdown).map(([k, v]) => `• ${k}: ${fmtCurrency(v)}`)
-      return `Deduction breakdown for your latest slip:\n${lines.join('\n')}`
-    },
-  },
-  {
-    id: 'payroll_summary',
-    keywords: ['payroll summary', 'team payroll', 'department payroll', 'total payroll'],
-    quickLabel: 'Payroll summary',
-    intent: 'payroll_summary',
-    persona: ['finance', 'manager', 'hr'],
-    respond: (data) =>
-      data?.summary
-        ? `Current month payroll summary:\n• Employees: ${data.summary.total_employees}\n• Gross: ${fmtCurrency(data.summary.current_month_gross)}\n• Net: ${fmtCurrency(data.summary.current_month_net)}\n• Pending approvals: ${data.summary.pending_approvals}`
-        : 'Payroll summary is not available yet.',
   },
 ]
 

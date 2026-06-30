@@ -1,0 +1,429 @@
+/**
+ * Payroll Engine — soft-coded frontend config.
+ * Mirrors backend `apps.payroll_engine.catalog`. Some lists are
+ * authoritative here for UI only; the rest are hydrated from
+ * `/api/v1/payroll-engine/catalog/` at runtime.
+ */
+
+// Currency formatter (UAE Dirhams by default)
+export const PAYROLL_ENGINE_CURRENCY = 'AED'
+export const PAYROLL_ENGINE_LOCALE = 'en-AE'
+
+export const formatCurrency = (value, { withSymbol = true } = {}) => {
+  const n = Number(value || 0)
+  if (Number.isNaN(n)) return withSymbol ? `${PAYROLL_ENGINE_CURRENCY} 0.00` : '0.00'
+  const formatted = n.toLocaleString(PAYROLL_ENGINE_LOCALE, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return withSymbol ? `${PAYROLL_ENGINE_CURRENCY} ${formatted}` : formatted
+}
+
+// Workflow status meta (kept in sync with backend catalog.WORKFLOW_STATUSES)
+export const WORKFLOW_STATUS = {
+  DRAFT: 'draft',
+  HR_APPROVED: 'hr_approved',
+  FINANCE_APPROVED: 'finance_approved',
+  RELEASED: 'released',
+}
+
+export const STATUS_META = {
+  [WORKFLOW_STATUS.DRAFT]: {
+    label: 'Draft',
+    tone: 'gray',
+    badge: 'bg-gray-100 text-gray-700 border-gray-300',
+  },
+  [WORKFLOW_STATUS.HR_APPROVED]: {
+    label: 'HR Approved',
+    tone: 'blue',
+    badge: 'bg-blue-50 text-blue-700 border-blue-300',
+  },
+  [WORKFLOW_STATUS.FINANCE_APPROVED]: {
+    label: 'Finance Approved',
+    tone: 'amber',
+    badge: 'bg-amber-50 text-amber-700 border-amber-300',
+  },
+  [WORKFLOW_STATUS.RELEASED]: {
+    label: 'Released',
+    tone: 'green',
+    badge: 'bg-green-50 text-green-700 border-green-300',
+  },
+}
+
+export const WORKFLOW_TRANSITIONS = {
+  [WORKFLOW_STATUS.DRAFT]: [WORKFLOW_STATUS.HR_APPROVED],
+  [WORKFLOW_STATUS.HR_APPROVED]: [WORKFLOW_STATUS.FINANCE_APPROVED, WORKFLOW_STATUS.DRAFT],
+  [WORKFLOW_STATUS.FINANCE_APPROVED]: [WORKFLOW_STATUS.RELEASED, WORKFLOW_STATUS.HR_APPROVED],
+  [WORKFLOW_STATUS.RELEASED]: [],
+}
+
+// Statuses whose runs can be deleted from the Monthly Runs list.
+// Mirrors the backend guard in `PayrollRunViewSet.destroy()` — keep in sync.
+// Used by RunsList to decide whether to render an enabled Delete action.
+export const RUN_DELETABLE_STATUSES = [WORKFLOW_STATUS.DRAFT]
+
+// ────────────────────────────────────────────────────────────────────────────
+// FORCE-OVERRIDE (Super Admin only): allows Delete / Edit / Force-Revert on
+// runs that are already HR-Approved, Finance-Approved or Released.
+// Mirrors backend env `PAYROLL_RUN_FORCE_OVERRIDE_ROLES`. Every override is
+// audited in `PayrollWorkflowLog`.
+// ────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_RUN_FORCE_OVERRIDE_ROLE_CODES = [
+  'superadmin', 'super_admin',
+]
+
+/** True when the user may force-edit / force-delete / force-revert any run. */
+export function canForcePayrollRun(authUser, rbacUser) {
+  const u = authUser?.user ?? authUser
+  if (u?.is_superuser) return true
+  const allow = new Set(PAYROLL_RUN_FORCE_OVERRIDE_ROLE_CODES.map((c) => c.toLowerCase()))
+  const roles = [
+    ...(Array.isArray(rbacUser?.roles) ? rbacUser.roles : []),
+    ...(Array.isArray(authUser?.roles) ? authUser.roles : []),
+  ]
+  return roles.some((r) => allow.has((r?.code || '').toLowerCase()))
+}
+
+// Frontend sub-tabs inside the engine
+export const ENGINE_TABS = [
+  { key: 'runs',        label: 'Monthly Runs',  description: 'Generate, review and approve payroll runs' },
+  { key: 'employees',   label: 'Employees',     description: 'Master roster of all payroll-eligible staff' },
+  { key: 'adjustments', label: 'Adjustments',   description: 'Pending earnings & deductions for upcoming runs' },
+  { key: 'excel',       label: 'Excel Hub',     description: 'Upload / download payroll Excel files' },
+]
+
+export const DEFAULT_ENGINE_TAB = 'runs'
+
+// Fixed earning fields living directly on the Payslip model. Listed here so
+// the modal can render an inline editor for each without hard-coding labels.
+// Add a new fixed earning here + on the serializer → it appears automatically.
+export const FIXED_EARNING_FIELDS = [
+  { key: 'basic',      label: 'Basic'      },
+  { key: 'housing',    label: 'Housing'    },
+  { key: 'transport',  label: 'Transport'  },
+  { key: 'home_leave', label: 'Home Leave' },
+]
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk percentage deduction — mirrors backend catalog.BULK_DEDUCTION_*.
+// Drives the "Apply Deduction" modal: HR picks a % and which fields it
+// applies to. Basic is intentionally NOT listed (it's always protected).
+// ────────────────────────────────────────────────────────────────────────────
+export const BULK_DEDUCTION_FIELDS = [
+  { key: 'housing',        label: 'Housing',        defaultChecked: true },
+  { key: 'transport',      label: 'Transport',      defaultChecked: true },
+  { key: 'home_leave',     label: 'Home Leave',     defaultChecked: true },
+  { key: 'other_earnings', label: 'Other Earnings', defaultChecked: true },
+]
+export const BULK_DEDUCTION_PROTECTED_FIELDS = ['basic']
+export const BULK_DEDUCTION_DEFAULT_PCT = 5
+export const BULK_DEDUCTION_MIN_PCT     = 0.01
+export const BULK_DEDUCTION_MAX_PCT     = 100
+export const BULK_DEDUCTION_COMPONENT_CODE = 'bulk_pct_deduction'
+
+// ────────────────────────────────────────────────────────────────────────────
+// Canvas modes — soft-coded layout presets for the engine shell.
+// Each preset controls (a) the outer container max-width class applied to the
+// engine, (b) the horizontal padding, and (c) which payslip columns RunDetail
+// surfaces. Add a new preset here and it automatically appears in the cycler.
+// ────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_ENGINE_CANVAS_STORAGE_KEY = 'payrollEngine.canvasMode'
+
+export const CANVAS_MODES = [
+  {
+    key: 'comfortable',
+    label: 'Comfortable',
+    description: 'Default centred layout (max 1536px).',
+    icon: 'ArrowsPointingInIcon',
+    containerClass: 'max-w-screen-2xl',
+    paddingClass: 'px-4 sm:px-6',
+    payslipColumnsKey: 'standard',
+  },
+  {
+    key: 'wide',
+    label: 'Wide',
+    description: 'Stretched canvas with extra payslip columns.',
+    icon: 'ArrowsRightLeftIcon',
+    containerClass: 'max-w-[110rem]',
+    paddingClass: 'px-4 sm:px-6',
+    payslipColumnsKey: 'expanded',
+  },
+  {
+    key: 'full',
+    label: 'Full Canvas',
+    description: 'Use the entire browser width — best for reviewing payslips.',
+    icon: 'ArrowsPointingOutIcon',
+    containerClass: 'max-w-none',
+    paddingClass: 'px-3 sm:px-4',
+    payslipColumnsKey: 'expanded',
+  },
+]
+
+export const DEFAULT_CANVAS_MODE = 'comfortable'
+
+export const getCanvasMode = (key) =>
+  CANVAS_MODES.find((m) => m.key === key) || CANVAS_MODES[0]
+
+// Run table columns
+export const RUN_COLUMNS = [
+  { key: 'cycle_code',       label: 'Cycle',           width: 120 },
+  { key: 'status_label',     label: 'Status',          width: 160 },
+  { key: 'employee_count',   label: 'Employees',       width: 110, align: 'right' },
+  { key: 'total_gross',      label: 'Gross',           width: 140, align: 'right', format: 'currency' },
+  { key: 'total_deductions', label: 'Deductions',      width: 140, align: 'right', format: 'currency' },
+  { key: 'total_net',        label: 'Net Payable',     width: 160, align: 'right', format: 'currency' },
+  { key: 'generated_at',     label: 'Generated',       width: 170, format: 'datetime' },
+]
+
+// Payslip table columns — compact view (default)
+export const PAYSLIP_COLUMNS = [
+  { key: 'snapshot_full_name', label: 'Employee',          width: 240 },
+  { key: 'snapshot_department','label': 'Department',      width: 160 },
+  { key: 'basic',              label: 'Basic',             width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'housing',            label: 'Housing',           width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'transport',          label: 'Transport',         width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'home_leave',         label: 'Home Leave',        width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'other_earnings',     label: 'Others',            width: 110, align: 'right', format: 'currency' },
+  { key: 'gross_earnings',     label: 'Gross',             width: 130, align: 'right', format: 'currency' },
+  { key: 'total_deductions',   label: 'Deductions',        width: 130, align: 'right', format: 'currency' },
+  { key: 'net_payable',        label: 'Net Payable',       width: 140, align: 'right', format: 'currency' },
+  { key: '__edit',             label: 'Edit',              width: 90,  align: 'center', action: 'edit' },
+  { key: '__delete',           label: 'Delete',            width: 90,  align: 'center', action: 'delete' },
+]
+
+// Payslip table columns — extended view (wide / full canvas)
+// Reveals the snapshot fields already on the serializer so HR/finance reviewers
+// can audit designation and joining date without opening every payslip.
+export const PAYSLIP_COLUMNS_EXPANDED = [
+  { key: 'employee_no',         label: 'Emp #',         width: 90 },
+  { key: 'snapshot_full_name',  label: 'Employee',      width: 240 },
+  { key: 'snapshot_joining_date', label: 'Joined',      width: 110, format: 'date' },
+  { key: 'snapshot_department', label: 'Department',    width: 160 },
+  { key: 'snapshot_designation',label: 'Designation',   width: 180 },
+  { key: 'basic',               label: 'Basic',         width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'housing',             label: 'Housing',       width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'transport',           label: 'Transport',     width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'home_leave',          label: 'Home Leave',    width: 110, align: 'right', format: 'currency', editable: true },
+  { key: 'other_earnings',      label: 'Others',        width: 110, align: 'right', format: 'currency' },
+  { key: 'gross_earnings',      label: 'Gross',         width: 130, align: 'right', format: 'currency' },
+  { key: 'total_deductions',    label: 'Deductions',    width: 130, align: 'right', format: 'currency' },
+  { key: 'net_payable',         label: 'Net Payable',   width: 140, align: 'right', format: 'currency' },
+  { key: '__edit',              label: 'Edit',          width: 90,  align: 'center', action: 'edit' },
+  { key: '__delete',            label: 'Delete',        width: 90,  align: 'center', action: 'delete' },
+]
+
+// Employee table columns
+export const EMPLOYEE_COLUMNS = [
+  { key: 'employee_no',  label: 'Emp #',         width: 100 },
+  { key: 'full_name',    label: 'Name',          width: 240 },
+  { key: 'department',   label: 'Department',    width: 160 },
+  { key: 'designation',  label: 'Designation',   width: 180 },
+  { key: 'grade',        label: 'Grade',         width: 120 },
+  { key: 'basic',        label: 'Basic',         width: 110, align: 'right', format: 'currency' },
+  { key: 'housing',      label: 'Housing',       width: 110, align: 'right', format: 'currency' },
+  { key: 'transport',    label: 'Transport',     width: 110, align: 'right', format: 'currency' },
+  { key: 'home_leave',   label: 'Home Leave',    width: 110, align: 'right', format: 'currency' },
+  { key: 'default_gross','label': 'Default Gross', width: 130, align: 'right', format: 'currency' },
+  { key: 'is_active',    label: 'Active',        width: 80 },
+]
+
+// ────────────────────────────────────────────────────────────────────────────
+// Employee editor — soft-coded role gate + field schema for the Edit modal.
+// Mirrors the backend permission in `PayrollEmployeeWritePermission` and the
+// env var `PAYROLL_EMPLOYEE_WRITE_ROLES`. Keep the two lists in sync.
+// Add a new field below + on the serializer and it appears in the modal
+// automatically — no other UI changes required.
+// ────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_EMPLOYEE_EDIT_ROLE_CODES = [
+  'superadmin', 'super_admin', 'admin',
+]
+
+/**
+ * Returns true if the user may edit / delete payroll employee records.
+ * Mirrors backend `_user_has_payroll_admin_role()`.
+ */
+export function canEditPayrollEmployee(authUser, rbacUser) {
+  const u = authUser?.user ?? authUser
+  if (u?.is_superuser || u?.is_staff) return true
+  const allow = new Set(PAYROLL_EMPLOYEE_EDIT_ROLE_CODES.map((c) => c.toLowerCase()))
+  const roles = [
+    ...(Array.isArray(rbacUser?.roles) ? rbacUser.roles : []),
+    ...(Array.isArray(authUser?.roles) ? authUser.roles : []),
+  ]
+  return roles.some((r) => allow.has((r?.code || '').toLowerCase()))
+}
+
+// Field schema for the Edit Employee modal. Driven entirely by this list:
+//   key       — model field on PayrollEmployee
+//   label     — UI label
+//   type      — 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'textarea'
+//   group     — section header in the modal
+//   required  — block save until populated
+//   options   — for type='select'; pass a static list or set
+//               `optionsFrom: 'payment_modes'` to hydrate from /catalog/
+//   readOnly  — render disabled (e.g. employee_no after creation)
+//   step      — numeric step (defaults to 0.01 for currency)
+//   currency  — true → render with AED suffix
+export const EMPLOYEE_EDIT_FIELDS = [
+  // ── Identity ─────────────────────────────────────────────────────────────
+  { key: 'employee_no',        label: 'Employee #',       type: 'text',   group: 'Identity', required: true, readOnly: true },
+  { key: 'full_name',          label: 'Full Name',        type: 'text',   group: 'Identity', required: true },
+  { key: 'emirates_id',        label: 'Emirates ID',      type: 'text',   group: 'Identity' },
+  { key: 'mol_no',             label: 'MOL #',            type: 'text',   group: 'Identity' },
+  { key: 'nationality_group',  label: 'Nationality',      type: 'text',   group: 'Identity' },
+
+  // ── Org ─────────────────────────────────────────────────────────────────
+  { key: 'department',         label: 'Department',       type: 'text',   group: 'Organisation' },
+  { key: 'discipline',         label: 'Discipline',       type: 'text',   group: 'Organisation' },
+  { key: 'designation',        label: 'Designation',      type: 'text',   group: 'Organisation' },
+  { key: 'grade',              label: 'Grade',            type: 'text',   group: 'Organisation' },
+  { key: 'joining_date',       label: 'Joining Date',     type: 'date',   group: 'Organisation' },
+  { key: 'leaving_date',       label: 'Leaving Date',     type: 'date',   group: 'Organisation' },
+
+  // ── Banking ─────────────────────────────────────────────────────────────
+  { key: 'iban',               label: 'IBAN',             type: 'text',   group: 'Banking' },
+  { key: 'bank_name',          label: 'Bank',             type: 'text',   group: 'Banking' },
+  { key: 'routing_code',       label: 'Routing Code',     type: 'text',   group: 'Banking' },
+  { key: 'default_payment_mode', label: 'Payment Mode',   type: 'select', group: 'Banking', optionsFrom: 'payment_modes' },
+
+  // ── Fixed Earnings ──────────────────────────────────────────────────────
+  { key: 'basic',              label: 'Basic',            type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
+  { key: 'housing',            label: 'Housing',          type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
+  { key: 'transport',          label: 'Transport',        type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
+  { key: 'home_leave',         label: 'Home Leave',       type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
+
+  // ── Status & Validity ───────────────────────────────────────────────────
+  { key: 'is_active',          label: 'Active',           type: 'checkbox', group: 'Status' },
+  { key: 'effective_from',     label: 'Effective From',   type: 'date',   group: 'Status' },
+  { key: 'effective_to',       label: 'Effective To',     type: 'date',   group: 'Status' },
+  { key: 'notes',              label: 'Notes',            type: 'textarea', group: 'Status' },
+]
+
+// Adjustments table columns
+export const ADJUSTMENT_COLUMNS = [
+  { key: 'employee_name', label: 'Employee',     width: 200 },
+  { key: 'employee_no',   label: 'Emp #',        width: 100 },
+  { key: 'kind',          label: 'Kind',         width: 110 },
+  { key: 'label',         label: 'Label',        width: 200 },
+  { key: 'description',   label: 'Description',  width: 280 },
+  { key: 'amount',        label: 'Amount',       width: 130, align: 'right', format: 'currency' },
+  { key: 'status',        label: 'Status',       width: 110 },
+]
+
+// ────────────────────────────────────────────────────────────────────────────
+// Adjustments — soft-coded RBAC, statuses, kinds, and modal field schema.
+// Mirrors the backend (PayrollAdjustmentWritePermission +
+// PAYROLL_ADJUSTMENT_WRITE_ROLES). Keep the two lists in sync.
+// ────────────────────────────────────────────────────────────────────────────
+export const PAYROLL_ADJUSTMENT_WRITE_ROLE_CODES = [
+  'superadmin', 'super_admin', 'admin', 'hr_manager', 'senior_hr', 'hr',
+]
+
+/** True when the current user may create / edit / cancel adjustments. */
+export function canEditPayrollAdjustment(authUser, rbacUser) {
+  const u = authUser?.user ?? authUser
+  if (u?.is_superuser || u?.is_staff) return true
+  const allow = new Set(PAYROLL_ADJUSTMENT_WRITE_ROLE_CODES.map((c) => c.toLowerCase()))
+  const roles = [
+    ...(Array.isArray(rbacUser?.roles) ? rbacUser.roles : []),
+    ...(Array.isArray(authUser?.roles) ? authUser.roles : []),
+  ]
+  return roles.some((r) => allow.has((r?.code || '').toLowerCase()))
+}
+
+// Adjustment status meta — matches backend catalog.ADJUSTMENT_STATUSES.
+// Adding a status here + on backend instantly shows up in chips & filter.
+export const ADJUSTMENT_STATUS = {
+  PENDING:   'pending',
+  APPLIED:   'applied',
+  CANCELLED: 'cancelled',
+}
+
+export const ADJUSTMENT_STATUS_META = {
+  [ADJUSTMENT_STATUS.PENDING]:   { label: 'Pending',   badge: 'bg-amber-50 text-amber-700 border-amber-300',   icon: 'ClockIcon' },
+  [ADJUSTMENT_STATUS.APPLIED]:   { label: 'Applied',   badge: 'bg-emerald-50 text-emerald-700 border-emerald-300', icon: 'CheckCircleIcon' },
+  [ADJUSTMENT_STATUS.CANCELLED]: { label: 'Cancelled', badge: 'bg-slate-100 text-slate-500 border-slate-300', icon: 'XCircleIcon' },
+}
+
+export const ADJUSTMENT_KIND = {
+  EARNING:   'earning',
+  DEDUCTION: 'deduction',
+}
+
+export const ADJUSTMENT_KIND_META = {
+  [ADJUSTMENT_KIND.EARNING]:   { label: 'Earning',   badge: 'bg-emerald-50 text-emerald-700 border-emerald-300', sign: '+' },
+  [ADJUSTMENT_KIND.DEDUCTION]: { label: 'Deduction', badge: 'bg-rose-50 text-rose-700 border-rose-300',          sign: '−' },
+}
+
+// KPI tiles for the adjustments dashboard. Add an entry to surface a new
+// metric — the values are computed from `/adjustments/summary/` on the fly.
+export const ADJUSTMENT_KPIS = [
+  { id: 'count',          label: 'Total Adjustments', icon: 'AdjustmentsHorizontalIcon', color: 'text-indigo-600',  bg: 'bg-indigo-50' },
+  { id: 'pending_total',  label: 'Pending Amount',    icon: 'ClockIcon',                  color: 'text-amber-600',   bg: 'bg-amber-50',  format: 'currency' },
+  { id: 'earning_total',  label: 'Earnings',          icon: 'ArrowTrendingUpIcon',        color: 'text-emerald-600', bg: 'bg-emerald-50', format: 'currency' },
+  { id: 'deduction_total','label': 'Deductions',      icon: 'ArrowTrendingDownIcon',      color: 'text-rose-600',    bg: 'bg-rose-50',    format: 'currency' },
+]
+
+/**
+ * Field schema for the create/edit modal. Each entry maps to a model field
+ * on PayrollAdjustment. Same renderer as EmployeeEditModal so adding a new
+ * field is one-line + serializer change.
+ *
+ * type='component' is special: it shows a dependent dropdown whose options
+ * come from /catalog/ — earning_components or deduction_components depending
+ * on the `kind` value selected.
+ */
+export const ADJUSTMENT_EDIT_FIELDS = [
+  // Target — what run will this materialise into
+  { key: 'employee',       label: 'Employee',     type: 'employee',  group: 'Target', required: true },
+  { key: 'target_year',    label: 'Year',         type: 'number',    group: 'Target', required: true, step: '1' },
+  { key: 'target_month',   label: 'Month',        type: 'select',    group: 'Target', required: true, optionsFrom: 'months' },
+
+  // Classification
+  { key: 'kind',           label: 'Kind',         type: 'select',    group: 'Classification', required: true, optionsFrom: 'line_item_kinds' },
+  { key: 'component_code', label: 'Component',    type: 'component', group: 'Classification', required: true },
+  { key: 'status',         label: 'Status',       type: 'select',    group: 'Classification', optionsFrom: 'adjustment_statuses', editOnly: true },
+
+  // Details
+  { key: 'label',          label: 'Label',        type: 'text',      group: 'Details', required: true, maxLength: 128 },
+  { key: 'amount',         label: 'Amount',       type: 'number',    group: 'Details', required: true, currency: true, step: '0.01' },
+  { key: 'description',    label: 'Description',  type: 'textarea',  group: 'Details' },
+]
+
+// Month picker labels
+export const MONTH_NAMES = [
+  '', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+export const STATUS_LABEL = (code) => STATUS_META[code]?.label ?? code
+
+export const STATUS_BADGE = (code) =>
+  STATUS_META[code]?.badge ?? 'bg-gray-100 text-gray-600 border-gray-300'
+
+// Resolve which payslip column set to render for a given canvas mode.
+export const getPayslipColumns = (canvasModeKey) => {
+  const mode = getCanvasMode(canvasModeKey)
+  return mode.payslipColumnsKey === 'expanded'
+    ? PAYSLIP_COLUMNS_EXPANDED
+    : PAYSLIP_COLUMNS
+}
+
+export default {
+  CURRENCY: PAYROLL_ENGINE_CURRENCY,
+  LOCALE: PAYROLL_ENGINE_LOCALE,
+  WORKFLOW_STATUS,
+  STATUS_META,
+  WORKFLOW_TRANSITIONS,
+  ENGINE_TABS,
+  DEFAULT_ENGINE_TAB,
+  CANVAS_MODES,
+  DEFAULT_CANVAS_MODE,
+  RUN_COLUMNS,
+  PAYSLIP_COLUMNS,
+  PAYSLIP_COLUMNS_EXPANDED,
+  EMPLOYEE_COLUMNS,
+  ADJUSTMENT_COLUMNS,
+  MONTH_NAMES,
+  formatCurrency,
+}

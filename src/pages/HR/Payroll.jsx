@@ -25,9 +25,6 @@ import PayrollDashboard      from './payroll/PayrollDashboard'
 import AttendanceDashboard   from './payroll/AttendanceDashboard'
 import LeaveDashboard        from './payroll/LeaveDashboard'
 import PayrollEngine         from './payroll/PayrollEngine'
-import SalaryManagement      from './payroll/SalaryManagement'
-import PayrollAuditor        from './payroll/PayrollAuditor'
-import PayrollChatbot        from './payroll/PayrollChatbot'
 import ApprovalTracker       from './payroll/ApprovalTracker'
 
 const TAB_COMPONENTS = {
@@ -35,9 +32,6 @@ const TAB_COMPONENTS = {
   attendance: AttendanceDashboard,
   leave:      LeaveDashboard,
   engine:     PayrollEngine,
-  salary:     SalaryManagement,
-  auditor:    PayrollAuditor,
-  assistant:  PayrollChatbot,
   tracker:    ApprovalTracker,
 }
 
