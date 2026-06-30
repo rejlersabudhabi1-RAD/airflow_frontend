@@ -68,13 +68,10 @@ const ProjectDetail = () => {
   };
 
   useEffect(() => {
-    // Don't fetch if we're creating a new project
-    if (id && id !== 'new') {
+    if (id) {
       fetchProjectDetail();
       fetchFinancialSummary();
       fetchPurchaseOrders();
-    } else if (id === 'new') {
-      setLoading(false);
     }
   }, [id]);
 
@@ -237,71 +234,6 @@ const ProjectDetail = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
         <span className="ml-3 text-gray-600 font-medium">Loading project...</span>
-      </div>
-    );
-  }
-
-  // NEW PROJECT CREATION FORM
-  if (id === 'new') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white border-b border-gray-200">
-          <div className="max-w-4xl mx-auto px-6 py-6">
-            <button
-              onClick={() => navigate('/procurement/projects')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="font-medium">Back to Projects</span>
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Create New Project</h1>
-            <p className="text-gray-600 mt-2">Set up a new project with budget allocations and team assignments</p>
-          </div>
-        </div>
-        
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 rounded-lg mb-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-6 h-6 text-yellow-600 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-yellow-900 mb-1">Project Creation Form Coming Soon</h3>
-                <p className="text-yellow-800 text-sm">
-                  The project creation form is currently under development. For now, please use the Django Admin panel 
-                  or contact your system administrator to create new projects.
-                </p>
-                <div className="mt-4 flex gap-3">
-                  <a
-                    href="/admin/procurement/project/add/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors inline-flex items-center gap-2 text-sm font-medium"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Open Django Admin
-                  </a>
-                  <button
-                    onClick={() => navigate('/procurement/projects')}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
-                  >
-                    Go Back
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Future Project Creation Form Placeholder */}
-          <div className="bg-white rounded-lg shadow-md p-8 border-2 border-dashed border-gray-300">
-            <div className="text-center">
-              <Briefcase className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Project Creation Form</h3>
-              <p className="text-gray-600 mb-6">
-                Fields: Project Number, Name, Type, Client, Location, Dates, Budget, Team, Cost Center
-              </p>
-              <p className="text-sm text-gray-500">Form components will be added in the next release</p>
-            </div>
-          </div>
-        </div>
       </div>
     );
   }

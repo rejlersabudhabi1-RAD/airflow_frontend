@@ -55,13 +55,6 @@ const payrollService = {
   clearExpiredInsights: () =>
     unwrap(apiClient.delete(`${BASE}/ai-insights/clear-expired/`)),
 
-  // ── Chatbot Messages ───────────────────────────────────────────────────────
-  getChatHistory: (sessionId) =>
-    unwrap(apiClient.get(`${BASE}/chatbot-messages/`, { params: { session_id: sessionId } })),
-
-  saveChatMessage: (data) =>
-    unwrap(apiClient.post(`${BASE}/chatbot-messages/`, data)),
-
   // ── Leave Records (imported from HR Excel) ─────────────────────────────────
   getLeaveRecords: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/leave-records/`, { params })),

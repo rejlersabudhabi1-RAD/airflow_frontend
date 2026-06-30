@@ -46,7 +46,8 @@ const emptyForm = () => ({
   // Identification
   po_number: '', pr_reference: '', pr_requester_name: '',
   
-  // Project details
+  // Project linkage (soft-coded FK relationship)
+  project: '',  // UUID FK to Project model
   project_number: '', project_manager: '', budget: '',
   
   // Vendor
@@ -180,7 +181,7 @@ const ItemRow = ({ item, onChange, onRemove }) => {
 };
 
 // -- Main component --
-const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [] }) => {
+const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [], projects = [] }) => {
   const [step, setStep] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
   const [extractionProgress, setExtractionProgress] = useState(0);
@@ -236,14 +237,22 @@ const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [] 
       vendorNameHint.toLowerCase().includes(v.name?.toLowerCase())
     );
     
+    // Smart auto-match project by number (AI extraction + fuzzy matching)
+    const projectNumberHint = data.project_number || data.project_code || '';
+    const matchedProject = projects.find((p) =>
+      p.project_number?.toLowerCase().includes(projectNumberHint.toLowerCase()) ||
+      projectNumberHint.toLowerCase().includes(p.project_number?.toLowerCase())
+    );
+    
     setFormData({
       // Identification
       po_number:            set('po_number', data.po_number) || '',
       pr_reference:         set('pr_reference', data.pr_number) || '',
       pr_requester_name:    set('pr_requester_name', data.pr_requester_name) || '',
       
-      // Project details
-      project_number:       set('project_number', data.project_number || data.project_code) || '',
+      // Project linkage - auto-populated if matched
+      project:              matchedProject ? matchedProject.id : '',
+      project_number:       set('project_number', projectNumberHint) || '',
       project_manager:      set('project_manager', data.project_manager) || '',
       budget:               set('budget', data.budget) || '',
       
@@ -292,6 +301,9 @@ const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [] 
     
     // Mark vendor as AI-extracted if matched
     if (matchedVendor) touched.add('vendor');
+    
+    // Mark project as AI-extracted if matched
+    if (matchedProject) touched.add('project');
     
     // Map payment milestones if present
     if (Array.isArray(data.payment_milestones) && data.payment_milestones.length > 0) {
@@ -342,7 +354,17 @@ const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [] 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.vendor) { setSubmitError('Please select a vendor from the list.'); return; }
+    
+    // Smart validation with helpful messages
+    if (vendors.length === 0) { 
+      setSubmitError('No vendors available. Please create a vendor first before creating a Purchase Order.'); 
+      return; 
+    }
+    if (!formData.vendor) { 
+      setSubmitError('Please select a vendor from the list.'); 
+      return; 
+    }
+    
     setSubmitting(true); setSubmitError(null);
     try {
       const payload = { ...formData, items, total_amount: totalOrderValue > 0 ? totalOrderValue : (parseFloat(formData.total_amount) || 0) };
@@ -506,30 +528,167 @@ const AIPurchaseOrderCreator = ({ isOpen, onClose, onOrderCreated, vendors = [] 
                   </div>
                 </section>
 
+                {/* Project Linkage */}
+                <section>
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-1 mb-3">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide flex items-center">
+                      <ClipboardDocumentListIcon className="h-4 w-4 mr-1.5 text-indigo-500" />Project Linkage
+                      {aiExtractedFields.has('project') && <ExtractedBadge value={true} />}
+                      {!aiExtractedFields.has('project') && formData.project_number && (
+                        <span className="ml-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                          AI found: "{formData.project_number}" — select from list below
+                        </span>
+                      )}
+                    </h3>
+                    <a
+                      href="/procurement/projects/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      <PlusIcon className="h-3.5 w-3.5" />
+                      <span>New Project</span>
+                    </a>
+                  </div>
+                  
+                  {/* Smart Project Selection or Creation Prompt */}
+                  {projects.length === 0 ? (
+                    <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <ClipboardDocumentListIcon className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                            No Projects Available
+                          </h4>
+                          <p className="text-xs text-blue-800 mb-3">
+                            You can create this Purchase Order without a project, or create a project first for better budget tracking and financial reporting.
+                          </p>
+                          <div className="flex gap-2">
+                            <a
+                              href="/procurement/projects/new"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              <PlusIcon className="h-4 w-4" />
+                              Create Project First
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {/* Continue without project - do nothing, form already allows it */}}
+                              className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50 transition-colors"
+                            >
+                              Continue Without Project
+                            </button>
+                          </div>
+                          <p className="text-xs text-blue-600 mt-2">
+                            💡 Tip: After creating a project, refresh this page to link it to this PO
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Project" name="project">
+                          <select 
+                            value={formData.project} 
+                            onChange={(e) => {
+                              setField('project', e.target.value);
+                              // Auto-fill project details when selected
+                              const selectedProj = projects.find(p => p.id === e.target.value);
+                              if (selectedProj) {
+                                setField('project_number', selectedProj.project_number || '');
+                                setField('project_manager', selectedProj.project_manager_name || '');
+                              }
+                            }}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                          >
+                            <option value="">— Select project (optional) —</option>
+                            {projects.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.project_number} - {p.project_name} ({p.client_name})
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Project number found in document">
+                          <input type="text" readOnly value={formData.project_number}
+                            className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500 cursor-not-allowed" />
+                        </Field>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        💡 Link this PO to a project for budget tracking and financial reporting. Found {projects.length} project{projects.length !== 1 ? 's' : ''}.
+                      </p>
+                    </>
+                  )}
+                </section>
+
                 {/* Vendor */}
                 <section>
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide border-b border-gray-200 pb-1 mb-3 flex items-center">
-                    <BuildingOfficeIcon className="h-4 w-4 mr-1.5 text-indigo-500" />Vendor
-                    {aiExtractedFields.has('vendor') && <ExtractedBadge value={true} />}
-                    {!aiExtractedFields.has('vendor') && formData.vendor_name_hint && (
-                      <span className="ml-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                        AI found: "{formData.vendor_name_hint}" — select from list below
-                      </span>
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label="Vendor" name="vendor" required>
-                      <select value={formData.vendor} onChange={(e) => setField('vendor', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none">
-                        <option value="">— Select vendor —</option>
-                        {vendors.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.vendor_code})</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Vendor name found in document">
-                      <input type="text" readOnly value={formData.vendor_name_hint}
-                        className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500 cursor-not-allowed" />
-                    </Field>
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-1 mb-3">
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide flex items-center">
+                      <BuildingOfficeIcon className="h-4 w-4 mr-1.5 text-indigo-500" />Vendor
+                      {aiExtractedFields.has('vendor') && <ExtractedBadge value={true} />}
+                      {!aiExtractedFields.has('vendor') && formData.vendor_name_hint && (
+                        <span className="ml-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                          AI found: "{formData.vendor_name_hint}" — select from list below
+                        </span>
+                      )}
+                    </h3>
+                    <a
+                      href="/procurement/vendors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      <PlusIcon className="h-3.5 w-3.5" />
+                      <span>New Vendor</span>
+                    </a>
                   </div>
+                  
+                  {/* Smart Vendor Selection or Creation Requirement */}
+                  {vendors.length === 0 ? (
+                    <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-red-900 mb-1">
+                            Vendor Required - No Vendors Available
+                          </h4>
+                          <p className="text-xs text-red-800 mb-3">
+                            You must create at least one vendor before creating a Purchase Order. Vendors are required for all procurement transactions.
+                          </p>
+                          <a
+                            href="/procurement/vendors"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            <BuildingOfficeIcon className="h-4 w-4" />
+                            Create Vendor First
+                          </a>
+                          <p className="text-xs text-red-600 mt-2">
+                            💡 Tip: After creating a vendor, refresh this page to select it
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Field label="Vendor" name="vendor" required>
+                        <select value={formData.vendor} onChange={(e) => setField('vendor', e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+                          <option value="">— Select vendor —</option>
+                          {vendors.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.vendor_code})</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Vendor name found in document">
+                        <input type="text" readOnly value={formData.vendor_name_hint}
+                          className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500 cursor-not-allowed" />
+                      </Field>
+                    </div>
+                  )}
                 </section>
 
                 {/* Financials */}

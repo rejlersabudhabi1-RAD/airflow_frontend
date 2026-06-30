@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
   // Priority: VITE_API_PROXY_TARGET env var → fallback to localhost:8000
   //
   // Modes (set in .env.local):
-  //   LOCAL  → VITE_API_PROXY_TARGET=http://aiflow_backend:8000
+  //   LOCAL  → VITE_API_PROXY_TARGET=http://backend_local:8000
   //   PROD   → VITE_API_PROXY_TARGET=https://aiflowbackend-production.up.railway.app
   //
   let apiUrl = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
   const targetHost = apiUrlObj.host // dynamic: 'localhost:8000' OR 'aiflowbackend-production.up.railway.app'
 
   // Soft-coded: detect when pointing at production so we can warn in the browser
-  const IS_PROD_BACKEND = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1') && !apiUrl.includes('aiflow_backend')
+  const IS_PROD_BACKEND = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1') && !apiUrl.includes('backend_local') && !apiUrl.includes('aiflow_backend')
 
   console.log('🔧 Vite Config - Mode:', mode)
   console.log('🔧 Vite Config - Proxy Target:', apiUrl)

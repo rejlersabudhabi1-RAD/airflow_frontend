@@ -32,6 +32,7 @@ const OrderManagement = () => {
   const [filterVendor, setFilterVendor] = useState('all');
   const [showAICreator, setShowAICreator] = useState(false);
   const [vendors, setVendors] = useState([]);
+  const [projects, setProjects] = useState([]);  // Smart project lookup for PO creation
   const [aiInsights, setAiInsights] = useState(null);
 
   const pageControls = usePageControls({
@@ -85,9 +86,21 @@ const OrderManagement = () => {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      const response = await apiClient.get('/procurement/projects/');
+      const data = response.data;
+      setProjects(Array.isArray(data.results) ? data.results : Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setProjects([]);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchVendors();
+    fetchProjects();  // Load projects for PO-Project linkage
   }, [pageControls.isRefreshing]);
 
   /**
@@ -596,6 +609,7 @@ const OrderManagement = () => {
         onClose={() => setShowAICreator(false)}
         onOrderCreated={handleOrderCreated}
         vendors={vendors}
+        projects={projects}
       />
     </div>
   );
