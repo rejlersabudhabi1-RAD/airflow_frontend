@@ -7,6 +7,7 @@ import Documentation from '../components/documentation/Documentation'
 import GoogleAnalyticsRealtime from '../components/Dashboard/GoogleAnalyticsRealtime'
 import { API_BASE_URL } from '../config/api.config'
 import analyticsService from '../services/analyticsService'
+import PersonalDashboard from './PersonalDashboard'
 import {
   BellIcon, ArrowPathIcon, SparklesIcon, FolderOpenIcon,
   DocumentTextIcon, CheckCircleIcon, ExclamationTriangleIcon,
@@ -557,6 +558,11 @@ const Dashboard = () => {
     const mods = rbacData?.modules || rbacCurrentUser?.modules || []
     return Array.isArray(mods) ? mods.map(m => (typeof m === 'string' ? m : m.code)).filter(Boolean) : []
   }, [isAdmin, rbacData, rbacCurrentUser])
+
+  // ── Role-based routing: non-admins get PersonalDashboard ────────────────────
+  if (!isAdmin) {
+    return <PersonalDashboard />
+  }
 
   const userRoleLabel  = useMemo(() => {
     const u = rbacData || {}
