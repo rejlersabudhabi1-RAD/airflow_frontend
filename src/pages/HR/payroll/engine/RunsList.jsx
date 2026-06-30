@@ -4,6 +4,7 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
 import {
   formatCurrency,
+  formatNumber,
   RUN_COLUMNS,
   RUN_DELETABLE_STATUSES,
   canForcePayrollRun,
@@ -221,6 +222,8 @@ export default function RunsList({ onSelectRun }) {
                   <td className="px-3 py-2 font-mono">{r.cycle_code}</td>
                   <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
                   <td className="px-3 py-2 text-right">{r.employee_count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(r.total_hours, { decimals: 2 })}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-700">{formatNumber(r.total_days, { decimals: 2 })}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(r.total_gross, { withSymbol: false })}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(r.total_deductions, { withSymbol: false })}</td>
                   <td className="px-3 py-2 text-right font-medium">{formatCurrency(r.total_net)}</td>

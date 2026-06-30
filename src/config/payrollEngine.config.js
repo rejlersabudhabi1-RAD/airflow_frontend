@@ -30,6 +30,20 @@ export const formatNumber = (value, { decimals = 2 } = {}) => {
   })
 }
 
+// Soft-coded: how many biometric hours equal one working day at this
+// company. Rejlers Abu Dhabi runs a 9-hour day. Override via Vite env
+// `VITE_PAYROLL_HOURS_PER_WORKDAY` without touching code.
+export const HOURS_PER_WORKDAY = Number(
+  import.meta?.env?.VITE_PAYROLL_HOURS_PER_WORKDAY || 9,
+) || 9
+
+/** Convert a live-hours number to working days (hours ÷ HOURS_PER_WORKDAY). */
+export const hoursToDays = (hours) => {
+  const h = Number(hours)
+  if (!Number.isFinite(h) || HOURS_PER_WORKDAY <= 0) return 0
+  return h / HOURS_PER_WORKDAY
+}
+
 // Workflow status meta (kept in sync with backend catalog.WORKFLOW_STATUSES)
 export const WORKFLOW_STATUS = {
   DRAFT: 'draft',
@@ -180,7 +194,9 @@ export const getCanvasMode = (key) =>
 export const RUN_COLUMNS = [
   { key: 'cycle_code',       label: 'Cycle',           width: 120 },
   { key: 'status_label',     label: 'Status',          width: 160 },
-  { key: 'employee_count',   label: 'Employees',       width: 110, align: 'right' },
+  { key: 'employee_count',   label: 'Employees',       width: 100, align: 'right' },
+  { key: 'total_hours',      label: 'Hours ⠂(Live)',  width: 110, align: 'right', format: 'number' },
+  { key: 'total_days',       label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 110, align: 'right', format: 'number' },
   { key: 'total_gross',      label: 'Gross',           width: 140, align: 'right', format: 'currency' },
   { key: 'total_deductions', label: 'Deductions',      width: 140, align: 'right', format: 'currency' },
   { key: 'total_net',        label: 'Net Payable',     width: 160, align: 'right', format: 'currency' },
@@ -191,7 +207,8 @@ export const RUN_COLUMNS = [
 export const PAYSLIP_COLUMNS = [
   { key: 'snapshot_full_name', label: 'Employee',          width: 240 },
   { key: 'snapshot_department','label': 'Department',      width: 160 },
-  { key: 'hours',              label: 'Hours ⠂(Live)',    width: 90,  align: 'right', format: 'number' },
+  { key: 'hours',              label: 'Hours ⠲(Live)',    width: 90,  align: 'right', format: 'number' },
+  { key: 'days',               label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
   { key: 'basic',              label: 'Basic',             width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',            label: 'Housing',           width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',          label: 'Transport',         width: 110, align: 'right', format: 'currency', editable: true },
@@ -213,7 +230,8 @@ export const PAYSLIP_COLUMNS_EXPANDED = [
   { key: 'snapshot_joining_date', label: 'Joined',      width: 110, format: 'date' },
   { key: 'snapshot_department', label: 'Department',    width: 160 },
   { key: 'snapshot_designation',label: 'Designation',   width: 180 },
-  { key: 'hours',               label: 'Hours ⠂(Live)', width: 90,  align: 'right', format: 'number' },
+  { key: 'hours',               label: 'Hours ⠲(Live)', width: 90,  align: 'right', format: 'number' },
+  { key: 'days',                label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
   { key: 'basic',               label: 'Basic',         width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',             label: 'Housing',       width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',           label: 'Transport',     width: 110, align: 'right', format: 'currency', editable: true },

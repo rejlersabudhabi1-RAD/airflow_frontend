@@ -24,6 +24,7 @@ export default function BulkDeductionModal({ run, payslips = [], onClose, onAppl
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
 
   const selectedKeys = useMemo(
     () => BULK_DEDUCTION_FIELDS.filter((f) => fields[f.key]).map((f) => f.key),
@@ -68,7 +69,7 @@ export default function BulkDeductionModal({ run, payslips = [], onClose, onAppl
   const canApply = pctValid && fieldsValid && !busy
 
   const handleApply = async () => {
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setSuccess(null)
     try {
       const payload = {
         percentage: percentage,
@@ -78,8 +79,13 @@ export default function BulkDeductionModal({ run, payslips = [], onClose, onAppl
       if (label.trim()) payload.label = label.trim()
       if (description.trim()) payload.description = description.trim()
       const result = await payrollEngineService.applyBulkDeduction(run.id, payload)
-      onApplied?.(result)
-      onClose?.()
+      // Refresh the parent BEFORE closing so the table reliably reflects the
+      // new DEDUCTIONS / NET PAYABLE values (avoids a render-race where the
+      // modal unmounts before payslips state updates).
+      await onApplied?.(result)
+      setSuccess(result?.summary || null)
+      // Brief pause so HR sees the confirmation before the modal disappears.
+      setTimeout(() => { onClose?.() }, 1200)
     } catch (e) {
       setError(e?.response?.data?.error || e.message)
     } finally { setBusy(false) }
@@ -87,10 +93,10 @@ export default function BulkDeductionModal({ run, payslips = [], onClose, onAppl
 
   const handleReverse = async () => {
     if (!confirm('Remove ALL bulk percentage-deduction line items from this run?')) return
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setSuccess(null)
     try {
       const result = await payrollEngineService.reverseBulkDeduction(run.id)
-      onApplied?.(result)
+      await onApplied?.(result)
       onClose?.()
     } catch (e) {
       setError(e?.response?.data?.error || e.message)
@@ -281,6 +287,18 @@ export default function BulkDeductionModal({ run, payslips = [], onClose, onAppl
             <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <HeroIcons.ExclamationTriangleIcon className="h-4 w-4 flex-shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              <HeroIcons.CheckCircleIcon className="h-4 w-4 flex-shrink-0 text-emerald-600" />
+              <span>
+                Applied <strong>{success.percentage}%</strong> deduction to{' '}
+                <strong>{success.employees_affected}</strong> payslip(s){' '}
+                ({success.employees_skipped} skipped). Total deducted:{' '}
+                <strong className="tabular-nums">{formatCurrency(success.total_deducted)}</strong>.
+              </span>
             </div>
           )}
         </div>
