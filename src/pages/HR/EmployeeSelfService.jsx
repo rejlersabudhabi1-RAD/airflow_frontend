@@ -196,6 +196,17 @@ const fmtDate = (d) => {
   return dt.toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Formats an ISO datetime string into a readable time (e.g. "07:45")
+// Returns null if the value is empty or unparseable
+const fmtTime = (raw) => {
+  if (!raw) return null
+  try {
+    const d = new Date(raw)
+    if (isNaN(d.getTime())) return null
+    return d.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch { return null }
+}
+
 const fmtHours = (h) => {
   if (h === null || h === undefined) return EMPTY_DISPLAY
   const n = Number(h)
@@ -465,10 +476,13 @@ const EmployeeProfileHeader = ({ profile, leaveRecord, monthlyTs, salaryInfo, lo
 const TodayStatusCard = ({ todayData, loading }) => {
   const status = todayData?.status || 'missing'
   const sm = ATTENDANCE_STATUS_MAP[status] || ATTENDANCE_STATUS_MAP.missing
-  const checkin  = todayData?.check_in_time  || todayData?.first_in
-  const checkout = todayData?.check_out_time || todayData?.last_out
+  // Format raw ISO datetime → readable time string (e.g. "07:45"); null when no data
+  const checkin  = fmtTime(todayData?.check_in_time  || todayData?.first_in)
+  const checkout = fmtTime(todayData?.check_out_time || todayData?.last_out)
   // Backend returns 'hours_worked' from daily_report
   const rawHours = Number(todayData?.hours_worked || todayData?.total_hours) || 0
+  // True when the API resolved but found no record for today
+  const noRecord = !todayData
   // Apply max daily hours cap (soft-coded)
   const hours = Math.min(rawHours, ESS_ATT_MAX_DAILY_HRS)
   // Calculate overtime (hours beyond standard day, capped at max)
@@ -500,27 +514,35 @@ const TodayStatusCard = ({ todayData, loading }) => {
             </div>
           )}
 
+          {/* No biometric record for today — show a neutral info strip */}
+          {noRecord && (
+            <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+              <Icon name="ClockIcon" className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Attendance data syncs from the biometric system. Records for today will appear once available.</span>
+            </div>
+          )}
+
           <div className={`grid gap-3 ${ESS_ATT_FEATURES.showOvertime ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ArrowRightCircleIcon" className="w-3.5 h-3.5 text-emerald-500" />
                 Check-In
               </div>
-              <div className="font-bold text-slate-800">{checkin || EMPTY_DISPLAY}</div>
+              <div className={`font-bold ${checkin ? 'text-slate-800' : 'text-slate-400'}`}>{checkin ?? EMPTY_DISPLAY}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ArrowLeftCircleIcon" className="w-3.5 h-3.5 text-rose-500" />
                 Check-Out
               </div>
-              <div className="font-bold text-slate-800">{checkout || EMPTY_DISPLAY}</div>
+              <div className={`font-bold ${checkout ? 'text-slate-800' : 'text-slate-400'}`}>{checkout ?? EMPTY_DISPLAY}</div>
             </div>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ClockIcon" className="w-3.5 h-3.5 text-blue-500" />
                 Total Hours
               </div>
-              <div className="font-bold text-slate-800">{hours > 0 ? fmtHours(hours) : EMPTY_DISPLAY}</div>
+              <div className={`font-bold ${hours > 0 ? 'text-slate-800' : 'text-slate-400'}`}>{hours > 0 ? fmtHours(hours) : EMPTY_DISPLAY}</div>
             </div>
             {/* Overtime tile — shown only when ESS_ATT_FEATURES.showOvertime is true; set to false to hide */}
             {ESS_ATT_FEATURES.showOvertime && (
