@@ -497,7 +497,7 @@ const TodayStatusCard = ({ todayData, loading }) => {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${ESS_ATT_FEATURES.showOvertime ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <div className="bg-slate-50 rounded-lg p-3">
               <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Icon name="ArrowRightCircleIcon" className="w-3.5 h-3.5 text-emerald-500" />
@@ -519,13 +519,16 @@ const TodayStatusCard = ({ todayData, loading }) => {
               </div>
               <div className="font-bold text-slate-800">{hours > 0 ? fmtHours(hours) : EMPTY_DISPLAY}</div>
             </div>
-            <div className="bg-slate-50 rounded-lg p-3">
-              <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-                <Icon name="ArrowTrendingUpIcon" className="w-3.5 h-3.5 text-amber-500" />
-                Overtime
+            {/* Overtime tile — shown only when ESS_ATT_FEATURES.showOvertime is true; set to false to hide */}
+            {ESS_ATT_FEATURES.showOvertime && (
+              <div className="bg-slate-50 rounded-lg p-3">
+                <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <Icon name="ArrowTrendingUpIcon" className="w-3.5 h-3.5 text-amber-500" />
+                  Overtime
+                </div>
+                <div className="font-bold text-slate-800">{ot > 0 ? fmtHours(ot) : EMPTY_DISPLAY}</div>
               </div>
-              <div className="font-bold text-slate-800">{ot > 0 ? fmtHours(ot) : EMPTY_DISPLAY}</div>
-            </div>
+            )}
           </div>
 
           <div>
