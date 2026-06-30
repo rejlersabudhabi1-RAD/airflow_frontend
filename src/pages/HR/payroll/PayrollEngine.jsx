@@ -22,12 +22,14 @@ import RunsList         from './engine/RunsList'
 import RunDetail        from './engine/RunDetail'
 import EmployeesTable   from './engine/EmployeesTable'
 import AdjustmentsList  from './engine/AdjustmentsList'
+import ComparisonsHub   from './engine/ComparisonsHub'
 import ExcelHub         from './engine/ExcelHub'
 
 const TAB_ICONS = {
   runs:        'CalendarDaysIcon',
   employees:   'UsersIcon',
   adjustments: 'AdjustmentsHorizontalIcon',
+  comparison:  'ArrowsRightLeftIcon',
   excel:       'TableCellsIcon',
 }
 
@@ -130,6 +132,7 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
       )}
       {tab === 'employees'   && <EmployeesTable />}
       {tab === 'adjustments' && <AdjustmentsList />}
+      {tab === 'comparison'  && <ComparisonsHub />}
       {tab === 'excel'       && (
         <ExcelHub
           onAfterImport={(run) => {

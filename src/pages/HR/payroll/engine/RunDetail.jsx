@@ -9,6 +9,7 @@ import {
 import StatusBadge from './StatusBadge'
 import PayslipDetailModal from './PayslipDetailModal'
 import BulkDeductionModal from './BulkDeductionModal'
+import ComparisonPanel from './ComparisonPanel'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -459,6 +460,20 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
           onApplied={async () => { await load() }}
         />
       )}
+
+      {/* External-file Comparison */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <HeroIcons.ArrowsRightLeftIcon className="w-4 h-4 text-indigo-600" />
+          <h3 className="text-sm font-semibold text-slate-700">
+            Comparison vs external HR file
+          </h3>
+          <span className="text-[10px] uppercase font-medium text-slate-400 ml-2">
+            ValueFrame · Sympa · Generic
+          </span>
+        </div>
+        <ComparisonPanel runId={run.id} />
+      </div>
     </div>
   )
 }

@@ -181,6 +181,37 @@ const payrollEngineService = {
   // ── Workflow log (read-only) ───────────────────────────────────────────
   listWorkflowLog: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/workflow-log/`, { params })),
+
+  // ── Comparison (external HR file vs run) ───────────────────────────────
+  listComparisons: (params = {}) =>
+    unwrap(apiClient.get(`${BASE}/comparisons/`, { params })),
+
+  getComparison: (id) =>
+    unwrap(apiClient.get(`${BASE}/comparisons/${id}/`)),
+
+  listComparisonRows: (id, params = {}) =>
+    unwrap(apiClient.get(`${BASE}/comparisons/${id}/rows/`, { params })),
+
+  uploadComparison: ({ runId, file, sourceLabel = '', sourceProfile = 'auto' }) => {
+    const fd = new FormData()
+    fd.append('run', runId)
+    fd.append('file', file)
+    if (sourceLabel)   fd.append('source_label', sourceLabel)
+    if (sourceProfile) fd.append('source_profile', sourceProfile)
+    return unwrap(apiClient.post(`${BASE}/comparisons/`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }))
+  },
+
+  deleteComparison: (id) =>
+    unwrap(apiClient.delete(`${BASE}/comparisons/${id}/`)),
+
+  downloadComparisonXlsx: (id) =>
+    apiClient.get(`${BASE}/comparisons/${id}/export-xlsx/`, { responseType: 'blob' })
+      .then((r) => r.data),
+
+  getComparisonProfiles: () =>
+    unwrap(apiClient.get(`${BASE}/comparisons/profiles/`)),
 }
 
 /** Helper for triggering browser download from a blob response. */

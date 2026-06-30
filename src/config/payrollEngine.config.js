@@ -100,6 +100,7 @@ export const ENGINE_TABS = [
   { key: 'runs',        label: 'Monthly Runs',  description: 'Generate, review and approve payroll runs' },
   { key: 'employees',   label: 'Employees',     description: 'Master roster of all payroll-eligible staff' },
   { key: 'adjustments', label: 'Adjustments',   description: 'Pending earnings & deductions for upcoming runs' },
+  { key: 'comparison',  label: 'Comparison',    description: 'Reconcile a run against external HR files (ValueFrame, Sympa, etc.)' },
   { key: 'excel',       label: 'Excel Hub',     description: 'Upload / download payroll Excel files' },
 ]
 
@@ -441,3 +442,88 @@ export default {
   formatCurrency,
   formatNumber,
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// COMPARISON — mirrors backend `catalog.COMPARISON_*` / `config.COMPARISON_*`.
+// Soft-coded everywhere; no value below is hard-coded in the diff panel.
+// ────────────────────────────────────────────────────────────────────────────
+export const COMPARISON_STATUS = {
+  MATCH:         'match',
+  VARIANCE:      'variance',
+  EXTERNAL_ONLY: 'external_only',
+  PAYROLL_ONLY:  'payroll_only',
+}
+
+export const COMPARISON_STATUS_META = {
+  [COMPARISON_STATUS.MATCH]: {
+    label: 'Match',
+    short: 'OK',
+    tone:  'emerald',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+    rowFill: '',
+  },
+  [COMPARISON_STATUS.VARIANCE]: {
+    label: 'Variance',
+    short: 'DIFF',
+    tone:  'amber',
+    badge: 'bg-amber-50 text-amber-700 border-amber-300',
+    rowFill: 'bg-amber-50/40',
+  },
+  [COMPARISON_STATUS.EXTERNAL_ONLY]: {
+    label: 'External only',
+    short: 'EXT',
+    tone:  'sky',
+    badge: 'bg-sky-50 text-sky-700 border-sky-300',
+    rowFill: 'bg-sky-50/40',
+  },
+  [COMPARISON_STATUS.PAYROLL_ONLY]: {
+    label: 'Missing from external',
+    short: 'MISS',
+    tone:  'rose',
+    badge: 'bg-rose-50 text-rose-700 border-rose-300',
+    rowFill: 'bg-rose-50/40',
+  },
+}
+
+export const COMPARISON_SEVERITY_META = {
+  critical: { label: 'Critical', badge: 'bg-rose-100 text-rose-700 border-rose-300', cell: 'bg-rose-50' },
+  warning:  { label: 'Warning',  badge: 'bg-amber-100 text-amber-700 border-amber-300', cell: 'bg-amber-50' },
+  info:     { label: 'Info',     badge: 'bg-sky-100 text-sky-700 border-sky-300',     cell: 'bg-sky-50' },
+}
+
+/** Field metadata mirrors backend catalog.COMPARISON_FIELDS. */
+export const COMPARISON_FIELDS = [
+  { field: 'employee_no',      label: 'Employee No',  kind: 'identifier' },
+  { field: 'full_name',        label: 'Full Name',    kind: 'identifier' },
+  { field: 'basic',            label: 'Basic',        kind: 'money'    },
+  { field: 'housing',          label: 'Housing',      kind: 'money'    },
+  { field: 'transport',        label: 'Transport',    kind: 'money'    },
+  { field: 'home_leave',       label: 'Home Leave',   kind: 'money'    },
+  { field: 'other_earnings',   label: 'Other Earn',   kind: 'money'    },
+  { field: 'total_deductions', label: 'Deductions',   kind: 'money'    },
+  { field: 'gross_earnings',   label: 'Gross',        kind: 'money'    },
+  { field: 'net_payable',      label: 'Net Payable',  kind: 'money'    },
+  { field: 'hours',            label: 'Hours',        kind: 'hours'    },
+  { field: 'leave_days',       label: 'Leave Days',   kind: 'days'     },
+]
+
+export const comparisonFieldMeta = (field) =>
+  COMPARISON_FIELDS.find((f) => f.field === field) || { field, label: field, kind: 'money' }
+
+/** Format a value based on field metadata (money / hours / days). */
+export const formatComparisonValue = (field, value) => {
+  if (value === null || value === undefined || value === '') return '—'
+  const meta = comparisonFieldMeta(field)
+  if (meta.kind === 'money')  return formatCurrency(value)
+  if (meta.kind === 'hours')  return `${formatNumber(value, { decimals: 2 })} h`
+  if (meta.kind === 'days')   return `${formatNumber(value, { decimals: 2 })} d`
+  return String(value)
+}
+
+/** Fallback profiles when the backend `/profiles/` call hasn't loaded yet. */
+export const COMPARISON_PROFILE_FALLBACK = [
+  { code: 'auto',       label: 'Auto-detect' },
+  { code: 'valueframe', label: 'ValueFrame (timesheet)' },
+  { code: 'sympa',      label: 'Sympa (HR master)' },
+  { code: 'generic',    label: 'Generic XLSX' },
+]
