@@ -21,6 +21,9 @@
 export const PEOPLE_NAV_VISIBILITY = {
   always:     () => true,
   adminOnly:  (user, helpers) => Boolean(helpers?.isUserAdmin?.(user)),
+  // SOFT-CODED: set a tab's visibility to 'never' to hide it everywhere
+  // without deleting the config entry (re-enable by changing back to 'always')
+  never:      () => false,
 }
 
 // Soft-coded tab definitions. Order = display order (left → right).
@@ -40,7 +43,8 @@ export const PEOPLE_NAV_TABS = [
     description: 'Workforce directory & competency view',
     to: '/hr/employees',
     icon: 'UserGroupIcon',
-    visibility: 'always',
+    // SOFT-CODED: hidden from My Profile nav — change to 'always' to re-enable
+    visibility: 'never',
     accent: 'from-emerald-500 to-teal-500',
   },
   {
@@ -58,7 +62,8 @@ export const PEOPLE_NAV_TABS = [
     description: 'Attendance, leave management, payroll engine & salary structures',
     to: '/hr/payroll',
     icon: 'BanknotesIcon',
-    visibility: 'always',
+    // SOFT-CODED: hidden from My Profile nav — change to 'always' to re-enable
+    visibility: 'never',
     accent: 'from-violet-500 to-purple-500',
   },
   {
