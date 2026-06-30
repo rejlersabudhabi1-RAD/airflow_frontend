@@ -490,12 +490,15 @@ const TodayStatusCard = ({ todayData, loading }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${sm.dot}`} />
-            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold border ${sm.badge}`}>
-              {sm.label}
-            </span>
-          </div>
+          {/* Status badge — hidden when no biometric data is available for today */}
+          {status !== 'missing' && (
+            <div className="flex items-center gap-3">
+              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${sm.dot}`} />
+              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold border ${sm.badge}`}>
+                {sm.label}
+              </span>
+            </div>
+          )}
 
           <div className={`grid gap-3 ${ESS_ATT_FEATURES.showOvertime ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <div className="bg-slate-50 rounded-lg p-3">
