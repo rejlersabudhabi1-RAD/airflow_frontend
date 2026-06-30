@@ -507,8 +507,10 @@ export const COMPARISON_FIELDS = [
   { field: 'leave_days',       label: 'Leave Days',   kind: 'days'     },
 ]
 
-export const comparisonFieldMeta = (field) =>
-  COMPARISON_FIELDS.find((f) => f.field === field) || { field, label: field, kind: 'money' }
+export const comparisonFieldMeta = (field) => {
+  if (field === '__match__') return { field: '__match__', label: 'Roster match', kind: 'identifier' }
+  return COMPARISON_FIELDS.find((f) => f.field === field) || { field, label: field, kind: 'money' }
+}
 
 /** Format a value based on field metadata (money / hours / days). */
 export const formatComparisonValue = (field, value) => {
