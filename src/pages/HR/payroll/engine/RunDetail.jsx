@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react'
+import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
 import {
-  formatCurrency, getPayslipColumns, WORKFLOW_STATUS, STATUS_LABEL,
+  formatCurrency, formatNumber, getPayslipColumns, WORKFLOW_STATUS, STATUS_LABEL,
+  canForcePayrollRun,
 } from '../../../../config/payrollEngine.config'
 import StatusBadge from './StatusBadge'
 import PayslipDetailModal from './PayslipDetailModal'
@@ -42,6 +44,12 @@ const TONE_CLASS = {
 
 export default function RunDetail({ runId, onBack, canvasModeKey }) {
   const payslipColumns = useMemo(() => getPayslipColumns(canvasModeKey), [canvasModeKey])
+  const authUser = useSelector((s) => s.auth?.user)
+  const rbacUser = useSelector((s) => s.rbac?.currentUser)
+  const canForce = useMemo(
+    () => canForcePayrollRun(authUser, rbacUser),
+    [authUser, rbacUser],
+  )
   const [run, setRun] = useState(null)
   const [payslips, setPayslips] = useState([])
   const [workflowLog, setWorkflowLog] = useState([])
@@ -110,6 +118,35 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
       const blob = await payrollEngineService.downloadRunMasterXlsx(run.id)
       downloadBlob(blob, `payroll_master_${run.cycle_code}.xlsx`)
     } catch (e) { setError(e?.response?.data?.error || e.message) }
+  }
+
+  const handleRefreshHours = async () => {
+    const isDraft = run.status === WORKFLOW_STATUS.DRAFT
+    const force = !isDraft
+    const msg = isDraft
+      ? `Pull live "Total" hours from the Time Sheet Summary for ${run.cycle_code}?\n\n`
+        + 'Each payslip’s Hours column will be replaced with the biometric '
+        + 'total (with HR overrides overlaid).'
+      : `⚠️ FORCE-REFRESH HOURS on a ${run.status.toUpperCase()} run?\n\n`
+        + `Run ${run.cycle_code} is already approved. Super-Admin override required.\n\n`
+        + 'This rewrites each payslip’s Hours column with the live biometric total. '
+        + 'Totals, gross and net are not recomputed (Hours is informational only).\n\n'
+        + 'Proceed?'
+    if (!confirm(msg)) return
+    setBusy(true); setError(null)
+    try {
+      const result = await payrollEngineService.refreshRunHoursFromTimesheet(run.id, { force })
+      await load()
+      const missing = (result?.missing || []).length
+      alert(
+        `Hours refreshed from Time Sheet${result?.forced ? ' (FORCED)' : ''}.\n\n`
+        + `Updated: ${result?.updated ?? 0}\n`
+        + `Unchanged: ${result?.unchanged ?? 0}\n`
+        + (missing ? `Missing biometric data: ${missing} employee(s)` : 'All employees matched.')
+      )
+    } catch (e) {
+      setError(e?.response?.data?.error || e.message)
+    } finally { setBusy(false) }
   }
 
   const handleDownloadPack = async () => {
@@ -204,6 +241,28 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
               >
                 <HeroIcons.ArrowUturnLeftIcon className="w-4 h-4" />
                 Revert to Draft
+              </button>
+            )}
+            {run.status === WORKFLOW_STATUS.DRAFT && (
+              <button
+                onClick={handleRefreshHours}
+                disabled={busy}
+                title="Pull each payslip’s Hours column from the live Time Sheet Summary (biometric Total + HR overrides)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+              >
+                <HeroIcons.ClockIcon className="w-4 h-4" />
+                Refresh Hours
+              </button>
+            )}
+            {run.status !== WORKFLOW_STATUS.DRAFT && canForce && (
+              <button
+                onClick={handleRefreshHours}
+                disabled={busy}
+                title="Super-Admin override — force-refresh Hours from the live Time Sheet on an approved run"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+              >
+                <HeroIcons.ShieldExclamationIcon className="w-4 h-4" />
+                Force Refresh Hours
               </button>
             )}
             <button
@@ -362,6 +421,7 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
                     const v = p[c.key]
                     let display
                     if (c.format === 'currency')      display = formatCurrency(v, { withSymbol: false })
+                    else if (c.format === 'number')   display = formatNumber(v)
                     else if (c.format === 'date')     display = formatDate(v)
                     else if (c.format === 'datetime') display = formatDateTime(v)
                     else                              display = (v ?? '—')

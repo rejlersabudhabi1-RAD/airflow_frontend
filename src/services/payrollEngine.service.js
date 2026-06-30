@@ -65,6 +65,11 @@ const payrollEngineService = {
   refreshRunTotals: (id) =>
     unwrap(apiClient.post(`${BASE}/runs/${id}/refresh-totals/`)),
 
+  refreshRunHoursFromTimesheet: (id, { force = false } = {}) =>
+    unwrap(apiClient.post(
+      `${BASE}/runs/${id}/refresh-hours-from-timesheet/${force ? '?force=true' : ''}`,
+    )),
+
   hrApproveRun: (id, note = '') =>
     unwrap(apiClient.post(`${BASE}/runs/${id}/hr-approve/`, { note })),
 

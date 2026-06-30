@@ -4,6 +4,7 @@ import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
 import {
   formatCurrency,
+  formatNumber,
   EMPLOYEE_COLUMNS,
   canEditPayrollEmployee,
 } from '../../../../config/payrollEngine.config'
@@ -183,7 +184,9 @@ export default function EmployeesTable() {
                               )
                             : c.format === 'currency'
                               ? formatCurrency(v, { withSymbol: false })
-                              : (v ?? '—')}
+                              : c.format === 'number'
+                                ? formatNumber(v)
+                                : (v ?? '—')}
                         </td>
                       )
                     })}

@@ -19,6 +19,17 @@ export const formatCurrency = (value, { withSymbol = true } = {}) => {
   return withSymbol ? `${PAYROLL_ENGINE_CURRENCY} ${formatted}` : formatted
 }
 
+// Generic number formatter (used for the `hours` column). Strips trailing
+// zeros so 240.00 renders as "240" but 240.50 still renders as "240.5".
+export const formatNumber = (value, { decimals = 2 } = {}) => {
+  const n = Number(value)
+  if (value === null || value === undefined || value === '' || Number.isNaN(n)) return '—'
+  return n.toLocaleString(PAYROLL_ENGINE_LOCALE, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  })
+}
+
 // Workflow status meta (kept in sync with backend catalog.WORKFLOW_STATUSES)
 export const WORKFLOW_STATUS = {
   DRAFT: 'draft',
@@ -179,6 +190,7 @@ export const RUN_COLUMNS = [
 export const PAYSLIP_COLUMNS = [
   { key: 'snapshot_full_name', label: 'Employee',          width: 240 },
   { key: 'snapshot_department','label': 'Department',      width: 160 },
+  { key: 'hours',              label: 'Hours ⠂(Live)',    width: 90,  align: 'right', format: 'number' },
   { key: 'basic',              label: 'Basic',             width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',            label: 'Housing',           width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',          label: 'Transport',         width: 110, align: 'right', format: 'currency', editable: true },
@@ -200,6 +212,7 @@ export const PAYSLIP_COLUMNS_EXPANDED = [
   { key: 'snapshot_joining_date', label: 'Joined',      width: 110, format: 'date' },
   { key: 'snapshot_department', label: 'Department',    width: 160 },
   { key: 'snapshot_designation',label: 'Designation',   width: 180 },
+  { key: 'hours',               label: 'Hours ⠂(Live)', width: 90,  align: 'right', format: 'number' },
   { key: 'basic',               label: 'Basic',         width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',             label: 'Housing',       width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',           label: 'Transport',     width: 110, align: 'right', format: 'currency', editable: true },
@@ -219,6 +232,7 @@ export const EMPLOYEE_COLUMNS = [
   { key: 'department',   label: 'Department',    width: 160 },
   { key: 'designation',  label: 'Designation',   width: 180 },
   { key: 'grade',        label: 'Grade',         width: 120 },
+  { key: 'hours',        label: 'Hours',         width: 80,  align: 'right', format: 'number' },
   { key: 'basic',        label: 'Basic',         width: 110, align: 'right', format: 'currency' },
   { key: 'housing',      label: 'Housing',       width: 110, align: 'right', format: 'currency' },
   { key: 'transport',    label: 'Transport',     width: 110, align: 'right', format: 'currency' },
@@ -286,8 +300,7 @@ export const EMPLOYEE_EDIT_FIELDS = [
   { key: 'routing_code',       label: 'Routing Code',     type: 'text',   group: 'Banking' },
   { key: 'default_payment_mode', label: 'Payment Mode',   type: 'select', group: 'Banking', optionsFrom: 'payment_modes' },
 
-  // ── Fixed Earnings ──────────────────────────────────────────────────────
-  { key: 'basic',              label: 'Basic',            type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
+  // ── Fixed Earnings ──────────────────────────────────────────────────────  { key: 'hours',              label: 'Hours / Month',    type: 'number', group: 'Fixed Earnings', step: '0.01' },  { key: 'basic',              label: 'Basic',            type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
   { key: 'housing',            label: 'Housing',          type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
   { key: 'transport',          label: 'Transport',        type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
   { key: 'home_leave',         label: 'Home Leave',       type: 'number', group: 'Fixed Earnings', currency: true, step: '0.01' },
@@ -426,4 +439,5 @@ export default {
   ADJUSTMENT_COLUMNS,
   MONTH_NAMES,
   formatCurrency,
+  formatNumber,
 }
