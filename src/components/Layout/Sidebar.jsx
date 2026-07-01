@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../../config/api.config'
 import { getSectionTitle } from '../../config/navigationLabels.config'
 import { getEngineeringDisciplines } from '../../config/engineeringStructure.config'
 import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
+import { SIDEBAR } from '../../config/layout.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -35,7 +36,7 @@ import {
  * Professional hierarchical menu for RADAI platform
  */
 
-const Sidebar = ({ isOpen, setIsOpen }) => {
+const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollapsed: setIsCollapsedProp }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const dispatch = useDispatch()
@@ -44,7 +45,11 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   // SOFT-CODED: freshIsAdmin is set from the live /rbac/users/me/ response so that
   // stale localStorage data does not permanently hide menu items until re-login.
   const [freshIsAdmin, setFreshIsAdmin] = useState(false)
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // If parent Layout drives collapse state, use those props; otherwise
+  // fall back to local state so the component still works standalone.
+  const [internalCollapsed, setInternalCollapsed] = useState(false)
+  const isCollapsed = isCollapsedProp !== undefined ? isCollapsedProp : internalCollapsed
+  const setIsCollapsed = setIsCollapsedProp || setInternalCollapsed
   const [expandedSections, setExpandedSections] = useState({
     processEngineering: true,
     // Engineering disciplines
@@ -648,7 +653,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 top-16
-          ${isCollapsed ? 'w-20' : 'w-72'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
+          ${isCollapsed ? SIDEBAR.collapsed.widthClass : SIDEBAR.expanded.widthClass} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
           transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           flex flex-col h-[calc(100vh-4rem)]

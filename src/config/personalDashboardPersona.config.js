@@ -59,6 +59,58 @@ export const PERSONA_REGISTRY = {
     tagline:      'Portfolio health, EVM, milestones & change control at a glance.',
     hero_accent:  'from-indigo-600 via-blue-600 to-cyan-500',
     api_bundle:   '/dashboard/personal/project-control/',
+    // Persona-specific KPI builder — receives the API bundle (portfolio/projects/tasks)
+    // and returns up to 4 tiles for the WelcomeHero. Overrides generic backend kpis.
+    // Returning [] or null falls back to backend kpis.
+    kpi_builder: (bundle) => {
+      const p = bundle?.portfolio || {}
+      const tasks = bundle?.my_tasks || []
+      const overdueTasks = tasks.filter(t => t.is_overdue).length
+      const cpi = p.avg_cpi
+      const cpiTone = cpi == null
+        ? 'grey'
+        : cpi >= HEALTH_THRESHOLDS.cpi_green ? 'green'
+        : cpi >= HEALTH_THRESHOLDS.cpi_amber ? 'amber' : 'red'
+      const budgetPct = p.budget_utilisation ?? 0
+      const budgetTone = budgetPct >= HEALTH_THRESHOLDS.budget_red ? 'red'
+        : budgetPct >= HEALTH_THRESHOLDS.budget_amber ? 'amber' : 'green'
+      const atRiskTone = (p.at_risk_count ?? 0) === 0 ? 'green'
+        : (p.at_risk_count ?? 0) <= 2 ? 'amber' : 'red'
+      return [
+        {
+          key: 'pc_active_projects',
+          label: 'Active Projects',
+          value: p.active_count ?? 0,
+          sub: `${p.project_count ?? 0} in portfolio`,
+          tone: 'blue',
+          emoji: '🏗️',
+        },
+        {
+          key: 'pc_at_risk',
+          label: 'At Risk',
+          value: p.at_risk_count ?? 0,
+          sub: `${p.overdue_count ?? 0} overdue`,
+          tone: atRiskTone,
+          emoji: '⚠️',
+        },
+        {
+          key: 'pc_budget_used',
+          label: 'Budget Used',
+          value: `${Math.round(budgetPct)}%`,
+          sub: `of $${Math.round((p.total_budget ?? 0) / 1000).toLocaleString()}k`,
+          tone: budgetTone,
+          emoji: '💰',
+        },
+        {
+          key: 'pc_cpi',
+          label: 'Avg CPI',
+          value: cpi != null ? cpi.toFixed(2) : '—',
+          sub: overdueTasks > 0 ? `${overdueTasks} tasks overdue` : 'cost performance',
+          tone: cpiTone,
+          emoji: '📊',
+        },
+      ]
+    },
     quick_actions: [
       { key: 'new_project',      icon: '🏗️', label: 'New Project',       route: '/designiq/projects',           accent: 'from-indigo-500 to-blue-600'  },
       { key: 'log_snapshot',     icon: '📊', label: 'Log Cost Snapshot', route: '/project-control/snapshots',   accent: 'from-emerald-500 to-teal-600' },
@@ -68,7 +120,6 @@ export const PERSONA_REGISTRY = {
       { key: 'ai_insights',      icon: '🤖', label: 'AI Insights',       route: '/dashboard',                   accent: 'from-purple-500 to-indigo-600' },
     ],
     widgets: [
-      'quick_actions',
       'welcome_hero',
       'ai_insights',
       'project_portfolio',
@@ -76,7 +127,6 @@ export const PERSONA_REGISTRY = {
       'milestones_timeline',
       'my_tasks',
       'recent_changes',
-      'my_modules',
       'notifications',
     ],
   },

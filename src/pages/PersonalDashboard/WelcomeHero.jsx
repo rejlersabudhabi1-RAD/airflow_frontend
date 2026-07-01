@@ -2,7 +2,7 @@
  * WelcomeHero — Personalized greeting card with KPI summary.
  * Animated aurora background, glassmorphism KPI cards with trend hints.
  */
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { ROLE_GRADIENTS } from '../../config/personalDashboard.config'
 
 const KPI_ICONS = {
@@ -23,6 +23,15 @@ const KPI_ACCENT = {
   pending_approvals:     { emoji: '📋', trend: 'awaiting you',    accent: 'from-emerald-300/40 to-teal-500/30' },
 }
 
+// Tone tokens for persona-driven KPIs (kpi.tone → gradient + trend label + dot)
+const TONE_TOKENS = {
+  green: { accent: 'from-emerald-300/40 to-teal-500/30', label: 'On track', dot: 'bg-emerald-400' },
+  amber: { accent: 'from-amber-300/40 to-orange-500/30', label: 'Watch',    dot: 'bg-amber-400'   },
+  red:   { accent: 'from-rose-300/40 to-red-500/30',     label: 'Critical', dot: 'bg-red-400'     },
+  blue:  { accent: 'from-cyan-300/40 to-blue-500/30',    label: 'Live',     dot: 'bg-cyan-400'    },
+  grey:  { accent: 'from-slate-300/30 to-slate-500/20',  label: '—',        dot: 'bg-slate-300'   },
+}
+
 function getTimeOfDay() {
   const h = new Date().getHours()
   if (h < 12) return { text: 'Good morning', emoji: '🌅' }
@@ -30,12 +39,38 @@ function getTimeOfDay() {
   return { text: 'Good evening', emoji: '🌙' }
 }
 
-export default function WelcomeHero({ userContext, kpis, loading }) {
+// Soft-coded relative-time formatter — reused across dashboard widgets later.
+const RELATIVE_TIME_REFRESH_MS = 10000
+function formatRelativeTime(iso) {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return null
+  const diffSec = Math.max(0, Math.round((Date.now() - then) / 1000))
+  if (diffSec < 5)     return 'just now'
+  if (diffSec < 60)    return `${diffSec}s ago`
+  const mins = Math.round(diffSec / 60)
+  if (mins  < 60)      return `${mins}m ago`
+  const hrs  = Math.round(mins / 60)
+  if (hrs   < 24)      return `${hrs}h ago`
+  const days = Math.round(hrs / 24)
+  return `${days}d ago`
+}
+
+export default function WelcomeHero({ userContext, kpis, loading, generatedAt }) {
   const greeting  = getTimeOfDay()
   const firstName = userContext?.name?.split(' ')[0] || 'there'
   const roleCode  = userContext?.role_code || 'default'
   const gradient  = ROLE_GRADIENTS[roleCode] || ROLE_GRADIENTS.default
   const topKpis   = (kpis || []).slice(0, 4)
+
+  // Live-updating "updated Xs ago" tick — cheap, one setInterval.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!generatedAt) return
+    const id = setInterval(() => setTick(t => t + 1), RELATIVE_TIME_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [generatedAt])
+  const updatedLabel = formatRelativeTime(generatedAt)
 
   if (loading) {
     return (
@@ -127,6 +162,9 @@ export default function WelcomeHero({ userContext, kpis, loading }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
               </span>
               Live
+              {updatedLabel && (
+                <span className="text-white/60 font-normal ml-1">· updated {updatedLabel}</span>
+              )}
             </div>
           </div>
         </div>
@@ -135,22 +173,39 @@ export default function WelcomeHero({ userContext, kpis, loading }) {
         {topKpis.length > 0 && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {topKpis.map((kpi) => {
-              const accent = KPI_ACCENT[kpi.key] || { emoji: KPI_ICONS[kpi.icon] || KPI_ICONS.default, trend: '', accent: 'from-white/20 to-white/5' }
+              const toneTok = kpi.tone ? TONE_TOKENS[kpi.tone] : null
+              const accent = KPI_ACCENT[kpi.key] || {
+                emoji: kpi.emoji || KPI_ICONS[kpi.icon] || KPI_ICONS.default,
+                trend: kpi.sub || '',
+                accent: toneTok?.accent || 'from-white/20 to-white/5',
+              }
+              const emoji = kpi.emoji || accent.emoji
+              const trendLabel = kpi.sub || accent.trend
               return (
                 <div
                   key={kpi.key}
                   className="group relative overflow-hidden rounded-2xl bg-white/15 backdrop-blur-md p-4 border border-white/20 shadow-lg hover:bg-white/20 hover:scale-[1.02] transition-all duration-300"
                 >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${accent.accent} opacity-60`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${toneTok?.accent || accent.accent} opacity-70`} />
                   <div className="relative">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-2xl" aria-hidden>{accent.emoji}</span>
-                      <span className="text-[10px] uppercase tracking-widest text-white/60 font-bold">{accent.trend}</span>
+                      <span className="text-2xl" aria-hidden>{emoji}</span>
+                      {toneTok ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-white/85 font-bold bg-white/15 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                          <span className={`h-1.5 w-1.5 rounded-full ${toneTok.dot}`} />
+                          {toneTok.label}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-widest text-white/60 font-bold">{accent.trend}</span>
+                      )}
                     </div>
                     <p className="text-white/75 text-[11px] font-semibold uppercase tracking-wide truncate">{kpi.label}</p>
                     <p className="text-white text-3xl font-black leading-tight mt-0.5">
                       {typeof kpi.value === 'number' ? kpi.value.toLocaleString() : kpi.value}
                     </p>
+                    {trendLabel && toneTok && (
+                      <p className="text-white/70 text-[11px] mt-1 truncate">{trendLabel}</p>
+                    )}
                   </div>
                 </div>
               )

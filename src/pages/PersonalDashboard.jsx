@@ -26,6 +26,20 @@ import MilestonesTimeline   from './PersonalDashboard/MilestonesTimeline'
 import MyTasksWidget        from './PersonalDashboard/MyTasksWidget'
 import RecentChangesWidget  from './PersonalDashboard/RecentChangesWidget'
 
+// ─── Customisable-layout stack (drag / hide / reset) ────────────────────────
+import usePersonalDashboardLayout from './PersonalDashboard/usePersonalDashboardLayout'
+import SortableWidget             from './PersonalDashboard/SortableWidget'
+import CustomizeToolbar           from './PersonalDashboard/CustomizeToolbar'
+import AIDashboardStyles          from './PersonalDashboard/AIDashboardStyles'
+import {
+  DndContext, PointerSensor, KeyboardSensor,
+  useSensor, useSensors, closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy,
+  arrayMove, sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+
 import apiService from '../services/api.service'
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
@@ -196,26 +210,39 @@ export default function PersonalDashboard() {
     loadInsights()
   }, [loadDashboard, loadInsights])
 
-  // Load persona bundle whenever persona changes and has one
+  // Load persona bundle whenever persona changes and has one.
+  // Extracted so we can call it from both the effect and the polling interval.
+  const loadPersonaBundle = useCallback(async (path, showSpinner = true) => {
+    if (showSpinner) setLoadingPersona(true)
+    try {
+      const res = await fetchPersonaBundle(path)
+      setPersonaBundle(res.data)
+    } catch {
+      // Keep previous bundle on transient failure; only clear on first load
+      if (showSpinner) setPersonaBundle(null)
+    } finally {
+      if (showSpinner) setLoadingPersona(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!persona?.api_bundle) {
       setPersonaBundle(null)
       return
     }
-    let cancelled = false
-    setLoadingPersona(true)
-    fetchPersonaBundle(persona.api_bundle)
-      .then(res => { if (!cancelled) setPersonaBundle(res.data) })
-      .catch(() => { if (!cancelled) setPersonaBundle(null) })
-      .finally(() => { if (!cancelled) setLoadingPersona(false) })
-    return () => { cancelled = true }
-  }, [persona])
+    loadPersonaBundle(persona.api_bundle, true)
+  }, [persona, loadPersonaBundle])
 
-  // Polling
+  // Polling — refresh main dashboard AND persona bundle so numbers stay live.
   useEffect(() => {
-    pollRef.current = setInterval(loadDashboard, PERSONAL_DASHBOARD_CONFIG.pollIntervalMs)
+    pollRef.current = setInterval(() => {
+      loadDashboard()
+      if (persona?.api_bundle) {
+        loadPersonaBundle(persona.api_bundle, false) // silent refresh
+      }
+    }, PERSONAL_DASHBOARD_CONFIG.pollIntervalMs)
     return () => clearInterval(pollRef.current)
-  }, [loadDashboard])
+  }, [loadDashboard, loadPersonaBundle, persona])
 
   if (error) {
     return (
@@ -241,9 +268,23 @@ export default function PersonalDashboard() {
     quick_actions: () => (
       <QuickActionsBar actions={persona.quick_actions} personaLabel={persona.label} />
     ),
-    welcome_hero: () => (
-      <WelcomeHero userContext={d.user_context} kpis={d.kpis} roleLayout={layout} loading={loadingMain} />
-    ),
+    welcome_hero: () => {
+      // Persona overrides generic backend KPIs when it provides a builder
+      // and the persona bundle is loaded. Falls back to backend kpis otherwise.
+      const personaKpis = persona.kpi_builder && personaBundle
+        ? persona.kpi_builder(personaBundle)
+        : null
+      const effectiveKpis = personaKpis?.length ? personaKpis : d.kpis
+      return (
+        <WelcomeHero
+          userContext={d.user_context}
+          kpis={effectiveKpis}
+          roleLayout={layout}
+          loading={loadingMain || (persona.kpi_builder && loadingPersona)}
+          generatedAt={personaBundle?.generated_at}
+        />
+      )
+    },
     ai_insights: () => (
       <AIInsightsStrip insights={insights} loading={loadingInsights} />
     ),
@@ -288,12 +329,87 @@ export default function PersonalDashboard() {
   // Widget groupings — some widgets should sit side-by-side.
   // Keys here define how the linear widget list is composed into rows.
   const SIDE_BY_SIDE_PAIRS = {
+    evm_health: 'milestones_timeline',
     my_tasks: 'recent_changes',
     activity_feed: 'notifications',
   }
 
+  // Human labels for the customise UI (drag tooltips + hidden chips)
+  const WIDGET_LABELS = {
+    quick_actions:       'Quick Actions',
+    welcome_hero:        'Welcome & KPIs',
+    ai_insights:         'AI Insights',
+    my_modules:          'My Workspace',
+    project_portfolio:   'Project Portfolio',
+    evm_health:          'EVM Health',
+    milestones_timeline: 'Milestones',
+    my_tasks:            'My Tasks',
+    recent_changes:      'Recent Changes',
+    activity_feed:       'Activity Feed',
+    notifications:       'Notifications',
+    pending_actions:     'Pending Actions',
+    usage_stats:         'Usage Stats',
+    team_snapshot:       'Team Snapshot',
+  }
+
+  // ─── User-customisable layout (drag / hide / reset) ────────────────────
+  const [editing, setEditing] = useState(false)
+  const layoutApi = usePersonalDashboardLayout({
+    userId: user?.id,
+    personaCode,
+    defaultWidgets: persona.widgets || [],
+  })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    const oldIndex = layoutApi.order.indexOf(active.id)
+    const newIndex = layoutApi.order.indexOf(over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    layoutApi.setOrder(arrayMove(layoutApi.order, oldIndex, newIndex))
+  }
+
+  const hiddenChipList = layoutApi.hidden.map(k => ({
+    key: k,
+    label: WIDGET_LABELS[k] || k,
+  }))
+
+  // Render a single widget key → { node, hideable } (skips nulls that widgets
+  // return when their layout flag is off)
+  const renderKey = (key) => {
+    const node = WIDGET_REGISTRY[key]?.()
+    if (!node) return null
+    return node
+  }
+
   const renderWidgetList = () => {
-    const list = persona.widgets || []
+    // Edit mode: every widget rendered individually so drag targets stay predictable.
+    if (editing) {
+      return layoutApi.visibleOrder
+        .map(key => {
+          const node = renderKey(key)
+          if (!node) return null
+          return (
+            <SortableWidget
+              key={key}
+              id={key}
+              editing
+              label={WIDGET_LABELS[key]}
+              onHide={layoutApi.hideWidget}
+            >
+              {node}
+            </SortableWidget>
+          )
+        })
+        .filter(Boolean)
+    }
+
+    // View mode: apply side-by-side pair grouping to the user's chosen order.
+    const list = layoutApi.visibleOrder
     const rendered = []
     const consumed = new Set()
 
@@ -304,31 +420,64 @@ export default function PersonalDashboard() {
 
       if (paired && nextIdx > idx) {
         consumed.add(nextIdx)
-        rendered.push(
-          <div key={`${key}-pair`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>{WIDGET_REGISTRY[key]?.()}</div>
-            <div>{WIDGET_REGISTRY[paired]?.()}</div>
-          </div>
-        )
+        const leftNode  = renderKey(key)
+        const rightNode = renderKey(paired)
+        if (leftNode || rightNode) {
+          rendered.push(
+            <div key={`${key}-pair`} className="ai-widget-shell grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>{leftNode}</div>
+              <div>{rightNode}</div>
+            </div>
+          )
+        }
       } else {
-        const node = WIDGET_REGISTRY[key]?.()
-        if (node) rendered.push(<div key={key}>{node}</div>)
+        const node = renderKey(key)
+        if (node) rendered.push(
+          <div key={key} className="ai-widget-shell">{node}</div>
+        )
       }
     })
     return rendered
   }
 
   return (
-    <div className="relative min-h-full">
-      {/* Ambient decorative background */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden -z-10">
-        <div className="absolute top-20 -left-40 h-96 w-96 rounded-full bg-blue-200/20 blur-3xl" />
-        <div className="absolute top-1/2 -right-40 h-96 w-96 rounded-full bg-purple-200/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-pink-200/10 blur-3xl" />
-      </div>
+    <div className="relative min-h-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-[1600px] mx-auto">
+      <AIDashboardStyles />
 
-      <div className="space-y-6 pb-8">
-        {renderWidgetList()}
+      {/* AI aurora ambient background (fixed, non-interactive) */}
+      <div className="ai-aurora" aria-hidden>
+        <div className="ai-aurora__blob ai-aurora__blob--a" />
+        <div className="ai-aurora__blob ai-aurora__blob--b" />
+        <div className="ai-aurora__blob ai-aurora__blob--c" />
+      </div>
+      <div className="ai-grid-overlay" aria-hidden />
+
+      <CustomizeToolbar
+        editing={editing}
+        onToggleEdit={() => setEditing(v => !v)}
+        hiddenWidgets={hiddenChipList}
+        onShow={layoutApi.showWidget}
+        onReset={layoutApi.resetLayout}
+        isCustomised={layoutApi.isCustomised}
+      />
+
+      <div className="space-y-6 pb-8 mt-4">
+        {editing ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={layoutApi.visibleOrder}
+              strategy={verticalListSortingStrategy}
+            >
+              {renderWidgetList()}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          renderWidgetList()
+        )}
       </div>
     </div>
   )
