@@ -3,9 +3,9 @@
  * Rendered inside Dashboard.jsx for all non-super-admin users.
  * Thin renderer: all layout decisions driven by personalDashboard.config.js.
  *
- * Data flow:
- *   GET /api/v1/dashboard/personal/   → role-scoped bundle (polls every 60s)
- *   GET /api/v1/dashboard/personal/insights/ → AI insights (once on mount)
+ * Data flow (apiService baseURL already includes /api/v1):
+ *   GET /dashboard/personal/          → role-scoped bundle (polls every 60s)
+ *   GET /dashboard/personal/insights/ → AI insights (once on mount)
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useSelector } from 'react-redux'
@@ -23,10 +23,10 @@ import apiService from '../services/api.service'
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 const fetchPersonalDashboard = () =>
-  apiService.get('/api/v1/dashboard/personal/')
+  apiService.get('/dashboard/personal/')
 
 const fetchPersonalInsights = () =>
-  apiService.get('/api/v1/dashboard/personal/insights/')
+  apiService.get('/dashboard/personal/insights/')
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Team snapshot inline component

@@ -143,7 +143,7 @@ const Enquiry = () => {
     try {
       console.log('📧 [Enquiry] Submitting form:', formData);
       
-      const response = await apiService.post('/api/v1/enquiry/submit/', formData);
+      const response = await apiService.post('/enquiry/submit/', formData);
       
       console.log('✅ [Enquiry] Form submitted successfully:', response);
       
