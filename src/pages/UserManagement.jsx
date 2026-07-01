@@ -1,23 +1,26 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { fetchUsers, fetchRoles, fetchModules, fetchCurrentUser } from '../store/slices/rbacSlice';
+import { fetchUsers, fetchCurrentUser, fetchRoles } from '../store/slices/rbacSlice';
 import rbacService from '../services/rbac.service';
 import { STORAGE_KEYS } from '../config/app.config';
 import { isUserAdmin } from '../utils/rbac.utils';
 import { withDashboardControls } from '@/hoc/withPageControls';
 import { PageControlButtons } from '@/components/PageControlButtons';
-import { getRoleDisplay, ROLE_DISCIPLINE_ORDER } from '../config/userManagement.config';
 import { 
   validateUserForm, 
   parseBackendError, 
   prepareUserPayload,
   USER_MANAGEMENT_CONFIG 
 } from '../config/userManagement.config';
+import {
+  ROLE_LEVEL_COLORS,
+  DEFAULT_LEVEL_COLOR,
+  ROLE_LEVEL_LABELS,
+  CUSTOM_ROLE_PREFIX,
+} from '../config/rbacAccess.config';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
-import RoleAssignPopover from '../components/UserManagement/RoleAssignPopover';
-import AccessToAllModal from '../components/UserManagement/AccessToAllModal';
 import PendingActivationAlert from '../components/UserManagement/PendingActivationAlert';
 import PeopleNav from '../components/PeopleNav/PeopleNav';
 
@@ -54,8 +57,8 @@ const UserManagement = ({ pageControls }) => {
   // Local state - UI
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
   const [organizationFilter, setOrganizationFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [notification, setNotification] = useState({ show: false, type: '', message: '' });
   
   // Local state - Pagination
@@ -74,7 +77,6 @@ const UserManagement = ({ pageControls }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
-  const [showAccessToAllModal, setShowAccessToAllModal] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -401,16 +403,13 @@ const UserManagement = ({ pageControls }) => {
         await dispatch(fetchCurrentUser()).unwrap();
         
         // Fetch core data in parallel
-        const [usersResult, rolesResult, modulesResult] = await Promise.allSettled([
+        const [usersResult] = await Promise.allSettled([
           dispatch(fetchUsers()).unwrap(),
-          dispatch(fetchRoles()).unwrap(),
-          dispatch(fetchModules()).unwrap()
+          dispatch(fetchRoles()).unwrap()
         ]);
         
         console.log('[UserManagement] Core data loaded:', {
-          users: usersResult.status,
-          roles: rolesResult.status,
-          modules: modulesResult.status
+          users: usersResult.status
         });
         
         // Debug: Check first user data structure
@@ -571,15 +570,18 @@ const UserManagement = ({ pageControls }) => {
       
       const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
       
-      const matchesRole = roleFilter === 'all' || 
-        user.roles?.some(role => role.id === roleFilter);
-      
       const matchesOrganization = organizationFilter === 'all' || 
         user.organization === organizationFilter;
       
-      return matchesSearch && matchesStatus && matchesRole && matchesOrganization;
+      const matchesRole = roleFilter === 'all' || (
+        Array.isArray(user.roles) && user.roles.some(r => 
+          (r?.code ?? r) === roleFilter || String(r?.id ?? '') === String(roleFilter)
+        )
+      );
+      
+      return matchesSearch && matchesStatus && matchesOrganization && matchesRole;
     });
-  }, [users, searchTerm, statusFilter, roleFilter, organizationFilter]);
+  }, [users, searchTerm, statusFilter, organizationFilter, roleFilter]);
   
   // ========== COMPUTED: PAGINATED USERS ==========
   const paginatedUsers = useMemo(() => {
@@ -603,6 +605,25 @@ const UserManagement = ({ pageControls }) => {
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const showingFrom = filteredUsers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const showingTo = Math.min(currentPage * itemsPerPage, filteredUsers.length);
+
+  // ========== COMPUTED: ASSIGNABLE ROLES ==========
+  // Roles the admin can pick from the filter dropdown and role-column display.
+  // Excludes per-user `custom_*` roles (those are internal artefacts, never
+  // shown in pickers). Source of truth: /admin/roles.
+  const assignableRoles = useMemo(() => {
+    return (roles || []).filter(r => r?.code && !r.code.startsWith(CUSTOM_ROLE_PREFIX));
+  }, [roles]);
+
+  // Pick the badge to show for a user's primary (or first) role.
+  const getUserRoleBadge = (user) => {
+    if (!Array.isArray(user?.roles) || user.roles.length === 0) return null;
+    const primary = user.roles.find(r => r?.is_primary) || user.roles[0];
+    if (!primary) return null;
+    const level = primary.level ?? primary.role?.level;
+    const name = primary.name || primary.role?.name || primary.code || 'Role';
+    const color = ROLE_LEVEL_COLORS[level] || DEFAULT_LEVEL_COLOR;
+    return { name, color, level, extra: Math.max(0, user.roles.length - 1) };
+  };
   
   // ========== MONITOR: ITEMS PER PAGE CHANGES ==========
   useEffect(() => {
@@ -672,8 +693,11 @@ const UserManagement = ({ pageControls }) => {
     try {
       setActionLoading({ create: true });
       
-      // Prepare payload using soft-coded function
-      const payload = prepareUserPayload(formData);
+      // Prepare payload using soft-coded function.
+      // Access is role-based: strip module_ids so the backend never falls
+      // back to the legacy custom-role-per-user path.
+      const { module_ids: _stripCreateModules, ...payloadRest } = prepareUserPayload(formData);
+      const payload = payloadRest;
       
       console.log('[UserManagement] Sending payload:', payload);
       console.log('[UserManagement] Payload details:', {
@@ -682,8 +706,7 @@ const UserManagement = ({ pageControls }) => {
         passwordLength: payload.password?.length,
         first_name: payload.first_name,
         last_name: payload.last_name,
-        role_ids: payload.role_ids,
-        module_ids: payload.module_ids
+        role_ids: payload.role_ids
       });
       
       const response = await rbacService.createUser(payload);
@@ -753,6 +776,9 @@ const UserManagement = ({ pageControls }) => {
     try {
       setActionLoading({ [`edit_${selectedUser.id}`]: true });
       
+      // Edit sends profile fields plus role assignments. Roles picked in
+      // the modal come from the live list managed at Admin › Roles & Access
+      // Management — backend safely no-ops if role_ids is omitted.
       const payload = {
         user: {
           email: formData.email,
@@ -763,8 +789,7 @@ const UserManagement = ({ pageControls }) => {
         department: formData.department,
         job_title: formData.job_title,
         phone: formData.phone,
-        module_ids: formData.module_ids,
-        role_ids: formData.role_ids || []
+        ...(Array.isArray(formData.role_ids) && { role_ids: formData.role_ids })
       };
       
       // If superuser or staff flags are present, include them
@@ -911,6 +936,7 @@ const UserManagement = ({ pageControls }) => {
       department: user.department || '',
       job_title: user.job_title || '',
       phone: user.phone || '',
+      // Kept for edit-modal read-only display; NOT sent to backend on save.
       module_ids: user.accessible_modules || []
     });
     setShowEditModal(true);
@@ -1129,42 +1155,11 @@ const UserManagement = ({ pageControls }) => {
     }
   };
 
-  // ========== HANDLER: ACCESS TO ALL USERS ==========
-  const handleAccessToAll = async (selectedModuleCodes) => {
-    try {
-      setActionLoading(prev => ({ ...prev, access_to_all: true }));
-      
-      console.log('[AccessToAll] Assigning modules to all users:', selectedModuleCodes);
-      
-      // Call the bulk assign API endpoint
-      const response = await rbacService.bulkAssignModules({
-        module_codes: selectedModuleCodes,
-        all_users: true
-      });
-      
-      console.log('[AccessToAll] Assignment response:', response);
-      
-      // Refresh users to get updated data
-      await dispatch(fetchUsers()).unwrap();
-      
-      setNotification({
-        show: true,
-        type: 'success',
-        message: `Successfully granted access to ${selectedModuleCodes.length} module(s) for all users`
-      });
-      
-    } catch (error) {
-      console.error('[AccessToAll] Assignment failed:', error);
-      setNotification({
-        show: true,
-        type: 'error',
-        message: error.response?.data?.error || 'Failed to assign modules to all users'
-      });
-      throw error;
-    } finally {
-      setActionLoading(prev => ({ ...prev, access_to_all: false }));
-    }
-  };
+  // ========== HANDLER: ACCESS TO ALL USERS (removed) ==========
+  // Bulk per-user module assignment is intentionally disabled — module
+  // access is granted through roles. See ALLOW_BULK_MODULE_ASSIGNMENT in
+  // frontend/src/config/rbacAccess.config.js. To grant modules to many
+  // users at once, add those modules to a shared role in Admin › Roles.
 
   const handleDownloadTemplate = async () => {
     try {
@@ -1468,16 +1463,6 @@ const UserManagement = ({ pageControls }) => {
             </div>
 
             <button
-              onClick={() => setShowAccessToAllModal(true)}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center gap-2 shadow-lg"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              Access to All Users
-            </button>
-
-            <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
@@ -1488,7 +1473,7 @@ const UserManagement = ({ pageControls }) => {
             </button>
           </div>
         </div>
-        
+
         {/* Search and Advanced Filters */}
         <div className="space-y-4">
           <div className="flex gap-4">
@@ -1538,20 +1523,6 @@ const UserManagement = ({ pageControls }) => {
             </select>
             
             <select
-              value={roleFilter}
-              onChange={(e) => {
-                console.log('?? Role filter changed:', e.target.value);
-                setRoleFilter(e.target.value);
-              }}
-              className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
-            >
-              <option value="all">?? All Roles</option>
-              {Array.isArray(roles) && roles.map(role => (
-                <option key={role.id} value={role.id}>{role.name}</option>
-              ))}
-            </select>
-            
-            <select
               value={organizationFilter}
               onChange={(e) => {
                 console.log('?? Organization filter changed:', e.target.value);
@@ -1564,14 +1535,28 @@ const UserManagement = ({ pageControls }) => {
                 <option key={org.id} value={org.id}>{org.name}</option>
               ))}
             </select>
+
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:border-blue-400 transition-all cursor-pointer font-medium"
+              title="Filter users by role — role list managed at /admin/roles"
+            >
+              <option value="all">All Roles</option>
+              {assignableRoles.map(r => (
+                <option key={r.id} value={r.code}>
+                  {ROLE_LEVEL_LABELS[r.level] ? `L${r.level} · ` : ''}{r.name}
+                </option>
+              ))}
+            </select>
             
             <button
               onClick={() => {
                 console.log('?? Resetting all filters');
                 setSearchTerm('');
                 setStatusFilter('all');
-                setRoleFilter('all');
                 setOrganizationFilter('all');
+                setRoleFilter('all');
                 setCurrentPage(1);
                 // Visual feedback
                 const btn = event.currentTarget;
@@ -1596,7 +1581,7 @@ const UserManagement = ({ pageControls }) => {
       </div>
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -1626,34 +1611,26 @@ const UserManagement = ({ pageControls }) => {
             </div>
           </div>
         </div>
-        
-        <div className="bg-white rounded-xl shadow-lg p-6">
+
+        <button
+          type="button"
+          onClick={() => navigate('/admin/roles')}
+          className="bg-white rounded-xl shadow-lg p-6 text-left hover:shadow-xl hover:border-purple-300 border border-transparent transition-all"
+          title="Open Roles & Access Management to define or edit roles"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 text-sm">Roles</p>
-              <p className="text-3xl font-bold text-purple-600 mt-1">{Array.isArray(roles) ? roles.length : 0}</p>
+              <p className="text-gray-600 text-sm">Roles Available</p>
+              <p className="text-3xl font-bold text-purple-600 mt-1">{assignableRoles.length}</p>
+              <p className="text-xs text-gray-500 mt-1">Manage at /admin/roles →</p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
           </div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Modules</p>
-              <p className="text-3xl font-bold text-orange-600 mt-1">{Array.isArray(modules) ? modules.length : 0}</p>
-            </div>
-            <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        </button>
       </div>
       
       {/* Users Table */}
@@ -1666,16 +1643,15 @@ const UserManagement = ({ pageControls }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email Address</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modules</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center">
+                  <td colSpan="7" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -1714,6 +1690,27 @@ const UserManagement = ({ pageControls }) => {
                       <div className="text-sm text-gray-500">{user.job_title || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const badge = getUserRoleBadge(user);
+                        if (!badge) {
+                          return <span className="text-xs text-gray-400 italic">No role</span>;
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge.color.bg} ${badge.color.text}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${badge.color.dot}`} />
+                              {badge.name}
+                            </span>
+                            {badge.extra > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700" title={`+${badge.extra} more role${badge.extra > 1 ? 's' : ''}`}>
+                                +{badge.extra}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         user.status === 'active'
                           ? 'bg-green-100 text-green-800'
@@ -1721,24 +1718,6 @@ const UserManagement = ({ pageControls }) => {
                       }`}>
                         {user.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <RoleAssignPopover
-                        userId={user.id}
-                        currentRoles={user.roles || []}
-                        allRoles={Array.isArray(roles) ? roles : []}
-                        isSuperAdmin={isSuperAdmin}
-                        onRolesChange={(uid, updatedRoles) => {
-                          // Optimistic update is already handled inside the popover;
-                          // re-fetch users to keep Redux store consistent.
-                          dispatch(fetchUsers());
-                        }}
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        {user.accessible_modules?.length || 0} modules
-                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
@@ -2089,77 +2068,6 @@ const UserManagement = ({ pageControls }) => {
                     <p className="text-base font-medium text-gray-900">{detailedUser.manager || 'N/A'}</p>
                   </div>
                 </div>
-              </div>
-              
-              {/* Roles */}
-              <div className="bg-purple-50 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Assigned Roles
-                  <span className="ml-2 px-2 py-0.5 bg-purple-200 text-purple-800 rounded-full text-xs font-semibold">
-                    {detailedUser.roles?.length || 0}
-                  </span>
-                </h3>
-                {detailedUser.roles && detailedUser.roles.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {detailedUser.roles.map((role) => {
-                      const display = getRoleDisplay(role.code);
-                      return (
-                        <div key={role.id} className="bg-white rounded-lg p-4 border border-purple-200">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-semibold text-gray-900">{role.name}</p>
-                              <span className={`mt-1 inline-block px-2 py-0.5 text-xs rounded-full font-medium ${display.badge}`}>
-                                {display.shortLabel || role.code}
-                              </span>
-                            </div>
-                            {role.is_primary && (
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-semibold">
-                                Primary
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-2 text-xs text-gray-500">{display.discipline}</p>
-                          {(role.description || display.description) && (
-                            <p className="mt-1 text-sm text-gray-600">{role.description || display.description}</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 italic">No roles assigned</p>
-                )}
-              </div>
-              
-              {/* Accessible Modules */}
-              <div className="bg-green-50 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                  Accessible Modules
-                  <span className="ml-2 px-2 py-0.5 bg-green-200 text-green-800 rounded-full text-xs font-semibold">
-                    {detailedUser.accessible_modules?.length || 0}
-                  </span>
-                </h3>
-                {detailedUser.accessible_modules && detailedUser.accessible_modules.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-3">
-                    {detailedUser.accessible_modules.map((moduleCode) => {
-                      const moduleInfo = modules?.find(m => m.code === moduleCode);
-                      return (
-                        <div key={moduleCode} className="bg-white rounded-lg p-3 border border-green-200">
-                          <p className="font-semibold text-gray-900 text-sm">{moduleInfo?.name || moduleCode}</p>
-                          <p className="text-xs text-gray-600 mt-1">{moduleInfo?.code || moduleCode}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 italic">No modules assigned</p>
-                )}
               </div>
               
               {/* Activity Information */}
@@ -2548,15 +2456,8 @@ const UserManagement = ({ pageControls }) => {
         loading={actionLoading[`edit_${selectedUser?.id}`]}
       />
 
-      {/* Access to All Users Modal */}
-      <AccessToAllModal
-        isOpen={showAccessToAllModal}
-        onClose={() => setShowAccessToAllModal(false)}
-        onAssign={handleAccessToAll}
-        modules={modules}
-        totalUsers={users?.length || 0}
-        loading={actionLoading.access_to_all}
-      />
+      {/* Access to All Users modal removed — access is role-based.
+          See ALLOW_BULK_MODULE_ASSIGNMENT in rbacAccess.config.js. */}
 
       {/* ── Reset Password Confirm Modal ──────────────────────────────────
           Replaces the old window.confirm() browser dialog.

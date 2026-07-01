@@ -10,31 +10,27 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import rbacService from '../../services/rbac.service';
-
-// ── Soft-coded role-level display config ────────────────────────────────────
-const ROLE_LEVEL_COLORS = {
-  1: { bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-200'    },
-  2: { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200' },
-  3: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
-  4: { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-200'   },
-  5: { bg: 'bg-teal-100',   text: 'text-teal-800',   border: 'border-teal-200'   },
-  6: { bg: 'bg-slate-100',  text: 'text-slate-700',  border: 'border-slate-200'  },
-};
-const DEFAULT_LEVEL_COLOR = { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200' };
-
-// Roles whose presence should show a sensitivity warning badge
-const SENSITIVE_ROLE_CODES = ['hr_admin'];
+import {
+  ROLE_LEVEL_COLORS,
+  DEFAULT_LEVEL_COLOR,
+  SENSITIVE_ROLE_CODES,
+  isSensitiveRole,
+  CUSTOM_ROLE_PREFIX,
+} from '../../config/rbacAccess.config';
+import SensitiveRoleConfirmModal from './SensitiveRoleConfirmModal';
 
 // Max badges to show inline before "+N more" truncation
 const MAX_VISIBLE_BADGES = 2;
 
 // ────────────────────────────────────────────────────────────────────────────
 
-function RoleAssignPopover({ userId, currentRoles = [], allRoles = [], isSuperAdmin, onRolesChange }) {
+function RoleAssignPopover({ userId, userLabel = '', currentRoles = [], allRoles = [], isSuperAdmin, onRolesChange }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localRoles, setLocalRoles] = useState(currentRoles);
   const [error, setError] = useState(null);
+  // Sensitive-role typed-confirmation gate — soft-coded via rbacAccess.config
+  const [pendingSensitive, setPendingSensitive] = useState(null); // Role obj awaiting confirmation
   const popoverRef = useRef(null);
   const triggerRef = useRef(null);
 
@@ -66,32 +62,65 @@ function RoleAssignPopover({ userId, currentRoles = [], allRoles = [], isSuperAd
     [localRoles]
   );
 
+  const performAssign = useCallback(
+    async (role) => {
+      await rbacService.assignRole(userId, role.id);
+      const updated = [...localRoles, role];
+      setLocalRoles(updated);
+      onRolesChange?.(userId, updated);
+    },
+    [userId, localRoles, onRolesChange]
+  );
+
   const handleToggle = useCallback(
     async (role) => {
       if (!isSuperAdmin || saving) return;
       setError(null);
-      setSaving(true);
-      try {
-        if (isAssigned(role.id)) {
+
+      // Revoke path — no confirmation gate
+      if (isAssigned(role.id)) {
+        setSaving(true);
+        try {
           await rbacService.revokeRole(userId, role.id);
           const updated = localRoles.filter((r) => r.id !== role.id);
           setLocalRoles(updated);
           onRolesChange?.(userId, updated);
-        } else {
-          await rbacService.assignRole(userId, role.id);
-          const updated = [...localRoles, role];
-          setLocalRoles(updated);
-          onRolesChange?.(userId, updated);
+        } catch (err) {
+          setError(err?.response?.data?.detail || err?.message || 'Failed to revoke role.');
+        } finally {
+          setSaving(false);
         }
+        return;
+      }
+
+      // Assign path — gate sensitive roles behind typed confirmation
+      if (isSensitiveRole(role.code)) {
+        setPendingSensitive(role);
+        return;
+      }
+
+      setSaving(true);
+      try {
+        await performAssign(role);
       } catch (err) {
-        const msg = err?.response?.data?.detail || err?.message || 'Failed to update role.';
-        setError(msg);
+        setError(err?.response?.data?.detail || err?.message || 'Failed to assign role.');
       } finally {
         setSaving(false);
       }
     },
-    [isSuperAdmin, saving, isAssigned, userId, localRoles, onRolesChange]
+    [isSuperAdmin, saving, isAssigned, userId, localRoles, onRolesChange, performAssign]
   );
+
+  const handleConfirmSensitive = useCallback(async () => {
+    if (!pendingSensitive) return;
+    setSaving(true);
+    try {
+      await performAssign(pendingSensitive);
+      setPendingSensitive(null);
+    } finally {
+      setSaving(false);
+    }
+  }, [pendingSensitive, performAssign]);
 
   const visibleBadges = localRoles.slice(0, MAX_VISIBLE_BADGES);
   const overflowCount = localRoles.length - MAX_VISIBLE_BADGES;
@@ -169,7 +198,12 @@ function RoleAssignPopover({ userId, currentRoles = [], allRoles = [], isSuperAd
             <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1 mb-2">{error}</p>
           )}
           <ul className="space-y-1 max-h-56 overflow-y-auto">
-            {allRoles.filter((r) => r.is_active !== false).map((role) => {
+            {allRoles
+              .filter((r) => r.is_active !== false)
+              // Hide legacy per-user custom_<email> roles — they must be removed via
+              // the backend cleanup_custom_roles management command, not the UI.
+              .filter((r) => !r.code?.startsWith(CUSTOM_ROLE_PREFIX))
+              .map((role) => {
               const assigned = isAssigned(role.id);
               const sensitive = SENSITIVE_ROLE_CODES.includes(role.code);
               const c = getLevelColor(role.level);
@@ -210,6 +244,16 @@ function RoleAssignPopover({ userId, currentRoles = [], allRoles = [], isSuperAd
           </button>
         </div>
       )}
+
+      {/* Typed-confirmation gate for sensitive-role assignment */}
+      <SensitiveRoleConfirmModal
+        open={!!pendingSensitive}
+        role={pendingSensitive}
+        userLabel={userLabel}
+        busy={saving}
+        onCancel={() => setPendingSensitive(null)}
+        onConfirm={handleConfirmSensitive}
+      />
     </div>
   );
 }

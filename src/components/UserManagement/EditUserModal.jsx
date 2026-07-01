@@ -3,6 +3,92 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchDepartments, fetchJobTitles } from '../../store/slices/rbacSlice';
 import { EDIT_USER_CONFIG, initializeFormData, validateField, hasChanges } from '../../config/editUser.config';
 import { groupModulesByCategory, MODULE_CATEGORIES_CONFIG } from '../../config/moduleCategories.config';
+import {
+  ALLOW_PER_USER_MODULE_ASSIGNMENT,
+  ACCESS_NOTICE,
+  SENSITIVE_MODULE_CODES,
+  isSensitiveModule,
+} from '../../config/rbacAccess.config';
+
+/**
+ * Read-only panel showing the modules a user inherits from their assigned
+ * roles. Rendered inside EditUserModal when ALLOW_PER_USER_MODULE_ASSIGNMENT
+ * is false (the default). Replaces the legacy editable module checkboxes.
+ */
+const InheritedModulesReadOnly = ({ user, modules }) => {
+  // Build a lookup: module code -> module row (for name/description).
+  const moduleByCode = useMemo(() => {
+    const m = new Map();
+    (Array.isArray(modules) ? modules : []).forEach((mod) => {
+      if (mod?.code) m.set(mod.code, mod);
+    });
+    return m;
+  }, [modules]);
+
+  // Normalize accessible_modules into a list of codes (accepts strings or objects).
+  const codes = useMemo(() => {
+    const list = Array.isArray(user?.accessible_modules) ? user.accessible_modules : [];
+    return list
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.code))
+      .filter(Boolean);
+  }, [user]);
+
+  const roleLabels = useMemo(() => {
+    const roles = Array.isArray(user?.roles) ? user.roles : [];
+    return roles.map((r) => r?.name || r?.code).filter(Boolean);
+  }, [user]);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-white to-blue-50/40 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <span className="text-lg">🛡️</span>
+            Modules (inherited from Roles)
+          </h4>
+          <p className="text-xs text-gray-600 mt-0.5">{ACCESS_NOTICE.BODY}</p>
+        </div>
+        <span className="shrink-0 text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-800">
+          {codes.length} module{codes.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      {roleLabels.length > 0 && (
+        <p className="text-xs text-gray-500 mb-3">
+          via {roleLabels.join(', ')}
+        </p>
+      )}
+
+      {codes.length === 0 ? (
+        <p className="text-sm text-gray-500 italic">
+          No modules granted. Assign a role to give this user access.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {codes.map((code) => {
+            const mod = moduleByCode.get(code);
+            const label = mod?.name || code;
+            const sensitive = isSensitiveModule(code);
+            return (
+              <span
+                key={code}
+                title={mod?.description || label}
+                className={
+                  sensitive
+                    ? 'inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-300 bg-amber-50 text-amber-900'
+                    : 'inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-700'
+                }
+              >
+                {sensitive && <span aria-hidden>🔒</span>}
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * Comprehensive Edit User Modal
@@ -124,8 +210,11 @@ const EditUserModal = ({
       }
     }
 
-    await onSave(formData);
-    
+    // Access is role-based: strip module_ids unless the flag is on.
+    const { module_ids, ...roleOnlyPayload } = formData;
+    const payload = ALLOW_PER_USER_MODULE_ASSIGNMENT ? formData : roleOnlyPayload;
+    await onSave(payload);
+
     if (EDIT_USER_CONFIG.behavior.closeOnSuccess) {
       handleClose();
     }
@@ -174,6 +263,15 @@ const EditUserModal = ({
       module.description?.toLowerCase().includes(search)
     );
   }, [modules, moduleSearch]);
+
+  // Sections shown in the modal. Only per-user module access is hidden
+  // (that always inherits from roles). Role assignment is shown so admins
+  // can pick/replace roles directly here; the source list of roles is
+  // managed at Admin › Roles & Access Management.
+  const visibleSections = useMemo(() => {
+    const hidden = new Set(['module_access']);
+    return EDIT_USER_CONFIG.sections.filter((s) => !hidden.has(s.id));
+  }, []);
 
   // Render field based on type
   const renderField = (field) => {
@@ -707,7 +805,7 @@ const EditUserModal = ({
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-6">
-            {EDIT_USER_CONFIG.sections.map(renderSection)}
+            {visibleSections.map(renderSection)}
           </div>
 
           {/* Footer */}
