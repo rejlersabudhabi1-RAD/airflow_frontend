@@ -7,10 +7,11 @@
  *   GET /dashboard/personal/          → role-scoped bundle (polls every 60s)
  *   GET /dashboard/personal/insights/ → AI insights (once on mount)
  */
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 
 import { PERSONAL_DASHBOARD_CONFIG, ROLE_LAYOUTS } from '../config/personalDashboard.config'
+import { getPersona } from '../config/personalDashboardPersona.config'
 
 import WelcomeHero          from './PersonalDashboard/WelcomeHero'
 import AIInsightsStrip      from './PersonalDashboard/AIInsightsStrip'
@@ -18,6 +19,12 @@ import MyModulesGrid        from './PersonalDashboard/MyModulesGrid'
 import ActivityFeed         from './PersonalDashboard/ActivityFeed'
 import PendingActionsWidget from './PersonalDashboard/PendingActionsWidget'
 import UsageStatsChart      from './PersonalDashboard/UsageStatsChart'
+import QuickActionsBar      from './PersonalDashboard/QuickActionsBar'
+import ProjectPortfolio     from './PersonalDashboard/ProjectPortfolio'
+import EVMHealthGauges      from './PersonalDashboard/EVMHealthGauges'
+import MilestonesTimeline   from './PersonalDashboard/MilestonesTimeline'
+import MyTasksWidget        from './PersonalDashboard/MyTasksWidget'
+import RecentChangesWidget  from './PersonalDashboard/RecentChangesWidget'
 
 import apiService from '../services/api.service'
 
@@ -27,6 +34,9 @@ const fetchPersonalDashboard = () =>
 
 const fetchPersonalInsights = () =>
   apiService.get('/dashboard/personal/insights/')
+
+const fetchPersonaBundle = (path) =>
+  apiService.get(path)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Team snapshot inline component
@@ -141,19 +151,22 @@ export default function PersonalDashboard() {
 
   const [dashData, setDashData]       = useState(null)
   const [insights, setInsights]       = useState([])
+  const [personaBundle, setPersonaBundle] = useState(null)
   const [loadingMain, setLoadingMain] = useState(true)
   const [loadingInsights, setLoadingInsights] = useState(true)
+  const [loadingPersona, setLoadingPersona]   = useState(false)
   const [error, setError]             = useState(null)
   const pollRef                       = useRef(null)
 
-  // Determine role layout
+  // Determine role + persona
   const roleCode   = dashData?.user_context?.role_code || 'default'
   const layout     = ROLE_LAYOUTS[roleCode] || ROLE_LAYOUTS.default
+  const personaCode = dashData?.user_context?.persona || 'default'
+  const persona    = useMemo(() => getPersona(personaCode), [personaCode])
 
   const loadDashboard = useCallback(async () => {
     try {
       const res = await fetchPersonalDashboard()
-      // 204 = super admin, shouldn't reach here but guard anyway
       if (res.status === 204) return
       setDashData(res.data)
       setError(null)
@@ -183,6 +196,21 @@ export default function PersonalDashboard() {
     loadInsights()
   }, [loadDashboard, loadInsights])
 
+  // Load persona bundle whenever persona changes and has one
+  useEffect(() => {
+    if (!persona?.api_bundle) {
+      setPersonaBundle(null)
+      return
+    }
+    let cancelled = false
+    setLoadingPersona(true)
+    fetchPersonaBundle(persona.api_bundle)
+      .then(res => { if (!cancelled) setPersonaBundle(res.data) })
+      .catch(() => { if (!cancelled) setPersonaBundle(null) })
+      .finally(() => { if (!cancelled) setLoadingPersona(false) })
+    return () => { cancelled = true }
+  }, [persona])
+
   // Polling
   useEffect(() => {
     pollRef.current = setInterval(loadDashboard, PERSONAL_DASHBOARD_CONFIG.pollIntervalMs)
@@ -206,6 +234,89 @@ export default function PersonalDashboard() {
   }
 
   const d = dashData || {}
+  const pb = personaBundle || {}
+
+  // ─── Widget registry — resolves widget keys from persona config to JSX ───
+  const WIDGET_REGISTRY = {
+    quick_actions: () => (
+      <QuickActionsBar actions={persona.quick_actions} personaLabel={persona.label} />
+    ),
+    welcome_hero: () => (
+      <WelcomeHero userContext={d.user_context} kpis={d.kpis} roleLayout={layout} loading={loadingMain} />
+    ),
+    ai_insights: () => (
+      <AIInsightsStrip insights={insights} loading={loadingInsights} />
+    ),
+    my_modules: () => (
+      <MyModulesGrid modules={d.my_modules} loading={loadingMain} />
+    ),
+    project_portfolio: () => (
+      <ProjectPortfolio portfolio={pb.portfolio} projects={pb.projects} loading={loadingPersona} />
+    ),
+    evm_health: () => (
+      <EVMHealthGauges portfolio={pb.portfolio} loading={loadingPersona} />
+    ),
+    milestones_timeline: () => (
+      <MilestonesTimeline milestones={pb.upcoming_milestones} loading={loadingPersona} />
+    ),
+    my_tasks: () => (
+      <MyTasksWidget tasks={pb.my_tasks} loading={loadingPersona} />
+    ),
+    recent_changes: () => (
+      <RecentChangesWidget changes={pb.recent_changes} loading={loadingPersona} />
+    ),
+    activity_feed: () => (
+      <ActivityFeed activities={d.activity_feed} loading={loadingMain} />
+    ),
+    notifications: () => (
+      <NotificationsCard notifications={d.notifications} />
+    ),
+    pending_actions: () =>
+      layout.showPendingActions ? (
+        <PendingActionsWidget actions={d.pending_actions} loading={loadingMain} />
+      ) : null,
+    usage_stats: () =>
+      layout.showUsageChart ? (
+        <UsageStatsChart usageStats={d.usage_stats} loading={loadingMain} />
+      ) : null,
+    team_snapshot: () =>
+      layout.showTeamSnapshot ? (
+        <TeamSnapshotCard teamSnapshot={d.team_snapshot} />
+      ) : null,
+  }
+
+  // Widget groupings — some widgets should sit side-by-side.
+  // Keys here define how the linear widget list is composed into rows.
+  const SIDE_BY_SIDE_PAIRS = {
+    my_tasks: 'recent_changes',
+    activity_feed: 'notifications',
+  }
+
+  const renderWidgetList = () => {
+    const list = persona.widgets || []
+    const rendered = []
+    const consumed = new Set()
+
+    list.forEach((key, idx) => {
+      if (consumed.has(idx)) return
+      const paired = SIDE_BY_SIDE_PAIRS[key]
+      const nextIdx = list.indexOf(paired, idx + 1)
+
+      if (paired && nextIdx > idx) {
+        consumed.add(nextIdx)
+        rendered.push(
+          <div key={`${key}-pair`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>{WIDGET_REGISTRY[key]?.()}</div>
+            <div>{WIDGET_REGISTRY[paired]?.()}</div>
+          </div>
+        )
+      } else {
+        const node = WIDGET_REGISTRY[key]?.()
+        if (node) rendered.push(<div key={key}>{node}</div>)
+      }
+    })
+    return rendered
+  }
 
   return (
     <div className="relative min-h-full">
@@ -217,61 +328,7 @@ export default function PersonalDashboard() {
       </div>
 
       <div className="space-y-6 pb-8">
-
-        {/* 1. Welcome Hero */}
-        <WelcomeHero
-          userContext={d.user_context}
-          kpis={d.kpis}
-          roleLayout={layout}
-          loading={loadingMain}
-        />
-
-        {/* 2. AI Insights Strip */}
-        <AIInsightsStrip
-          insights={insights}
-          loading={loadingInsights}
-        />
-
-        {/* 3. My Modules Grid */}
-        <MyModulesGrid
-          modules={d.my_modules}
-          loading={loadingMain}
-        />
-
-        {/* 4. Middle row — activity + notifications/team */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <ActivityFeed
-              activities={d.activity_feed}
-              loading={loadingMain}
-            />
-          </div>
-          <div className="space-y-6">
-            {layout.showTeamSnapshot && (
-              <TeamSnapshotCard teamSnapshot={d.team_snapshot} />
-            )}
-            <NotificationsCard notifications={d.notifications} />
-          </div>
-        </div>
-
-        {/* 5. Bottom row — pending actions + usage chart */}
-        {(layout.showPendingActions || layout.showUsageChart) && (
-          <div className={`grid grid-cols-1 gap-6 ${layout.showPendingActions && layout.showUsageChart ? 'lg:grid-cols-2' : ''}`}>
-            {layout.showPendingActions && (
-              <PendingActionsWidget
-                actions={d.pending_actions}
-                loading={loadingMain}
-              />
-            )}
-            {layout.showUsageChart && (
-              <UsageStatsChart
-                usageStats={d.usage_stats}
-                loading={loadingMain}
-              />
-            )}
-          </div>
-        )}
-
+        {renderWidgetList()}
       </div>
     </div>
   )
