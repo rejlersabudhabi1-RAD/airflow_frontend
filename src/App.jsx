@@ -34,6 +34,7 @@ import PFDHistory from './pages/PFDHistory'
 import PFDFiveStageAnalysis from './pages/PFDFiveStageAnalysis'
 import S3PFDBrowser from './pages/S3PFDBrowser'
 import S3Management from './pages/S3Management'
+import DataMiningPlatform from './pages/DataMiningPlatform'
 import CRSDocuments from './pages/CRSDocuments'
 import CRSDocumentsHistory from './pages/CRSDocumentsHistory'
 import CRSChainDetail from './pages/CRSChainDetail'
@@ -566,6 +567,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pfd_to_pid">
               <S3Management />
+            </ModuleProtectedRoute>
+          }
+        />
+        
+        {/* Feature Routes - Data Mining Platform */}
+        <Route
+          path="data-mining"
+          element={
+            <ModuleProtectedRoute moduleCode="data_mining">
+              <DataMiningPlatform />
             </ModuleProtectedRoute>
           }
         />

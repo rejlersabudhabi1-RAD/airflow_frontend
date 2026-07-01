@@ -273,6 +273,15 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           description: 'Intelligent PFD conversion',
           moduleCode: 'pfd_to_pid',
           badge: 'AI'
+        },
+        {
+          id: 'dataMining',
+          title: '2.4 Data Mining',
+          icon: TableCellsIcon,
+          path: '/data-mining',
+          description: 'AI-powered data integration & transformation',
+          moduleCode: 'data_mining',
+          badge: 'NEW'
         }
       ]
         },
