@@ -98,7 +98,7 @@ const NON_ENGINEERING_GROUPS = [
     label: 'Common & Integration',
     color: 'purple',
     description: 'Cross-discipline tools and document management',
-    moduleCodes: ['crs_documents', 'pfd_to_pid', 'designiq'],
+    moduleCodes: ['crs_documents', 'pfd_to_pid', 'designiq', 'data_mining'],
   },
   {
     id: 'qhse',
