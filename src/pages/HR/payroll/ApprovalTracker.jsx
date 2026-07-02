@@ -311,7 +311,7 @@ export default function ApprovalTracker() {
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (loading && !data) {
     return (
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+      <div>
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
           <HeroIcons.ArrowPathIcon className="w-8 h-8 mx-auto mb-3 text-blue-500 animate-spin" />
           <p className="text-sm text-slate-500">Loading Approval Tracker…</p>
@@ -324,7 +324,7 @@ export default function ApprovalTracker() {
   const summary = data?.summary ?? {}
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+    <div>
 
       {/* ── Page Header ──────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">

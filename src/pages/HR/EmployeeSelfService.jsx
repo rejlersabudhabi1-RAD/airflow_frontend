@@ -3538,13 +3538,13 @@ export default function EmployeeSelfService() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-slate-50">
       {/* People nav cross-link */}
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 pt-4">
+      <div className="px-4 sm:px-6 lg:px-8 pt-4">
         <PeopleNav activeId="ess" />
       </div>
 
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+      <div className="px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {/* -- Profile Header -- */}
         <EmployeeProfileHeader
           profile={profile}

@@ -89,10 +89,10 @@ export default function Payroll() {
   const ActiveModule = TAB_COMPONENTS[activeTab]
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="bg-slate-50">
       {/* Page Header */}
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-4">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -150,7 +150,7 @@ export default function Payroll() {
       </div>
 
       {/* Module Content */}
-      <div className="py-6">
+      <div className="px-4 sm:px-6 lg:px-8 py-6">
         {ActiveModule ? (
           <ActiveModule
             activeRunId={activeRunId}

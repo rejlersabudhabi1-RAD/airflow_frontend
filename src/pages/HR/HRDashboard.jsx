@@ -975,8 +975,8 @@ export default function HRDashboard() {
     'there'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 sm:p-6 lg:p-8 xl:px-10 2xl:px-12">
-      <div className="max-w-screen-2xl mx-auto space-y-6">
+    <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50/40 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-6">
 
         {/* ── Header ───────────────────────────────────────────────────── */}
         <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
