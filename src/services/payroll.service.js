@@ -381,6 +381,13 @@ const payrollService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })),
 
+  // ── Initialize Current Month Leave ─────────────────────────────────────────
+  // POST to initialize current month leave balance for all employees.
+  // Sets earned value to standard monthly accrual (1.83 days).
+  // Params: { year?, month?, branch?, dry_run?: boolean }
+  initializeCurrentMonthLeave: (params = {}) =>
+    unwrap(apiClient.post(`${BASE}/initialize-current-month-leave/`, params)),
+
   // ── Daily Work Log (Daily Tracker) ─────────────────────────────────────────
   getDailyLogs:          (params = {}) =>
     unwrap(apiClient.get(`${BASE}/daily-logs/`,                 { params })),

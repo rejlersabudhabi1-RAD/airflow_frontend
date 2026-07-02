@@ -192,6 +192,13 @@ export const DEFAULT_ANNUAL_ENTITLEMENT = Number(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 9.1 MONTHLY LEAVE ACCRUAL — soft-coded constant
+//     Standard monthly leave accrual = ANNUAL_ENTITLEMENT / 12 months
+//     UAE Labour Law art.75: 22 days annual → 1.8333... days per month
+// ─────────────────────────────────────────────────────────────────────────────
+export const MONTHLY_LEAVE_ACCRUAL = DEFAULT_ANNUAL_ENTITLEMENT / 12  // 1.8333... ≈ 1.83 days
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 10. ESS LEAVE TYPE CONFIG — soft-coded entitlements for the Self-Service
 //     portal. Keyed by canonical leave category (matches API category field).
 //     Colours here use a distinct palette from DEFAULT_LEAVE_TYPES so that
