@@ -10,7 +10,7 @@ import {
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
   Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
   Search, ExternalLink, Sparkles, Maximize2, Minimize2, Wind,
-  Gauge, CheckSquare,
+  Gauge, CheckSquare, Factory, Droplet, Flame, Settings, Award, Waves, Cog, CircleDot as Valve,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2579,8 +2579,8 @@ const PIDVerification = () => {
               <span className="text-blue-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
             </div>
             <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
-              P&amp;ID Verification
-              <span className="block" style={{ background:'linear-gradient(90deg,#3b82f6,#6366f1)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+              P&amp;ID Verification{' '}
+              <span style={{ background:'linear-gradient(90deg,#3b82f6,#6366f1)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
                 Quality Checker
               </span>
             </h1>
@@ -2598,6 +2598,527 @@ const PIDVerification = () => {
                   <span>{b.icon}</span>{b.label}
                 </span>
               ))}
+            </div>
+          </div>
+
+          {/* User Guide - Oil & Gas Industry Workflow */}
+          <div className="mb-10" style={{ animation:'fadeUp 0.7s ease-out 0.2s both' }}>
+            <style>{`
+              /* Oil & Gas Industry Theme - Soft Coded Animations */
+              @keyframes pipelineFlow {
+                0% { stroke-dashoffset: 100; opacity: 0.3; }
+                50% { opacity: 1; }
+                100% { stroke-dashoffset: 0; opacity: 0.3; }
+              }
+              @keyframes refineryPulse {
+                0%, 100% { 
+                  box-shadow: 0 0 30px rgba(10,75,120,0.5), 0 0 50px rgba(245,158,11,0.3), inset 0 0 20px rgba(255,255,255,0.1);
+                  transform: scale(1);
+                }
+                50% { 
+                  box-shadow: 0 0 50px rgba(10,75,120,0.8), 0 0 80px rgba(245,158,11,0.5), inset 0 0 30px rgba(255,255,255,0.2);
+                  transform: scale(1.03);
+                }
+              }
+              @keyframes industrialSpin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+              @keyframes valveRotate {
+                0%, 100% { transform: rotate(-20deg); opacity: 0.7; }
+                50% { transform: rotate(20deg); opacity: 1; }
+              }
+              @keyframes safetyGlow {
+                0%, 100% { 
+                  box-shadow: 0 0 25px rgba(16,185,129,0.5), 0 0 45px rgba(52,211,153,0.3);
+                  filter: brightness(1);
+                }
+                50% { 
+                  box-shadow: 0 0 45px rgba(16,185,129,0.8), 0 0 70px rgba(52,211,153,0.5);
+                  filter: brightness(1.1);
+                }
+              }
+              @keyframes flowIndicator {
+                0% { transform: translateX(-150%) scale(0); opacity: 0; }
+                50% { opacity: 1; transform: translateX(0%) scale(1); }
+                100% { opacity: 0; transform: translateX(150%) scale(0); }
+              }
+              @keyframes platformFloat {
+                0%, 100% { transform: translateY(0px) rotate(0deg); }
+                50% { transform: translateY(-10px) rotate(1deg); }
+              }
+              @keyframes energyBurst {
+                0% { transform: translate(0, 0) scale(0); opacity: 0; }
+                40% { opacity: 0.9; }
+                100% { transform: translate(var(--tx, 50px), var(--ty, -50px)) scale(1.8); opacity: 0; }
+              }
+              @keyframes industrialShimmer {
+                0% { transform: translateX(-100%) skewX(-20deg); opacity: 0; }
+                50% { opacity: 0.6; }
+                100% { transform: translateX(200%) skewX(-20deg); opacity: 0; }
+              }
+              @keyframes steamRise {
+                0% { transform: translateY(0) scale(1); opacity: 0; }
+                50% { opacity: 0.6; }
+                100% { transform: translateY(-40px) scale(1.5); opacity: 0; }
+              }
+              @keyframes cardElevate {
+                0%, 100% { transform: translateY(0px) rotateX(0deg); box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+                50% { transform: translateY(-8px) rotateX(2deg); box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+              }
+            `}</style>
+
+            <div className="relative rounded-3xl p-10 overflow-hidden" style={{ 
+              background: 'linear-gradient(135deg, rgba(15,23,42,0.97) 0%, rgba(30,41,59,0.95) 50%, rgba(15,23,42,0.97) 100%)',
+              border: '2px solid rgba(100,116,139,0.3)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(148,163,184,0.1) inset, 0 0 80px rgba(245,158,11,0.15)',
+              backdropFilter: 'blur(24px)'
+            }}>
+              {/* Industrial Background Grid */}
+              <div className="absolute inset-0 opacity-10" style={{
+                backgroundImage: 'linear-gradient(rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.3) 1px, transparent 1px)',
+                backgroundSize: '40px 40px'
+              }} />
+              
+              {/* Steam/Gas Particles */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="absolute w-3 h-3 rounded-full blur-sm" style={{
+                    left: `${15 + i * 12}%`,
+                    bottom: '10%',
+                    background: i % 2 === 0 ? 'rgba(245,158,11,0.4)' : 'rgba(30,107,150,0.4)',
+                    animation: `steamRise ${3 + (i * 0.3)}s ease-out ${i * 0.25}s infinite`
+                  }} />
+                ))}
+              </div>
+
+              {/* Header - Oil & Gas Engineering Theme */}
+              <div className="flex items-center gap-4 mb-10 relative">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl relative overflow-hidden" style={{ 
+                  background: 'linear-gradient(135deg, #0a4b78 0%, #1e6b96 50%, #f59e0b 100%)',
+                  animation: 'platformFloat 4s ease-in-out infinite'
+                }}>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite' }} />
+                  <Factory className="w-6 h-6 text-white relative z-10 drop-shadow-lg" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight" style={{
+                    background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #1e6b96 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>P&ID Verification Workflow</h2>
+                  <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                    <span className="text-amber-500">⚡</span> Industrial-Grade AI Processing Pipeline
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between gap-4 relative overflow-x-auto pb-2"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 transparent' }}>
+                
+                {/* Step 1: DUAL INPUT METHOD - Manual Upload OR Wrench Cloud */}
+                <div className="flex-shrink-0 flex flex-col items-center gap-4">
+                  {/* Input Method Badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg" style={{
+                    background: 'linear-gradient(90deg, rgba(30,58,138,0.9) 0%, rgba(16,185,129,0.9) 100%)',
+                    border: '1px solid rgba(148,163,184,0.3)',
+                    color: '#e0f2fe'
+                  }}>
+                    <GitBranch className="w-3.5 h-3.5" />
+                    PHASE 1 • INPUT METHOD
+                  </div>
+                  
+                  {/* Dual Method Container */}
+                  <div className="flex flex-col items-center gap-3 relative">
+                    
+                    {/* Method A: Manual Upload (P&ID + Legends) */}
+                    <div className="flex items-center gap-3 relative" style={{ animation: 'cardElevate 4s ease-in-out infinite' }}>
+                      <div className="absolute -left-16 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-xs font-bold" style={{
+                        background: 'rgba(30,107,150,0.2)',
+                        border: '1px solid rgba(30,107,150,0.5)',
+                        color: '#7dd3fc'
+                      }}>
+                        Method A
+                      </div>
+                      
+                      {/* P&ID Drawing */}
+                      <div className="w-44 text-center group">
+                        <div className="relative mb-3">
+                          <div className="w-16 h-16 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
+                            background: 'linear-gradient(135deg, #1e3a8a 0%, #1e6b96 100%)',
+                            boxShadow: '0 6px 24px rgba(30,107,150,0.4), inset 0 0 15px rgba(255,255,255,0.1)',
+                            border: '2px solid rgba(148,163,184,0.3)'
+                          }}>
+                            <div className="absolute inset-0 opacity-20" style={{
+                              backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
+                              backgroundSize: '8px 8px'
+                            }} />
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite' }} />
+                            <div className="relative z-10 w-full h-full flex items-center justify-center">
+                              <FileText className="w-8 h-8 text-cyan-100 drop-shadow-lg" />
+                            </div>
+                          </div>
+                        </div>
+                        <h3 className="text-xs font-bold text-slate-100 mb-0.5">P&ID Drawing</h3>
+                        <p className="text-xs text-cyan-400 font-medium">PDF • DWG</p>
+                      </div>
+                      
+                      <div className="text-slate-400 font-bold text-sm">+</div>
+                      
+                      {/* Legends Sheet */}
+                      <div className="w-44 text-center group">
+                        <div className="relative mb-3">
+                          <div className="w-16 h-16 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
+                            background: 'linear-gradient(135deg, #4c1d95 0%, #8b5cf6 100%)',
+                            boxShadow: '0 6px 24px rgba(99,102,241,0.4), inset 0 0 15px rgba(255,255,255,0.1)',
+                            border: '2px solid rgba(167,139,250,0.3)'
+                          }}>
+                            <div className="absolute inset-0 opacity-20" style={{
+                              backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 1px, transparent 1px, transparent 5px)',
+                              backgroundSize: '100% 5px'
+                            }} />
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out 0.5s infinite' }} />
+                            <div className="relative z-10 w-full h-full flex items-center justify-center">
+                              <Layers className="w-8 h-8 text-violet-100 drop-shadow-lg" />
+                            </div>
+                          </div>
+                        </div>
+                        <h3 className="text-xs font-bold text-slate-100 mb-0.5">Legends Sheet</h3>
+                        <p className="text-xs text-violet-400 font-medium">Symbol Lib</p>
+                      </div>
+                    </div>
+                    
+                    {/* OR Divider */}
+                    <div className="relative w-full py-2">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-slate-600"></div>
+                      </div>
+                      <div className="relative flex justify-center">
+                        <span className="px-3 py-1 text-xs font-bold rounded-full" style={{
+                          background: 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(51,65,85,0.95) 100%)',
+                          border: '2px solid rgba(148,163,184,0.4)',
+                          color: '#f59e0b',
+                          boxShadow: '0 0 20px rgba(245,158,11,0.3)'
+                        }}>OR</span>
+                      </div>
+                    </div>
+                    
+                    {/* Method B: Wrench Cloud API (Fetches Both) */}
+                    <div className="flex items-center gap-3 relative" style={{ animation: 'cardElevate 4s ease-in-out 0.3s infinite' }}>
+                      <div className="absolute -left-16 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-xs font-bold" style={{
+                        background: 'rgba(16,185,129,0.2)',
+                        border: '1px solid rgba(16,185,129,0.5)',
+                        color: '#6ee7b7'
+                      }}>
+                        Method B
+                      </div>
+                      
+                      {/* Wrench Cloud Integration */}
+                      <div className="w-96 text-center group">
+                        <div className="relative mb-3 mx-auto w-fit">
+                          <div className="w-20 h-20 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
+                            background: 'linear-gradient(135deg, #065f46 0%, #10b981 50%, #34d399 100%)',
+                            boxShadow: '0 8px 32px rgba(16,185,129,0.6), 0 0 60px rgba(52,211,153,0.3), inset 0 0 20px rgba(255,255,255,0.15)',
+                            border: '2px solid rgba(52,211,153,0.5)'
+                          }}>
+                            {/* Network Pattern */}
+                            <div className="absolute inset-0 opacity-20">
+                              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                  <pattern id="wrench-cloud-network" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+                                    <circle cx="2" cy="2" r="1" fill="rgba(255,255,255,0.5)" />
+                                    <circle cx="14" cy="14" r="1" fill="rgba(255,255,255,0.5)" />
+                                    <line x1="2" y1="2" x2="14" y2="14" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" />
+                                  </pattern>
+                                </defs>
+                                <rect width="100%" height="100%" fill="url(#wrench-cloud-network)" />
+                              </svg>
+                            </div>
+                            {/* Cloud Data Pulses */}
+                            <div className="absolute inset-0 pointer-events-none">
+                              {[0, 1, 2, 3].map(i => (
+                                <div key={i} className="absolute w-1.5 h-1.5 rounded-full bg-emerald-200" style={{
+                                  top: `${15 + i * 22}%`,
+                                  left: `${12 + i * 25}%`,
+                                  animation: `safetyGlow ${1.8 + i * 0.35}s ease-in-out ${i * 0.25}s infinite`,
+                                  opacity: 0.8
+                                }} />
+                              ))}
+                            </div>
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out 0.8s infinite' }} />
+                            <div className="relative z-10 w-full h-full flex items-center justify-center">
+                              <Wrench className="w-10 h-10 text-emerald-50 drop-shadow-2xl" />
+                            </div>
+                            {/* Cloud Badge */}
+                            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{
+                              background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+                              boxShadow: '0 0 16px rgba(16,185,129,0.9)',
+                              animation: 'refineryPulse 2s ease-in-out infinite'
+                            }}>
+                              <Database className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          </div>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-100 mb-1">Wrench Cloud API</h3>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Fetch P&ID + Legends directly from cloud<br />
+                          <span className="text-xs text-emerald-400 font-medium">⚡ Automated Integration</span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                  </div>
+                </div>
+
+                {/* Dual Method Convergence Pipeline */}
+                <div className="flex-shrink-0 flex justify-center items-center px-3">
+                  <svg className="w-28 h-32" viewBox="0 0 110 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <linearGradient id="methodAPipe" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#1e6b96" stopOpacity="0.6" />
+                        <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.8" />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.9" />
+                      </linearGradient>
+                      <linearGradient id="methodBPipe" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.7" />
+                        <stop offset="50%" stopColor="#34d399" stopOpacity="0.8" />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.9" />
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* Method A Path (Manual Upload) - Upper */}
+                    <path d="M 5 35 Q 40 35 55 50 L 85 50" 
+                      stroke="url(#methodAPipe)" 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round"
+                      strokeDasharray="4 4"
+                      style={{ animation: 'pipelineFlow 2.2s linear infinite' }}
+                    />
+                    
+                    {/* Method B Path (Wrench Cloud) - Lower */}
+                    <path d="M 5 95 Q 40 95 55 80 L 85 80" 
+                      stroke="url(#methodBPipe)" 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round"
+                      strokeDasharray="4 4"
+                      style={{ animation: 'pipelineFlow 2.2s linear infinite' }}
+                    />
+                    
+                    {/* Converging Arrows */}
+                    <path d="M 85 50 L 90 50 L 85 47 M 90 50 L 85 53" 
+                      stroke="url(#methodAPipe)" 
+                      strokeWidth="2" 
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M 85 80 L 90 80 L 85 77 M 90 80 L 85 83" 
+                      stroke="url(#methodBPipe)" 
+                      strokeWidth="2" 
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    
+                    {/* Method Labels */}
+                    <text x="3" y="32" fontSize="8" fill="#7dd3fc" fontWeight="bold">A</text>
+                    <text x="3" y="92" fontSize="8" fill="#6ee7b7" fontWeight="bold">B</text>
+                    
+                    {/* Flow Droplets on Method A */}
+                    {[0, 1, 2].map(i => (
+                      <circle key={`methodA-${i}`} r="2" fill="#8b5cf6" opacity="0">
+                        <animateMotion path="M 5 35 Q 40 35 55 50 L 85 50" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0;1;1;0" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
+                      </circle>
+                    ))}
+                    
+                    {/* Flow Droplets on Method B */}
+                    {[0, 1, 2].map(i => (
+                      <circle key={`methodB-${i}`} r="2" fill="#34d399" opacity="0">
+                        <animateMotion path="M 5 95 Q 40 95 55 80 L 85 80" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0;1;1;0" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
+                      </circle>
+                    ))}
+                  </svg>
+                </div>
+
+                {/* Step 2: Refinery Processing (Oil & Gas Theme) */}
+                <div className="flex-shrink-0 w-72 text-center group" style={{ animation: 'cardElevate 4s ease-in-out 0.5s infinite' }}>
+                  <div className="relative mb-5">
+                    {/* Refinery/Processing Plant Icon */}
+                    <div className="w-24 h-24 mx-auto rounded-2xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
+                      background: 'linear-gradient(135deg, #0a4b78 0%, #f59e0b 50%, #ea580c 100%)',
+                      boxShadow: '0 0 40px rgba(245,158,11,0.5), 0 0 80px rgba(10,75,120,0.3), inset 0 0 30px rgba(255,255,255,0.15)',
+                      animation: 'refineryPulse 3s ease-in-out infinite',
+                      border: '2px solid rgba(245,158,11,0.4)'
+                    }}>
+                      {/* Rotating Industrial Gear */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                        <Settings className="w-20 h-20 text-white" style={{ animation: 'industrialSpin 8s linear infinite' }} />
+                      </div>
+                      {/* Central Processing Icon */}
+                      <div className="relative z-10 w-full h-full flex items-center justify-center">
+                        <Factory className="w-11 h-11 text-white drop-shadow-2xl" />
+                      </div>
+                      {/* Energy Bursts */}
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {[...Array(6)].map((_, i) => (
+                          <div key={i} className="absolute w-2 h-2 rounded-full" style={{
+                            top: '50%',
+                            left: '50%',
+                            background: i % 2 === 0 ? '#f59e0b' : '#1e6b96',
+                            animation: `energyBurst ${2.5 + i * 0.2}s ease-out ${i * 0.3}s infinite`,
+                            '--tx': `${Math.cos(i * 60 * Math.PI / 180) * 80}px`,
+                            '--ty': `${Math.sin(i * 60 * Math.PI / 180) * 80}px`
+                          }} />
+                        ))}
+                      </div>
+                    </div>
+                    {/* Industrial Valves/Indicators */}
+                    {[-45, 45].map((angle, i) => (
+                      <Valve key={i} className="absolute w-4 h-4 text-amber-400 opacity-70" style={{
+                        top: '30%',
+                        [i === 0 ? 'left' : 'right']: '15%',
+                        animation: 'valveRotate 2s ease-in-out infinite',
+                        animationDelay: `${i * 0.5}s`
+                      }} />
+                    ))}
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold mb-3 shadow-lg" style={{
+                    background: 'linear-gradient(90deg, rgba(10,75,120,0.9) 0%, rgba(245,158,11,0.9) 50%, rgba(234,88,12,0.9) 100%)',
+                    border: '1px solid rgba(245,158,11,0.4)',
+                    color: '#fff'
+                  }}>
+                    <Cpu className="w-3.5 h-3.5 animate-pulse" />
+                    PHASE 2
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-100 mb-2">
+                    <span style={{
+                      background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #fbbf24 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      backgroundSize: '200% auto',
+                      animation: 'gradientFlow 3s ease infinite'
+                    }}>RADAI</span> Processing
+                  </h3>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    AI analyzes with 20+ rules<br />
+                    <span className="text-xs text-amber-400 font-medium">OCR • Vision • ML Engine</span>
+                  </p>
+                </div>
+
+                {/* Pipeline Flow Arrow 2 */}
+                <div className="flex-shrink-0 flex justify-center items-center px-4">
+                  <svg className="w-24 h-12" viewBox="0 0 100 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <linearGradient id="pipelineGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#ea580c" stopOpacity="0.4" />
+                        <stop offset="50%" stopColor="#10b981" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#059669" stopOpacity="0.4" />
+                      </linearGradient>
+                    </defs>
+                    {/* Pipeline Path */}
+                    <path d="M 5 25 L 75 25 L 70 20 M 75 25 L 70 30" 
+                      stroke="url(#pipelineGrad2)" 
+                      strokeWidth="3" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      strokeDasharray="4 4"
+                      style={{ animation: 'pipelineFlow 2s linear infinite' }}
+                    />
+                    {/* Flow Indicators */}
+                    {[0, 1, 2].map(i => (
+                      <circle key={i} cx="0" cy="25" r="2.5" fill="#10b981" opacity="0">
+                        <animate attributeName="cx" from="-5" to="80" dur="2.5s" begin={`${i * 0.7}s`} repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="0;1;1;0" dur="2.5s" begin={`${i * 0.7}s`} repeatCount="indefinite" />
+                      </circle>
+                    ))}
+                  </svg>
+                </div>
+
+                {/* Step 3: Quality Certification (Safety/Compliance Theme) */}
+                <div className="flex-shrink-0 w-72 text-center group" style={{ animation: 'cardElevate 4s ease-in-out 1s infinite' }}>
+                  <div className="relative mb-5">
+                    {/* Safety Badge / Certification Icon */}
+                    <div className="w-24 h-24 mx-auto rounded-2xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
+                      background: 'linear-gradient(135deg, #064e3b 0%, #10b981 50%, #34d399 100%)',
+                      boxShadow: '0 0 40px rgba(16,185,129,0.6), 0 0 80px rgba(52,211,153,0.3), inset 0 0 30px rgba(255,255,255,0.15)',
+                      animation: 'safetyGlow 3s ease-in-out infinite',
+                      border: '2px solid rgba(52,211,153,0.5)'
+                    }}>
+                      {/* Rotating Quality Stamp */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                        <div className="w-16 h-16 rounded-full border-4 border-white border-dashed" style={{ animation: 'industrialSpin 12s linear infinite' }} />
+                      </div>
+                      {/* Shimmer Effect */}
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite 1s' }} />
+                      {/* Central Award/Badge Icon */}
+                      <div className="relative z-10 w-full h-full flex items-center justify-center">
+                        <Award className="w-12 h-12 text-white drop-shadow-2xl" style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.8))' }} />
+                      </div>
+                      {/* Safety Sparkles */}
+                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {[...Array(4)].map((_, i) => (
+                          <Sparkles key={i} className="absolute w-3 h-3 text-emerald-200" style={{
+                            top: `${15 + i * 25}%`,
+                            left: `${15 + i * 20}%`,
+                            animation: `energyBurst ${2 + i * 0.3}s ease-out ${i * 0.4}s infinite`,
+                            opacity: 0.8,
+                            '--tx': `${(i * 15) - 30}px`,
+                            '--ty': `${-(i * 10 + 15)}px`
+                          }} />
+                        ))}
+                      </div>
+                    </div>
+                    {/* Safety Checkmarks */}
+                    {[0, 1, 2, 3].map((i) => (
+                      <CheckCircle key={i} className="absolute w-3 h-3 text-emerald-300 opacity-60" style={{
+                        top: i < 2 ? '10%' : '90%',
+                        left: i % 2 === 0 ? '10%' : '90%',
+                        animation: `platformFloat ${2 + i * 0.3}s ease-in-out ${i * 0.2}s infinite`
+                      }} />
+                    ))}
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold mb-3 shadow-lg" style={{
+                    background: 'linear-gradient(90deg, rgba(6,78,59,0.9) 0%, rgba(16,185,129,0.9) 50%, rgba(52,211,153,0.9) 100%)',
+                    border: '1px solid rgba(52,211,153,0.4)',
+                    color: '#ecfdf5'
+                  }}>
+                    <Award className="w-3.5 h-3.5" />
+                    PHASE 3
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-100 mb-2">Quality Certification</h3>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    Verified compliance report<br />
+                    <span className="text-xs text-emerald-400 font-medium">Standards • Safety • Quality</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Industrial Features Bar - Oil & Gas Themed */}
+              <div className="mt-10 pt-8 border-t relative overflow-hidden" style={{ 
+                borderColor: 'rgba(100,116,139,0.3)',
+                background: 'linear-gradient(90deg, rgba(10,75,120,0.05) 0%, rgba(245,158,11,0.05) 50%, rgba(16,185,129,0.05) 100%)'
+              }}>
+                <div className="relative flex flex-wrap justify-center gap-6 text-xs">
+                  {[
+                    { icon: Gauge, label: 'Process Safety', color: 'text-sky-400', bg: 'bg-sky-900/30', border: 'border-sky-500/30', glow: 'hover:shadow-sky-500/50' },
+                    { icon: Factory, label: 'Industry Standards', color: 'text-amber-400', bg: 'bg-amber-900/30', border: 'border-amber-500/30', glow: 'hover:shadow-amber-500/50' },
+                    { icon: Zap, label: 'Real-time Analysis', color: 'text-orange-400', bg: 'bg-orange-900/30', border: 'border-orange-500/30', glow: 'hover:shadow-orange-500/50' },
+                    { icon: Shield, label: 'ISO Certified', color: 'text-emerald-400', bg: 'bg-emerald-900/30', border: 'border-emerald-500/30', glow: 'hover:shadow-emerald-500/50' }
+                  ].map((stat, i) => (
+                    <div key={stat.label} 
+                      className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl border ${stat.bg} ${stat.border} transition-all duration-300 hover:scale-110 ${stat.glow}`} 
+                      style={{ 
+                        animation: `platformFloat ${3 + i * 0.5}s ease-in-out ${0.2 * i}s infinite`,
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                      }}>
+                      <stat.icon className={`w-4 h-4 ${stat.color} drop-shadow-lg`} style={{ filter: 'drop-shadow(0 0 4px currentColor)' }} />
+                      <span className="font-bold text-slate-200">{stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
