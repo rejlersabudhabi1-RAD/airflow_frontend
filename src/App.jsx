@@ -18,6 +18,7 @@ import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import ProfileAlignedComprehensive from './pages/ProfileAlignedComprehensive'  // ✅ Comprehensive profile with engineering expertise
 import NotificationPanel from './pages/NotificationPanel'
 import UsageDashboard from './pages/UsageDashboard'
 // SOFT-CODED: /pid/upload disabled — replaced by Engineering > Process > P&ID Verification
@@ -58,6 +59,7 @@ import HREmployees from './pages/HR/HREmployees'
 import HRDashboard from './pages/HR/HRDashboard'
 import Payroll from './pages/HR/Payroll'
 import EmployeeSelfService from './pages/HR/EmployeeSelfService'
+import OnboardingOffboarding from './pages/HR/OnboardingOffboarding'
 import SiteVisits from './pages/HR/SiteVisits'
 // import InvoiceDetail from './pages/Finance/InvoiceDetail'
 import InvoiceApproval from './pages/Finance/InvoiceApproval'
@@ -464,7 +466,7 @@ function App() {
           path="profile"
           element={
             <ProtectedRoute>
-              <Profile />
+              <ProfileAlignedComprehensive />
             </ProtectedRoute>
           }
         />
@@ -673,6 +675,14 @@ function App() {
           element={
             <ProtectedRoute>
               <EmployeeSelfService />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="hr/onboarding"
+          element={
+            <ProtectedRoute>
+              <OnboardingOffboarding />
             </ProtectedRoute>
           }
         />

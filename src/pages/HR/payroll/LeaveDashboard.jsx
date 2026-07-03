@@ -273,6 +273,45 @@ export default function LeaveDashboard() {
     finally { setReviewBusy(null) }
   }
 
+  // ── Initialize Current Month Leave ─────────────────────────────────────────
+  const [initBusy, setInitBusy] = useState(false)
+  const [initMsg, setInitMsg] = useState(null)  // { type: 'ok'|'err', text }
+  
+  const initializeCurrentMonthLeave = async () => {
+    if (!window.confirm(
+      `Initialize current month leave balance to 1.83 days for all employees?\n\n` +
+      `This will set the earned value for ${new Date().toLocaleString('default', { month: 'long' })} ${YEAR} ` +
+      `to the standard monthly accrual (1.83 days = 22 days/year ÷ 12 months).`
+    )) return
+    
+    setInitBusy(true)
+    setInitMsg(null)
+    try {
+      const result = await payrollService.initializeCurrentMonthLeave({ 
+        year: YEAR,
+        month: new Date().getMonth() + 1,  // current month
+        branch: branch || undefined,
+      })
+      setInitMsg({ 
+        type: 'ok', 
+        text: `✅ Initialized ${result.records_created} new records, updated ${result.records_updated} existing records. Monthly accrual: ${result.monthly_accrual.toFixed(2)} days.` 
+      })
+      // Reload records to show updated balances
+      setTimeout(() => {
+        const params = { year: YEAR, page_size: 500 }
+        if (branch) params.branch = branch
+        payrollService.getLeaveRecords(params)
+          .then(d => setRecords(Array.isArray(d) ? d : (d?.results ?? [])))
+          .catch(() => {})
+      }, 500)
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || 'Initialization failed'
+      setInitMsg({ type: 'err', text: `❌ ${msg}` })
+    } finally {
+      setInitBusy(false)
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // KPI computations
   // ─────────────────────────────────────────────────────────────────────────

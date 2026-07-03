@@ -353,6 +353,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
             path: '/hr/leave',
             description: 'My leave, attendance, timesheet & payroll',
             moduleCode: 'hr_self_service'
+          },
+          {
+            id: 'hrOnboarding',
+            title: '4.4 Onboarding | Offboarding',
+            icon: UsersIcon,
+            path: '/hr/onboarding',
+            description: 'Employee lifecycle management',
+            moduleCode: 'hr_management'
           }
         ]
       },
