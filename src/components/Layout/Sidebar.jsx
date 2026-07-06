@@ -360,7 +360,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
             icon: UsersIcon,
             path: '/hr/onboarding',
             description: 'Employee lifecycle management',
-            moduleCode: 'hr_management'
+            moduleCode: 'hr_onboarding'
           }
         ]
       },

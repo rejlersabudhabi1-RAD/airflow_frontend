@@ -147,8 +147,8 @@ const NON_ENGINEERING_GROUPS = [
     id: 'hr',
     label: 'Human Resources',
     color: 'green',
-    description: 'HR management, payroll and self-service',
-    moduleCodes: ['hr_management', 'payroll', 'timesheet', 'hr_self_service'],
+    description: 'HR management, payroll, self-service and employee lifecycle',
+    moduleCodes: ['hr_management', 'payroll', 'timesheet', 'hr_self_service', 'hr_onboarding'],
   },
   {
     id: 'administration',
