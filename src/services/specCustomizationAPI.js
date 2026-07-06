@@ -61,6 +61,9 @@ export const SPEC_API_CONFIG = {
   // Workbook canvas — cross-check & edit SPEC/CAT data before download.
   jobWorkbookPath:     (id) => `/paper-spec/jobs/${id}/workbook/`,
   jobWorkbookCellPath: (id) => `/paper-spec/jobs/${id}/workbook/cell/`,
+  jobWorkbookBatchSavePath: (id) => `/paper-spec/jobs/${id}/workbook/batch-save/`,
+  jobWorkbookDeleteRowPath: (id) => `/paper-spec/jobs/${id}/workbook/delete-row/`,
+  jobWorkbookBulkDeletePath: (id) => `/paper-spec/jobs/${id}/workbook/bulk-delete/`,
   classDetailPath:  (id) => `/paper-spec/classes/${id}/`,
   configPath:       '/config/',
 
@@ -287,6 +290,51 @@ const specCustomizationAPI = {
     const { data } = await apiClient.delete(
       path(SPEC_API_CONFIG.jobWorkbookCellPath(jobId)),
       { data: { workbook, sheet_name, row_key, column_name } },
+    );
+    return data;
+  },
+
+  /**
+   * Batch save multiple cell overrides at once.
+   * 
+   * @param {string} jobId - Job ID
+   * @param {Array} cells - Array of {workbook, sheet_name, row_key, column_name, value}
+   * @returns {Promise<{saved_count, created, updated, s3_snapshot}>}
+   */
+  async batchSaveWorkbookCells(jobId, cells) {
+    const { data } = await apiClient.post(
+      path(SPEC_API_CONFIG.jobWorkbookBatchSavePath(jobId)),
+      { cells },
+    );
+    return data;
+  },
+
+  /**
+   * Delete all cell overrides for a specific row.
+   * 
+   * @param {string} jobId - Job ID
+   * @param {object} params - {workbook, sheet_name, row_key}
+   * @returns {Promise<{deleted_count, row_key, columns_deleted}>}
+   */
+  async deleteWorkbookRow(jobId, { workbook, sheet_name, row_key }) {
+    const { data } = await apiClient.delete(
+      path(SPEC_API_CONFIG.jobWorkbookDeleteRowPath(jobId)),
+      { data: { workbook, sheet_name, row_key } },
+    );
+    return data;
+  },
+
+  /**
+   * Delete multiple rows at once.
+   * 
+   * @param {string} jobId - Job ID
+   * @param {object} params - {workbook, sheet_name, row_keys: Array}
+   * @returns {Promise<{deleted_rows, deleted_cells, row_keys}>}
+   */
+  async bulkDeleteWorkbookRows(jobId, { workbook, sheet_name, row_keys }) {
+    const { data } = await apiClient.delete(
+      path(SPEC_API_CONFIG.jobWorkbookBulkDeletePath(jobId)),
+      { data: { workbook, sheet_name, row_keys } },
     );
     return data;
   },
