@@ -65,6 +65,25 @@ const URGENCY_LABEL = {
   low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent',
 }
 
+// Soft-coded service labels & badges — extend when new services are added.
+// Password reset requests originate from /forgot-password when SMTP is
+// unavailable, so we highlight them for the admin.
+const SERVICE_LABEL = {
+  'pid-analysis':          'P&ID Analysis',
+  'pfd-conversion':        'PFD → P&ID',
+  'asset-integrity':       'Asset Integrity',
+  'engineering-consulting':'Engineering Consulting',
+  'digital-twin':          'Digital Twin',
+  'ai-ml-services':        'AI/ML Services',
+  'password-reset':        '🔐 Password Reset',
+  'general':               'General Enquiry',
+  'other':                 'Other',
+}
+const SERVICE_BADGE = {
+  'password-reset': 'bg-red-100 text-red-800 ring-1 ring-red-200 font-semibold',
+}
+const formatServiceLabel = (code) => SERVICE_LABEL[code] || (code || '—')
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -273,7 +292,13 @@ export default function EnquiryManagement () {
                     </div>
                   </Td>
                   <Td className="max-w-[240px] truncate text-sm text-gray-800" title={row.subject}>{row.subject}</Td>
-                  <Td className="text-sm text-gray-700">{row.service || '—'}</Td>
+                  <Td className="text-sm text-gray-700">
+                    {SERVICE_BADGE[row.service] ? (
+                      <Badge cls={SERVICE_BADGE[row.service]}>{formatServiceLabel(row.service)}</Badge>
+                    ) : (
+                      formatServiceLabel(row.service)
+                    )}
+                  </Td>
                   <Td><Badge cls={URGENCY_BADGE[row.urgency]}>{URGENCY_LABEL[row.urgency] || row.urgency}</Badge></Td>
                   <Td><Badge cls={STATUS_BADGE[row.status]}>{STATUS_LABEL[row.status] || row.status}</Badge></Td>
                   <Td className="text-right pr-6">
@@ -420,7 +445,7 @@ const DetailDrawer = ({ enquiry, saving, onClose, onPatch, onDelete }) => {
             <KV k="Email"    v={<a className="text-blue-600 hover:underline" href={`mailto:${enquiry.email}`}>{enquiry.email}</a>} />
             <KV k="Phone"    v={<a className="text-blue-600 hover:underline" href={`tel:${enquiry.phone}`}>{enquiry.phone}</a>} />
             <KV k="Company"  v={enquiry.company || '—'} />
-            <KV k="Service"  v={enquiry.service || '—'} />
+            <KV k="Service"  v={formatServiceLabel(enquiry.service)} />
           </Section>
 
           {/* Message */}

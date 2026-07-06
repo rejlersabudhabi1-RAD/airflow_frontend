@@ -5,6 +5,57 @@
  */
 
 /**
+ * ─── Fallback Mode (Enquiry-based reset) ────────────────────────────────
+ * When SMTP is unavailable, password reset requests are routed through the
+ * public /enquiry/submit/ endpoint (persisted in the Enquiry table) so that
+ * an administrator can review and manually reset the user's password from
+ * the 9.6 Enquiry admin page.
+ *
+ * Flip USE_ENQUIRY_FALLBACK back to false once SMTP is configured; the
+ * original email-based flow will be restored without any code changes.
+ */
+export const PASSWORD_RESET_FALLBACK = {
+  USE_ENQUIRY_FALLBACK: true,           // set to false once SMTP is live
+  enquiryEndpoint: '/enquiry/submit/',  // reuses existing public endpoint
+  serviceCode: 'password-reset',        // tags enquiry as password-reset
+  subject: 'Password Reset Request',
+  urgency: 'high',                      // reset requests are usually urgent
+
+  // Admin contact info shown on the request page so the user has a
+  // fallback channel while waiting for the administrator to action their
+  // request. Update centrally when the admin contact changes.
+  adminContact: {
+    name:  'System Administrator',
+    email: 'tanzeem.agra@rejlers.ae',
+    phone: '+971 50 560 6987',
+    slaHours: 24,   // expected response time
+  },
+
+  // Steps shown in the "How it works" timeline. Reorder / extend freely.
+  workflowSteps: [
+    { icon: '✍️',  title: 'You submit',      body: 'Enter your registered email and (optionally) a reason.' },
+    { icon: '🔔',  title: 'Admin alerted',   body: 'System notifies every administrator in real-time.' },
+    { icon: '🛡️',  title: 'Identity check',  body: 'Admin verifies you and resets the password securely.' },
+    { icon: '📞',  title: 'You get contacted', body: 'You receive a temporary password to change on first login.' },
+  ],
+
+  // Trust badges shown at the bottom of the hero column
+  trustBadges: [
+    { icon: '🔒', label: 'End-to-end encrypted' },
+    { icon: '⚡', label: 'Fast admin response' },
+    { icon: '🛡️', label: 'Zero self-serve resets' },
+  ],
+
+  messageTemplate: ({ email, reason }) =>
+    `A user has requested a password reset via /forgot-password.
+
+User email: ${email}
+Reason: ${reason || '(not provided)'}
+
+Please verify the user's identity and reset their password via User Management (/admin/users). After reset, share the temporary password securely and require change on first login.`,
+}
+
+/**
  * API Endpoints Configuration
  */
 export const PASSWORD_RESET_API = {

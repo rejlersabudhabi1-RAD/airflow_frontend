@@ -55,6 +55,7 @@ export const ENQUIRY_CONFIG = {
     { value: 'engineering-consulting', label: 'Engineering Consulting' },
     { value: 'digital-twin', label: 'Digital Twin Solutions' },
     { value: 'ai-ml-services', label: 'AI/ML Engineering Services' },
+    { value: 'password-reset', label: '🔐 Password Reset Request' },
     { value: 'general', label: 'General Enquiry' },
     { value: 'other', label: 'Other Services' }
   ],
