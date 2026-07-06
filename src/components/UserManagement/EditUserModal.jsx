@@ -210,9 +210,23 @@ const EditUserModal = ({
       }
     }
 
+    // Defensive UUID normalization — backend PrimaryKeyRelatedField rejects
+    // role/module objects. Keep this even though initializeFormData normalizes,
+    // in case any code path pushes an object into the array.
+    const normalizeIds = (arr) =>
+      Array.isArray(arr)
+        ? arr.map((item) => (typeof item === 'object' && item ? item.id : item)).filter(Boolean)
+        : [];
+
+    const cleanFormData = {
+      ...formData,
+      role_ids: normalizeIds(formData.role_ids),
+      module_ids: normalizeIds(formData.module_ids),
+    };
+
     // Access is role-based: strip module_ids unless the flag is on.
-    const { module_ids, ...roleOnlyPayload } = formData;
-    const payload = ALLOW_PER_USER_MODULE_ASSIGNMENT ? formData : roleOnlyPayload;
+    const { module_ids, ...roleOnlyPayload } = cleanFormData;
+    const payload = ALLOW_PER_USER_MODULE_ASSIGNMENT ? cleanFormData : roleOnlyPayload;
     await onSave(payload);
 
     if (EDIT_USER_CONFIG.behavior.closeOnSuccess) {

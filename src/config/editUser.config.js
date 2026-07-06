@@ -346,6 +346,24 @@ export const EDIT_USER_CONFIG = {
 /**
  * Helper Functions
  */
+
+// Soft-coded normalizer: accepts an array of UUID strings, role/module objects,
+// or a mix of both, and returns a flat array of UUID strings.
+// Prevents "Must be a valid UUID" backend errors when the frontend feeds the
+// original user.roles / user.accessible_modules arrays (which contain objects)
+// into checkbox handlers that append plain UUID strings.
+const toIdArray = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (item == null) return null;
+      if (typeof item === 'string') return item;
+      if (typeof item === 'object') return item.id || item.uuid || null;
+      return null;
+    })
+    .filter(Boolean);
+};
+
 export const getFieldValue = (user, fieldName) => {
   const fieldMap = {
     'first_name': user?.user?.first_name || user?.first_name || '',
@@ -359,8 +377,9 @@ export const getFieldValue = (user, fieldName) => {
     'date_joined': user?.user?.date_joined || user?.created_at || null,
     'last_login': user?.last_login_at || user?.user?.last_login || null,
     'login_count': user?.login_count || 0,
-    'module_ids': user?.accessible_modules || user?.module_ids || [],
-    'role_ids': user?.roles || user?.role_ids || [],
+    // Normalize to UUID strings — backend expects PrimaryKeyRelatedField list
+    'module_ids': toIdArray(user?.accessible_modules ?? user?.module_ids ?? []),
+    'role_ids': toIdArray(user?.roles ?? user?.role_ids ?? []),
     'is_superuser': user?.user?.is_superuser || user?.is_superuser || false,
     'is_staff': user?.user?.is_staff || user?.is_staff || false
   };
