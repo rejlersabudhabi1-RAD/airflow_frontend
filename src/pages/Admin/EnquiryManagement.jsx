@@ -18,10 +18,13 @@ import apiService from '../../services/api.service'
 // ---------------------------------------------------------------------------
 // Soft-coded configuration
 // ---------------------------------------------------------------------------
+// NOTE: apiService already prepends the API base ('/api/v1'), so these paths
+// must NOT include the '/api/v1' prefix — otherwise requests hit
+// '/api/v1/api/v1/enquiry/' and get a 404 back from the router.
 const ENQUIRY_API = {
-  list:   '/api/v1/enquiry/',
-  stats:  '/api/v1/enquiry/stats/',
-  detail: (id) => `/api/v1/enquiry/${id}/`,
+  list:   '/enquiry/',
+  stats:  '/enquiry/stats/',
+  detail: (id) => `/enquiry/${id}/`,
 }
 
 const PAGE_SIZE = 25
