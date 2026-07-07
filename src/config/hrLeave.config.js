@@ -199,22 +199,36 @@ export const DEFAULT_ANNUAL_ENTITLEMENT = Number(
 export const MONTHLY_LEAVE_ACCRUAL = DEFAULT_ANNUAL_ENTITLEMENT / 12  // 1.8333... ≈ 1.83 days
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 9.2 LEAVE ENCASHMENT — soft-coded divisor for daily rate calculation
+//     Daily rate = monthly_salary ÷ LEAVE_ENCASHMENT_WORKING_DAYS
+//     UAE standard: 22 working days per month.
+//     Mirror of ENCASHMENT_WORKING_DAYS in backend/apps/payroll/services/leave_encashment.py
+// ─────────────────────────────────────────────────────────────────────────────
+export const LEAVE_ENCASHMENT_WORKING_DAYS = Number(
+  import.meta.env?.VITE_LEAVE_ENCASHMENT_WORKING_DAYS || 22
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 10. ESS LEAVE TYPE CONFIG — soft-coded entitlements for the Self-Service
-//     portal. Keyed by canonical leave category (matches API category field).
+//     portal. Keyed by canonical leave category (matches API `category` field
+//     populated from LeaveCategory choices in payroll/models.py).
 //     Colours here use a distinct palette from DEFAULT_LEAVE_TYPES so that
 //     the bar-chart view stays visually separate from the badge/table views.
 //
-//     ⚠️  PRODUCTION ACTIVE LEAVE TYPES (user-approved, 2026-06-26):
-//         Only Annual, Compensatory, and Unpaid leave types are enabled.
-//         Sick, Emergency, Maternity, Paternity, Work off = DISABLED per user request.
+//     To enable/disable a leave type, set `enabled: true/false`.
+//     Entitlement values reflect UAE Labour Law (Federal Law No.33 of 2021).
 // ─────────────────────────────────────────────────────────────────────────────
 export const ESS_LEAVE_TYPE_CONFIG = {
-  annual:       { label: 'Annual Leave',       color: '#3b82f6', bg: 'bg-blue-50',    text: 'text-blue-700',    bar: 'bg-blue-500',    entitlement: DEFAULT_ANNUAL_ENTITLEMENT, enabled: true },
-  compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5,  enabled: true },
-  unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0,  enabled: true },
-  // Disabled leave types (can be re-enabled by setting enabled: true)
-  // sick:         { label: 'Sick Leave',         color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', entitlement: 15, enabled: false },
-  // emergency:    { label: 'Emergency Leave',    color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500',   entitlement: 3,  enabled: false },
+  annual:       { label: 'Annual Leave',       color: '#3b82f6', bg: 'bg-blue-50',    text: 'text-blue-700',    bar: 'bg-blue-500',    entitlement: DEFAULT_ANNUAL_ENTITLEMENT, enabled: true  },
+  sick:         { label: 'Sick Leave',         color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500', entitlement: 15,                         enabled: true  },
+  emergency:    { label: 'Emergency Leave',    color: '#f59e0b', bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500',   entitlement: 3,                          enabled: false },
+  maternity:    { label: 'Maternity Leave',    color: '#8b5cf6', bg: 'bg-purple-50',  text: 'text-purple-700',  bar: 'bg-purple-500',  entitlement: 60,                         enabled: true  },
+  paternity:    { label: 'Paternity Leave',    color: '#6366f1', bg: 'bg-indigo-50',  text: 'text-indigo-700',  bar: 'bg-indigo-500',  entitlement: 5,                          enabled: true  },
+  compensatory: { label: 'Compensatory Leave', color: '#8b5cf6', bg: 'bg-violet-50',  text: 'text-violet-700',  bar: 'bg-violet-500',  entitlement: 5,                          enabled: false },
+  unpaid:       { label: 'Unpaid Leave',       color: '#64748b', bg: 'bg-slate-50',   text: 'text-slate-700',   bar: 'bg-slate-400',   entitlement: 0,                          enabled: true  },
+  // Set enabled: false to hide a type from the ESS portal without deleting it from the DB
+  public_holiday: { label: 'Public Holiday',  color: '#6b7280', bg: 'bg-slate-50',   text: 'text-slate-600',   bar: 'bg-slate-300',   entitlement: 0,                          enabled: false },
+  work_off:       { label: 'Work Off',         color: '#14b8a6', bg: 'bg-teal-50',    text: 'text-teal-700',    bar: 'bg-teal-400',    entitlement: 0,                          enabled: false },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

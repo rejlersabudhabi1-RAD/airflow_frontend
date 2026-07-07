@@ -795,13 +795,12 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
 
   const insufficient = form.leave_type === 'annual' && calcDays !== null && calcDays > balance
 
-  // Default leave types (filtered to match ESS_LEAVE_TYPE_CONFIG enabled types)
-  // Only Annual, Compensatory, and Unpaid are enabled per user request (2026-06-26)
-  const defaultTypes = [
-    { id: 'annual',       name: 'Annual Leave' },
-    { id: 'compensatory', name: 'Compensatory Leave' },
-    { id: 'unpaid',       name: 'Unpaid Leave' },
-  ]
+  // Default leave types (fallback when API returns nothing) — mirrors
+  // ESS_LEAVE_TYPE_CONFIG enabled entries; uses category as id so the
+  // backend filter (t.category || t.code) resolves correctly.
+  const defaultTypes = Object.entries(LEAVE_TYPE_CONFIG)
+    .filter(([, cfg]) => cfg.enabled !== false)
+    .map(([key, cfg]) => ({ id: key, name: cfg.label }))
   const types = leaveTypes?.length > 0 ? leaveTypes : defaultTypes
 
   return (
@@ -3229,8 +3228,8 @@ export default function EmployeeSelfService() {
       // No need to pass employee_code or search - backend detects from auth user
       payrollService.getLeaveRecords({ page_size: 5 }).catch(() => ({ results: [] })),
     ]).then(([types, reqRes, recRes]) => {
-      // Filter leave types to only show enabled types from ESS_LEAVE_TYPE_CONFIG
-      // Enabled categories: annual, compensatory, unpaid (sick, emergency disabled per user request 2026-06-26)
+      // Filter leave types to only show enabled types from ESS_LEAVE_TYPE_CONFIG.
+      // To enable/disable a type, change `enabled` in hrLeave.config.js — no code change needed.
       const enabledCategories = Object.keys(LEAVE_TYPE_CONFIG).filter(
         key => LEAVE_TYPE_CONFIG[key].enabled !== false
       )
@@ -3386,7 +3385,7 @@ export default function EmployeeSelfService() {
                   <KpiCard icon="CalendarDaysIcon" label="Annual Balance" value={`${Number(leaveRecord?.leave_balance||0).toFixed(1)} d`} sub="Remaining" tone="blue" />
                   <KpiCard icon="CheckCircleIcon" label="Days Taken" value={`${Number(leaveRecord?.total_taken||0).toFixed(1)} d`} sub="This year" tone="green" />
                   <KpiCard icon="ClockIcon" label="Pending" value={pendingLeave} sub="Awaiting approval" tone={pendingLeave ? 'amber' : 'slate'} />
-                  <KpiCard icon="BanknotesIcon" label="Encashed" value={`${Number(leaveRecord?.total_encashed||0).toFixed(1)} d`} sub="Leave encashment" tone="purple" />
+                  <KpiCard icon="BanknotesIcon" label="Encashed" value={`${Number(leaveRecord?.total_encashed||0).toFixed(1)} d`} sub={`${new Date().toLocaleString('default',{month:'short',year:'numeric'})} YTD`} tone="purple" />
                 </div>
               )}
             </SectionCard>

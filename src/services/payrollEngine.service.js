@@ -50,8 +50,8 @@ const payrollEngineService = {
   getRun: (id) =>
     unwrap(apiClient.get(`${BASE}/runs/${id}/`)),
 
-  generateRun: ({ year, month, overwrite = false, note = '' }) =>
-    unwrap(apiClient.post(`${BASE}/runs/`, { year, month, overwrite, note })),
+  generateRun: ({ year, month, overwrite = false, note = '', working_days = 22 }) =>
+    unwrap(apiClient.post(`${BASE}/runs/`, { year, month, overwrite, note, working_days })),
 
   deleteRun: (id, { force = false, note = '' } = {}) =>
     unwrap(apiClient.delete(`${BASE}/runs/${id}/`, {
@@ -61,6 +61,18 @@ const payrollEngineService = {
 
   regenerateRun: (id, payload = {}) =>
     unwrap(apiClient.post(`${BASE}/runs/${id}/regenerate/`, payload)),
+
+  // ── External file upload (ValueFrame / Sympa) ──────────────────────────
+  uploadExternalFile: (runId, file, fileType = 'valueframe') => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('file_type', fileType)
+    return unwrap(apiClient.post(`${BASE}/runs/${runId}/upload-external/`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }))
+  },
+  listRunUploads: (runId) =>
+    unwrap(apiClient.get(`${BASE}/runs/${runId}/uploads/`)),
 
   refreshRunTotals: (id) =>
     unwrap(apiClient.post(`${BASE}/runs/${id}/refresh-totals/`)),

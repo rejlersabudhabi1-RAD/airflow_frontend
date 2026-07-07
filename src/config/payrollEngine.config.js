@@ -130,6 +130,40 @@ export const FIXED_EARNING_FIELDS = [
   { key: 'home_leave', label: 'Home Leave' },
 ]
 
+// Attendance & Leave fields — editable per payslip, separate from salary.
+// Mirrors catalog.LEAVE_CATEGORIES_FOR_PAYROLL + hours on the Payslip model.
+// step controls the numeric input increment shown in the edit modal.
+// Add a new field here + on the model/serializer/migration → appears automatically.
+export const ATTENDANCE_LEAVE_FIELDS = [
+  { key: 'hours',               label: 'Hours (Live)',   step: '0.1'  },
+  { key: 'public_holiday_days', label: 'Public Hols',   step: '1'    },
+  { key: 'annual_leave_days',   label: 'Annual Leave',  step: '0.5'  },
+  { key: 'unpaid_leave_days',   label: 'Unpaid Leave',  step: '0.5'  },
+]
+
+// External file upload types — used by ExternalUploadPanel in RunDetail.
+// file_type must match catalog.EXTERNAL_IMPORT_FIELD_MAP on the backend.
+// fields_updated is informational (shown in the upload history UI).
+// To add a new source file type: add an entry here + extend backend catalog.
+export const EXTERNAL_UPLOAD_FILE_TYPES = [
+  {
+    key:            'valueframe',
+    label:          'ValueFrame',
+    description:    'Wage Type Report — updates Hours (Live), Annual Leave',
+    accept:         '.xlsx,.xls',
+    fields_updated: ['hours', 'annual_leave_days'],
+    color:          'blue',
+  },
+  {
+    key:            'sympa',
+    label:          'Sympa',
+    description:    'Salary Master — updates Basic, Housing, Transport, Home Leave',
+    accept:         '.xlsx,.xls',
+    fields_updated: ['basic', 'housing', 'transport', 'home_leave'],
+    color:          'violet',
+  },
+]
+
 // ────────────────────────────────────────────────────────────────────────────
 // Bulk percentage deduction — mirrors backend catalog.BULK_DEDUCTION_*.
 // Drives the "Apply Deduction" modal: HR picks a % and which fields it
@@ -192,9 +226,11 @@ export const getCanvasMode = (key) =>
 
 // Run table columns
 export const RUN_COLUMNS = [
-  { key: 'cycle_code',       label: 'Cycle',           width: 120 },
-  { key: 'status_label',     label: 'Status',          width: 160 },
-  { key: 'employee_count',   label: 'Employees',       width: 100, align: 'right' },
+  { key: 'cycle_code',            label: 'Cycle',           width: 120 },
+  { key: 'status_label',          label: 'Status',          width: 160 },
+  { key: 'employee_count',        label: 'Employees',       width: 100, align: 'right' },
+  { key: 'working_days_in_month', label: 'Working Days',    width: 110, align: 'right' },
+  { key: 'public_holidays_in_month', label: 'Public Holidays', width: 110, align: 'right' },
   { key: 'total_hours',      label: 'Hours ⠂(Live)',  width: 110, align: 'right', format: 'number' },
   { key: 'total_days',       label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 110, align: 'right', format: 'number' },
   { key: 'total_gross',      label: 'Gross',           width: 140, align: 'right', format: 'currency' },
@@ -209,6 +245,9 @@ export const PAYSLIP_COLUMNS = [
   { key: 'snapshot_department','label': 'Department',      width: 160 },
   { key: 'hours',              label: 'Hours ⠲(Live)',    width: 90,  align: 'right', format: 'number' },
   { key: 'days',               label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
+  { key: 'public_holiday_days',  label: 'Public Holidays', width: 100, align: 'right', format: 'number' },
+  { key: 'annual_leave_days',   label: 'Annual Leave',    width: 100, align: 'right', format: 'number' },
+  { key: 'unpaid_leave_days',   label: 'Unpaid Leave',    width: 100, align: 'right', format: 'number' },
   { key: 'basic',              label: 'Basic',             width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',            label: 'Housing',           width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',          label: 'Transport',         width: 110, align: 'right', format: 'currency', editable: true },
@@ -232,6 +271,9 @@ export const PAYSLIP_COLUMNS_EXPANDED = [
   { key: 'snapshot_designation',label: 'Designation',   width: 180 },
   { key: 'hours',               label: 'Hours ⠲(Live)', width: 90,  align: 'right', format: 'number' },
   { key: 'days',                label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
+  { key: 'public_holiday_days',  label: 'Public Holidays', width: 100, align: 'right', format: 'number' },
+  { key: 'annual_leave_days',    label: 'Annual Leave',    width: 100, align: 'right', format: 'number' },
+  { key: 'unpaid_leave_days',    label: 'Unpaid Leave',    width: 100, align: 'right', format: 'number' },
   { key: 'basic',               label: 'Basic',         width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'housing',             label: 'Housing',       width: 110, align: 'right', format: 'currency', editable: true },
   { key: 'transport',           label: 'Transport',     width: 110, align: 'right', format: 'currency', editable: true },
@@ -305,13 +347,14 @@ export const EMPLOYEE_EDIT_FIELDS = [
   { key: 'mol_no',             label: 'MOL #',            type: 'text',   group: 'Identity' },
   { key: 'nationality_group',  label: 'Nationality',      type: 'text',   group: 'Identity' },
 
-  // ── Org ─────────────────────────────────────────────────────────────────
-  { key: 'department',         label: 'Department',       type: 'text',   group: 'Organisation' },
-  { key: 'discipline',         label: 'Discipline',       type: 'text',   group: 'Organisation' },
-  { key: 'designation',        label: 'Designation',      type: 'text',   group: 'Organisation' },
-  { key: 'grade',              label: 'Grade',            type: 'text',   group: 'Organisation' },
-  { key: 'joining_date',       label: 'Joining Date',     type: 'date',   group: 'Organisation' },
-  { key: 'leaving_date',       label: 'Leaving Date',     type: 'date',   group: 'Organisation' },
+  // ── Org ──────────────────────────────────────────────────────────────────────
+  // type: 'datalist' renders <input list="..."> for freeform entry with suggestions
+  { key: 'department',         label: 'Department',       type: 'datalist', group: 'Organisation', optionsFrom: 'departments'  },
+  { key: 'discipline',         label: 'Discipline',       type: 'text',     group: 'Organisation' },
+  { key: 'designation',        label: 'Designation',      type: 'datalist', group: 'Organisation', optionsFrom: 'designations' },
+  { key: 'grade',              label: 'Grade',            type: 'text',     group: 'Organisation' },
+  { key: 'joining_date',       label: 'Joining Date',     type: 'date',     group: 'Organisation' },
+  { key: 'leaving_date',       label: 'Leaving Date',     type: 'date',     group: 'Organisation' },
 
   // ── Banking ─────────────────────────────────────────────────────────────
   { key: 'iban',               label: 'IBAN',             type: 'text',   group: 'Banking' },
@@ -329,6 +372,15 @@ export const EMPLOYEE_EDIT_FIELDS = [
   { key: 'effective_from',     label: 'Effective From',   type: 'date',   group: 'Status' },
   { key: 'effective_to',       label: 'Effective To',     type: 'date',   group: 'Status' },
   { key: 'notes',              label: 'Notes',            type: 'textarea', group: 'Status' },
+]
+
+// Payslip employee-info editable fields — snapshot fields that can be
+// corrected in the PayslipDetailModal. Changes sync back to PayrollEmployee.
+// type 'datalist' = freeform input with catalog suggestions.
+export const PAYSLIP_EMPLOYEE_INFO_FIELDS = [
+  { key: 'snapshot_joining_date',  label: 'Joining Date',  type: 'date'     },
+  { key: 'snapshot_department',    label: 'Department',    type: 'datalist', optionsFrom: 'departments'  },
+  { key: 'snapshot_designation',   label: 'Designation',   type: 'datalist', optionsFrom: 'designations' },
 ]
 
 // Adjustments table columns

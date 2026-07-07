@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
@@ -41,6 +41,13 @@ export default function RunsList({ onSelectRun }) {
     month: today.getMonth() + 1,
   })
   const [overwrite, setOverwrite] = useState(false)
+  // Soft-coded default: mirrors catalog.DEFAULT_WORKING_DAYS_PER_MONTH (22 UAE standard)
+  const DEFAULT_WORKING_DAYS = 22
+  const [workingDays, setWorkingDays] = useState(DEFAULT_WORKING_DAYS)
+  // Generation mode: 'system' = from live data, 'import' = from uploaded Excel
+  const [genMode, setGenMode] = useState('system')
+  const [importFile, setImportFile] = useState(null)
+  const importFileRef = React.useRef(null)
   const [deletingId, setDeletingId] = useState(null)
   const [revertingId, setRevertingId] = useState(null)
 
@@ -63,7 +70,16 @@ export default function RunsList({ onSelectRun }) {
     setGenerating(true)
     setError(null)
     try {
-      const run = await payrollEngineService.generateRun({ ...period, overwrite })
+      let run
+      if (genMode === 'import') {
+        if (!importFile) { setError('Select an Excel file to import.'); setGenerating(false); return }
+        const data = await payrollEngineService.importFullXlsx(importFile, period)
+        run = data.run
+        if (importFileRef.current) importFileRef.current.value = ''
+        setImportFile(null)
+      } else {
+        run = await payrollEngineService.generateRun({ ...period, overwrite, working_days: workingDays })
+      }
       await load()
       onSelectRun?.(run)
     } catch (e) {
@@ -127,45 +143,90 @@ export default function RunsList({ onSelectRun }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <div className="flex items-end flex-wrap gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              Generate run for
-            </label>
-            <MonthYearPicker
-              year={period.year}
-              month={period.month}
-              onChange={setPeriod}
-            />
-          </div>
-          <label className="inline-flex items-center gap-2 text-xs text-slate-600">
-            <input
-              type="checkbox"
-              checked={overwrite}
-              onChange={(e) => setOverwrite(e.target.checked)}
-              className="rounded"
-            />
-            Overwrite if Draft exists
-          </label>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={generating}
-            className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {generating
-              ? <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
-              : <HeroIcons.PlayCircleIcon className="w-4 h-4" />
-            }
-            {generating ? 'Generating…' : 'Generate Run'}
-          </button>
+      {/* ── Generate Panel ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        {/* Mode selector tabs */}
+        <div className="flex border-b border-slate-200">
+          {[
+            { key: 'system', label: 'System Generate', icon: 'PlayCircleIcon',       desc: 'From live employee & timesheet data' },
+            { key: 'import', label: 'Import from File', icon: 'DocumentArrowUpIcon', desc: 'From master payroll Excel upload' },
+          ].map((m) => {
+            const Icon = HeroIcons[m.icon]
+            return (
+              <button key={m.key} type="button"
+                onClick={() => { setGenMode(m.key); setError(null) }}
+                className={`flex-1 flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  genMode === m.key
+                    ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}>
+                <Icon className="w-4 h-4" />
+                <span>{m.label}</span>
+                <span className="hidden sm:inline text-xs font-normal text-slate-400 ml-1">— {m.desc}</span>
+              </button>
+            )
+          })}
         </div>
-        {error && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            {error}
+
+        {/* Controls */}
+        <div className="p-4">
+          <div className="flex items-end flex-wrap gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Month / Year</label>
+              <MonthYearPicker year={period.year} month={period.month} onChange={setPeriod} />
+            </div>
+
+            {genMode === 'system' && (
+              <>
+                {/* Working Days */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Working Days <span className="text-slate-400 font-normal">(this month)</span>
+                  </label>
+                  <input type="number" min={1} max={31} value={workingDays}
+                    onChange={(e) => { const v = parseInt(e.target.value, 10); if (v >= 1 && v <= 31) setWorkingDays(v) }}
+                    className="w-24 border border-slate-200 rounded-lg px-3 py-2 text-sm text-center font-semibold focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    title="Total working days for this month"
+                  />
+                </div>
+                {/* Overwrite */}
+                <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} className="rounded" />
+                  Overwrite if Draft exists
+                </label>
+              </>
+            )}
+
+            {genMode === 'import' && (
+              <div className="flex-1 min-w-56">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Master Payroll Excel</label>
+                <input ref={importFileRef} type="file" accept=".xlsx,.xls"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                {importFile && (
+                  <p className="text-xs text-slate-400 mt-0.5">{importFile.name} ({Math.round(importFile.size / 1024)} KB)</p>
+                )}
+              </div>
+            )}
+
+            <button type="button" onClick={handleGenerate} disabled={generating}
+              className={`ml-auto inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50 ${
+                genMode === 'import'
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}>
+              {generating
+                ? <HeroIcons.ArrowPathIcon className="w-4 h-4 animate-spin" />
+                : genMode === 'import' ? <HeroIcons.DocumentArrowUpIcon className="w-4 h-4" /> : <HeroIcons.PlayCircleIcon className="w-4 h-4" />
+              }
+              {generating ? (genMode === 'import' ? 'Importing…' : 'Generating…') : (genMode === 'import' ? 'Import & Generate' : 'Generate Run')}
+            </button>
           </div>
-        )}
+
+          {error && (
+            <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -220,8 +281,20 @@ export default function RunsList({ onSelectRun }) {
                   onClick={() => onSelectRun?.(r)}
                 >
                   <td className="px-3 py-2 font-mono">{r.cycle_code}</td>
-                  <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <StatusBadge status={r.status} />
+                      {r.source_type === 'import' && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200" title="Generated from imported Excel file">
+                          ↗ Import
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-right">{r.employee_count}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-indigo-700">
+                    {r.working_days_in_month ?? 22}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatNumber(r.total_hours, { decimals: 2 })}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-700">{formatNumber(r.total_days, { decimals: 2 })}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(r.total_gross, { withSymbol: false })}</td>

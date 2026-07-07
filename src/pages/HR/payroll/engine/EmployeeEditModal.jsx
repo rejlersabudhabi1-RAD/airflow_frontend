@@ -173,6 +173,34 @@ export default function EmployeeEditModal({ employee, onClose, onSaved }) {
       )
     }
 
+    // datalist = freeform input with dropdown suggestions from catalog.
+    // Allows HR to type a new value OR pick from existing entries.
+    if (field.type === 'datalist') {
+      const listId = `${id}-list`
+      const suggestions = field.optionsFrom && catalog?.[field.optionsFrom]
+        ? catalog[field.optionsFrom]
+        : []
+      return (
+        <>
+          <input
+            id={id}
+            type="text"
+            list={listId}
+            value={value ?? ''}
+            disabled={field.readOnly}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            className={baseCls}
+            placeholder="Type or select…"
+          />
+          <datalist id={listId}>
+            {suggestions.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </>
+      )
+    }
+
     if (field.type === 'textarea') {
       return (
         <textarea

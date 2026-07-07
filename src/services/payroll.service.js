@@ -388,6 +388,20 @@ const payrollService = {
   initializeCurrentMonthLeave: (params = {}) =>
     unwrap(apiClient.post(`${BASE}/initialize-current-month-leave/`, params)),
 
+  // ── Leave Encashment ────────────────────────────────────────────────────────
+  // GET  status of encashment run for a given period
+  getLeaveEncashmentStatus: ({ year, month } = {}) =>
+    unwrap(apiClient.get(`${BASE}/leave-encashment/status/`, { params: { year, month } })),
+  // GET  dry-run preview (no DB writes) — per-employee days + pay estimate
+  previewLeaveEncashment: ({ year, month } = {}) =>
+    unwrap(apiClient.get(`${BASE}/leave-encashment/preview/`, { params: { year, month } })),
+  // POST trigger encashment for a given period (HR-only)
+  runLeaveEncashment: ({ year, month } = {}) =>
+    unwrap(apiClient.post(`${BASE}/leave-encashment/run/`, { year, month })),
+  // GET  list of all encashment runs
+  getLeaveEncashmentList: () =>
+    unwrap(apiClient.get(`${BASE}/leave-encashment/`)),
+
   // ── Daily Work Log (Daily Tracker) ─────────────────────────────────────────
   getDailyLogs:          (params = {}) =>
     unwrap(apiClient.get(`${BASE}/daily-logs/`,                 { params })),

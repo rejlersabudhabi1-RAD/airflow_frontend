@@ -15,7 +15,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import payrollService from '../../../services/payroll.service'
-import { BRANCHES, getBranch, LEAVE_YEAR, DEFAULT_ANNUAL_ENTITLEMENT } from '../../../config/hrLeave.config'
+import { BRANCHES, getBranch, LEAVE_YEAR, DEFAULT_ANNUAL_ENTITLEMENT, LEAVE_ENCASHMENT_WORKING_DAYS } from '../../../config/hrLeave.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG — all soft-coded constants
@@ -76,10 +76,11 @@ const BalanceBadge = ({ value }) => {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 const VIEWS = [
-  { id: 'overview',  label: 'Overview',   icon: 'ChartBarSquareIcon' },
-  { id: 'list',      label: 'Employees',  icon: 'TableCellsIcon' },
-  { id: 'detail',    label: 'Detail',     icon: 'UserCircleIcon' },
-  { id: 'requests',  label: 'Requests',   icon: 'ClipboardDocumentListIcon' },
+  { id: 'overview',    label: 'Overview',   icon: 'ChartBarSquareIcon' },
+  { id: 'list',        label: 'Employees',  icon: 'TableCellsIcon' },
+  { id: 'detail',      label: 'Detail',     icon: 'UserCircleIcon' },
+  { id: 'requests',    label: 'Requests',   icon: 'ClipboardDocumentListIcon' },
+  { id: 'encashment',  label: 'Encashment', icon: 'BanknotesIcon' },
 ]
 
 export default function LeaveDashboard() {
@@ -113,6 +114,17 @@ export default function LeaveDashboard() {
   const [formBusy,     setFormBusy]     = useState(false)
   const [formMsg,      setFormMsg]      = useState(null)     // { type: 'ok'|'err', text }
   const [reviewBusy,   setReviewBusy]   = useState(null)     // UUID being reviewed
+
+  // ── Encashment view state ──────────────────────────────────────────────────
+  const today        = new Date()
+  const [encYear,    setEncYear]    = useState(today.getFullYear())
+  const [encMonth,   setEncMonth]   = useState(today.getMonth() + 1)
+  const [encStatus,  setEncStatus]  = useState(null)   // LeaveEncashmentRun | null | 'not_run'
+  const [encPreview, setEncPreview] = useState(null)   // preview rows array
+  const [encLoading, setEncLoading] = useState(false)
+  const [encRunning, setEncRunning] = useState(false)
+  const [encMsg,     setEncMsg]     = useState(null)   // { type: 'ok'|'err', text }
+  const [encConfirm, setEncConfirm] = useState(false)  // show confirm modal
 
   // ── Fetch all records ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -706,6 +718,255 @@ export default function LeaveDashboard() {
     CANCELLED:   'bg-slate-100 text-slate-600 border-slate-300',
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Encashment view helpers
+  // ─────────────────────────────────────────────────────────────────────────
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December']
+
+  const loadEncashmentStatus = (yr, mo) => {
+    setEncLoading(true)
+    setEncStatus(null)
+    setEncPreview(null)
+    payrollService.getLeaveEncashmentStatus({ year: yr, month: mo })
+      .then(d => setEncStatus(d))
+      .catch(() => setEncStatus('not_run'))
+      .finally(() => setEncLoading(false))
+  }
+
+  const loadPreview = () => {
+    setEncLoading(true)
+    payrollService.previewLeaveEncashment({ year: encYear, month: encMonth })
+      .then(d => setEncPreview(d?.preview || []))
+      .catch(() => setEncMsg({ type: 'err', text: 'Failed to load preview.' }))
+      .finally(() => setEncLoading(false))
+  }
+
+  const handleRunEncashment = async () => {
+    setEncConfirm(false)
+    setEncRunning(true)
+    setEncMsg(null)
+    try {
+      const result = await payrollService.runLeaveEncashment({ year: encYear, month: encMonth })
+      setEncPreview(result?.preview || [])
+      setEncStatus({
+        status: result?.missing_salaries?.length > 0 ? 'partial' : 'success',
+        year: encYear, month: encMonth,
+        records_processed: result?.records_processed,
+        total_days_encashed: result?.total_days_encashed,
+        total_pay: result?.total_pay,
+        missing_salaries: result?.missing_salaries || [],
+        executed_at: new Date().toISOString(),
+        triggered_by: 'You',
+      })
+      setEncMsg({ type: 'ok', text: `Encashment completed. ${result?.records_processed} employees processed.` })
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'Encashment run failed.'
+      setEncMsg({ type: 'err', text: msg })
+    } finally {
+      setEncRunning(false)
+    }
+  }
+
+  // Load status when encashment view becomes active or period changes
+  useEffect(() => {
+    if (view !== 'encashment') return
+    loadEncashmentStatus(encYear, encMonth)
+  }, [view, encYear, encMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const renderEncashment = () => {
+    const alreadyRun = encStatus && encStatus !== 'not_run' && encStatus?.status === 'success'
+    const periodLabel = `${MONTH_NAMES[encMonth - 1]} ${encYear}`
+
+    return (
+      <div className="space-y-4">
+        {/* Period selector */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Year</label>
+            <select value={encYear} onChange={e => setEncYear(Number(e.target.value))}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+              {[encYear - 1, encYear, encYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Month</label>
+            <select value={encMonth} onChange={e => setEncMonth(Number(e.target.value))}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+              {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <button type="button" onClick={loadPreview} disabled={encLoading}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+            {encLoading ? 'Loading…' : 'Preview'}
+          </button>
+        </div>
+
+        {/* Status banner */}
+        {encLoading && (
+          <div className="text-sm text-slate-500 text-center py-6 animate-pulse">Loading encashment data…</div>
+        )}
+        {!encLoading && encStatus && encStatus !== 'not_run' && (
+          <div className={`rounded-xl border p-4 flex flex-wrap gap-4 items-start ${
+            encStatus.status === 'success' ? 'bg-emerald-50 border-emerald-200' :
+            encStatus.status === 'partial' ? 'bg-amber-50 border-amber-200' :
+            'bg-rose-50 border-rose-200'}`}>
+            <HeroIcons.CheckCircleIcon className={`w-5 h-5 mt-0.5 shrink-0 ${
+              encStatus.status === 'success' ? 'text-emerald-600' : 'text-amber-600'}`} />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold text-slate-800 mb-1">
+                Encashment {encStatus.status === 'success' ? 'completed' : 'completed with warnings'} — {periodLabel}
+              </div>
+              <div className="text-slate-600 grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                <div><div className="text-xs text-slate-400">Employees</div><div className="font-semibold">{encStatus.records_processed}</div></div>
+                <div><div className="text-xs text-slate-400">Days Encashed</div><div className="font-semibold">{Number(encStatus.total_days_encashed).toFixed(2)}</div></div>
+                <div><div className="text-xs text-slate-400">Total Pay (AED)</div><div className="font-semibold">{Number(encStatus.total_pay).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</div></div>
+                <div><div className="text-xs text-slate-400">Run by</div><div className="font-semibold">{encStatus.triggered_by}</div></div>
+              </div>
+              {encStatus.missing_salaries?.length > 0 && (
+                <div className="mt-2 text-xs text-amber-700">
+                  ⚠ {encStatus.missing_salaries.length} employee(s) had no salary on record — encashment pay set to 0:&nbsp;
+                  {encStatus.missing_salaries.join(', ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {!encLoading && (encStatus === null || encStatus === 'not_run') && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-500 flex items-center gap-2">
+            <HeroIcons.InformationCircleIcon className="w-4 h-4 text-slate-400 shrink-0" />
+            No encashment run found for {periodLabel}.
+          </div>
+        )}
+
+        {/* Feedback message */}
+        {encMsg && (
+          <div className={`rounded-xl border px-4 py-3 text-sm flex items-center gap-2 ${
+            encMsg.type === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                 : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
+            {encMsg.type === 'ok'
+              ? <HeroIcons.CheckCircleIcon className="w-4 h-4 shrink-0" />
+              : <HeroIcons.ExclamationCircleIcon className="w-4 h-4 shrink-0" />}
+            {encMsg.text}
+          </div>
+        )}
+
+        {/* Run button (HR-only, disabled if already run) */}
+        {isHRManager && (
+          <div className="flex items-center gap-3">
+            <button type="button"
+              disabled={alreadyRun || encRunning}
+              onClick={() => setEncConfirm(true)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                alreadyRun
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+              }`}>
+              <HeroIcons.BanknotesIcon className="w-4 h-4" />
+              {encRunning ? 'Running…' : alreadyRun ? `Already run for ${periodLabel}` : `Run Encashment for ${periodLabel}`}
+            </button>
+            {alreadyRun && (
+              <span className="text-xs text-slate-500">
+                Completed on {encStatus?.executed_at ? new Date(encStatus.executed_at).toLocaleDateString() : '—'}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Confirm modal */}
+        {encConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+              <h3 className="text-base font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                <HeroIcons.BanknotesIcon className="w-5 h-5 text-blue-600" />
+                Confirm Encashment
+              </h3>
+              <p className="text-sm text-slate-600 mb-4">
+                This will encash all unused leave balances for <strong>{periodLabel}</strong> using the
+                formula: <code className="text-xs bg-slate-100 px-1 rounded">days × (salary ÷ {LEAVE_ENCASHMENT_WORKING_DAYS})</code>.
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => setEncConfirm(false)}
+                  className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button type="button" onClick={handleRunEncashment}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors">
+                  Yes, Run Encashment
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Preview / Results table */}
+        {encPreview && encPreview.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">
+                {encStatus && encStatus !== 'not_run' ? 'Encashment Results' : 'Preview'} — {periodLabel}
+              </h3>
+              <span className="text-xs text-slate-400">{encPreview.length} employees</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-500 uppercase tracking-wide">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Employee</th>
+                    <th className="px-3 py-2 text-right">Earned</th>
+                    <th className="px-3 py-2 text-right">Taken</th>
+                    <th className="px-3 py-2 text-right">Days Encashed</th>
+                    <th className="px-3 py-2 text-right">Monthly Salary</th>
+                    <th className="px-3 py-2 text-right">Daily Rate</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-700">Pay (AED)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {encPreview.map((row, i) => (
+                    <tr key={row.employee_code || i} className="hover:bg-slate-50">
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-slate-800">{row.employee_name}</div>
+                        <div className="text-slate-400">{row.employee_code}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-slate-600">{Number(row.earned).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right text-slate-600">{Number(row.taken).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-blue-700">{Number(row.days_encashed).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right text-slate-600">
+                        {row.monthly_salary != null ? Number(row.monthly_salary).toLocaleString('en-AE', { minimumFractionDigits: 0 }) : <span className="text-amber-500">N/A</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-slate-600">{Number(row.daily_rate).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-emerald-700">
+                        {Number(row.encashment_pay).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 font-semibold text-slate-700">
+                  <tr>
+                    <td className="px-3 py-2.5" colSpan={3}>Totals</td>
+                    <td className="px-3 py-2.5 text-right text-blue-700">
+                      {encPreview.reduce((s, r) => s + Number(r.days_encashed), 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2.5" colSpan={2} />
+                    <td className="px-3 py-2.5 text-right text-emerald-700">
+                      {encPreview.reduce((s, r) => s + Number(r.encashment_pay), 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+        {encPreview && encPreview.length === 0 && (
+          <div className="text-sm text-slate-400 text-center py-8">
+            No leave accrual records found for {periodLabel}. Run the monthly accrual first.
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderRequests = () => (
     <div className="space-y-4">
       {/* Sub-tabs */}
@@ -1028,10 +1289,11 @@ export default function LeaveDashboard() {
         </div>
       </div>
 
-      {view === 'overview'  && renderOverview()}
-      {view === 'list'      && renderList()}
-      {view === 'detail'    && renderDetail()}
-      {view === 'requests'  && renderRequests()}
+      {view === 'overview'   && renderOverview()}
+      {view === 'list'       && renderList()}
+      {view === 'detail'     && renderDetail()}
+      {view === 'requests'   && renderRequests()}
+      {view === 'encashment' && renderEncashment()}
     </div>
   )
 }

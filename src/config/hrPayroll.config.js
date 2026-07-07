@@ -1203,6 +1203,8 @@ export const IMPORT_MASTER_COLUMNS = [
   { key: 'total_deductions',   label: 'Salary Deduction',    numeric: true,                                    editable: true  },
   { key: 'deduction_details',  label: 'Deduction Details',                                                     editable: true  },
   { key: 'final_salary',       label: 'Final Salary',        numeric: true,  computed: true, highlight: true,  editable: false },
+  { key: 'leave_encashment_days', label: 'Leave Enc. Days',  numeric: true,                                    editable: false },
+  { key: 'leave_encashment_pay',  label: 'Leave Enc. Pay',   numeric: true,  highlight: true,                  editable: false },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1262,6 +1264,16 @@ export const MASTER_PAYROLL_SUMMARY_KPIS = [
     sub:     ()     => 'Net payroll = Basic + Allow − Deductions',
     currency: true,
     highlight: true,
+  },
+  {
+    id:    'leave_encashment_pay',
+    label: 'Leave Encashment Pay',
+    icon:  'BanknotesIcon',
+    tone:  'bg-indigo-50 text-indigo-700 border-indigo-200',
+    compute: (rows) => rows.reduce((s, r) => s + (parseFloat(r.leave_encashment_pay) || 0), 0),
+    format:  (v)    => v,
+    sub:     ()     => 'Total leave encashment for this period',
+    currency: true,
   },
 ]
 

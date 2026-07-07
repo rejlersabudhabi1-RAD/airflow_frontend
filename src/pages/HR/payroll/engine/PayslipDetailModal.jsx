@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
-import { formatCurrency, FIXED_EARNING_FIELDS } from '../../../../config/payrollEngine.config'
+import { formatCurrency, FIXED_EARNING_FIELDS, ATTENDANCE_LEAVE_FIELDS, PAYSLIP_EMPLOYEE_INFO_FIELDS } from '../../../../config/payrollEngine.config'
 
 export default function PayslipDetailModal({ slip: initialSlip, runEditable, onClose, onChanged }) {
   // Local mirror of the payslip so basic/housing/transport/home_leave/totals
@@ -12,6 +12,14 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [savingField, setSavingField] = useState(null)
+  // Catalog for department/designation dropdowns
+  const [catalog, setCatalog] = useState(null)
+
+  useEffect(() => {
+    payrollEngineService.getCatalog()
+      .then(setCatalog)
+      .catch(() => setCatalog({}))
+  }, [])
 
   useEffect(() => {
     setSlip(initialSlip)
@@ -114,7 +122,59 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
         </div>
 
         <div className="p-5">
+          {/* Attendance & Leave — editable when run is Draft */}
+          <div className="mb-5">
+            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+              <HeroIcons.CalendarDaysIcon className="w-3.5 h-3.5" />
+              Attendance &amp; Leave
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {ATTENDANCE_LEAVE_FIELDS.map(({ key, label, step }) => (
+                <NumericTile
+                  key={key}
+                  fieldKey={key}
+                  label={label}
+                  step={step}
+                  value={slip[key]}
+                  editable={runEditable}
+                  saving={savingField === key}
+                  onCommit={(val) => handleFixedEarningChange(key, val)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Employee Info — joining date, department, designation */}
+          <div className="mb-5">
+            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+              <HeroIcons.UserCircleIcon className="w-3.5 h-3.5" />
+              Employee Info
+              <span className="text-[9px] font-normal normal-case text-slate-400 ml-1">changes sync to Employees tab</span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {PAYSLIP_EMPLOYEE_INFO_FIELDS.map(({ key, label, type, optionsFrom }) => (
+                <InfoTile
+                  key={key}
+                  fieldKey={key}
+                  label={label}
+                  fieldType={type}
+                  suggestions={optionsFrom && catalog?.[optionsFrom] ? catalog[optionsFrom] : []}
+                  value={slip[key]}
+                  editable={runEditable}
+                  saving={savingField === key}
+                  onCommit={(val) => handleFixedEarningChange(key, val)}
+                />
+              ))}
+            </div>
+          </div>
+
           {/* Fixed earnings — inline editable when run is in Draft */}
+          <div className="mb-1">
+            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1.5">
+              <HeroIcons.BanknotesIcon className="w-3.5 h-3.5" />
+              Salary Components
+            </h4>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             {FIXED_EARNING_FIELDS.map(({ key, label }) => (
               <FixedEarningTile
@@ -232,6 +292,114 @@ function FixedEarningTile({ fieldKey, label, value, editable, saving, onCommit }
         }}
         className="mt-0.5 w-full text-sm font-semibold tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0"
       />
+    </div>
+  )
+}
+
+/**
+ * Inline-editable tile for numeric (non-monetary) payslip fields:
+ * hours, public_holiday_days, annual_leave_days, unpaid_leave_days.
+ * Mirrors FixedEarningTile but displays plain numbers without currency formatting.
+ * step controls keyboard ↑/↓ increment (e.g. '1' for whole days, '0.5' for half-days).
+ */
+function NumericTile({ fieldKey, label, step = '1', value, editable, saving, onCommit }) {
+  const initial = value == null ? '0' : String(value)
+  const [draft, setDraft] = useState(initial)
+
+  useEffect(() => { setDraft(initial) }, [initial])
+
+  const fmt = (v) => {
+    const n = Number(v)
+    return Number.isNaN(n) ? '0' : n % 1 === 0 ? String(n) : n.toFixed(2)
+  }
+
+  if (!editable) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+        <div className="text-[10px] uppercase text-slate-500">{label}</div>
+        <div className="text-sm font-semibold tabular-nums">{fmt(value)}</div>
+      </div>
+    )
+  }
+
+  const commit = () => onCommit(draft)
+
+  return (
+    <div className="bg-white border border-indigo-200 rounded-lg p-2.5 focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-200">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase text-slate-500">{label}</span>
+        {saving && <HeroIcons.ArrowPathIcon className="w-3 h-3 text-indigo-500 animate-spin" />}
+      </div>
+      <input
+        type="number"
+        step={step}
+        min="0"
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+          if (e.key === 'Escape') { setDraft(initial); e.currentTarget.blur() }
+        }}
+        className="mt-0.5 w-full text-sm font-semibold tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0"
+      />
+    </div>
+  )
+}
+
+/**
+ * Editable tile for snapshot employee-info fields (date, text, datalist).
+ * Saves on blur/Enter; shows suggestions from catalog for datalist type.
+ */
+function InfoTile({ fieldKey, label, fieldType, suggestions = [], value, editable, saving, onCommit }) {
+  const initial = value == null ? '' : String(value).slice(0, 10) // trim date if needed
+  const [draft, setDraft] = useState(initial)
+  const listId = `info-${fieldKey}-list`
+
+  useEffect(() => { setDraft(value == null ? '' : String(value).slice(0, 10)) }, [value])
+
+  if (!editable) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+        <div className="text-[10px] uppercase text-slate-500">{label}</div>
+        <div className="text-sm font-medium text-slate-700 truncate">{value || '—'}</div>
+      </div>
+    )
+  }
+
+  const commit = () => { if (draft !== initial) onCommit(draft) }
+
+  const inputCls = 'mt-0.5 w-full text-sm text-slate-800 bg-transparent border-0 p-0 focus:outline-none focus:ring-0'
+
+  return (
+    <div className="bg-white border border-violet-200 rounded-lg p-2.5 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-200">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase text-slate-500">{label}</span>
+        {saving && <HeroIcons.ArrowPathIcon className="w-3 h-3 text-violet-500 animate-spin" />}
+      </div>
+      {fieldType === 'date' ? (
+        <input type="date" value={draft} disabled={saving}
+          onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          className={inputCls} />
+      ) : fieldType === 'datalist' ? (
+        <>
+          <input type="text" list={listId} value={draft} disabled={saving}
+            placeholder="Type or select…"
+            onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            className={inputCls} />
+          <datalist id={listId}>
+            {suggestions.map((s) => <option key={s} value={s} />)}
+          </datalist>
+        </>
+      ) : (
+        <input type="text" value={draft} disabled={saving}
+          onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          className={inputCls} />
+      )}
     </div>
   )
 }

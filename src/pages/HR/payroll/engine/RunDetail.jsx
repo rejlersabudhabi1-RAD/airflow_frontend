@@ -10,6 +10,7 @@ import StatusBadge from './StatusBadge'
 import PayslipDetailModal from './PayslipDetailModal'
 import BulkDeductionModal from './BulkDeductionModal'
 import ComparisonPanel from './ComparisonPanel'
+import ExternalUploadPanel from './ExternalUploadPanel'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -60,6 +61,7 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
   const [search, setSearch] = useState('')
   const [selectedSlip, setSelectedSlip] = useState(null)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [showUploadPanel, setShowUploadPanel] = useState(false)
   const [deletingSlipId, setDeletingSlipId] = useState(null)
 
   const load = async () => {
@@ -223,6 +225,17 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
                 Deduction
               </button>
             )}
+            {/* Quick upload buttons in header — trigger the ExternalUploadPanel below */}
+            {run.status === WORKFLOW_STATUS.DRAFT && (
+              <button
+                onClick={() => setShowUploadPanel(true)}
+                title="Import ValueFrame or Sympa XLSX to update hours & salary data"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              >
+                <HeroIcons.ArrowUpTrayIcon className="w-4 h-4" />
+                Import Files
+              </button>
+            )}
             {availableTransitions.map((b) => (
               <button
                 key={b.status}
@@ -315,6 +328,16 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* External File Import — collapsible, shown right after KPI tiles */}
+      {showUploadPanel && (
+        <ExternalUploadPanel
+          runId={run.id}
+          runEditable={run.status === WORKFLOW_STATUS.DRAFT}
+          onUploaded={() => { load(); }}
+          onClose={() => setShowUploadPanel(false)}
+        />
       )}
 
       {/* Payslip table */}
