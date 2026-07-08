@@ -59,8 +59,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['assets/Rejlers_Logo.png', 'favicon.ico'],
         manifest: {
-          name: 'RAD AI Platform - Rejlers Abu Dhabi',
-          short_name: 'RAD AI',
+          name: 'RADAI',
+          short_name: 'RADAI',
           description: 'Next-generation AI-powered engineering workspace for the Oil & Gas industry',
           theme_color: '#0A1628',
           background_color: '#0A1628',

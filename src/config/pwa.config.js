@@ -11,7 +11,7 @@ export const PWA_MODAL_CONFIG = {
   // Modal Header
   header: {
     logo: '/assets/Rejlers_Logo.png', // Professional Rejlers branding
-    title: 'Install RAD AI Platform',
+    title: 'Install RADAI',
     subtitle: 'Get instant access from your desktop',
     badge: {
       text: 'One-Click Install',
@@ -21,7 +21,7 @@ export const PWA_MODAL_CONFIG = {
 
   // App Information
   appInfo: {
-    name: 'RAD AI Platform',
+    name: 'RADAI',
     tagline: 'AI-Powered Engineering for Oil & Gas',
     description: 'Transform your workflow with intelligent P&ID verification, automated compliance checking, and real-time collaboration - all from your desktop.',
     publisher: 'Rejlers Abu Dhabi',

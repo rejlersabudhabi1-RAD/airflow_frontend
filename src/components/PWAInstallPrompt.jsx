@@ -5,6 +5,8 @@ import PWAInstallModal from './PWAInstallModal'
  * PWA Install Prompt Component
  * Shows "Download Desktop App" button when PWA is installable
  * Opens professional modal before browser prompt
+ * 
+ * NOTE: In development (localhost), button always shows for testing
  */
 const PWAInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
@@ -12,15 +14,27 @@ const PWAInstallPrompt = () => {
   const [isInstalled, setIsInstalled] = useState(false)
   const [showModal, setShowModal] = useState(false)
 
+  // Check if running on localhost (development mode)
+  const isDevelopment = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1'
+
   useEffect(() => {
     // Check if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
+      console.log('✅ PWA: Already installed (standalone mode)')
       return
+    }
+
+    // In development mode, always show the install button for testing
+    if (isDevelopment) {
+      setShowInstall(true)
+      console.log('🔧 PWA: Development mode - Install button visible for testing')
     }
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e) => {
+      console.log('✅ PWA: beforeinstallprompt event fired')
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault()
       // Stash the event so it can be triggered later
@@ -31,6 +45,7 @@ const PWAInstallPrompt = () => {
 
     // Listen for successful installation
     const handleAppInstalled = () => {
+      console.log('✅ PWA: App installed successfully')
       setIsInstalled(true)
       setShowInstall(false)
       setDeferredPrompt(null)
@@ -39,6 +54,17 @@ const PWAInstallPrompt = () => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
 
+    // Debug: Check service worker registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(() => {
+        console.log('✅ PWA: Service Worker is ready')
+      }).catch(err => {
+        console.error('❌ PWA: Service Worker not ready:', err)
+      })
+    } else {
+      console.warn('⚠️ PWA: Service Workers not supported in this browser')
+    }
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
       window.removeEventListener('appinstalled', handleAppInstalled)
@@ -46,13 +72,23 @@ const PWAInstallPrompt = () => {
   }, [])
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return
-    // Show our custom modal first
+    // Show our custom modal (works in both dev and production)
     setShowModal(true)
   }
 
   const handleModalInstall = async () => {
-    if (!deferredPrompt) return
+    // If no deferred prompt (development mode), just show console message
+    if (!deferredPrompt) {
+      console.log('ℹ️ PWA: In development mode. In production, this will trigger browser install prompt.')
+      console.log('ℹ️ PWA: To test installation locally, serve the built app over HTTPS or use Chrome DevTools')
+      
+      // Close modal after showing message
+      setShowModal(false)
+      
+      // Show alert for user feedback
+      alert('Development Mode:\n\nThe install prompt will work in production (https://www.radai.ae).\n\nTo test locally:\n1. Build the app: npm run build\n2. Serve over HTTPS\n3. Or use Chrome DevTools > Application > Manifest > "Install"')
+      return
+    }
 
     // Close modal
     setShowModal(false)
@@ -114,7 +150,7 @@ const PWAInstallPrompt = () => {
                 Download Desktop App
               </div>
               <div className="text-cyan-100 text-xs font-semibold">
-                Install RAD AI for faster access
+                Install RADAI for faster access
               </div>
             </div>
 
