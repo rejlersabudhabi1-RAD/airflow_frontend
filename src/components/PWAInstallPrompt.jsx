@@ -3,49 +3,56 @@ import PWAInstallModal from './PWAInstallModal'
 
 /**
  * PWA Install Prompt Component
- * Shows "Download Desktop App" button when PWA is installable
- * Opens professional modal before browser prompt
+ * Shows "Download Desktop App" button for PWA installation
  * 
- * NOTE: In development (localhost), button always shows for testing
+ * Strategy:
+ * - Always shows button by default (except if already installed)
+ * - Captures beforeinstallprompt event when available
+ * - Provides fallback instructions if browser doesn't support PWA
  */
 const PWAInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [showInstall, setShowInstall] = useState(false)
+  const [showInstall, setShowInstall] = useState(true) // Show by default
   const [isInstalled, setIsInstalled] = useState(false)
   const [showModal, setShowModal] = useState(false)
 
-  // Check if running on localhost (development mode)
-  const isDevelopment = window.location.hostname === 'localhost' || 
-                        window.location.hostname === '127.0.0.1'
-
   useEffect(() => {
-    // Check if already installed
+    console.log('🚀 PWA: Component mounted, checking installation status...')
+    
+    // Check if already installed (standalone mode)
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
-      console.log('✅ PWA: Already installed (standalone mode)')
+      setShowInstall(false)
+      console.log('✅ PWA: Already installed (running in standalone mode)')
       return
     }
 
-    // In development mode, always show the install button for testing
-    if (isDevelopment) {
-      setShowInstall(true)
-      console.log('🔧 PWA: Development mode - Install button visible for testing')
+    // Check if running as PWA on iOS
+    if (window.navigator.standalone === true) {
+      setIsInstalled(true)
+      setShowInstall(false)
+      console.log('✅ PWA: Already installed (iOS standalone)')
+      return
     }
+
+    // Show the install button by default
+    setShowInstall(true)
+    console.log('📱 PWA: Install button visible')
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e) => {
-      console.log('✅ PWA: beforeinstallprompt event fired')
+      console.log('✅ PWA: beforeinstallprompt event captured!')
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault()
       // Stash the event so it can be triggered later
       setDeferredPrompt(e)
-      // Show the install button
+      // Ensure button is visible
       setShowInstall(true)
     }
 
     // Listen for successful installation
     const handleAppInstalled = () => {
-      console.log('✅ PWA: App installed successfully')
+      console.log('🎉 PWA: App installed successfully!')
       setIsInstalled(true)
       setShowInstall(false)
       setDeferredPrompt(null)
@@ -54,16 +61,29 @@ const PWAInstallPrompt = () => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
 
-    // Debug: Check service worker registration
+    // Check service worker status
     if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        console.log(`✅ PWA: ${registrations.length} service worker(s) registered`)
+        if (registrations.length > 0) {
+          registrations.forEach(reg => {
+            console.log('   - SW State:', reg.active ? reg.active.state : 'no active worker')
+          })
+        }
+      })
+      
       navigator.serviceWorker.ready.then(() => {
-        console.log('✅ PWA: Service Worker is ready')
+        console.log('✅ PWA: Service Worker is ready and active')
       }).catch(err => {
-        console.error('❌ PWA: Service Worker not ready:', err)
+        console.error('❌ PWA: Service Worker error:', err)
       })
     } else {
       console.warn('⚠️ PWA: Service Workers not supported in this browser')
     }
+
+    // Debug: Log current URL and protocol
+    console.log(`📍 PWA: Running on ${window.location.protocol}//${window.location.host}`)
+    console.log(`🔐 PWA: HTTPS: ${window.location.protocol === 'https:'}`)
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -77,43 +97,73 @@ const PWAInstallPrompt = () => {
   }
 
   const handleModalInstall = async () => {
-    // If no deferred prompt (development mode), just show console message
-    if (!deferredPrompt) {
-      console.log('ℹ️ PWA: In development mode. In production, this will trigger browser install prompt.')
-      console.log('ℹ️ PWA: To test installation locally, serve the built app over HTTPS or use Chrome DevTools')
+    // If we have a deferred prompt, use the browser's native install flow
+    if (deferredPrompt) {
+      console.log('📱 PWA: Triggering native browser install prompt...')
       
-      // Close modal after showing message
+      // Close modal
       setShowModal(false)
-      
-      // Show alert for user feedback
-      alert('Development Mode:\n\nThe install prompt will work in production (https://www.radai.ae).\n\nTo test locally:\n1. Build the app: npm run build\n2. Serve over HTTPS\n3. Or use Chrome DevTools > Application > Manifest > "Install"')
+
+      // Small delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Show the browser's native install prompt
+      deferredPrompt.prompt()
+
+      // Wait for the user to respond to the prompt
+      const { outcome } = await deferredPrompt.userChoice
+
+      if (outcome === 'accepted') {
+        console.log('✅ PWA: User accepted installation')
+      } else {
+        console.log('❌ PWA: User dismissed installation')
+      }
+
+      // Clear the deferred prompt
+      setDeferredPrompt(null)
       return
     }
 
+    // No deferred prompt - provide manual installation instructions
+    console.log('ℹ️ PWA: No beforeinstallprompt event - showing manual instructions')
+    
     // Close modal
     setShowModal(false)
-
-    // Small delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 300))
-
-    // Show the browser's native install prompt
-    deferredPrompt.prompt()
-
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice
-
-    if (outcome === 'accepted') {
-      console.log('✅ User accepted PWA installation')
+    
+    // Detect browser
+    const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
+    const isEdge = /Edg/.test(navigator.userAgent)
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)
+    const isFirefox = /Firefox/.test(navigator.userAgent)
+    
+    let instructions = 'To install RADAI:\n\n'
+    
+    if (isChrome || isEdge) {
+      instructions += 'Chrome/Edge:\n'
+      instructions += '1. Click the ⋮ (menu) button in the top-right\n'
+      instructions += '2. Select "Install RADAI" or "Install app"\n'
+      instructions += '3. Click "Install" in the confirmation dialog\n\n'
+      instructions += 'Or look for the 🖥️ install icon in the address bar'
+    } else if (isSafari) {
+      instructions += 'Safari (iOS/Mac):\n'
+      instructions += '1. Tap the Share button (📤)\n'
+      instructions += '2. Scroll down and tap "Add to Home Screen"\n'
+      instructions += '3. Tap "Add" to confirm'
+    } else if (isFirefox) {
+      instructions += 'Firefox:\n'
+      instructions += '1. Click the ⋮ (menu) button\n'
+      instructions += '2. Select "Install" or "Add to Home Screen"\n'
+      instructions += '3. Confirm installation'
     } else {
-      console.log('❌ User dismissed PWA installation')
+      instructions += 'Your browser:\n'
+      instructions += '1. Look for install options in your browser menu\n'
+      instructions += '2. Or visit Chrome/Edge for full PWA support'
     }
-
-    // Clear the deferred prompt
-    setDeferredPrompt(null)
-    setShowInstall(false)
+    
+    alert(instructions)
   }
 
-  // Don't render if already installed or not installable
+  // Don't render if already installed
   if (isInstalled || !showInstall) return null
 
   return (
