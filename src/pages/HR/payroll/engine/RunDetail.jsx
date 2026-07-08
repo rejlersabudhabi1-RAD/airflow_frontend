@@ -1,16 +1,17 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
 import {
   formatCurrency, formatNumber, getPayslipColumns, WORKFLOW_STATUS, STATUS_LABEL,
-  canForcePayrollRun,
+  canForcePayrollRun, getCanvasMode, TABLE_SIZE_CLASSES,
 } from '../../../../config/payrollEngine.config'
 import StatusBadge from './StatusBadge'
 import PayslipDetailModal from './PayslipDetailModal'
 import BulkDeductionModal from './BulkDeductionModal'
 import ComparisonPanel from './ComparisonPanel'
 import ExternalUploadPanel from './ExternalUploadPanel'
+import './payrollTable.css'
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -46,6 +47,10 @@ const TONE_CLASS = {
 
 export default function RunDetail({ runId, onBack, canvasModeKey }) {
   const payslipColumns = useMemo(() => getPayslipColumns(canvasModeKey), [canvasModeKey])
+  const canvasMode = useMemo(() => getCanvasMode(canvasModeKey), [canvasModeKey])
+  const tableSizeClasses = useMemo(() => TABLE_SIZE_CLASSES[canvasMode.tableSize] || TABLE_SIZE_CLASSES.normal, [canvasMode])
+  const tableContainerRef = useRef(null)
+  const [isScrolledToEnd, setIsScrolledToEnd] = useState(false)
   const authUser = useSelector((s) => s.auth?.user)
   const rbacUser = useSelector((s) => s.rbac?.currentUser)
   const canForce = useMemo(
@@ -94,6 +99,23 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
       (p.snapshot_department || '').toLowerCase().includes(q)
     )
   }, [payslips, search])
+
+  // Track horizontal scroll to show/hide fade overlay
+  useEffect(() => {
+    const container = tableContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = container
+      const scrolledToEnd = scrollLeft + clientWidth >= scrollWidth - 10
+      setIsScrolledToEnd(scrolledToEnd)
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    handleScroll() // Initial check
+
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [payslips, canvasMode])
 
   const handleTransition = async (apiFn) => {
     setBusy(true); setError(null)
@@ -342,8 +364,10 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
 
       {/* Payslip table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-semibold text-slate-700">
+        <div className={`px-4 py-3 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2 ${canvasMode.tableSize === 'ultra-compact' ? 'py-2' : ''}`}>
+          <h3 className={`font-semibold text-slate-700 ${
+            canvasMode.tableSize === 'ultra-compact' ? 'text-xs' : 'text-sm'
+          }`}>
             Payslips ({filtered.length})
           </h3>
           <div className="flex items-center gap-2">
@@ -354,115 +378,164 @@ export default function RunDetail({ runId, onBack, canvasModeKey }) {
                 placeholder="Search name / emp # / dept"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-7 pr-2 py-1.5 text-xs border border-slate-300 rounded-md w-64"
+                className={`pl-7 pr-2 py-1.5 border border-slate-300 rounded-md ${
+                  canvasMode.tableSize === 'ultra-compact' ? 'text-[10px] w-48' : 'text-xs w-64'
+                }`}
               />
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500 uppercase sticky top-0 z-10">
-              <tr>
-                {payslipColumns.map((c) => (
-                  <th
-                    key={c.key}
-                    style={{ width: c.width }}
-                    className={`px-3 py-2 font-medium ${c.align === 'right' ? 'text-right' : 'text-left'}`}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((p) => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-slate-50 cursor-pointer"
-                  onClick={() => setSelectedSlip(p)}
-                >
-                  {payslipColumns.map((c) => {
-                    if (c.action === 'edit') {
-                      const editable = run.status === WORKFLOW_STATUS.DRAFT
-                      return (
-                        <td
-                          key={c.key}
-                          className="px-3 py-2 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSlip(p)}
-                            title={editable
-                              ? 'Edit salary, earnings & deductions'
-                              : `View payslip (read-only — run is ${run.status})`}
-                            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors ${
-                              editable
-                                ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                            }`}
-                          >
-                            {editable
-                              ? <HeroIcons.PencilSquareIcon className="w-3.5 h-3.5" />
-                              : <HeroIcons.EyeIcon className="w-3.5 h-3.5" />
-                            }
-                            {editable ? 'Edit' : 'View'}
-                          </button>
-                        </td>
-                      )
-                    }
-                    if (c.action === 'delete') {
-                      const editable = run.status === WORKFLOW_STATUS.DRAFT
-                      const isDeleting = deletingSlipId === p.id
-                      return (
-                        <td
-                          key={c.key}
-                          className="px-3 py-2 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            disabled={!editable || isDeleting}
-                            onClick={() => handleDeleteSlip(p)}
-                            title={editable
-                              ? `Delete payslip (e.g. terminated employee)`
-                              : `Deletion disabled — run is ${run.status}`}
-                            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors ${
-                              editable
-                                ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-                                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                            } disabled:opacity-60`}
-                          >
-                            {isDeleting
-                              ? <HeroIcons.ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
-                              : <HeroIcons.TrashIcon className="w-3.5 h-3.5" />
-                            }
-                            Delete
-                          </button>
-                        </td>
-                      )
-                    }
-                    const v = p[c.key]
-                    let display
-                    if (c.format === 'currency')      display = formatCurrency(v, { withSymbol: false })
-                    else if (c.format === 'number')   display = formatNumber(v)
-                    else if (c.format === 'date')     display = formatDate(v)
-                    else if (c.format === 'datetime') display = formatDateTime(v)
-                    else                              display = (v ?? '—')
-                    return (
-                      <td
+        {/* Enhanced table container with smooth horizontal scroll and sticky columns */}
+        <div
+          ref={tableContainerRef}
+          className={`payroll-table-container overflow-x-auto overflow-y-visible relative ${
+            canvasMode.tableSize === 'ultra-compact' ? 'ultra-compact-table' : ''
+          } ${isScrolledToEnd ? 'scrolled-to-end' : ''}`}
+          style={{ maxHeight: 'calc(100vh - 320px)' }}
+        >
+          <div className="inline-block min-w-full align-middle">
+            <div className="overflow-hidden">
+              <table className={`${tableSizeClasses.minWidth} ${tableSizeClasses.text} border-collapse`}>
+                <thead className="bg-slate-50 text-slate-500 uppercase sticky top-0 z-20 shadow-sm">
+                  <tr>
+                    {payslipColumns.map((c, idx) => (
+                      <th
                         key={c.key}
-                        title={c.key === 'snapshot_iban' && v ? v : undefined}
-                        className={`px-3 py-2 ${c.align === 'right' ? 'text-right tabular-nums' : ''} ${c.key === 'snapshot_iban' ? 'font-mono text-slate-500' : ''}`}
+                        style={{
+                          width: c.width,
+                          minWidth: c.width,
+                          ...(idx === 0 ? { left: 0 } : {}),
+                          ...(idx === 1 ? { left: payslipColumns[0]?.width || 90 } : {}),
+                        }}
+                        className={`${
+                          tableSizeClasses.headerPadding
+                        } font-medium border-b border-slate-200 ${
+                          c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'
+                        } ${
+                          // Make first two columns sticky for better navigation
+                          idx === 0 || idx === 1
+                            ? 'sticky bg-slate-50 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.05)] payroll-sticky-col'
+                            : ''
+                        }`}
+                        title={c.helpText || c.label}
                       >
-                        {display}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {filtered.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedSlip(p)}
+                    >
+                      {payslipColumns.map((c, idx) => {
+                        if (c.action === 'edit') {
+                          const editable = run.status === WORKFLOW_STATUS.DRAFT
+                          return (
+                            <td
+                              key={c.key}
+                              className={`${tableSizeClasses.cellPadding} text-center border-b border-slate-100`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSlip(p)}
+                                title={editable
+                                  ? 'Edit salary, earnings & deductions'
+                                  : `View payslip (read-only — run is ${run.status})`}
+                                className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors ${
+                                  editable
+                                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                }`}
+                              >
+                                {editable
+                                  ? <HeroIcons.PencilSquareIcon className="w-3.5 h-3.5" />
+                                  : <HeroIcons.EyeIcon className="w-3.5 h-3.5" />
+                                }
+                                {editable ? 'Edit' : 'View'}
+                              </button>
+                            </td>
+                          )
+                        }
+                        if (c.action === 'delete') {
+                          const editable = run.status === WORKFLOW_STATUS.DRAFT
+                          const isDeleting = deletingSlipId === p.id
+                          return (
+                            <td
+                              key={c.key}
+                              className={`${tableSizeClasses.cellPadding} text-center border-b border-slate-100`}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                disabled={!editable || isDeleting}
+                                onClick={() => handleDeleteSlip(p)}
+                                title={editable
+                                  ? `Delete payslip (e.g. terminated employee)`
+                                  : `Deletion disabled — run is ${run.status}`}
+                                className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors ${
+                                  editable
+                                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                    : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                                } disabled:opacity-60`}
+                              >
+                                {isDeleting
+                                  ? <HeroIcons.ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                                  : <HeroIcons.TrashIcon className="w-3.5 h-3.5" />
+                                }
+                                Delete
+                              </button>
+                            </td>
+                          )
+                        }
+                        const v = p[c.key]
+                        let display
+                        if (c.format === 'currency')      display = formatCurrency(v, { withSymbol: false })
+                        else if (c.format === 'number')   display = formatNumber(v)
+                        else if (c.format === 'date')     display = formatDate(v)
+                        else if (c.format === 'datetime') display = formatDateTime(v)
+                        else                              display = (v ?? '—')
+                        
+                        return (
+                          <td
+                            key={c.key}
+                            title={c.key === 'snapshot_iban' && v ? v : c.helpText || undefined}
+                            className={`${
+                              tableSizeClasses.cellPadding
+                            } border-b border-slate-100 ${
+                              c.align === 'right' ? 'text-right tabular-nums' : c.align === 'center' ? 'text-center' : ''
+                            } ${
+                              c.key === 'snapshot_iban' ? 'font-mono text-slate-500' : ''
+                            } ${
+                              // Highlight new columns with subtle background
+                              c.key === 'total_worked_days' || c.key === 'employee_category'
+                                ? 'bg-indigo-50/30 new-column-highlight'
+                                : ''
+                            } ${
+                              // Make first two columns sticky
+                              idx === 0 || idx === 1
+                                ? 'sticky bg-white z-10 shadow-[2px_0_4px_rgba(0,0,0,0.05)] payroll-sticky-col'
+                                : ''
+                            }`}
+                            style={{
+                              ...(idx === 0 ? { left: 0, minWidth: c.width, width: c.width } : {}),
+                              ...(idx === 1 ? { left: payslipColumns[0]?.width || 90, minWidth: c.width, width: c.width } : {}),
+                            }}
+                          >
+                            {display}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 

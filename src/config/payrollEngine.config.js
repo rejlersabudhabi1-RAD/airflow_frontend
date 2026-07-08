@@ -135,10 +135,11 @@ export const FIXED_EARNING_FIELDS = [
 // step controls the numeric input increment shown in the edit modal.
 // Add a new field here + on the model/serializer/migration → appears automatically.
 export const ATTENDANCE_LEAVE_FIELDS = [
-  { key: 'hours',               label: 'Hours (Live)',   step: '0.1'  },
-  { key: 'public_holiday_days', label: 'Public Hols',   step: '1'    },
-  { key: 'annual_leave_days',   label: 'Annual Leave',  step: '0.5'  },
-  { key: 'unpaid_leave_days',   label: 'Unpaid Leave',  step: '0.5'  },
+  { key: 'hours',               label: 'Hours (Live)',      step: '0.1', helpText: 'Total biometric hours or ValueFrame hours' },
+  { key: 'total_worked_days',   label: 'Total Worked Days', step: '0.01', helpText: 'Auto-calculated: (Hours ÷ Hours/Day) + Public Holidays + Annual Leave', readOnly: true },
+  { key: 'public_holiday_days', label: 'Public Holidays',   step: '1', helpText: 'Official public holidays in this month'    },
+  { key: 'annual_leave_days',   label: 'Annual Leave',      step: '0.5', helpText: 'Approved paid annual leave days'  },
+  { key: 'unpaid_leave_days',   label: 'Unpaid Leave',      step: '0.5', helpText: 'Unpaid leave days (deducted from salary)'  },
 ]
 
 // External file upload types — used by ExternalUploadPanel in RunDetail.
@@ -198,6 +199,7 @@ export const CANVAS_MODES = [
     containerClass: 'max-w-screen-2xl',
     paddingClass: 'px-4 sm:px-6',
     payslipColumnsKey: 'standard',
+    tableSize: 'normal',
   },
   {
     key: 'wide',
@@ -207,15 +209,27 @@ export const CANVAS_MODES = [
     containerClass: 'max-w-[110rem]',
     paddingClass: 'px-4 sm:px-6',
     payslipColumnsKey: 'expanded',
+    tableSize: 'normal',
   },
   {
     key: 'full',
-    label: 'Full Canvas',
-    description: 'Use the entire browser width — best for reviewing payslips.',
+    label: 'Full Screen',
+    description: 'Edge-to-edge layout with compact spacing — best for many columns.',
     icon: 'ArrowsPointingOutIcon',
     containerClass: 'max-w-none',
-    paddingClass: 'px-3 sm:px-4',
+    paddingClass: 'px-2',
     payslipColumnsKey: 'expanded',
+    tableSize: 'compact',
+  },
+  {
+    key: 'ultra',
+    label: 'Ultra Wide',
+    description: 'Maximum density — smallest text, minimal padding, all columns visible.',
+    icon: 'TableCellsIcon',
+    containerClass: 'max-w-none',
+    paddingClass: 'px-1',
+    payslipColumnsKey: 'expanded',
+    tableSize: 'ultra-compact',
   },
 ]
 
@@ -223,6 +237,28 @@ export const DEFAULT_CANVAS_MODE = 'comfortable'
 
 export const getCanvasMode = (key) =>
   CANVAS_MODES.find((m) => m.key === key) || CANVAS_MODES[0]
+
+// Table size classes for different canvas modes
+export const TABLE_SIZE_CLASSES = {
+  normal: {
+    text: 'text-xs',
+    headerPadding: 'px-3 py-2',
+    cellPadding: 'px-3 py-2',
+    minWidth: 'min-w-full',
+  },
+  compact: {
+    text: 'text-[11px]',
+    headerPadding: 'px-2 py-1.5',
+    cellPadding: 'px-2 py-1.5',
+    minWidth: 'min-w-full',
+  },
+  'ultra-compact': {
+    text: 'text-[10px]',
+    headerPadding: 'px-1.5 py-1',
+    cellPadding: 'px-1.5 py-1',
+    minWidth: 'min-w-full',
+  },
+}
 
 // Run table columns
 export const RUN_COLUMNS = [
@@ -245,6 +281,7 @@ export const PAYSLIP_COLUMNS = [
   { key: 'snapshot_department','label': 'Department',      width: 160 },
   { key: 'hours',              label: 'Hours ⠲(Live)',    width: 90,  align: 'right', format: 'number' },
   { key: 'days',               label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
+  { key: 'total_worked_days',  label: 'Total Worked Days', width: 120, align: 'right', format: 'number', helpText: 'Auto: (Hours ÷ Hrs/Day) + PH + AL' },
   { key: 'public_holiday_days',  label: 'Public Holidays', width: 100, align: 'right', format: 'number' },
   { key: 'annual_leave_days',   label: 'Annual Leave',    width: 100, align: 'right', format: 'number' },
   { key: 'unpaid_leave_days',   label: 'Unpaid Leave',    width: 100, align: 'right', format: 'number' },
@@ -271,6 +308,8 @@ export const PAYSLIP_COLUMNS_EXPANDED = [
   { key: 'snapshot_designation',label: 'Designation',   width: 180 },
   { key: 'hours',               label: 'Hours ⠲(Live)', width: 90,  align: 'right', format: 'number' },
   { key: 'days',                label: `Days (÷${HOURS_PER_WORKDAY}h)`, width: 90, align: 'right', format: 'number' },
+  { key: 'total_worked_days',   label: 'Total Worked Days', width: 120, align: 'right', format: 'number', helpText: '(Hours ÷ 8h or 9h) + PH + AL' },
+  { key: 'employee_category',   label: 'Category', width: 100, align: 'center', helpText: 'Emirates (8h) or Expatriate (9h)' },
   { key: 'public_holiday_days',  label: 'Public Holidays', width: 100, align: 'right', format: 'number' },
   { key: 'annual_leave_days',    label: 'Annual Leave',    width: 100, align: 'right', format: 'number' },
   { key: 'unpaid_leave_days',    label: 'Unpaid Leave',    width: 100, align: 'right', format: 'number' },

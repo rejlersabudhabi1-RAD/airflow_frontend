@@ -112,11 +112,20 @@ export default function PayrollEngine({ activeRunId, onSelectRun, onSwitchTab })
         <button
           type="button"
           onClick={cycleCanvasMode}
-          title={`Canvas: ${canvasMode.label}. Click to cycle.\n${canvasMode.description}`}
-          className="mb-1 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 whitespace-nowrap"
+          title={`Canvas: ${canvasMode.label}. Click to cycle.\n${canvasMode.description}\n\n💡 Tip: Use 'Full Screen' or 'Ultra Wide' modes to see all columns at once!`}
+          className={`mb-1 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-all ${
+            canvasMode.key === 'full' || canvasMode.key === 'ultra'
+              ? 'border-indigo-300 bg-indigo-100 text-indigo-800 shadow-sm'
+              : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700'
+          } whitespace-nowrap`}
         >
-          <CanvasIcon className="w-3.5 h-3.5" />
-          {canvasMode.label}
+          <CanvasIcon className="w-4 h-4" />
+          <span className="font-semibold">{canvasMode.label}</span>
+          {canvasMode.key === 'ultra' && (
+            <span className="ml-1 px-1 py-0.5 text-[9px] font-bold uppercase bg-purple-500 text-white rounded">
+              Max
+            </span>
+          )}
         </button>
       </div>
 
