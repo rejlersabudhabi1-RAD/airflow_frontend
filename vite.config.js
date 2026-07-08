@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import http from 'http'
 
@@ -52,16 +53,77 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['assets/Rejlers_Logo.png', 'favicon.ico'],
+        manifest: {
+          name: 'RAD AI Platform - Rejlers Abu Dhabi',
+          short_name: 'RAD AI',
+          description: 'Next-generation AI-powered engineering workspace for the Oil & Gas industry',
+          theme_color: '#0A1628',
+          background_color: '#0A1628',
+          display: 'standalone',
+          scope: '/',
+          start_url: '/login',
+          orientation: 'any',
+          icons: [
+            {
+              src: '/assets/icon-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/assets/icon-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/radai\.ae\/api\/.*/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-cache',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 5 // 5 minutes
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            }
+          ]
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module'
+        }
+      })
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
+      // Force a single instance of styled-components so all chunks share the
+      // same initialised module — prevents "styled_default is not a function"
+      // when multiple vendor chunks each try to initialise their own copy.
+      dedupe: ['styled-components', '@emotion/react', '@emotion/styled', 'react', 'react-dom'],
     },
     // Soft-coded: expose backend mode to the React app as a compile-time constant
     // Use in components: if (import.meta.env.VITE_IS_PROD_BACKEND === 'true') { ... }
+    // process.env.NODE_ENV is also defined so styled-components v6 can detect
+    // the runtime environment — without this styled_default can be undefined in ESM scope.
     define: {
       '__PROD_BACKEND__': JSON.stringify(IS_PROD_BACKEND),
+      'process.env.NODE_ENV': JSON.stringify(mode === 'production' ? 'production' : 'development'),
     },
     server: {
       host: '0.0.0.0', // Listen on all interfaces for Docker
@@ -113,6 +175,20 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
+    },
+    // Soft-coded: explicitly pre-bundle packages that use non-standard ESM
+    // default exports so Vite's esbuild can wrap them correctly.
+    // Root cause: @mui/material's TouchRipple imports styled via @mui/styled-engine
+    // which re-exports @emotion/styled. Without pre-bundling @emotion/styled,
+    // the default export resolves to undefined → "styled_default is not a function".
+    optimizeDeps: {
+      include: [
+        'styled-components',
+        '@emotion/styled',
+        '@emotion/react',
+        '@mui/styled-engine',
+        '@mui/material',
+      ],
     },
   }
 })

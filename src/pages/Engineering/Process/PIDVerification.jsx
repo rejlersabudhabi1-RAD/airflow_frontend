@@ -11,6 +11,7 @@ import {
   Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
   Search, ExternalLink, Sparkles, Maximize2, Minimize2, Wind,
   Gauge, CheckSquare, Factory, Droplet, Flame, Settings, Award, Waves, Cog, CircleDot as Valve,
+  BookOpen, HelpCircle, List, Star, FileCheck, PlayCircle,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,6 +61,124 @@ const KEYFRAMES = `
     to   { transform: scaleY(1); opacity: 1; }
   }
 `;
+
+// ── Soft-coded: INNOVATIVE 3-PANEL DASHBOARD LAYOUT Configuration ────────────
+const ENABLE_INNOVATIVE_LAYOUT   = false; // DISABLED: Use original single-column layout
+// WORKFLOW_WIDTH_PERCENT moved to "INNOVATIVE WORKFLOW LAYOUT Configuration" section below
+const DOCUMENTATION_ENABLED      = true;  // Smart AI documentation panel
+const PROJECTS_PANEL_ENABLED     = true;  // NEW: Project navigator for managing multiple P&IDs
+const LAYOUT_GAP_PX              = 12;    // Tighter gap for dashboard density
+const LAYOUT_RESPONSIVE_BREAKPT  = 'xl';  // stacks on mobile, 3-column on xl+ screens
+
+// ── Soft-coded: Workflow Diagram Scaling ───────
+const WORKFLOW_DIAGRAM_SCALE_X   = 1.0;   // 100% width — normal size
+const WORKFLOW_DIAGRAM_SCALE_Y   = 1.0;   // 100% height — normal size
+const WORKFLOW_DIAGRAM_SPACING   = 1.0;   // 100% padding — normal spacing
+const WORKFLOW_COMPACT_MODE      = false; // DISABLED: Use original card sizing
+
+// ── Soft-coded: INNOVATIVE WORKFLOW LAYOUT Configuration ─────────────────────
+// Smart workflow diagram with collapsible, compact, and split-screen modes
+
+// WORKFLOW VISIBILITY & BEHAVIOR
+const WORKFLOW_COLLAPSIBLE       = true;   // Enable collapse/expand functionality
+const WORKFLOW_DEFAULT_COLLAPSED = false;  // Start collapsed (true) or expanded (false)
+const WORKFLOW_COMPACT_DEFAULT   = true;   // Start in compact mode (smaller, efficient)
+const WORKFLOW_SHOW_CONTROLS     = true;   // Show collapse/compact toggle buttons
+
+// SPLIT-SCREEN LAYOUT (Workflow + Documentation side-by-side)
+const WORKFLOW_SPLIT_SCREEN      = true;   // Enable side-by-side layout
+const WORKFLOW_WIDTH_PERCENT     = 45;     // Workflow column width (45% = balanced)
+const DOCUMENTATION_WIDTH_PERCENT = 55;    // Documentation area width (55% = more space)
+const SPLIT_SCREEN_GAP           = '20px'; // Gap between columns
+const SPLIT_SCREEN_MIN_WIDTH     = 1024;   // px - minimum screen width for split (stacks on mobile)
+
+// COMPACT MODE SIZING (when WORKFLOW_COMPACT_DEFAULT = true)
+const COMPACT_SCALE_X            = 0.75;   // 75% width in compact mode
+const COMPACT_SCALE_Y            = 0.65;   // 65% height in compact mode  
+const COMPACT_PADDING            = 0.6;    // 60% padding in compact mode
+const COMPACT_CARD_SIZE          = 0.8;    // 80% card/icon size
+
+// WORKFLOW CONTAINER STYLING
+const WORKFLOW_BG_COLOR          = '#ffffff';        // Background color
+const WORKFLOW_BORDER_COLOR      = '#e2e8f0';        // Border color
+const WORKFLOW_BORDER_RADIUS     = '16px';           // Corner radius
+const WORKFLOW_SHADOW            = '0 1px 3px rgba(0,0,0,0.08)'; // Box shadow
+const WORKFLOW_COLLAPSED_HEIGHT  = '60px';           // Height when collapsed (title bar only)
+
+// ANIMATION
+const WORKFLOW_COLLAPSE_DURATION = '400ms';          // Collapse/expand animation speed
+const WORKFLOW_TRANSITION_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'; // Smooth easing
+
+// ── Soft-coded: SMART UI REDESIGN Configuration ──────────────────────────────
+// Professional, clean engineering UI with full customization control
+
+// HEADER & BRANDING
+const HEADER_SHOW_GRADIENT_BG    = true;  // Enable subtle gradient background on page header
+const HEADER_GRADIENT_FROM       = 'rgba(59,130,246,0.03)';  // Blue tint start
+const HEADER_GRADIENT_TO         = 'rgba(99,102,241,0.06)';  // Indigo tint end
+const HEADER_ICON_SIZE           = 40;    // px - main page icon size
+const HEADER_ICON_BG_STYLE       = 'gradient'; // 'solid', 'gradient', 'outline'
+const HEADER_SHOW_STATUS_BADGE   = true;  // Show "Production Ready" or similar badge
+const HEADER_BADGE_TEXT          = 'Production Ready'; // Badge text
+const HEADER_BADGE_COLOR         = '#10b981'; // Badge color (green)
+
+// TYPOGRAPHY
+const HEADING_MAIN_SIZE          = '2.5rem';    // Main page title size
+const HEADING_MAIN_WEIGHT        = 800;         // Font weight (400-900)
+const HEADING_SUB_SIZE           = '0.95rem';   // Subtitle/description size
+const HEADING_SUB_COLOR          = '#64748b';   // Subtitle color
+const FEATURE_BADGE_SIZE         = '0.75rem';   // Feature badges text size
+const FEATURE_BADGE_STYLE        = 'pill';      // 'pill', 'rounded', 'square'
+
+// PROJECT CARDS
+const CARD_BORDER_RADIUS         = '16px';      // Card corner radius
+const CARD_PADDING               = '24px';      // Internal card padding
+const CARD_GAP                   = '20px';      // Gap between cards in grid
+const CARD_SHADOW_DEFAULT        = '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)';
+const CARD_SHADOW_HOVER          = '0 10px 25px rgba(59,130,246,0.15), 0 4px 10px rgba(0,0,0,0.08)';
+const CARD_BORDER_COLOR          = '#e2e8f0';  // Default border
+const CARD_BORDER_HOVER_COLOR    = '#3b82f6';  // Hover border color
+const CARD_HOVER_LIFT            = '-4px';     // Vertical lift on hover
+const CARD_HOVER_SCALE           = 1.01;       // Scale on hover (1.0 = no scale)
+const CARD_TRANSITION_SPEED      = '250ms';    // Transition duration
+const CARD_ICON_SIZE             = 48;         // px - project icon size
+const CARD_ICON_BG               = 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)';
+const CARD_SHOW_ACCENT_LINE      = true;       // Top accent line on cards
+const CARD_ACCENT_HEIGHT         = '3px';      // Accent line thickness
+
+// BUTTONS
+const BUTTON_PRIMARY_BG          = 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)';
+const BUTTON_PRIMARY_HOVER_BG    = 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)';
+const BUTTON_BORDER_RADIUS       = '12px';     // Button corner radius
+const BUTTON_PADDING_X           = '20px';     // Horizontal padding
+const BUTTON_PADDING_Y           = '12px';     // Vertical padding
+const BUTTON_FONT_WEIGHT         = 600;        // Font weight
+const BUTTON_SHADOW              = '0 4px 12px rgba(59,130,246,0.25)';
+const BUTTON_HOVER_LIFT          = '-2px';     // Vertical lift on hover
+const BUTTON_ICON_SIZE           = 18;         // px - icon size in buttons
+
+// EMPTY STATE
+const EMPTY_STATE_ICON_SIZE      = 80;         // px - large icon when no projects
+const EMPTY_STATE_BG             = '#fafafa';  // Background color
+const EMPTY_STATE_BORDER_STYLE   = 'dashed';   // 'solid', 'dashed', 'none'
+const EMPTY_STATE_BORDER_COLOR   = '#cbd5e1';  // Border color
+const EMPTY_STATE_PADDING        = '64px';     // Internal padding
+
+// COLORS & ACCENTS
+const COLOR_PRIMARY              = '#3b82f6';  // Primary blue
+const COLOR_PRIMARY_LIGHT        = '#60a5fa';  // Light blue
+const COLOR_SUCCESS              = '#10b981';  // Green
+const COLOR_WARNING              = '#f59e0b';  // Amber
+const COLOR_DANGER               = '#ef4444';  // Red
+const COLOR_TEXT_PRIMARY         = '#0f172a';  // Dark text
+const COLOR_TEXT_SECONDARY       = '#64748b';  // Medium gray text
+const COLOR_TEXT_TERTIARY        = '#94a3b8';  // Light gray text
+
+// ANIMATIONS
+const ANIMATION_CARD_ENTRANCE    = 'fadeUp';   // Card entrance animation
+const ANIMATION_ENTRANCE_DELAY   = 0.05;       // seconds - stagger between cards
+const ANIMATION_ENTRANCE_DURATION = '0.5s';    // Card entrance duration
+const ANIMATION_HOVER_DURATION   = CARD_TRANSITION_SPEED; // Hover animation speed
 
 // ── Soft-coded: icon rail nav button appearance ───────────────────────────────
 // NAV_RAIL_ENTRY_DELAY_MS   : stagger between each button's entry animation (ms)
@@ -1130,6 +1249,14 @@ const PIDVerification = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [legendFile,      setLegendFile]      = useState(null);
   const [legendKnowledge, setLegendKnowledge] = useState(null);
+
+  // ── Smart Workflow UI Controls (Collapsible + Compact Mode) ──────────────
+  const [workflowCollapsed, setWorkflowCollapsed] = useState(WORKFLOW_DEFAULT_COLLAPSED);
+  const [workflowCompact,   setWorkflowCompact]   = useState(WORKFLOW_COMPACT_DEFAULT);
+
+  // ── Documentation Workspace UI State ──────────────────────────────────────
+  const [docActiveTab,      setDocActiveTab]      = useState('quickstart'); // 'quickstart'|'rules'|'practices'|'faq'|'formats'
+  const [docExpandedItems,  setDocExpandedItems]  = useState({}); // { [itemId]: true/false }
   const [buildingLegend,  setBuildingLegend]  = useState(false);
   // Per-project legend status: 'project' | 'global' | null
   const [legendScope,     setLegendScope]     = useState(null);
@@ -2570,568 +2697,1076 @@ const PIDVerification = () => {
   if (!selectedProject) {
     return (
       <DarkBg>
+        <style>{`
+          /* Responsive workflow split-screen */
+          @media (max-width: ${SPLIT_SCREEN_MIN_WIDTH - 1}px) {
+            .workflow-split-container {
+              display: block !important;
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
         <div className="w-full px-2 sm:px-4 lg:px-6 py-10">
 
-          {/* Page header */}
-          <div className="mb-10" style={{ animation:'fadeUp 0.6s ease-out both' }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-1 h-7 rounded-full" style={{ background:'linear-gradient(180deg,#3b82f6,#6366f1)' }} />
-              <span className="text-blue-600 text-xs font-bold tracking-[0.3em] uppercase">AIFlow · Engineering Suite</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-3">
-              P&amp;ID Verification{' '}
-              <span style={{ background:'linear-gradient(90deg,#3b82f6,#6366f1)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-                Quality Checker
-              </span>
-            </h1>
-            <p className="text-slate-500 max-w-xl text-sm sm:text-base">
-              Deterministic rule engine — 20+ engineering compliance checks per drawing. Tag, connectivity, valve &amp; line size validation.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-5">
-              {[
-                { icon:'🏷️', label:'Tag Validation',      cls:'bg-blue-50 border-blue-200 text-blue-700'       },
-                { icon:'🔗', label:'Connectivity Checks',  cls:'bg-indigo-50 border-indigo-200 text-indigo-700' },
-                { icon:'🔧', label:'Valve Compliance',     cls:'bg-purple-50 border-purple-200 text-purple-700' },
-                { icon:'📐', label:'Line Size Rules',      cls:'bg-amber-50 border-amber-200 text-amber-700'    },
-              ].map(b => (
-                <span key={b.label} className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium ${b.cls}`}>
-                  <span>{b.icon}</span>{b.label}
-                </span>
-              ))}
+          {/* ═══ SMART REDESIGNED HEADER ═══ */}
+          <div className="mb-12" style={{ 
+            animation: `${ANIMATION_CARD_ENTRANCE} ${ANIMATION_ENTRANCE_DURATION} ease-out both`,
+            ...(HEADER_SHOW_GRADIENT_BG && {
+              background: `linear-gradient(135deg, ${HEADER_GRADIENT_FROM} 0%, ${HEADER_GRADIENT_TO} 100%)`,
+              borderRadius: CARD_BORDER_RADIUS,
+              padding: '32px',
+              border: `1px solid ${CARD_BORDER_COLOR}`
+            })
+          }}>
+            <div className="flex items-start justify-between gap-6 flex-wrap">
+              {/* Left: Icon + Title + Description */}
+              <div className="flex items-start gap-5 flex-1">
+                {/* Icon */}
+                <div style={{ 
+                  width: `${HEADER_ICON_SIZE}px`,
+                  height: `${HEADER_ICON_SIZE}px`,
+                  borderRadius: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  background: HEADER_ICON_BG_STYLE === 'gradient' 
+                    ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
+                    : HEADER_ICON_BG_STYLE === 'solid' 
+                    ? COLOR_PRIMARY 
+                    : 'transparent',
+                  border: HEADER_ICON_BG_STYLE === 'outline' ? `2px solid ${COLOR_PRIMARY}` : 'none',
+                  boxShadow: HEADER_ICON_BG_STYLE !== 'outline' ? '0 4px 14px rgba(59,130,246,0.3)' : 'none'
+                }}>
+                  <Shield className="text-white" style={{ width: `${HEADER_ICON_SIZE * 0.55}px`, height: `${HEADER_ICON_SIZE * 0.55}px` }} />
+                </div>
+
+                {/* Title & Description */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <h1 style={{ 
+                      fontSize: HEADING_MAIN_SIZE,
+                      fontWeight: HEADING_MAIN_WEIGHT,
+                      color: COLOR_TEXT_PRIMARY,
+                      lineHeight: 1.2,
+                      margin: 0
+                    }}>
+                      P&ID Verification
+                    </h1>
+                    {HEADER_SHOW_STATUS_BADGE && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        background: `${HEADER_BADGE_COLOR}15`,
+                        color: HEADER_BADGE_COLOR,
+                        border: `1px solid ${HEADER_BADGE_COLOR}30`
+                      }}>
+                        <CheckCircle style={{ width: '14px', height: '14px' }} />
+                        {HEADER_BADGE_TEXT}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ 
+                    fontSize: HEADING_SUB_SIZE,
+                    color: HEADING_SUB_COLOR,
+                    margin: 0,
+                    maxWidth: '680px',
+                    lineHeight: 1.6
+                  }}>
+                    AI-powered compliance engine with 20+ deterministic checks. Validates P&ID drawings against ISA-5.1 standards for tag naming, connectivity, valve specs, and line sizing.
+                  </p>
+
+                  {/* Feature Badges */}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {[
+                      { icon: <CheckCircle className="w-3.5 h-3.5" />, label: 'Tag Validation', color: COLOR_PRIMARY },
+                      { icon: <Network className="w-3.5 h-3.5" />, label: 'Connectivity', color: '#6366f1' },
+                      { icon: <Wrench className="w-3.5 h-3.5" />, label: 'Valve Compliance', color: '#8b5cf6' },
+                      { icon: <Ruler className="w-3.5 h-3.5" />, label: 'Line Sizing', color: COLOR_WARNING },
+                    ].map((badge, idx) => (
+                      <span key={idx} style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: FEATURE_BADGE_STYLE === 'pill' ? '6px 14px' : '6px 12px',
+                        borderRadius: FEATURE_BADGE_STYLE === 'pill' ? '20px' : FEATURE_BADGE_STYLE === 'rounded' ? '8px' : '4px',
+                        fontSize: FEATURE_BADGE_SIZE,
+                        fontWeight: 500,
+                        background: `${badge.color}08`,
+                        color: badge.color,
+                        border: `1px solid ${badge.color}20`
+                      }}>
+                        {badge.icon}
+                        {badge.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Quick Stats (optional - shown when projects exist) */}
+              {projects.length > 0 && (
+                <div className="flex gap-6">
+                  <div className="text-center">
+                    <div style={{ fontSize: '1.75rem', fontWeight: 700, color: COLOR_PRIMARY, lineHeight: 1 }}>
+                      {projects.length}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: COLOR_TEXT_TERTIARY, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Projects
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div style={{ fontSize: '1.75rem', fontWeight: 700, color: COLOR_SUCCESS, lineHeight: 1 }}>
+                      {projects.reduce((sum, p) => sum + (p.document_count || 0), 0)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: COLOR_TEXT_TERTIARY, marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Drawings
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* User Guide - Oil & Gas Industry Workflow */}
-          <div className="mb-10" style={{ animation:'fadeUp 0.7s ease-out 0.2s both' }}>
-            <style>{`
-              /* Oil & Gas Industry Theme - Soft Coded Animations */
-              @keyframes pipelineFlow {
-                0% { stroke-dashoffset: 100; opacity: 0.3; }
-                50% { opacity: 1; }
-                100% { stroke-dashoffset: 0; opacity: 0.3; }
-              }
-              @keyframes refineryPulse {
-                0%, 100% { 
-                  box-shadow: 0 0 30px rgba(10,75,120,0.5), 0 0 50px rgba(245,158,11,0.3), inset 0 0 20px rgba(255,255,255,0.1);
-                  transform: scale(1);
-                }
-                50% { 
-                  box-shadow: 0 0 50px rgba(10,75,120,0.8), 0 0 80px rgba(245,158,11,0.5), inset 0 0 30px rgba(255,255,255,0.2);
-                  transform: scale(1.03);
-                }
-              }
-              @keyframes industrialSpin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              @keyframes valveRotate {
-                0%, 100% { transform: rotate(-20deg); opacity: 0.7; }
-                50% { transform: rotate(20deg); opacity: 1; }
-              }
-              @keyframes safetyGlow {
-                0%, 100% { 
-                  box-shadow: 0 0 25px rgba(16,185,129,0.5), 0 0 45px rgba(52,211,153,0.3);
-                  filter: brightness(1);
-                }
-                50% { 
-                  box-shadow: 0 0 45px rgba(16,185,129,0.8), 0 0 70px rgba(52,211,153,0.5);
-                  filter: brightness(1.1);
-                }
-              }
-              @keyframes flowIndicator {
-                0% { transform: translateX(-150%) scale(0); opacity: 0; }
-                50% { opacity: 1; transform: translateX(0%) scale(1); }
-                100% { opacity: 0; transform: translateX(150%) scale(0); }
-              }
-              @keyframes platformFloat {
-                0%, 100% { transform: translateY(0px) rotate(0deg); }
-                50% { transform: translateY(-10px) rotate(1deg); }
-              }
-              @keyframes energyBurst {
-                0% { transform: translate(0, 0) scale(0); opacity: 0; }
-                40% { opacity: 0.9; }
-                100% { transform: translate(var(--tx, 50px), var(--ty, -50px)) scale(1.8); opacity: 0; }
-              }
-              @keyframes industrialShimmer {
-                0% { transform: translateX(-100%) skewX(-20deg); opacity: 0; }
-                50% { opacity: 0.6; }
-                100% { transform: translateX(200%) skewX(-20deg); opacity: 0; }
-              }
-              @keyframes steamRise {
-                0% { transform: translateY(0) scale(1); opacity: 0; }
-                50% { opacity: 0.6; }
-                100% { transform: translateY(-40px) scale(1.5); opacity: 0; }
-              }
-              @keyframes cardElevate {
-                0%, 100% { transform: translateY(0px) rotateX(0deg); box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-                50% { transform: translateY(-8px) rotateX(2deg); box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
-              }
-            `}</style>
-
-            <div className="relative rounded-3xl p-10 overflow-hidden" style={{ 
-              background: 'linear-gradient(135deg, rgba(15,23,42,0.97) 0%, rgba(30,41,59,0.95) 50%, rgba(15,23,42,0.97) 100%)',
-              border: '2px solid rgba(100,116,139,0.3)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(148,163,184,0.1) inset, 0 0 80px rgba(245,158,11,0.15)',
-              backdropFilter: 'blur(24px)'
+          {/* ═══ SMART WORKFLOW SECTION (Collapsible + Split-Screen Mode) ═══ */}
+          <div style={{
+            display: WORKFLOW_SPLIT_SCREEN ? 'grid' : 'block',
+            gridTemplateColumns: WORKFLOW_SPLIT_SCREEN 
+              ? `${WORKFLOW_WIDTH_PERCENT}% ${DOCUMENTATION_WIDTH_PERCENT}%`
+              : '1fr',
+            gap: SPLIT_SCREEN_GAP,
+            marginBottom: '40px',
+            animation: `${ANIMATION_CARD_ENTRANCE} ${ANIMATION_ENTRANCE_DURATION} ease-out 0.2s both`
+          }}
+          className="workflow-split-container"
+          >
+            
+            {/* ─── LEFT COLUMN: Workflow Diagram ─── */}
+            <div style={{
+              background: WORKFLOW_BG_COLOR,
+              border: `1px solid ${WORKFLOW_BORDER_COLOR}`,
+              borderRadius: WORKFLOW_BORDER_RADIUS,
+              boxShadow: WORKFLOW_SHADOW,
+              overflow: 'hidden',
+              transition: `all ${WORKFLOW_COLLAPSE_DURATION} ${WORKFLOW_TRANSITION_EASING}`,
+              height: workflowCollapsed ? WORKFLOW_COLLAPSED_HEIGHT : 'auto'
             }}>
-              {/* Industrial Background Grid */}
-              <div className="absolute inset-0 opacity-10" style={{
-                backgroundImage: 'linear-gradient(rgba(148,163,184,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.3) 1px, transparent 1px)',
-                backgroundSize: '40px 40px'
-              }} />
               
-              {/* Steam/Gas Particles */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="absolute w-3 h-3 rounded-full blur-sm" style={{
-                    left: `${15 + i * 12}%`,
-                    bottom: '10%',
-                    background: i % 2 === 0 ? 'rgba(245,158,11,0.4)' : 'rgba(30,107,150,0.4)',
-                    animation: `steamRise ${3 + (i * 0.3)}s ease-out ${i * 0.25}s infinite`
-                  }} />
-                ))}
+              {/* Workflow Header (Always Visible) */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                background: 'linear-gradient(135deg, rgba(15,23,42,0.97) 0%, rgba(30,41,59,0.95) 100%)',
+                borderBottom: workflowCollapsed ? 'none' : `1px solid ${WORKFLOW_BORDER_COLOR}`,
+                cursor: WORKFLOW_COLLAPSIBLE ? 'pointer' : 'default'
+              }}
+              onClick={() => WORKFLOW_COLLAPSIBLE && setWorkflowCollapsed(!workflowCollapsed)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'linear-gradient(135deg, #0a4b78 0%, #1e6b96 50%, #f59e0b 100%)',
+                    boxShadow: '0 4px 12px rgba(245,158,11,0.3)'
+                  }}>
+                    <Factory style={{ width: '20px', height: '20px', color: 'white' }} />
+                  </div>
+                  <div>
+                    <h2 style={{
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      color: 'white',
+                      margin: 0,
+                      lineHeight: 1
+                    }}>
+                      P&ID Verification Workflow
+                    </h2>
+                    <p style={{
+                      fontSize: '0.75rem',
+                      color: '#94a3b8',
+                      margin: '4px 0 0',
+                      lineHeight: 1
+                    }}>
+                      Industrial AI Processing Pipeline
+                    </p>
+                  </div>
+                </div>
+
+                {/* Controls */}
+                {WORKFLOW_SHOW_CONTROLS && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Compact Toggle */}
+                    {!workflowCollapsed && (
+                      <button
+                        onClick={() => setWorkflowCompact(!workflowCompact)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          color: workflowCompact ? '#fbbf24' : '#94a3b8',
+                          background: workflowCompact ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.1)',
+                          border: `1px solid ${workflowCompact ? 'rgba(245,158,11,0.3)' : 'rgba(148,163,184,0.2)'}`,
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: 'all 200ms ease'
+                        }}
+                        title="Toggle Compact Mode"
+                      >
+                        {workflowCompact ? <Minimize2 style={{ width: '14px', height: '14px' }} /> : <Maximize2 style={{ width: '14px', height: '14px' }} />}
+                        {workflowCompact ? 'Compact' : 'Full'}
+                      </button>
+                    )}
+
+                    {/* Collapse Toggle */}
+                    {WORKFLOW_COLLAPSIBLE && (
+                      <button
+                        onClick={() => setWorkflowCollapsed(!workflowCollapsed)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '32px',
+                          height: '32px',
+                          color: '#94a3b8',
+                          background: 'rgba(148,163,184,0.1)',
+                          border: '1px solid rgba(148,163,184,0.2)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: 'all 200ms ease'
+                        }}
+                        title={workflowCollapsed ? 'Expand Workflow' : 'Collapse Workflow'}
+                      >
+                        {workflowCollapsed ? 
+                          <ChevronDown style={{ width: '18px', height: '18px' }} /> : 
+                          <ChevronUp style={{ width: '18px', height: '18px' }} />
+                        }
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Header - Oil & Gas Engineering Theme */}
-              <div className="flex items-center gap-4 mb-10 relative">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xl relative overflow-hidden" style={{ 
-                  background: 'linear-gradient(135deg, #0a4b78 0%, #1e6b96 50%, #f59e0b 100%)',
-                  animation: 'platformFloat 4s ease-in-out infinite'
+              {/* Workflow Content (Collapsible) */}
+              {!workflowCollapsed && (
+                <div style={{
+                  padding: workflowCompact ? `${16 * COMPACT_PADDING}px` : '24px',
+                  transform: workflowCompact 
+                    ? `scale(${COMPACT_SCALE_X}, ${COMPACT_SCALE_Y})`
+                    : 'scale(1, 1)',
+                  transformOrigin: 'top center',
+                  transition: `transform ${WORKFLOW_COLLAPSE_DURATION} ${WORKFLOW_TRANSITION_EASING}`,
+                  background: 'linear-gradient(135deg, rgba(15,23,42,0.02) 0%, rgba(30,41,59,0.04) 100%)'
                 }}>
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite' }} />
-                  <Factory className="w-6 h-6 text-white relative z-10 drop-shadow-lg" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight" style={{
-                    background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #1e6b96 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>P&ID Verification Workflow</h2>
-                  <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                    <span className="text-amber-500">⚡</span> Industrial-Grade AI Processing Pipeline
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between gap-4 relative overflow-x-auto pb-2"
-                style={{ scrollbarWidth: 'thin', scrollbarColor: '#475569 transparent' }}>
-                
-                {/* Step 1: DUAL INPUT METHOD - Manual Upload OR Wrench Cloud */}
-                <div className="flex-shrink-0 flex flex-col items-center gap-4">
-                  {/* Input Method Badge */}
-                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg" style={{
-                    background: 'linear-gradient(90deg, rgba(30,58,138,0.9) 0%, rgba(16,185,129,0.9) 100%)',
-                    border: '1px solid rgba(148,163,184,0.3)',
-                    color: '#e0f2fe'
-                  }}>
-                    <GitBranch className="w-3.5 h-3.5" />
-                    PHASE 1 • INPUT METHOD
-                  </div>
                   
-                  {/* Dual Method Container */}
-                  <div className="flex flex-col items-center gap-3 relative">
-                    
-                    {/* Method A: Manual Upload (P&ID + Legends) */}
-                    <div className="flex items-center gap-3 relative" style={{ animation: 'cardElevate 4s ease-in-out infinite' }}>
-                      <div className="absolute -left-16 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-xs font-bold" style={{
-                        background: 'rgba(30,107,150,0.2)',
-                        border: '1px solid rgba(30,107,150,0.5)',
-                        color: '#7dd3fc'
-                      }}>
-                        Method A
-                      </div>
-                      
-                      {/* P&ID Drawing */}
-                      <div className="w-44 text-center group">
-                        <div className="relative mb-3">
-                          <div className="w-16 h-16 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
-                            background: 'linear-gradient(135deg, #1e3a8a 0%, #1e6b96 100%)',
-                            boxShadow: '0 6px 24px rgba(30,107,150,0.4), inset 0 0 15px rgba(255,255,255,0.1)',
-                            border: '2px solid rgba(148,163,184,0.3)'
-                          }}>
-                            <div className="absolute inset-0 opacity-20" style={{
-                              backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
-                              backgroundSize: '8px 8px'
-                            }} />
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite' }} />
-                            <div className="relative z-10 w-full h-full flex items-center justify-center">
-                              <FileText className="w-8 h-8 text-cyan-100 drop-shadow-lg" />
-                            </div>
-                          </div>
-                        </div>
-                        <h3 className="text-xs font-bold text-slate-100 mb-0.5">P&ID Drawing</h3>
-                        <p className="text-xs text-cyan-400 font-medium">PDF • DWG</p>
-                      </div>
-                      
-                      <div className="text-slate-400 font-bold text-sm">+</div>
-                      
-                      {/* Legends Sheet */}
-                      <div className="w-44 text-center group">
-                        <div className="relative mb-3">
-                          <div className="w-16 h-16 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
-                            background: 'linear-gradient(135deg, #4c1d95 0%, #8b5cf6 100%)',
-                            boxShadow: '0 6px 24px rgba(99,102,241,0.4), inset 0 0 15px rgba(255,255,255,0.1)',
-                            border: '2px solid rgba(167,139,250,0.3)'
-                          }}>
-                            <div className="absolute inset-0 opacity-20" style={{
-                              backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.3) 0px, rgba(255,255,255,0.3) 1px, transparent 1px, transparent 5px)',
-                              backgroundSize: '100% 5px'
-                            }} />
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out 0.5s infinite' }} />
-                            <div className="relative z-10 w-full h-full flex items-center justify-center">
-                              <Layers className="w-8 h-8 text-violet-100 drop-shadow-lg" />
-                            </div>
-                          </div>
-                        </div>
-                        <h3 className="text-xs font-bold text-slate-100 mb-0.5">Legends Sheet</h3>
-                        <p className="text-xs text-violet-400 font-medium">Symbol Lib</p>
-                      </div>
-                    </div>
-                    
-                    {/* OR Divider */}
-                    <div className="relative w-full py-2">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-slate-600"></div>
-                      </div>
-                      <div className="relative flex justify-center">
-                        <span className="px-3 py-1 text-xs font-bold rounded-full" style={{
-                          background: 'linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(51,65,85,0.95) 100%)',
-                          border: '2px solid rgba(148,163,184,0.4)',
-                          color: '#f59e0b',
-                          boxShadow: '0 0 20px rgba(245,158,11,0.3)'
-                        }}>OR</span>
-                      </div>
-                    </div>
-                    
-                    {/* Method B: Wrench Cloud API (Fetches Both) */}
-                    <div className="flex items-center gap-3 relative" style={{ animation: 'cardElevate 4s ease-in-out 0.3s infinite' }}>
-                      <div className="absolute -left-16 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-xs font-bold" style={{
-                        background: 'rgba(16,185,129,0.2)',
-                        border: '1px solid rgba(16,185,129,0.5)',
-                        color: '#6ee7b7'
-                      }}>
-                        Method B
-                      </div>
-                      
-                      {/* Wrench Cloud Integration */}
-                      <div className="w-96 text-center group">
-                        <div className="relative mb-3 mx-auto w-fit">
-                          <div className="w-20 h-20 mx-auto rounded-xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
-                            background: 'linear-gradient(135deg, #065f46 0%, #10b981 50%, #34d399 100%)',
-                            boxShadow: '0 8px 32px rgba(16,185,129,0.6), 0 0 60px rgba(52,211,153,0.3), inset 0 0 20px rgba(255,255,255,0.15)',
-                            border: '2px solid rgba(52,211,153,0.5)'
-                          }}>
-                            {/* Network Pattern */}
-                            <div className="absolute inset-0 opacity-20">
-                              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                                <defs>
-                                  <pattern id="wrench-cloud-network" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-                                    <circle cx="2" cy="2" r="1" fill="rgba(255,255,255,0.5)" />
-                                    <circle cx="14" cy="14" r="1" fill="rgba(255,255,255,0.5)" />
-                                    <line x1="2" y1="2" x2="14" y2="14" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" />
-                                  </pattern>
-                                </defs>
-                                <rect width="100%" height="100%" fill="url(#wrench-cloud-network)" />
-                              </svg>
-                            </div>
-                            {/* Cloud Data Pulses */}
-                            <div className="absolute inset-0 pointer-events-none">
-                              {[0, 1, 2, 3].map(i => (
-                                <div key={i} className="absolute w-1.5 h-1.5 rounded-full bg-emerald-200" style={{
-                                  top: `${15 + i * 22}%`,
-                                  left: `${12 + i * 25}%`,
-                                  animation: `safetyGlow ${1.8 + i * 0.35}s ease-in-out ${i * 0.25}s infinite`,
-                                  opacity: 0.8
-                                }} />
-                              ))}
-                            </div>
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out 0.8s infinite' }} />
-                            <div className="relative z-10 w-full h-full flex items-center justify-center">
-                              <Wrench className="w-10 h-10 text-emerald-50 drop-shadow-2xl" />
-                            </div>
-                            {/* Cloud Badge */}
-                            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{
-                              background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
-                              boxShadow: '0 0 16px rgba(16,185,129,0.9)',
-                              animation: 'refineryPulse 2s ease-in-out infinite'
-                            }}>
-                              <Database className="w-2.5 h-2.5 text-white" />
-                            </div>
-                          </div>
-                        </div>
-                        <h3 className="text-sm font-bold text-slate-100 mb-1">Wrench Cloud API</h3>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          Fetch P&ID + Legends directly from cloud<br />
-                          <span className="text-xs text-emerald-400 font-medium">⚡ Automated Integration</span>
-                        </p>
-                      </div>
-                    </div>
-                    
-                  </div>
-                </div>
-
-                {/* Dual Method Convergence Pipeline */}
-                <div className="flex-shrink-0 flex justify-center items-center px-3">
-                  <svg className="w-28 h-32" viewBox="0 0 110 130" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="methodAPipe" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#1e6b96" stopOpacity="0.6" />
-                        <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.8" />
-                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.9" />
-                      </linearGradient>
-                      <linearGradient id="methodBPipe" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.7" />
-                        <stop offset="50%" stopColor="#34d399" stopOpacity="0.8" />
-                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.9" />
-                      </linearGradient>
-                    </defs>
-                    
-                    {/* Method A Path (Manual Upload) - Upper */}
-                    <path d="M 5 35 Q 40 35 55 50 L 85 50" 
-                      stroke="url(#methodAPipe)" 
-                      strokeWidth="2.5" 
-                      strokeLinecap="round"
-                      strokeDasharray="4 4"
-                      style={{ animation: 'pipelineFlow 2.2s linear infinite' }}
-                    />
-                    
-                    {/* Method B Path (Wrench Cloud) - Lower */}
-                    <path d="M 5 95 Q 40 95 55 80 L 85 80" 
-                      stroke="url(#methodBPipe)" 
-                      strokeWidth="2.5" 
-                      strokeLinecap="round"
-                      strokeDasharray="4 4"
-                      style={{ animation: 'pipelineFlow 2.2s linear infinite' }}
-                    />
-                    
-                    {/* Converging Arrows */}
-                    <path d="M 85 50 L 90 50 L 85 47 M 90 50 L 85 53" 
-                      stroke="url(#methodAPipe)" 
-                      strokeWidth="2" 
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M 85 80 L 90 80 L 85 77 M 90 80 L 85 83" 
-                      stroke="url(#methodBPipe)" 
-                      strokeWidth="2" 
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    
-                    {/* Method Labels */}
-                    <text x="3" y="32" fontSize="8" fill="#7dd3fc" fontWeight="bold">A</text>
-                    <text x="3" y="92" fontSize="8" fill="#6ee7b7" fontWeight="bold">B</text>
-                    
-                    {/* Flow Droplets on Method A */}
-                    {[0, 1, 2].map(i => (
-                      <circle key={`methodA-${i}`} r="2" fill="#8b5cf6" opacity="0">
-                        <animateMotion path="M 5 35 Q 40 35 55 50 L 85 50" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0;1;1;0" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
-                      </circle>
-                    ))}
-                    
-                    {/* Flow Droplets on Method B */}
-                    {[0, 1, 2].map(i => (
-                      <circle key={`methodB-${i}`} r="2" fill="#34d399" opacity="0">
-                        <animateMotion path="M 5 95 Q 40 95 55 80 L 85 80" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0;1;1;0" dur="2.2s" begin={`${i * 0.73}s`} repeatCount="indefinite" />
-                      </circle>
-                    ))}
-                  </svg>
-                </div>
-
-                {/* Step 2: Refinery Processing (Oil & Gas Theme) */}
-                <div className="flex-shrink-0 w-72 text-center group" style={{ animation: 'cardElevate 4s ease-in-out 0.5s infinite' }}>
-                  <div className="relative mb-5">
-                    {/* Refinery/Processing Plant Icon */}
-                    <div className="w-24 h-24 mx-auto rounded-2xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
-                      background: 'linear-gradient(135deg, #0a4b78 0%, #f59e0b 50%, #ea580c 100%)',
-                      boxShadow: '0 0 40px rgba(245,158,11,0.5), 0 0 80px rgba(10,75,120,0.3), inset 0 0 30px rgba(255,255,255,0.15)',
-                      animation: 'refineryPulse 3s ease-in-out infinite',
-                      border: '2px solid rgba(245,158,11,0.4)'
-                    }}>
-                      {/* Rotating Industrial Gear */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-20">
-                        <Settings className="w-20 h-20 text-white" style={{ animation: 'industrialSpin 8s linear infinite' }} />
-                      </div>
-                      {/* Central Processing Icon */}
-                      <div className="relative z-10 w-full h-full flex items-center justify-center">
-                        <Factory className="w-11 h-11 text-white drop-shadow-2xl" />
-                      </div>
-                      {/* Energy Bursts */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {[...Array(6)].map((_, i) => (
-                          <div key={i} className="absolute w-2 h-2 rounded-full" style={{
-                            top: '50%',
-                            left: '50%',
-                            background: i % 2 === 0 ? '#f59e0b' : '#1e6b96',
-                            animation: `energyBurst ${2.5 + i * 0.2}s ease-out ${i * 0.3}s infinite`,
-                            '--tx': `${Math.cos(i * 60 * Math.PI / 180) * 80}px`,
-                            '--ty': `${Math.sin(i * 60 * Math.PI / 180) * 80}px`
-                          }} />
-                        ))}
-                      </div>
-                    </div>
-                    {/* Industrial Valves/Indicators */}
-                    {[-45, 45].map((angle, i) => (
-                      <Valve key={i} className="absolute w-4 h-4 text-amber-400 opacity-70" style={{
-                        top: '30%',
-                        [i === 0 ? 'left' : 'right']: '15%',
-                        animation: 'valveRotate 2s ease-in-out infinite',
-                        animationDelay: `${i * 0.5}s`
-                      }} />
-                    ))}
-                  </div>
-                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold mb-3 shadow-lg" style={{
-                    background: 'linear-gradient(90deg, rgba(10,75,120,0.9) 0%, rgba(245,158,11,0.9) 50%, rgba(234,88,12,0.9) 100%)',
-                    border: '1px solid rgba(245,158,11,0.4)',
-                    color: '#fff'
+                  {/* P&ID Verification Workflow Diagram */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: workflowCompact ? '8px' : '12px',
+                    width: '100%',
+                    maxWidth: '100%',
+                    paddingBottom: '8px'
                   }}>
-                    <Cpu className="w-3.5 h-3.5 animate-pulse" />
-                    PHASE 2
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-100 mb-2">
-                    <span style={{
-                      background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 50%, #fbbf24 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                      backgroundSize: '200% auto',
-                      animation: 'gradientFlow 3s ease infinite'
-                    }}>RADAI</span> Processing
-                  </h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    AI analyzes with 20+ rules<br />
-                    <span className="text-xs text-amber-400 font-medium">OCR • Vision • ML Engine</span>
-                  </p>
-                </div>
-
-                {/* Pipeline Flow Arrow 2 */}
-                <div className="flex-shrink-0 flex justify-center items-center px-4">
-                  <svg className="w-24 h-12" viewBox="0 0 100 50" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="pipelineGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#ea580c" stopOpacity="0.4" />
-                        <stop offset="50%" stopColor="#10b981" stopOpacity="0.9" />
-                        <stop offset="100%" stopColor="#059669" stopOpacity="0.4" />
-                      </linearGradient>
-                    </defs>
-                    {/* Pipeline Path */}
-                    <path d="M 5 25 L 75 25 L 70 20 M 75 25 L 70 30" 
-                      stroke="url(#pipelineGrad2)" 
-                      strokeWidth="3" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                      strokeDasharray="4 4"
-                      style={{ animation: 'pipelineFlow 2s linear infinite' }}
-                    />
-                    {/* Flow Indicators */}
-                    {[0, 1, 2].map(i => (
-                      <circle key={i} cx="0" cy="25" r="2.5" fill="#10b981" opacity="0">
-                        <animate attributeName="cx" from="-5" to="80" dur="2.5s" begin={`${i * 0.7}s`} repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0;1;1;0" dur="2.5s" begin={`${i * 0.7}s`} repeatCount="indefinite" />
-                      </circle>
-                    ))}
-                  </svg>
-                </div>
-
-                {/* Step 3: Quality Certification (Safety/Compliance Theme) */}
-                <div className="flex-shrink-0 w-72 text-center group" style={{ animation: 'cardElevate 4s ease-in-out 1s infinite' }}>
-                  <div className="relative mb-5">
-                    {/* Safety Badge / Certification Icon */}
-                    <div className="w-24 h-24 mx-auto rounded-2xl relative overflow-hidden transition-all duration-500 group-hover:scale-105" style={{ 
-                      background: 'linear-gradient(135deg, #064e3b 0%, #10b981 50%, #34d399 100%)',
-                      boxShadow: '0 0 40px rgba(16,185,129,0.6), 0 0 80px rgba(52,211,153,0.3), inset 0 0 30px rgba(255,255,255,0.15)',
-                      animation: 'safetyGlow 3s ease-in-out infinite',
-                      border: '2px solid rgba(52,211,153,0.5)'
+                    
+                    {/* PHASE 1: Input */}
+                    <div style={{
+                      flex: '1 1 0',
+                      textAlign: 'center',
+                      maxWidth: workflowCompact ? '200px' : '280px',
+                      minWidth: workflowCompact ? '150px' : '200px'
                     }}>
-                      {/* Rotating Quality Stamp */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-10">
-                        <div className="w-16 h-16 rounded-full border-4 border-white border-dashed" style={{ animation: 'industrialSpin 12s linear infinite' }} />
-                      </div>
-                      {/* Shimmer Effect */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent" style={{ animation: 'industrialShimmer 3s ease-in-out infinite 1s' }} />
-                      {/* Central Award/Badge Icon */}
-                      <div className="relative z-10 w-full h-full flex items-center justify-center">
-                        <Award className="w-12 h-12 text-white drop-shadow-2xl" style={{ filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.8))' }} />
-                      </div>
-                      {/* Safety Sparkles */}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {[...Array(4)].map((_, i) => (
-                          <Sparkles key={i} className="absolute w-3 h-3 text-emerald-200" style={{
-                            top: `${15 + i * 25}%`,
-                            left: `${15 + i * 20}%`,
-                            animation: `energyBurst ${2 + i * 0.3}s ease-out ${i * 0.4}s infinite`,
-                            opacity: 0.8,
-                            '--tx': `${(i * 15) - 30}px`,
-                            '--ty': `${-(i * 10 + 15)}px`
-                          }} />
-                        ))}
-                      </div>
-                    </div>
-                    {/* Safety Checkmarks */}
-                    {[0, 1, 2, 3].map((i) => (
-                      <CheckCircle key={i} className="absolute w-3 h-3 text-emerald-300 opacity-60" style={{
-                        top: i < 2 ? '10%' : '90%',
-                        left: i % 2 === 0 ? '10%' : '90%',
-                        animation: `platformFloat ${2 + i * 0.3}s ease-in-out ${i * 0.2}s infinite`
-                      }} />
-                    ))}
-                  </div>
-                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold mb-3 shadow-lg" style={{
-                    background: 'linear-gradient(90deg, rgba(6,78,59,0.9) 0%, rgba(16,185,129,0.9) 50%, rgba(52,211,153,0.9) 100%)',
-                    border: '1px solid rgba(52,211,153,0.4)',
-                    color: '#ecfdf5'
-                  }}>
-                    <Award className="w-3.5 h-3.5" />
-                    PHASE 3
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-100 mb-2">Quality Certification</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    Verified compliance report<br />
-                    <span className="text-xs text-emerald-400 font-medium">Standards • Safety • Quality</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Industrial Features Bar - Oil & Gas Themed */}
-              <div className="mt-10 pt-8 border-t relative overflow-hidden" style={{ 
-                borderColor: 'rgba(100,116,139,0.3)',
-                background: 'linear-gradient(90deg, rgba(10,75,120,0.05) 0%, rgba(245,158,11,0.05) 50%, rgba(16,185,129,0.05) 100%)'
-              }}>
-                <div className="relative flex flex-wrap justify-center gap-6 text-xs">
-                  {[
-                    { icon: Gauge, label: 'Process Safety', color: 'text-sky-400', bg: 'bg-sky-900/30', border: 'border-sky-500/30', glow: 'hover:shadow-sky-500/50' },
-                    { icon: Factory, label: 'Industry Standards', color: 'text-amber-400', bg: 'bg-amber-900/30', border: 'border-amber-500/30', glow: 'hover:shadow-amber-500/50' },
-                    { icon: Zap, label: 'Real-time Analysis', color: 'text-orange-400', bg: 'bg-orange-900/30', border: 'border-orange-500/30', glow: 'hover:shadow-orange-500/50' },
-                    { icon: Shield, label: 'ISO Certified', color: 'text-emerald-400', bg: 'bg-emerald-900/30', border: 'border-emerald-500/30', glow: 'hover:shadow-emerald-500/50' }
-                  ].map((stat, i) => (
-                    <div key={stat.label} 
-                      className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl border ${stat.bg} ${stat.border} transition-all duration-300 hover:scale-110 ${stat.glow}`} 
-                      style={{ 
-                        animation: `platformFloat ${3 + i * 0.5}s ease-in-out ${0.2 * i}s infinite`,
-                        boxShadow: '0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                      <div style={{
+                        width: workflowCompact ? '48px' : '64px',
+                        height: workflowCompact ? '48px' : '64px',
+                        margin: '0 auto',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+                        marginBottom: workflowCompact ? '8px' : '12px'
                       }}>
-                      <stat.icon className={`w-4 h-4 ${stat.color} drop-shadow-lg`} style={{ filter: 'drop-shadow(0 0 4px currentColor)' }} />
-                      <span className="font-bold text-slate-200">{stat.label}</span>
+                        <UploadIcon style={{ 
+                          width: workflowCompact ? '24px' : '32px', 
+                          height: workflowCompact ? '24px' : '32px', 
+                          color: 'white' 
+                        }} />
+                      </div>
+                      <div style={{
+                        display: 'inline-block',
+                        padding: workflowCompact ? '4px 10px' : '6px 14px',
+                        borderRadius: '20px',
+                        background: 'rgba(59,130,246,0.1)',
+                        border: '1px solid rgba(59,130,246,0.2)',
+                        fontSize: workflowCompact ? '10px' : '11px',
+                        fontWeight: 600,
+                        color: COLOR_PRIMARY,
+                        marginBottom: workflowCompact ? '6px' : '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Phase 1
+                      </div>
+                      <h3 style={{
+                        fontSize: workflowCompact ? '13px' : '15px',
+                        fontWeight: 700,
+                        color: COLOR_TEXT_PRIMARY,
+                        margin: '0 0 6px',
+                        lineHeight: 1.3
+                      }}>
+                        Upload P&ID
+                      </h3>
+                      <p style={{
+                        fontSize: workflowCompact ? '11px' : '12px',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: 0,
+                        lineHeight: 1.4
+                      }}>
+                        Upload drawing + legends<br/>
+                        <span style={{ color: COLOR_PRIMARY, fontSize: workflowCompact ? '10px' : '11px' }}>
+                          PDF • DWG • PNG
+                        </span>
+                      </p>
                     </div>
-                  ))}
+
+                    {/* Arrow 1 */}
+                    <div style={{ 
+                      flex: '0 0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#cbd5e1'
+                    }}>
+                      <ChevronRight style={{ 
+                        width: workflowCompact ? '20px' : '28px', 
+                        height: workflowCompact ? '20px' : '28px' 
+                      }} />
+                    </div>
+
+                    {/* PHASE 2: AI Analysis */}
+                    <div style={{
+                      flex: '1 1 0',
+                      textAlign: 'center',
+                      maxWidth: workflowCompact ? '200px' : '280px',
+                      minWidth: workflowCompact ? '150px' : '200px'
+                    }}>
+                      <div style={{
+                        width: workflowCompact ? '48px' : '64px',
+                        height: workflowCompact ? '48px' : '64px',
+                        margin: '0 auto',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
+                        marginBottom: workflowCompact ? '8px' : '12px',
+                        position: 'relative'
+                      }}>
+                        <Brain style={{ 
+                          width: workflowCompact ? '24px' : '32px', 
+                          height: workflowCompact ? '24px' : '32px', 
+                          color: 'white' 
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          width: workflowCompact ? '16px' : '20px',
+                          height: workflowCompact ? '16px' : '20px',
+                          borderRadius: '50%',
+                          background: COLOR_SUCCESS,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 2px 8px rgba(16,185,129,0.4)'
+                        }}>
+                          <Zap style={{ 
+                            width: workflowCompact ? '10px' : '12px', 
+                            height: workflowCompact ? '10px' : '12px', 
+                            color: 'white' 
+                          }} />
+                        </div>
+                      </div>
+                      <div style={{
+                        display: 'inline-block',
+                        padding: workflowCompact ? '4px 10px' : '6px 14px',
+                        borderRadius: '20px',
+                        background: 'rgba(245,158,11,0.1)',
+                        border: '1px solid rgba(245,158,11,0.2)',
+                        fontSize: workflowCompact ? '10px' : '11px',
+                        fontWeight: 600,
+                        color: COLOR_WARNING,
+                        marginBottom: workflowCompact ? '6px' : '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Phase 2
+                      </div>
+                      <h3 style={{
+                        fontSize: workflowCompact ? '13px' : '15px',
+                        fontWeight: 700,
+                        color: COLOR_TEXT_PRIMARY,
+                        margin: '0 0 6px',
+                        lineHeight: 1.3
+                      }}>
+                        AI Analysis
+                      </h3>
+                      <p style={{
+                        fontSize: workflowCompact ? '11px' : '12px',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: 0,
+                        lineHeight: 1.4
+                      }}>
+                        20+ quality rules<br/>
+                        <span style={{ color: COLOR_WARNING, fontSize: workflowCompact ? '10px' : '11px' }}>
+                          OCR • Vision • ML
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Arrow 2 */}
+                    <div style={{ 
+                      flex: '0 0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#cbd5e1'
+                    }}>
+                      <ChevronRight style={{ 
+                        width: workflowCompact ? '20px' : '28px', 
+                        height: workflowCompact ? '20px' : '28px' 
+                      }} />
+                    </div>
+
+                    {/* PHASE 3: Results */}
+                    <div style={{
+                      flex: '1 1 0',
+                      textAlign: 'center',
+                      maxWidth: workflowCompact ? '200px' : '280px',
+                      minWidth: workflowCompact ? '150px' : '200px'
+                    }}>
+                      <div style={{
+                        width: workflowCompact ? '48px' : '64px',
+                        height: workflowCompact ? '48px' : '64px',
+                        margin: '0 auto',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
+                        marginBottom: workflowCompact ? '8px' : '12px'
+                      }}>
+                        <CheckCircle style={{ 
+                          width: workflowCompact ? '24px' : '32px', 
+                          height: workflowCompact ? '24px' : '32px', 
+                          color: 'white' 
+                        }} />
+                      </div>
+                      <div style={{
+                        display: 'inline-block',
+                        padding: workflowCompact ? '4px 10px' : '6px 14px',
+                        borderRadius: '20px',
+                        background: 'rgba(16,185,129,0.1)',
+                        border: '1px solid rgba(16,185,129,0.2)',
+                        fontSize: workflowCompact ? '10px' : '11px',
+                        fontWeight: 600,
+                        color: COLOR_SUCCESS,
+                        marginBottom: workflowCompact ? '6px' : '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        Phase 3
+                      </div>
+                      <h3 style={{
+                        fontSize: workflowCompact ? '13px' : '15px',
+                        fontWeight: 700,
+                        color: COLOR_TEXT_PRIMARY,
+                        margin: '0 0 6px',
+                        lineHeight: 1.3
+                      }}>
+                        Quality Report
+                      </h3>
+                      <p style={{
+                        fontSize: workflowCompact ? '11px' : '12px',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: 0,
+                        lineHeight: 1.4
+                      }}>
+                        Interactive findings<br/>
+                        <span style={{ color: COLOR_SUCCESS, fontSize: workflowCompact ? '10px' : '11px' }}>
+                          Export • Review • Fix
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Workflow Features Bar */}
+                  {!workflowCompact && (
+                    <div style={{
+                      marginTop: '24px',
+                      paddingTop: '20px',
+                      borderTop: `1px solid ${WORKFLOW_BORDER_COLOR}`,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      gap: '16px',
+                      flexWrap: 'wrap'
+                    }}>
+                      {[
+                        { icon: Tag, label: 'Tag Validation', color: '#3b82f6' },
+                        { icon: Network, label: 'Connectivity', color: '#8b5cf6' },
+                        { icon: Ruler, label: 'Line Sizing', color: '#f59e0b' },
+                        { icon: Shield, label: 'Compliance', color: '#10b981' }
+                      ].map((feature, i) => (
+                        <div key={i} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          background: 'rgba(148,163,184,0.05)',
+                          border: '1px solid rgba(148,163,184,0.15)',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          color: COLOR_TEXT_SECONDARY
+                        }}>
+                          <feature.icon style={{ width: '16px', height: '16px', color: feature.color }} />
+                          {feature.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                 </div>
-              </div>
+              )}
             </div>
+
+            {/* ─── RIGHT COLUMN: Documentation Area (Split-Screen Mode Only) ─── */}
+            {WORKFLOW_SPLIT_SCREEN && (
+              <div style={{
+                background: WORKFLOW_BG_COLOR,
+                border: `1px solid ${WORKFLOW_BORDER_COLOR}`,
+                borderRadius: WORKFLOW_BORDER_RADIUS,
+                boxShadow: WORKFLOW_SHADOW,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '600px'
+              }}>
+                {/* Header */}
+                <div style={{
+                  padding: '20px 24px',
+                  borderBottom: `1px solid ${WORKFLOW_BORDER_COLOR}`,
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(59,130,246,0.06) 100%)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '12px'
+                  }}>
+                    <BookOpen style={{ width: '24px', height: '24px', color: COLOR_PRIMARY }} />
+                    <div>
+                      <h3 style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        color: COLOR_TEXT_PRIMARY,
+                        margin: 0,
+                        lineHeight: 1
+                      }}>
+                        Smart Documentation
+                      </h3>
+                      <p style={{
+                        fontSize: '0.75rem',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: '4px 0 0',
+                        lineHeight: 1
+                      }}>
+                        {projects.length === 0 
+                          ? 'Get started with your first P&ID verification' 
+                          : `${projects.length} project${projects.length === 1 ? '' : 's'} • AI-powered quality analysis`
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tab Navigation */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    overflowX: 'auto',
+                    paddingBottom: '4px'
+                  }}>
+                    {[
+                      { id: 'quickstart', label: 'Quick Start', icon: PlayCircle, color: '#3b82f6' },
+                      { id: 'rules', label: 'Quality Rules', icon: List, color: '#8b5cf6' },
+                      { id: 'practices', label: 'Best Practices', icon: Star, color: '#f59e0b' },
+                      { id: 'faq', label: 'FAQ', icon: HelpCircle, color: '#10b981' },
+                      { id: 'formats', label: 'File Formats', icon: FileCheck, color: '#6366f1' }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setDocActiveTab(tab.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: docActiveTab === tab.id 
+                            ? 'rgba(59,130,246,0.12)'
+                            : 'transparent',
+                          color: docActiveTab === tab.id ? tab.color : COLOR_TEXT_SECONDARY,
+                          fontSize: '0.8rem',
+                          fontWeight: docActiveTab === tab.id ? 600 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 200ms ease',
+                          whiteSpace: 'nowrap',
+                          borderBottom: docActiveTab === tab.id 
+                            ? `2px solid ${tab.color}` 
+                            : '2px solid transparent'
+                        }}
+                        onMouseEnter={e => {
+                          if (docActiveTab !== tab.id) {
+                            e.currentTarget.style.background = 'rgba(148,163,184,0.08)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (docActiveTab !== tab.id) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <tab.icon style={{ width: '14px', height: '14px' }} />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Content Area (Scrollable) */}
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '20px 24px'
+                }}>
+                  
+                  {/* QUICK START TAB */}
+                  {docActiveTab === 'quickstart' && (
+                    <div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.12) 100%)',
+                        border: `1px solid rgba(59,130,246,0.2)`,
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginBottom: '20px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                          <Lightbulb style={{ width: '20px', height: '20px', color: COLOR_PRIMARY, marginTop: '2px' }} />
+                          <div>
+                            <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 6px' }}>
+                              {projects.length === 0 ? 'Welcome to P&ID Verification!' : 'Continue Your Workflow'}
+                            </h4>
+                            <p style={{ fontSize: '0.8rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              {projects.length === 0 
+                                ? 'Follow these steps to verify your first P&ID drawing with AI-powered quality analysis.'
+                                : 'Select a project below or create a new one to continue verifying P&ID drawings.'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step-by-step guide */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {[
+                          { num: 1, title: 'Create Project', desc: 'Click "New Project" and enter a descriptive name', icon: FolderPlus, color: '#3b82f6' },
+                          { num: 2, title: 'Upload P&ID', desc: 'Upload your drawing (PDF/DWG/PNG) + legend symbols', icon: UploadIcon, color: '#8b5cf6' },
+                          { num: 3, title: 'AI Analysis', desc: 'Our AI scans 20+ quality rules automatically', icon: Brain, color: '#f59e0b' },
+                          { num: 4, title: 'Review Results', desc: 'Interactive findings table with visual markers', icon: CheckCircle, color: '#10b981' },
+                          { num: 5, title: 'Export Report', desc: 'Download PDF quality report for your team', icon: Download, color: '#6366f1' }
+                        ].map((step, i) => (
+                          <div key={i} style={{
+                            display: 'flex',
+                            gap: '12px',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            background: i === 0 && projects.length === 0 
+                              ? 'rgba(59,130,246,0.05)' 
+                              : 'transparent',
+                            border: `1px solid ${i === 0 && projects.length === 0 ? 'rgba(59,130,246,0.15)' : 'transparent'}`,
+                            transition: 'all 200ms ease'
+                          }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: `linear-gradient(135deg, ${step.color}15, ${step.color}25)`,
+                              border: `2px solid ${step.color}40`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.85rem',
+                              fontWeight: 700,
+                              color: step.color,
+                              flexShrink: 0
+                            }}>
+                              {step.num}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 4px' }}>
+                                {step.title}
+                              </h5>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.4 }}>
+                                {step.desc}
+                              </p>
+                            </div>
+                            <step.icon style={{ width: '18px', height: '18px', color: step.color, flexShrink: 0, marginTop: '6px' }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QUALITY RULES TAB */}
+                  {docActiveTab === 'rules' && (
+                    <div>
+                      <p style={{ fontSize: '0.8rem', color: COLOR_TEXT_SECONDARY, marginBottom: '16px', lineHeight: 1.5 }}>
+                        Our AI engine validates your P&IDs against 20+ engineering quality rules:
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {[
+                          { cat: 'Tag Validation', rules: ['Tag format compliance', 'Duplicate tag detection', 'Missing tag identification', 'Tag naming conventions'], color: '#3b82f6', icon: Tag },
+                          { cat: 'Connectivity', rules: ['Orphaned equipment', 'Open-ended lines', 'Missing connections', 'Valve placement'], color: '#8b5cf6', icon: Network },
+                          { cat: 'Line Sizing', rules: ['Consistent line sizing', 'Size change notation', 'Branch sizing logic'], color: '#f59e0b', icon: Ruler },
+                          { cat: 'Compliance', rules: ['Industry standards (API, ASME)', 'Symbol consistency', 'Legend alignment'], color: '#10b981', icon: Shield }
+                        ].map((category, i) => (
+                          <div key={i} style={{
+                            border: `1px solid ${CARD_BORDER_COLOR}`,
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            transition: 'all 200ms ease'
+                          }}>
+                            <div style={{
+                              background: `linear-gradient(135deg, ${category.color}10, ${category.color}20)`,
+                              padding: '12px 14px',
+                              borderBottom: `1px solid ${category.color}30`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
+                            }}>
+                              <category.icon style={{ width: '16px', height: '16px', color: category.color }} />
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY }}>
+                                {category.cat}
+                              </span>
+                              <span style={{
+                                marginLeft: 'auto',
+                                fontSize: '0.7rem',
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                background: `${category.color}20`,
+                                color: category.color,
+                                fontWeight: 600
+                              }}>
+                                {category.rules.length} checks
+                              </span>
+                            </div>
+                            <div style={{ padding: '12px 14px' }}>
+                              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.7 }}>
+                                {category.rules.map((rule, j) => (
+                                  <li key={j}>{rule}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BEST PRACTICES TAB */}
+                  {docActiveTab === 'practices' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {[
+                        { title: 'Upload High-Quality Scans', tip: 'Use 300+ DPI resolution for best OCR accuracy. Clear, high-contrast images yield better AI results.', icon: '📸' },
+                        { title: 'Include Legend Sheets', tip: 'Always upload symbol legend sheets. This helps AI accurately identify equipment types and symbols.', icon: '📋' },
+                        { title: 'Use Consistent Naming', tip: 'Follow your company\'s tag naming conventions. Consistent patterns help AI detect anomalies.', icon: '🏷️' },
+                        { title: 'Review AI Findings', tip: 'AI detects patterns but needs human validation. Review each finding critically before accepting.', icon: '👁️' },
+                        { title: 'Export PDF Reports', tip: 'Generate and archive quality reports for compliance audits and project documentation.', icon: '📄' },
+                        { title: 'Incremental Updates', tip: 'Create new project versions when drawings change. Maintain audit trail of all revisions.', icon: '🔄' }
+                      ].map((practice, i) => (
+                        <div key={i} style={{
+                          padding: '14px',
+                          borderRadius: '10px',
+                          background: 'rgba(245,158,11,0.04)',
+                          border: '1px solid rgba(245,158,11,0.15)',
+                          display: 'flex',
+                          gap: '12px'
+                        }}>
+                          <div style={{ fontSize: '1.5rem', flexShrink: 0 }}>{practice.icon}</div>
+                          <div>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 6px' }}>
+                              {practice.title}
+                            </h5>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              {practice.tip}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* FAQ TAB */}
+                  {docActiveTab === 'faq' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {[
+                        { q: 'What file formats are supported?', a: 'PDF, DWG, PNG, JPG, TIFF. PDF and DWG are recommended for best OCR accuracy.' },
+                        { q: 'How long does AI analysis take?', a: 'Typically 2-5 minutes depending on drawing complexity. You\'ll receive real-time progress updates.' },
+                        { q: 'Can I edit findings after analysis?', a: 'Yes! Click any finding to mark as resolved, add comments, or adjust severity levels.' },
+                        { q: 'How accurate is the AI?', a: 'AI achieves 92-97% accuracy on clear scans. Always review findings - AI assists but doesn\'t replace engineering judgment.' },
+                        { q: 'What happens to my drawings?', a: 'All data is encrypted at rest and in transit. Drawings are stored securely and never shared with third parties.' },
+                        { q: 'Can I export findings?', a: 'Yes! Export to PDF report, Excel spreadsheet, or JSON data format for integration with other tools.' }
+                      ].map((faq, i) => (
+                        <div key={i} style={{
+                          border: `1px solid ${CARD_BORDER_COLOR}`,
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          transition: 'all 200ms ease'
+                        }}>
+                          <button
+                            onClick={() => setDocExpandedItems(prev => ({ ...prev, [`faq${i}`]: !prev[`faq${i}`] }))}
+                            style={{
+                              width: '100%',
+                              padding: '12px 14px',
+                              background: docExpandedItems[`faq${i}`] ? 'rgba(16,185,129,0.06)' : 'transparent',
+                              border: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              cursor: 'pointer',
+                              transition: 'all 200ms ease'
+                            }}
+                            onMouseEnter={e => {
+                              if (!docExpandedItems[`faq${i}`]) {
+                                e.currentTarget.style.background = 'rgba(148,163,184,0.05)';
+                              }
+                            }}
+                            onMouseLeave={e => {
+                              if (!docExpandedItems[`faq${i}`]) {
+                                e.currentTarget.style.background = 'transparent';
+                              }
+                            }}
+                          >
+                            <HelpCircle style={{ 
+                              width: '16px', 
+                              height: '16px', 
+                              color: docExpandedItems[`faq${i}`] ? COLOR_SUCCESS : COLOR_TEXT_SECONDARY,
+                              flexShrink: 0
+                            }} />
+                            <span style={{
+                              flex: 1,
+                              textAlign: 'left',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              color: COLOR_TEXT_PRIMARY
+                            }}>
+                              {faq.q}
+                            </span>
+                            {docExpandedItems[`faq${i}`] ? 
+                              <ChevronUp style={{ width: '16px', height: '16px', color: COLOR_TEXT_SECONDARY }} /> :
+                              <ChevronDown style={{ width: '16px', height: '16px', color: COLOR_TEXT_SECONDARY }} />
+                            }
+                          </button>
+                          {docExpandedItems[`faq${i}`] && (
+                            <div style={{
+                              padding: '12px 14px',
+                              borderTop: `1px solid ${CARD_BORDER_COLOR}`,
+                              background: 'rgba(148,163,184,0.03)'
+                            }}>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.6 }}>
+                                {faq.a}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* FILE FORMATS TAB */}
+                  {docActiveTab === 'formats' && (
+                    <div>
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.12) 100%)',
+                        border: '1px solid rgba(99,102,241,0.2)',
+                        borderRadius: '12px',
+                        padding: '14px',
+                        marginBottom: '16px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                          <FileCheck style={{ width: '18px', height: '18px', color: '#6366f1' }} />
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY }}>
+                            Supported File Types
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {['PDF', 'DWG', 'PNG', 'JPG', 'JPEG', 'TIFF'].map((fmt, i) => (
+                            <span key={i} style={{
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              background: 'white',
+                              border: '1px solid rgba(99,102,241,0.3)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              color: '#6366f1'
+                            }}>
+                              .{fmt.toLowerCase()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                          <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <CheckCircle style={{ width: '16px', height: '16px', color: COLOR_SUCCESS }} />
+                            Recommended: PDF & DWG
+                          </h5>
+                          <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5, paddingLeft: '24px' }}>
+                            Vector-based formats preserve text layers, resulting in 95%+ OCR accuracy. Best for production drawings.
+                          </p>
+                        </div>
+
+                        <div>
+                          <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <AlertTriangle style={{ width: '16px', height: '16px', color: COLOR_WARNING }} />
+                            Image Formats: PNG, JPG, TIFF
+                          </h5>
+                          <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5, paddingLeft: '24px' }}>
+                            Raster images work but require high resolution (≥300 DPI). OCR accuracy depends on scan quality.
+                          </p>
+                        </div>
+
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '12px',
+                          borderRadius: '10px',
+                          background: 'rgba(59,130,246,0.04)',
+                          border: '1px solid rgba(59,130,246,0.15)'
+                        }}>
+                          <h5 style={{ fontSize: '0.8rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px' }}>
+                            File Size Limits
+                          </h5>
+                          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.7 }}>
+                            <li><strong>Single file:</strong> 50 MB maximum</li>
+                            <li><strong>Total upload:</strong> 200 MB per project</li>
+                            <li><strong>Batch upload:</strong> Up to 20 files simultaneously</li>
+                          </ul>
+                        </div>
+
+                        <div style={{
+                          padding: '12px',
+                          borderRadius: '10px',
+                          background: 'rgba(16,185,129,0.04)',
+                          border: '1px solid rgba(16,185,129,0.15)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                            <Lightbulb style={{ width: '16px', height: '16px', color: COLOR_SUCCESS, marginTop: '2px', flexShrink: 0 }} />
+                            <div>
+                              <h5 style={{ fontSize: '0.8rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 6px' }}>
+                                Pro Tip: Multi-Sheet Drawings
+                              </h5>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                                Upload all sheets of a multi-page P&ID as separate files in one project. The AI will cross-reference between sheets automatically.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            )}
+
           </div>
 
           <FlashBanner />
 
-          <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-            <p className="text-slate-500 text-sm">
-              {projects.length > 0 ? `${projects.length} project${projects.length !== 1 ? 's' : ''} — select one to upload a drawing` : 'Create your first project to get started'}
-            </p>
-            <button onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 font-bold rounded-xl transition-all text-sm text-white hover:-translate-y-px"
-              style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow:'0 4px 14px rgba(99,102,241,0.35)' }}>
-              <FolderPlus className="w-4 h-4" />New Project
+          {/* ═══ PROJECT WORKSPACE SECTION ═══ */}
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-4" style={{
+            animation: `${ANIMATION_CARD_ENTRANCE} ${ANIMATION_ENTRANCE_DURATION} ease-out 0.1s both`
+          }}>
+            <div>
+              <h2 style={{
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: COLOR_TEXT_PRIMARY,
+                margin: 0,
+                marginBottom: '4px'
+              }}>
+                Project Workspace
+              </h2>
+              <p style={{
+                fontSize: '0.875rem',
+                color: COLOR_TEXT_SECONDARY,
+                margin: 0
+              }}>
+                {projects.length > 0 
+                  ? `${projects.length} active project${projects.length !== 1 ? 's' : ''} · Select one to upload and verify drawings` 
+                  : 'Create your first project to get started with P&ID verification'}
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: `${BUTTON_PADDING_Y} ${BUTTON_PADDING_X}`,
+                fontSize: '0.875rem',
+                fontWeight: BUTTON_FONT_WEIGHT,
+                color: 'white',
+                background: BUTTON_PRIMARY_BG,
+                border: 'none',
+                borderRadius: BUTTON_BORDER_RADIUS,
+                cursor: 'pointer',
+                boxShadow: BUTTON_SHADOW,
+                transition: `all ${ANIMATION_HOVER_DURATION} cubic-bezier(0.4, 0, 0.2, 1)`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = BUTTON_PRIMARY_HOVER_BG;
+                e.currentTarget.style.transform = `translateY(${BUTTON_HOVER_LIFT})`;
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.35)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = BUTTON_PRIMARY_BG;
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = BUTTON_SHADOW;
+              }}
+            >
+              <FolderPlus style={{ width: `${BUTTON_ICON_SIZE}px`, height: `${BUTTON_ICON_SIZE}px` }} />
+              New Project
             </button>
           </div>
 
@@ -3144,52 +3779,367 @@ const PIDVerification = () => {
               <p className="text-slate-400 text-sm">Loading projects…</p>
             </div>
           ) : projects.length === 0 ? (
-            <div className="rounded-2xl p-16 text-center" style={T.card}>
-              <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5 bg-blue-50 border border-blue-100">
-                <Package className="w-10 h-10 text-blue-400" />
+            /* ═══ SMART EMPTY STATE ═══ */
+            <div style={{
+              background: EMPTY_STATE_BG,
+              border: `2px ${EMPTY_STATE_BORDER_STYLE} ${EMPTY_STATE_BORDER_COLOR}`,
+              borderRadius: CARD_BORDER_RADIUS,
+              padding: EMPTY_STATE_PADDING,
+              textAlign: 'center',
+              animation: `${ANIMATION_CARD_ENTRANCE} ${ANIMATION_ENTRANCE_DURATION} ease-out 0.2s both`
+            }}>
+              {/* Icon */}
+              <div style={{
+                width: `${EMPTY_STATE_ICON_SIZE}px`,
+                height: `${EMPTY_STATE_ICON_SIZE}px`,
+                margin: '0 auto 24px',
+                borderRadius: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: CARD_ICON_BG,
+                border: `2px solid ${CARD_BORDER_COLOR}`
+              }}>
+                <Package style={{ 
+                  width: `${EMPTY_STATE_ICON_SIZE * 0.5}px`, 
+                  height: `${EMPTY_STATE_ICON_SIZE * 0.5}px`,
+                  color: COLOR_PRIMARY
+                }} />
               </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-2">No Projects Yet</h3>
-              <p className="text-slate-500 text-sm mb-6">Create a project to start uploading and verifying P&amp;ID drawings</p>
-              <button onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 font-bold rounded-xl text-white hover:-translate-y-px transition-all"
-                style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow:'0 4px 14px rgba(99,102,241,0.35)' }}>
-                <FolderPlus className="w-5 h-5" />Create First Project
+
+              {/* Message */}
+              <h3 style={{
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: COLOR_TEXT_PRIMARY,
+                margin: '0 0 8px'
+              }}>
+                No Projects Yet
+              </h3>
+              <p style={{
+                fontSize: '0.95rem',
+                color: COLOR_TEXT_SECONDARY,
+                margin: '0 0 32px',
+                maxWidth: '420px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+                lineHeight: 1.5
+              }}>
+                Create your first project to start uploading and verifying P&ID drawings with AI-powered quality checks
+              </p>
+
+              {/* CTA Button */}
+              <button 
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: `${BUTTON_PADDING_Y} ${BUTTON_PADDING_X}`,
+                  fontSize: '0.95rem',
+                  fontWeight: BUTTON_FONT_WEIGHT,
+                  color: 'white',
+                  background: BUTTON_PRIMARY_BG,
+                  border: 'none',
+                  borderRadius: BUTTON_BORDER_RADIUS,
+                  cursor: 'pointer',
+                  boxShadow: BUTTON_SHADOW,
+                  transition: `all ${ANIMATION_HOVER_DURATION} cubic-bezier(0.4, 0, 0.2, 1)`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = BUTTON_PRIMARY_HOVER_BG;
+                  e.currentTarget.style.transform = `translateY(${BUTTON_HOVER_LIFT})`;
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(59,130,246,0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = BUTTON_PRIMARY_BG;
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = BUTTON_SHADOW;
+                }}
+              >
+                <FolderPlus style={{ width: '20px', height: '20px' }} />
+                Create First Project
               </button>
+
+              {/* Quick guide */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '16px',
+                marginTop: '40px',
+                fontSize: '0.8rem',
+                color: COLOR_TEXT_TERTIARY
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: `${COLOR_PRIMARY}15`,
+                    color: COLOR_PRIMARY,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700
+                  }}>1</div>
+                  Create Project
+                </div>
+                <ChevronRight style={{ width: '14px', height: '14px', opacity: 0.4 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: `${COLOR_PRIMARY}15`,
+                    color: COLOR_PRIMARY,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700
+                  }}>2</div>
+                  Upload P&ID
+                </div>
+                <ChevronRight style={{ width: '14px', height: '14px', opacity: 0.4 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: `${COLOR_PRIMARY}15`,
+                    color: COLOR_PRIMARY,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700
+                  }}>3</div>
+                  AI Analysis
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-              {projects.map((p, idx) => (
-                <div key={p.project_id} onClick={() => handleSelectProject(p)}
-                  className="group relative rounded-2xl p-6 cursor-pointer transition-all duration-300 overflow-hidden"
-                  style={{ ...T.card, animation:`fadeUp 0.5s ease-out ${idx * 0.07}s both` }}
-                  onMouseEnter={e => Object.assign(e.currentTarget.style, T.cardH)}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = T.card.boxShadow; e.currentTarget.style.borderColor = '#e2e8f0'; }}>
-                  <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    style={{ background:'linear-gradient(90deg,#3b82f6,#6366f1)' }} />
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-11 h-11 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                      <Layers className="w-5 h-5 text-blue-600" />
+            /* ═══ SMART PROJECT CARDS GRID ═══ */
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: CARD_GAP
+            }}>
+              {projects.map((p, idx) => {
+                const cardStyle = {
+                  position: 'relative',
+                  background: 'white',
+                  border: `1px solid ${CARD_BORDER_COLOR}`,
+                  borderRadius: CARD_BORDER_RADIUS,
+                  padding: CARD_PADDING,
+                  cursor: 'pointer',
+                  boxShadow: CARD_SHADOW_DEFAULT,
+                  transition: `all ${CARD_TRANSITION_SPEED} cubic-bezier(0.4, 0, 0.2, 1)`,
+                  overflow: 'hidden',
+                  animation: `${ANIMATION_CARD_ENTRANCE} ${ANIMATION_ENTRANCE_DURATION} ease-out ${0.2 + (idx * ANIMATION_ENTRANCE_DELAY)}s both`
+                };
+
+                return (
+                  <div 
+                    key={p.project_id} 
+                    onClick={() => handleSelectProject(p)}
+                    style={cardStyle}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = CARD_BORDER_HOVER_COLOR;
+                      e.currentTarget.style.boxShadow = CARD_SHADOW_HOVER;
+                      e.currentTarget.style.transform = `translateY(${CARD_HOVER_LIFT}) scale(${CARD_HOVER_SCALE})`;
+                      const accentLine = e.currentTarget.querySelector('.card-accent-line');
+                      if (accentLine) accentLine.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = CARD_BORDER_COLOR;
+                      e.currentTarget.style.boxShadow = CARD_SHADOW_DEFAULT;
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                      const accentLine = e.currentTarget.querySelector('.card-accent-line');
+                      if (accentLine) accentLine.style.opacity = '0';
+                    }}
+                  >
+                    {/* Top accent line */}
+                    {CARD_SHOW_ACCENT_LINE && (
+                      <div 
+                        className="card-accent-line"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: CARD_ACCENT_HEIGHT,
+                          background: BUTTON_PRIMARY_BG,
+                          opacity: 0,
+                          transition: `opacity ${CARD_TRANSITION_SPEED} ease`
+                        }}
+                      />
+                    )}
+
+                    {/* Header: Icon + Action */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      {/* Icon */}
+                      <div style={{
+                        width: `${CARD_ICON_SIZE}px`,
+                        height: `${CARD_ICON_SIZE}px`,
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: CARD_ICON_BG,
+                        border: `1px solid ${CARD_BORDER_COLOR}`,
+                        transition: `all ${CARD_TRANSITION_SPEED} ease`
+                      }}>
+                        <Layers style={{ 
+                          width: `${CARD_ICON_SIZE * 0.45}px`, 
+                          height: `${CARD_ICON_SIZE * 0.45}px`,
+                          color: COLOR_PRIMARY
+                        }} />
+                      </div>
+
+                      {/* Chevron */}
+                      <ChevronRight style={{
+                        width: '20px',
+                        height: '20px',
+                        color: COLOR_TEXT_TERTIARY,
+                        transition: `all ${CARD_TRANSITION_SPEED} ease`
+                      }} />
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all duration-300" />
+
+                    {/* Project Name */}
+                    <h3 style={{
+                      fontSize: '1.05rem',
+                      fontWeight: 700,
+                      color: COLOR_TEXT_PRIMARY,
+                      margin: '0 0 4px',
+                      lineClamp: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {p.project_name}
+                    </h3>
+
+                    {/* Description */}
+                    {p.description && (
+                      <p style={{
+                        fontSize: '0.85rem',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: '0 0 16px',
+                        lineHeight: 1.5,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}>
+                        {p.description}
+                      </p>
+                    )}
+
+                    {/* Stats */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 0',
+                      marginTop: '8px',
+                      borderTop: `1px solid ${CARD_BORDER_COLOR}`,
+                      fontSize: '0.8rem',
+                      color: COLOR_TEXT_TERTIARY
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <FileText style={{ width: '14px', height: '14px' }} />
+                        <span style={{ fontWeight: 500, color: COLOR_TEXT_SECONDARY }}>
+                          {p.document_count ?? 0}
+                        </span>
+                        <span>drawings</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock style={{ width: '14px', height: '14px' }} />
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                      <button 
+                        onClick={(ev) => { 
+                          ev.stopPropagation(); 
+                          setEditingProject(p); 
+                          setEditName(p.project_name); 
+                          setEditDesc(p.description || ''); 
+                          setShowEditModal(true); 
+                        }}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '8px 12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 500,
+                          color: COLOR_TEXT_SECONDARY,
+                          background: '#f8fafc',
+                          border: `1px solid ${CARD_BORDER_COLOR}`,
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: `all ${CARD_TRANSITION_SPEED} ease`
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f1f5f9';
+                          e.currentTarget.style.borderColor = COLOR_PRIMARY;
+                          e.currentTarget.style.color = COLOR_PRIMARY;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#f8fafc';
+                          e.currentTarget.style.borderColor = CARD_BORDER_COLOR;
+                          e.currentTarget.style.color = COLOR_TEXT_SECONDARY;
+                        }}
+                      >
+                        <Edit style={{ width: '14px', height: '14px' }} />
+                        Edit
+                      </button>
+                      <button 
+                        onClick={(ev) => { 
+                          ev.stopPropagation(); 
+                          setDeletingProject(p); 
+                          setShowDeleteConfirm(true); 
+                        }}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '8px 12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 500,
+                          color: COLOR_DANGER,
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: `all ${CARD_TRANSITION_SPEED} ease`
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#fee2e2';
+                          e.currentTarget.style.borderColor = COLOR_DANGER;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#fef2f2';
+                          e.currentTarget.style.borderColor = '#fecaca';
+                        }}
+                      >
+                        <Trash2 style={{ width: '14px', height: '14px' }} />
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-blue-700 transition-colors line-clamp-1">{p.project_name}</h3>
-                  {p.description && <p className="text-xs text-slate-400 line-clamp-2 mb-4">{p.description}</p>}
-                  <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100 mb-4">
-                    <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />{p.document_count ?? 0} drawings</span>
-                    <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />{new Date(p.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={ev => { ev.stopPropagation(); setEditingProject(p); setEditName(p.project_name); setEditDesc(p.description||''); setShowEditModal(true); }}
-                      className="flex-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-xs font-medium">
-                      <Edit className="w-3.5 h-3.5" />Edit
-                    </button>
-                    <button onClick={ev => { ev.stopPropagation(); setDeletingProject(p); setShowDeleteConfirm(true); }}
-                      className="flex-1 px-3 py-1.5 bg-red-50 border border-red-100 text-red-500 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5 text-xs font-medium">
-                      <Trash2 className="w-3.5 h-3.5" />Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -4066,11 +5016,167 @@ const PIDVerification = () => {
 
           const activePanelDef = orderedPanels.find(p => p.id === activePanel) || orderedPanels[0];
 
-          return (
-          <div className="flex gap-4 items-start flex-row-reverse" style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
+          // ── Soft-coded: INNOVATIVE DASHBOARD LAYOUT — 3-Panel Grid ─────────────
+          // When ENABLE_INNOVATIVE_LAYOUT is true, renders smart 3-column dashboard:
+          // • Top: Compact workflow diagram (overview)
+          // • Left: Project Navigator (P&ID file management)
+          // • Center: Active findings panel (main work area)
+          // • Right: AI Documentation & Smart Assistant
+          const innovativeLayoutClass = ENABLE_INNOVATIVE_LAYOUT
+            ? 'grid grid-cols-1 lg:grid-cols-12 gap-4'
+            : (DOCUMENTATION_ENABLED && WORKFLOW_WIDTH_PERCENT < 100
+                ? `grid grid-cols-1 ${LAYOUT_RESPONSIVE_BREAKPT}:grid-cols-2 gap-${Math.round(LAYOUT_GAP_PX / 4)}`
+                : 'flex');
 
-            {/* CONTENT — visually right (flex-row-reverse puts DOM-first on right) */}
-            <div className="flex-1 min-w-0 space-y-4">
+          return (
+          <div className={innovativeLayoutClass} style={{ animation:'fadeUp 0.5s ease-out 0.05s both' }}>
+
+            {/* ══════════════════════════════════════════════════════════
+                INNOVATIVE LAYOUT: Top workflow overview (full-width)
+            ══════════════════════════════════════════════════════════ */}
+            {ENABLE_INNOVATIVE_LAYOUT && (
+              <div className="col-span-1 lg:col-span-12 mb-4">
+                <div className="rounded-2xl overflow-hidden shadow-lg" style={{
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                  border: '2px solid rgba(148,163,184,0.2)',
+                }}>
+                  {/* Workflow header */}
+                  <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)' }}>
+                    <div className="flex items-center gap-3">
+                      <Factory className="w-5 h-5 text-white" />
+                      <h3 className="text-sm font-bold text-white">AI Processing Workflow</h3>
+                    </div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium"
+                      style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Compact Overview
+                    </div>
+                  </div>
+                  {/* Workflow content container */}
+                  <div className="p-4" style={{
+                    maxHeight: '280px',
+                    overflowY: 'auto',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#cbd5e1 transparent'
+                  }}>
+                    {/* Workflow diagram will be rendered in upload section */}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                INNOVATIVE LAYOUT: Left panel — Project Navigator (3 cols)
+            ══════════════════════════════════════════════════════════ */}
+            {ENABLE_INNOVATIVE_LAYOUT && PROJECTS_PANEL_ENABLED && (
+              <div className="col-span-1 lg:col-span-3 space-y-4">
+                {/* Project Navigator Card */}
+                <div className="rounded-2xl overflow-hidden shadow-lg sticky top-4" style={{
+                  background: '#ffffff',
+                  border: '2px solid rgba(148,163,184,0.15)',
+                }}>
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' }}>
+                    <div className="flex items-center gap-2">
+                      <FolderPlus className="w-4 h-4 text-amber-700" />
+                      <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">Projects</h3>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold"
+                      style={{ background: '#f59e0b', color: '#fff' }}>
+                      {results?.drawings?.length || 0}
+                    </span>
+                  </div>
+
+                  {/* Project list */}
+                  <div className="p-3 space-y-2" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    {results?.drawings && results.drawings.length > 0 ? (
+                      results.drawings.map((drawing, idx) => (
+                        <button
+                          key={drawing.drawing_id}
+                          onClick={() => setActiveDrawing(drawing.drawing_id)}
+                          className="w-full text-left p-3 rounded-xl border-2 transition-all hover:shadow-md group"
+                          style={{
+                            background: activeDrawing === drawing.drawing_id
+                              ? 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)'
+                              : '#f8fafc',
+                            borderColor: activeDrawing === drawing.drawing_id ? '#3b82f6' : '#e2e8f0',
+                          }}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                              style={{
+                                background: activeDrawing === drawing.drawing_id
+                                  ? 'linear-gradient(135deg, #3b82f6, #6366f1)'
+                                  : 'linear-gradient(135deg, #cbd5e1, #94a3b8)',
+                              }}>
+                              <FileText className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {drawing.drawing_id}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-xs font-medium ${
+                                  drawing.issue_count > 0 ? 'text-red-600' : 'text-green-600'
+                                }`}>
+                                  {drawing.issue_count} {drawing.issue_count === 1 ? 'issue' : 'issues'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <FileText className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+                        <p className="text-xs text-slate-400">No projects yet</p>
+                        <p className="text-xs text-slate-400 mt-1">Upload a P&ID to begin</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="rounded-2xl overflow-hidden shadow-lg" style={{
+                  background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                  border: '2px solid rgba(16,185,129,0.2)',
+                  padding: '12px',
+                }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-green-700" />
+                    <h4 className="text-xs font-bold text-green-900 uppercase tracking-wider">Quick Stats</h4>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: 'Total', value: totalIssues, color: '#10b981' },
+                      { label: 'Critical', value: criticalCount, color: '#ef4444' },
+                      { label: 'Major', value: majorCount, color: '#f59e0b' },
+                      { label: 'Minor', value: totalIssues - criticalCount - majorCount, color: '#3b82f6' },
+                    ].map(stat => (
+                      <div key={stat.label} className="text-center p-2 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.7)', border: `1px solid ${stat.color}33` }}>
+                        <p className="text-lg font-black" style={{ color: stat.color }}>{stat.value}</p>
+                        <p className="text-xs text-slate-600 font-medium">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════
+                MAIN CONTENT COLUMN (center/full-width in old layout)
+            ══════════════════════════════════════════════════════════ */}
+            <div className={ENABLE_INNOVATIVE_LAYOUT && PROJECTS_PANEL_ENABLED
+              ? 'col-span-1 lg:col-span-6 min-w-0'
+              : `${DOCUMENTATION_ENABLED && WORKFLOW_WIDTH_PERCENT < 100 ? '' : 'flex-1'} min-w-0`
+            }>
+              <div className="flex gap-4 items-start flex-row-reverse">
+
+                {/* CONTENT — visually right (flex-row-reverse puts DOM-first on right) */}
+                <div className="flex-1 min-w-0 space-y-4">
 
               {/* ── Sticky top stats bar ───────────────────────────────── */}
               <div className="rounded-2xl p-4" style={{ ...T.panel, animation:'fadeUp 0.4s ease-out 0.08s both' }}>
@@ -14457,6 +15563,297 @@ const PIDVerification = () => {
               })()}
             </div>
             {/* ══ end RIGHT ICON RAIL ══ */}
+
+          </div>
+          {/* ══ END MAIN CONTENT COLUMN ══ */}
+
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════
+              AI DOCUMENTATION & SMART ASSISTANT (right column)
+          ══════════════════════════════════════════════════════════ */}
+          {ENABLE_INNOVATIVE_LAYOUT && DOCUMENTATION_ENABLED ? (
+            <div className="col-span-1 lg:col-span-3 space-y-4">
+              
+              {/* AI Smart Assistant Card */}
+              <div className="rounded-2xl overflow-hidden shadow-lg sticky top-4" style={{
+                background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+                border: '2px solid rgba(124,58,237,0.3)',
+              }}>
+                <div className="px-4 py-3 border-b border-purple-200 flex items-center gap-3"
+                  style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #a855f7 100%)' }}>
+                  <Brain className="w-4 h-4 text-white" />
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">AI Assistant</h3>
+                  <div className="ml-auto">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-200 animate-pulse" />
+                  </div>
+                </div>
+                <div className="p-4 space-y-3">
+                  {/* AI Status */}
+                  <div className="flex items-center gap-2 p-2 rounded-lg"
+                    style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <p className="text-xs font-medium text-purple-900">AI Engine Active</p>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-purple-900 uppercase tracking-wide">Quick Actions</p>
+                    {[
+                      { icon: Zap, label: 'Auto-fix Issues', color: '#f59e0b' },
+                      { icon: Brain, label: 'Smart Analysis', color: '#7c3aed' },
+                      { icon: Lightbulb, label: 'Recommendations', color: '#10b981' },
+                    ].map(action => (
+                      <button
+                        key={action.label}
+                        className="w-full flex items-center gap-2 p-2 rounded-lg transition-all hover:shadow-md"
+                        style={{
+                          background: '#ffffff',
+                          border: `1.5px solid ${action.color}33`,
+                        }}
+                      >
+                        <action.icon className="w-3.5 h-3.5" style={{ color: action.color }} />
+                        <span className="text-xs font-medium text-slate-700">{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* AI Insights */}
+                  <div className="p-3 rounded-lg" style={{
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                  }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Lightbulb className="w-3.5 h-3.5 text-amber-700" />
+                      <p className="text-xs font-bold text-amber-900">AI Insight</p>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      {totalIssues > 0
+                        ? `Detected ${totalIssues} potential issues across ${results?.drawings?.length || 0} drawings. ${criticalCount > 0 ? `${criticalCount} require immediate attention.` : 'Review findings panel for details.'}`
+                        : 'All drawings passed quality checks. Excellent compliance!'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Documentation Quick Reference */}
+              <div className="rounded-2xl overflow-hidden shadow-lg" style={{
+                background: '#ffffff',
+                border: '2px solid rgba(148,163,184,0.15)',
+              }}>
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3"
+                  style={{ background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)' }}>
+                  <ClipboardList className="w-4 h-4 text-slate-700" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Quick Guide</h3>
+                </div>
+                <div className="p-3 space-y-2" style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#cbd5e1 transparent'
+                }}>
+                  {[
+                    { step: '1', title: 'Upload P&ID', desc: 'Drag & drop PDF or image' },
+                    { step: '2', title: 'AI Analysis', desc: 'Automatic symbol extraction' },
+                    { step: '3', title: 'Review Findings', desc: 'Navigate panels on left' },
+                    { step: '4', title: 'Override', desc: 'Accept/reject AI findings' },
+                    { step: '5', title: 'Export', desc: 'Download Excel or PDF' },
+                  ].map(item => (
+                    <div key={item.step} className="flex items-start gap-2 p-2 rounded-lg hover:bg-slate-50 transition-colors">
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: '#fff', fontSize: '10px', fontWeight: 800 }}>
+                        {item.step}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                        <p className="text-xs text-slate-500">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Best Practices */}
+              <div className="rounded-2xl overflow-hidden shadow-lg" style={{
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                border: '2px solid rgba(16,185,129,0.2)',
+              }}>
+                <div className="px-4 py-3 border-b border-green-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-700" />
+                    <h4 className="text-xs font-bold text-green-900 uppercase tracking-wider">Best Practices</h4>
+                  </div>
+                </div>
+                <div className="p-3 space-y-2">
+                  {[
+                    { icon: '✓', text: 'Always review critical issues first', color: '#ef4444' },
+                    { icon: '✓', text: 'Override only when AI is incorrect', color: '#f59e0b' },
+                    { icon: '✓', text: 'Export reports for documentation', color: '#3b82f6' },
+                  ].map((tip, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-green-800">
+                      <span className="font-bold" style={{ color: tip.color }}>{tip.icon}</span>
+                      <span>{tip.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : DOCUMENTATION_ENABLED && WORKFLOW_WIDTH_PERCENT < 100 && (
+            <div className="min-w-0 space-y-4" style={{ animation:'fadeUp 0.6s ease-out 0.15s both' }}>
+              
+              {/* Documentation header card */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3"
+                  style={{ background:'linear-gradient(135deg,#fefce8,#fef3c7)' }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+                    <Lightbulb className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900">Workflow Documentation</h2>
+                    <p className="text-xs text-slate-500">Quick reference guide & best practices</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Start Guide */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <p className="text-xs font-black uppercase tracking-widest text-indigo-700">🚀 Quick Start</p>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  {[
+                    { step: '1', title: 'Upload Drawing', desc: 'Drag & drop or click to upload P&ID PDF/image file' },
+                    { step: '2', title: 'Auto Analysis', desc: 'AI extracts symbols, tags, lines & runs quality checks' },
+                    { step: '3', title: 'Review Results', desc: 'Navigate panels using right rail to inspect findings' },
+                    { step: '4', title: 'Override Issues', desc: 'Mark findings as "Accept" or "Reject" if AI is wrong' },
+                    { step: '5', title: 'Export Reports', desc: 'Download Excel or PDF summary of all findings' },
+                  ].map(item => (
+                    <div key={item.step} className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', color:'white', fontSize:'11px', fontWeight:800 }}>
+                        {item.step}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Panel Navigation Guide */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-purple-50 to-pink-50">
+                  <p className="text-xs font-black uppercase tracking-widest text-purple-700">🧭 Panel Guide</p>
+                </div>
+                <div className="px-5 py-4 space-y-2.5">
+                  {[
+                    { icon: '📏', panel: 'Lines', desc: 'Piping lines, tags, size/fluid validation, drawing layout' },
+                    { icon: '⚙️', panel: 'Equipment', desc: 'Vessels, exchangers, pumps, compressors with tag registry' },
+                    { icon: '🎛️', panel: 'Instrument', desc: 'DCS symbols, ISA compliance, tag naming, loop diagrams' },
+                    { icon: '🔧', panel: 'Piping', desc: 'Valve types, fittings, connections, spec compliance' },
+                    { icon: '💨', panel: 'Compressor', desc: 'Compressor-specific checks, performance data' },
+                    { icon: '🔗', panel: 'Cross-Ref', desc: 'PFD cross-reference & Wrench DMS document search' },
+                    { icon: '📋', panel: 'Index', desc: 'Master findings index, severity filtering, valve tracking' },
+                    { icon: '⚡', panel: 'Performance', desc: 'Model accuracy, rule leaderboard, per-drawing stats' },
+                  ].map(item => (
+                    <div key={item.panel} className="flex items-start gap-2 py-1">
+                      <span className="text-sm flex-shrink-0">{item.icon}</span>
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{item.panel}</p>
+                        <p className="text-xs text-slate-500 leading-snug">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Best Practices */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50">
+                  <p className="text-xs font-black uppercase tracking-widest text-emerald-700">✅ Best Practices</p>
+                </div>
+                <div className="px-5 py-4 space-y-2">
+                  {[
+                    'Upload high-resolution PDFs for best OCR accuracy',
+                    'Upload project legend sheet first for prefix validation',
+                    'Review "Critical" findings before "Major" or "Minor"',
+                    'Use override buttons only when AI is definitively wrong',
+                    'Cross-check with PFD to validate line designations',
+                    'Export Excel for detailed analysis & sharing',
+                    'Re-check drawings after legend updates',
+                  ].map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-slate-600 leading-relaxed">{tip}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Standards Reference */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-700">📖 Standards</p>
+                </div>
+                <div className="px-5 py-4 space-y-2">
+                  {[
+                    { std: 'ISA-5.1', desc: 'Instrumentation symbols & identification' },
+                    { std: 'ISO 14617', desc: 'Graphical symbols for diagrams' },
+                    { std: 'ASME Y14.5', desc: 'Dimensioning & tolerancing' },
+                    { std: 'API 14E', desc: 'Design of offshore production platform piping' },
+                    { std: 'ANSI/ISA-20', desc: 'Specification forms for process instruments' },
+                  ].map(item => (
+                    <div key={item.std} className="flex items-start gap-2">
+                      <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">{item.std}</span>
+                      <p className="text-xs text-slate-600 leading-snug flex-1">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Keyboard Shortcuts (optional — add if navigation shortcuts exist) */}
+              <div className="rounded-2xl overflow-hidden" style={{ ...T.card }}>
+                <div className="px-5 py-3 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-orange-50">
+                  <p className="text-xs font-black uppercase tracking-widest text-amber-700">⌨️ Tips & Tricks</p>
+                </div>
+                <div className="px-5 py-4 space-y-2">
+                  {[
+                    'Drag panel icons on right rail to reorder navigation',
+                    'Click drawing canvas to hide/show QC panel header',
+                    'Use search boxes to filter findings by tag or rule',
+                    'Click severity badges to filter by Critical/Major/Minor',
+                    'Fullscreen mode removes all UI except drawing viewer',
+                    'Legend drawer shows all extracted prefixes & line types',
+                  ].map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-amber-500 flex-shrink-0 text-sm">💡</span>
+                      <p className="text-xs text-slate-600 leading-relaxed">{tip}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Contact / Support */}
+              <div className="rounded-2xl overflow-hidden border-2 border-dashed border-slate-200" style={{ background:'linear-gradient(135deg,#f8fafc,#f1f5f9)' }}>
+                <div className="px-5 py-4 text-center">
+                  <p className="text-xs font-bold text-slate-700 mb-1">Need Help?</p>
+                  <p className="text-xs text-slate-500 mb-3">Contact the engineering team for support or feature requests</p>
+                  <a href="mailto:support@radai.ae" 
+                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg text-white transition-all hover:-translate-y-px"
+                    style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow:'0 2px 8px rgba(59,130,246,0.3)' }}>
+                    <ExternalLink className="w-3 h-3" />
+                    support@radai.ae
+                  </a>
+                </div>
+              </div>
+
+            </div>
+          )}
+          {/* ══ END DOCUMENTATION COLUMN ══ */}
 
           </div>
           );

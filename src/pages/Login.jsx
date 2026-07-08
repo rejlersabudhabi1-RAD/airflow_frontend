@@ -7,6 +7,7 @@ import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlic
 import { authService } from '../services/auth.service'
 import LoginBranding from '../components/login/LoginBranding'
 import LoginForm from '../components/login/LoginForm'
+import PWAInstallPrompt from '../components/PWAInstallPrompt'
 import {
   VALIDATION_CONFIG,
   ERROR_MESSAGES,
@@ -499,6 +500,9 @@ const Login = () => {
           50% { transform: translateY(-20px); }
         }
       `}</style>
+
+      {/* PWA Install Prompt - Non-intrusive desktop app download */}
+      <PWAInstallPrompt />
     </div>
   )
 }

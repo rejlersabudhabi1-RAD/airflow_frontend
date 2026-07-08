@@ -148,7 +148,26 @@ const Profile = () => {
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', phone: '', bio: '',
     location: '', department: '', job_title: '',
+    manager_id: '',  // Reporting Manager — single source of truth with Onboarding
   });
+
+  // Managers list for the Reporting Manager dropdown
+  const [managers, setManagers] = useState([]);
+
+  // ── Organisation Details (from EmployeeMaster / Onboarding alignment) ────
+  // Soft-coded fields — mirrors Onboarding CreateEmployeeTab organisation section
+  const PROFILE_EMPLOYEE_FIELDS = [
+    { key: 'branch',        label: 'Branch',        type: 'select'  },
+    { key: 'join_date',     label: 'Joining Date',  type: 'date'    },
+    { key: 'division',      label: 'Division',      type: 'text'    },
+    { key: 'business_unit', label: 'Business Unit', type: 'text'    },
+    { key: 'business_area', label: 'Business Area', type: 'text'    },
+    { key: 'office',        label: 'Office',        type: 'text'    },
+  ];
+  const [empData, setEmpData]           = useState({ branch: '', join_date: '', division: '', business_unit: '', business_area: '', office: '' });
+  const [branchChoices, setBranchChoices] = useState([]);
+  const [empDataChanged, setEmpDataChanged] = useState(false);
+  const setEmpField = (key, val) => { setEmpData(p => ({ ...p, [key]: val })); setEmpDataChanged(true); };
 
   // Engineer profile
   const [ep, setEp]           = useState(DEFAULT_EP);
@@ -182,6 +201,40 @@ const Profile = () => {
   // ── Fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => { fetchProfile(); }, []);
 
+  // Load potential managers for the dropdown (active employees/engineers)
+  useEffect(() => {
+    const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
+    fetch(`${API_BASE_URL}/rbac/users/engineers/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setManagers(Array.isArray(d) ? d : (d?.results ?? [])))
+      .catch(() => {});
+  }, []);
+
+  // Load EmployeeMaster org fields (branch, join_date, division, etc.)
+  useEffect(() => {
+    const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
+    fetch(`${API_BASE_URL}/users/employees/my-employee-profile/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const emp = d.employee || {};
+        setEmpData({
+          branch:        emp.branch        || '',
+          join_date:     emp.join_date     || '',
+          division:      emp.division      || '',
+          business_unit: emp.business_unit || '',
+          business_area: emp.business_area || '',
+          office:        emp.office        || '',
+        });
+        if (Array.isArray(d.branch_choices)) setBranchChoices(d.branch_choices);
+      })
+      .catch(() => {});
+  }, []);
+
   const fetchProfile = async () => {
     try {
       setIsFetching(true);
@@ -204,6 +257,7 @@ const Profile = () => {
         location:   data.location         || '',
         department: data.department       || '',
         job_title:  data.job_title        || '',
+        manager_id: data.manager_detail?.id || '',
       });
       if (data.profile_photo) setPhotoPreview(data.profile_photo);
       const saved = data.engineer_profile || {};
@@ -222,7 +276,11 @@ const Profile = () => {
     try {
       const token = localStorage.getItem('radai_access_token') || localStorage.getItem('access');
       const fd = new FormData();
-      Object.entries(formData).forEach(([k, v]) => { if (v !== undefined) fd.append(k, v); });
+      Object.entries(formData).forEach(([k, v]) => {
+        // Omit empty manager_id so we don’t accidentally clear the field
+        if (k === 'manager_id') { if (v) fd.append(k, v); return; }
+        if (v !== undefined) fd.append(k, v);
+      });
       if (selectedFile) { fd.append('profile_photo', selectedFile); setUploadProgress(40); }
       const res = await fetch(`${API_BASE_URL}/rbac/users/me/`, {
         method: 'PATCH',
@@ -233,6 +291,18 @@ const Profile = () => {
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Update failed'); }
       const updated = await res.json();
       setUploadProgress(100);
+
+      // ── Dual save: also PATCH EmployeeMaster for org fields ────────────────
+      if (empDataChanged) {
+        try {
+          const empRes = await fetch(`${API_BASE_URL}/users/employees/my-employee-profile/`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(empData),
+          });
+          if (empRes.ok) setEmpDataChanged(false);
+        } catch (_) { /* non-fatal */ }
+      }
       dispatch(updateUser(updated));
       await fetchProfile();
       setSelectedFile(null);
@@ -554,6 +624,66 @@ const Profile = () => {
                   <input type="text" value={formData.job_title}
                     onChange={e => setFormData(p => ({ ...p, job_title: e.target.value }))}
                     className={inputCls} placeholder="Senior Process Engineer" />
+                </div>
+                {/* Reporting Manager — shared with Onboarding, single source of truth (UserProfile.manager FK) */}
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>
+                    Reporting Manager
+                  </label>
+                  <select
+                    value={formData.manager_id || ''}
+                    onChange={e => setFormData(p => ({ ...p, manager_id: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value="">No reporting manager assigned</option>
+                    {managers.map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}{m.job_title ? ' - ' + m.job_title : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {managers.find(m => m.id === formData.manager_id) && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      {managers.find(m => m.id === formData.manager_id)?.department || 'Manager selected'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Organisation Details — aligned with Onboarding CreateEmployeeTab */}
+                <div className="sm:col-span-2 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5" />
+                    Organisation Details
+                    <span className="font-normal normal-case text-gray-300 ml-1">synced with Onboarding</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {PROFILE_EMPLOYEE_FIELDS.map(({ key, label, type }) => (
+                      <div key={key}>
+                        <label className={labelCls}>{label}</label>
+                        {type === 'select' ? (
+                          <select
+                            value={empData[key] || ''}
+                            onChange={e => setEmpField(key, e.target.value)}
+                            className={inputCls}
+                          >
+                            <option value="">Not set</option>
+                            {branchChoices.map(c => (
+                              <option key={c.value} value={c.value}>{c.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={type}
+                            value={empData[key] || ''}
+                            onChange={e => setEmpField(key, e.target.value)}
+                            className={inputCls}
+                            placeholder={label}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="sm:col-span-2">
                   <label className={labelCls}>Professional Bio</label>

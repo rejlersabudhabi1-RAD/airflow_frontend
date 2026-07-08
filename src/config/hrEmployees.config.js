@@ -286,12 +286,13 @@ export const HR_TABLE_COLUMNS = [
 // 9. DETAIL DRAWER TABS
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_DETAIL_TABS = [
-  { id: 'overview',    label: 'Overview',     icon: 'UserCircleIcon' },
-  { id: 'employment',  label: 'Employment',   icon: 'BriefcaseIcon' },
-  { id: 'timesheet',   label: 'Time Sheet',   icon: 'ClockIcon' },
-  { id: 'competency',  label: 'Competency',   icon: 'AcademicCapIcon' },
-  { id: 'access',      label: 'Roles & Access', icon: 'KeyIcon' },
-  { id: 'security',    label: 'Security & Activity', icon: 'ShieldCheckIcon' },
+  { id: 'overview',      label: 'Overview',            icon: 'UserCircleIcon' },
+  { id: 'employment',    label: 'Employment',          icon: 'BriefcaseIcon' },
+  { id: 'compensation',  label: 'Compensation',        icon: 'BanknotesIcon' },
+  { id: 'timesheet',     label: 'Time Sheet',          icon: 'ClockIcon' },
+  { id: 'competency',    label: 'Competency',          icon: 'AcademicCapIcon' },
+  { id: 'access',        label: 'Roles & Access',      icon: 'KeyIcon' },
+  { id: 'security',      label: 'Security & Activity', icon: 'ShieldCheckIcon' },
 ]
 export const HR_DEFAULT_DETAIL_TAB = 'overview'
 
@@ -301,9 +302,10 @@ export const HR_DEFAULT_DETAIL_TAB = 'overview'
 // `HR_DRAWER_WIDTH_DEFAULT`. Tailwind max-w-* class names only.
 export const HR_DRAWER_WIDTH_DEFAULT = 'max-w-xl'
 export const HR_DRAWER_WIDTH_BY_TAB = {
-  timesheet:  'max-w-6xl',
-  competency: 'max-w-3xl',
-  access:     'max-w-3xl',
+  timesheet:    'max-w-6xl',
+  competency:   'max-w-3xl',
+  compensation: 'max-w-2xl',
+  access:       'max-w-3xl',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -448,6 +450,295 @@ export const HR_EXPORT_FORMATS = [
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_ADMIN_USER_LINK = (id) => `/admin/users/${id}`
 export const HR_ADMIN_USERS_LIST_LINK = '/admin/users'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12a. EDIT MODE CONFIGURATION — Controls inline editing in detail drawer
+//      Soft-coded: RBAC permissions, editable fields, validation rules, UI labels
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_EDIT_CONFIG = {
+  // RBAC permission required to edit employee data (null = allow all)
+  requiredPermission: 'hr.employee.update',
+  // Fallback: allow edit if user has any of these roles
+  allowedRoles: ['Super Administrator', 'Admin', 'HR Manager'],
+  // Enable edit button in detail drawer footer
+  enableEditMode: true,
+  // Show "Edit in Admin" link even when inline edit is available
+  showAdminLink: true,
+  // Salary/Compensation editing permissions (stricter than general HR edits)
+  salaryEditRoles: ['Super Administrator', 'Admin', 'Finance Manager'],
+  salaryRequiredPermission: 'hr.salary.update',
+}
+
+// Soft-coded: Salary increment limits and validation rules
+export const HR_SALARY_CONFIG = {
+  // Maximum allowed percentage increase per edit (soft-coded limit)
+  maxIncrementPercent: 30,  // 30% max increase
+  // Minimum basic salary (AED) — validation floor
+  minBasicSalary: 3000,
+  // Maximum basic salary (AED) — validation ceiling
+  maxBasicSalary: 100000,
+  // Minimum total package (AED)
+  minTotalPackage: 5000,
+  // Maximum total package (AED)
+  maxTotalPackage: 200000,
+  // Require note/justification for increases above this %
+  requireNoteAbovePercent: 15,
+  // Currency symbol
+  currencySymbol: 'AED',
+  // Decimal places for salary fields
+  decimalPlaces: 2,
+  // Show salary history (requires audit trail implementation)
+  showSalaryHistory: false,
+}
+
+// Editable fields per tab — each field defines:
+//   - id: field name matching backend serializer
+//   - label: display label
+//   - type: input type (text | email | tel | number | select | textarea | multiselect | date | currency)
+//   - required: validation flag
+//   - options: for select/multiselect (can be array or async function)
+//   - placeholder: input placeholder
+//   - helpText: helper text below input
+//   - validation: custom validation function (field, value) => error string | null
+//   - readOnly: cannot be edited (display only)
+export const HR_EDITABLE_FIELDS = {
+  overview: [
+    { 
+      id: 'first_name', 
+      label: 'First Name', 
+      type: 'text', 
+      required: true,
+      placeholder: 'e.g., Mohammed',
+      helpText: 'Legal first name as per Emirates ID'
+    },
+    { 
+      id: 'last_name', 
+      label: 'Last Name', 
+      type: 'text', 
+      required: true,
+      placeholder: 'e.g., Al-Rahman',
+      helpText: 'Legal last name as per Emirates ID'
+    },
+    { 
+      id: 'email', 
+      label: 'Email', 
+      type: 'email', 
+      required: true,
+      placeholder: 'user@company.com',
+      readOnly: true,
+      helpText: 'Primary email for login. Contact IT to change.'
+    },
+    { id: 'employee_id', label: 'Employee ID', type: 'text', placeholder: 'e.g., EMP001' },
+    { id: 'phone', label: 'Phone', type: 'tel', placeholder: '+971 50 123 4567' },
+    { id: 'location', label: 'Office Location', type: 'text', placeholder: 'Dubai, UAE' },
+    { 
+      id: 'is_mfa_enabled', 
+      label: 'Two-Factor Auth (2FA)', 
+      type: 'select',
+      readOnly: true,
+      options: [
+        { value: true, label: 'Enabled' },
+        { value: false, label: 'Disabled' }
+      ],
+      helpText: 'Enable in Security settings'
+    },
+    { id: 'bio', label: 'Bio / Notes', type: 'textarea', rows: 3, maxLength: 500, placeholder: 'Brief profile, specializations, or internal notes...' },
+  ],
+  employment: [
+    { 
+      id: 'organization', 
+      label: 'Organisation', 
+      type: 'select', 
+      optionsFrom: 'organizations',  // fetched from rbacService.getOrganizations()
+      valueField: 'id',
+      labelField: 'name',
+      readOnly: true,  // Usually fixed; change via admin
+      helpText: 'Organisation assignment cannot be changed here. Use Admin panel.'
+    },
+    { id: 'department', label: 'Department', type: 'text', placeholder: 'e.g., Process Engineering', required: true },
+    { id: 'job_title', label: 'Designation', type: 'text', placeholder: 'e.g., Senior Process Engineer', required: true },
+    { 
+      id: 'status', 
+      label: 'Employment Status', 
+      type: 'select',
+      options: Object.entries(HR_STATUSES).map(([v, m]) => ({ value: v, label: m.label })),
+      required: true,
+      helpText: 'Active = working, Inactive = on leave, Suspended = access blocked'
+    },
+    { 
+      id: 'is_active', 
+      label: 'Account Active', 
+      type: 'select',
+      options: [
+        { value: true, label: 'Active - Can Login' },
+        { value: false, label: 'Inactive - Login Blocked' }
+      ],
+      required: true,
+      helpText: 'Controls system access. Inactive users cannot log in.'
+    },
+    { 
+      id: 'manager', 
+      label: 'Reports To (Manager)', 
+      type: 'select',
+      optionsFrom: 'managers',  // will be fetched dynamically
+      valueField: 'id',
+      labelField: 'name',
+      helpText: 'Direct line manager for reporting hierarchy'
+    },
+    { 
+      id: 'roles', 
+      label: 'Assigned Roles', 
+      type: 'multiselect',
+      optionsFrom: 'roles',  // fetched from rbacService.getRoles()
+      valueField: 'id',
+      labelField: 'display_name',
+      helpText: 'Select one or more roles. First selected role becomes primary.',
+      required: true
+    },
+  ],
+  competency: [
+    { 
+      id: 'engineer_profile.discipline', 
+      label: 'Discipline', 
+      type: 'select',
+      options: HR_DISCIPLINES.map(d => ({ value: d.code, label: d.label })),
+      helpText: 'Primary engineering discipline'
+    },
+    { 
+      id: 'engineer_profile.certifications', 
+      label: 'Certifications', 
+      type: 'textarea',
+      rows: 2,
+      placeholder: 'PMP, CEng, Six Sigma Black Belt...',
+      helpText: 'Professional certifications (comma-separated)'
+    },
+    { 
+      id: 'engineer_profile.skills', 
+      label: 'Technical Skills', 
+      type: 'textarea',
+      rows: 3,
+      placeholder: 'HYSYS, AutoCAD, P&ID review, hazard analysis...',
+      helpText: 'Key technical skills and software proficiencies'
+    },
+    { 
+      id: 'engineer_profile.experience_years', 
+      label: 'Total Experience (Years)', 
+      type: 'number',
+      min: 0,
+      max: 50,
+      step: 0.5,
+      placeholder: 'e.g., 10.5'
+    },
+  ],
+  compensation: [
+    {
+      id: 'payroll.basic',
+      label: 'Basic Salary',
+      type: 'currency',
+      required: true,
+      min: HR_SALARY_CONFIG.minBasicSalary,
+      max: HR_SALARY_CONFIG.maxBasicSalary,
+      placeholder: `${HR_SALARY_CONFIG.minBasicSalary}`,
+      helpText: `Monthly basic salary (${HR_SALARY_CONFIG.currencySymbol})`,
+      icon: 'BanknotesIcon',
+    },
+    {
+      id: 'payroll.housing',
+      label: 'Housing Allowance',
+      type: 'currency',
+      min: 0,
+      max: 50000,
+      placeholder: '0',
+      helpText: `Monthly housing allowance (${HR_SALARY_CONFIG.currencySymbol})`,
+      icon: 'HomeIcon',
+    },
+    {
+      id: 'payroll.transport',
+      label: 'Transport Allowance',
+      type: 'currency',
+      min: 0,
+      max: 10000,
+      placeholder: '0',
+      helpText: `Monthly transport allowance (${HR_SALARY_CONFIG.currencySymbol})`,
+      icon: 'TruckIcon',
+    },
+    {
+      id: 'payroll.home_leave',
+      label: 'Home Leave Allowance',
+      type: 'currency',
+      min: 0,
+      max: 10000,
+      placeholder: '0',
+      helpText: `Monthly home leave allowance (${HR_SALARY_CONFIG.currencySymbol})`,
+      icon: 'GlobeAltIcon',
+    },
+    {
+      id: 'payroll.designation',
+      label: 'Payroll Designation',
+      type: 'text',
+      placeholder: 'e.g., Senior Engineer',
+      helpText: 'Job title as it appears on payslips',
+    },
+    {
+      id: 'payroll.grade',
+      label: 'Grade',
+      type: 'text',
+      placeholder: 'e.g., L4, Manager',
+      helpText: 'Salary grade or level',
+    },
+    {
+      id: 'payroll.joining_date',
+      label: 'Joining Date',
+      type: 'date',
+      helpText: 'Employment start date',
+    },
+    {
+      id: 'payroll.notes',
+      label: 'Payroll Notes',
+      type: 'textarea',
+      rows: 2,
+      placeholder: 'Internal notes for payroll processing...',
+      helpText: 'Admin notes (not shown to employee)',
+    },
+  ],
+}
+
+// Validation messages (soft-coded for i18n readiness)
+export const HR_EDIT_VALIDATION = {
+  required: (field) => `${field} is required`,
+  email: 'Please enter a valid email address',
+  phone: 'Please enter a valid phone number',
+  minLength: (field, min) => `${field} must be at least ${min} characters`,
+  maxLength: (field, max) => `${field} must not exceed ${max} characters`,
+  invalidFormat: (field) => `Invalid format for ${field}`,
+  minValue: (field, min) => `${field} must be at least ${HR_SALARY_CONFIG.currencySymbol} ${min.toLocaleString()}`,
+  maxValue: (field, max) => `${field} must not exceed ${HR_SALARY_CONFIG.currencySymbol} ${max.toLocaleString()}`,
+  salaryIncreaseLimit: `Salary increase exceeds maximum allowed (${HR_SALARY_CONFIG.maxIncrementPercent}%). Please contact Finance for approval.`,
+  noteRequired: `A justification note is required for increases above ${HR_SALARY_CONFIG.requireNoteAbovePercent}%`,
+}
+
+// UI labels for edit mode
+export const HR_EDIT_COPY = {
+  editButton: 'Edit Profile',
+  saveButton: 'Save Changes',
+  cancelButton: 'Cancel',
+  savingButton: 'Saving...',
+  successMessage: 'Employee profile updated successfully',
+  errorMessage: 'Failed to update profile. Please try again.',
+  confirmCancel: 'Discard unsaved changes?',
+  confirmCancelMessage: 'You have unsaved changes. Are you sure you want to cancel?',
+  noPermission: 'You do not have permission to edit employee profiles',
+  roleUpdateSuccess: 'Roles updated successfully',
+  roleUpdateError: 'Failed to update roles',
+  salaryEditButton: 'Edit Compensation',
+  salaryNoPermission: 'You do not have permission to edit salary information',
+  salarySuccessMessage: 'Salary updated successfully',
+  salaryErrorMessage: 'Failed to update salary. Please try again.',
+  salaryIncreaseWarning: 'Large salary increase detected',
+  salaryIncreaseNote: 'Please provide justification for this increase',
+  noPayrollProfile: 'No payroll profile found. Create one in Payroll Engine first.',
+  createPayrollProfile: 'Create Payroll Profile',
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 12b. DEPARTMENT VIEW — table columns + copy
@@ -757,6 +1048,11 @@ export default {
   HR_COPY,
   HR_ADMIN_USER_LINK,
   HR_ADMIN_USERS_LIST_LINK,
+  HR_EDIT_CONFIG,
+  HR_SALARY_CONFIG,
+  HR_EDITABLE_FIELDS,
+  HR_EDIT_VALIDATION,
+  HR_EDIT_COPY,
   HR_DEPT_TABLE_COLUMNS,
   HR_DEPT_ACCENT_PALETTE,
   HR_DEPT_CARD_CONFIG,

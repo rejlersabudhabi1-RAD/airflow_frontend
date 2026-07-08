@@ -12,6 +12,121 @@ import {
   CTA_CONFIG,
   SOCIAL_PROOF
 } from '../config/homeContent.config'
+import PWAInstallPrompt from '../components/PWAInstallPrompt'
+import PWAInstallModal from '../components/PWAInstallModal'
+
+// ─── PWA Install Button Component (Navigation Version) ───────────────────────
+const PWAInstallButton = ({ mobile, onClose }) => {
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [showButton, setShowButton] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+
+  useEffect(() => {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) return
+
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowButton(true)
+    }
+
+    const handleAppInstalled = () => {
+      setShowButton(false)
+      setDeferredPrompt(null)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleAppInstalled)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
+    }
+  }, [])
+
+  const handleInstallClick = () => {
+    if (!deferredPrompt) return
+    // Show our custom modal first
+    setShowModal(true)
+  }
+
+  const handleModalInstall = async () => {
+    if (!deferredPrompt) return
+
+    // Close modal
+    setShowModal(false)
+    if (onClose) onClose()
+
+    // Small delay for better UX
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    // Show browser prompt
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') {
+      console.log('✅ PWA installed from nav button')
+    }
+    setDeferredPrompt(null)
+    setShowButton(false)
+  }
+
+  if (!showButton) return null
+
+  // Mobile version
+  if (mobile) {
+    return (
+      <>
+        <button
+          onClick={handleInstallClick}
+          className="block w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold transition-all hover:scale-105"
+          style={{
+            background: 'linear-gradient(135deg,#0891b2,#06b6d4)',
+            color: '#fff',
+            boxShadow: '0 4px 14px rgba(8,145,178,0.4)'
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Download Desktop App</span>
+          </div>
+        </button>
+        <PWAInstallModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          onInstall={handleModalInstall}
+        />
+      </>
+    )
+  }
+
+  // Desktop version
+  return (
+    <>
+      <button
+        onClick={handleInstallClick}
+        className="group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 hover:scale-105"
+        style={{
+          background: 'linear-gradient(135deg,#0891b2,#06b6d4)',
+          color: '#fff',
+          boxShadow: '0 4px 14px rgba(8,145,178,0.3)'
+        }}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>Download</span>
+      </button>
+      <PWAInstallModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onInstall={handleModalInstall}
+      />
+    </>
+  )
+}
 
 // - SOFT-CODED animation + marketing config (edit here, no deeper change needed) -
 const LANDING_CONFIG = {
@@ -540,6 +655,7 @@ const Home = () => {
 
               {/* Desktop nav links */}
               <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
+                <PWAInstallButton />
                 {['Solutions','About','Contact'].map(label => (
                   <Link key={label} to={`/${label.toLowerCase()}`}
                     className="text-gray-300 hover:text-white text-sm font-semibold transition-colors duration-200 hover:text-[#7FCAB5]">
@@ -566,6 +682,7 @@ const Home = () => {
             {/* Mobile drawer */}
             {mobileOpen && (
               <div className="md:hidden pb-4 border-t border-gray-700/50 pt-3 space-y-2">
+                <PWAInstallButton mobile onClose={() => setMobileOpen(false)} />
                 {['Solutions','About','Contact'].map(label => (
                   <Link key={label} to={`/${label.toLowerCase()}`} onClick={() => setMobileOpen(false)}
                     className="block text-gray-300 hover:text-[#7FCAB5] py-2 text-sm font-semibold transition-colors">
@@ -1524,6 +1641,9 @@ const Home = () => {
           </div>
         </footer>
       </div>
+
+      {/* PWA Install Prompt - Floating button for non-nav users */}
+      <PWAInstallPrompt />
     </>
   )
 }

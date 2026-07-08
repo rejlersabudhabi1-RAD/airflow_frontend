@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import rbacService from '../../services/rbac.service'
+import payrollEngineService from '../../services/payrollEngine.service'
 import PeopleNav from '../../components/PeopleNav/PeopleNav'
 import TimeSheetAnalytics from './TimeSheetAnalytics'
 import { fetchUserHistory, lookupByCode } from '../../services/timesheet.service'
@@ -57,6 +58,12 @@ import {
   HR_DEPT_CARD_CONFIG,
   HR_DEPT_COPY,
   HR_DEPT_ACTIONS,
+  HR_EDIT_CONFIG,
+  HR_SALARY_CONFIG,
+  HR_EDITABLE_FIELDS,
+  HR_EDIT_VALIDATION,
+  HR_EDIT_COPY,
+  HR_STATUSES,
   formatYearsOfService,
   formatDateTime,
   formatDate,
@@ -926,6 +933,164 @@ const Field = ({ label, value, mono = false }) => (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Editable Field Component — Soft-Coded Edit Mode
+// Renders read-only (Field) or editable input based on `isEditing` prop
+// ─────────────────────────────────────────────────────────────────────────────
+const EditableField = ({ field, value, isEditing, onChange, options = null, error = null }) => {
+  const { id, label, type, placeholder, helpText, rows, maxLength, min, max, step, readOnly, icon } = field
+
+  // Read-only mode OR field marked as readOnly
+  if (!isEditing || readOnly) {
+    let displayValue = value
+    if (type === 'select' && options) {
+      const opt = options.find(o => o.value === value)
+      displayValue = opt?.label || value
+    }
+    if (type === 'multiselect' && Array.isArray(value) && options) {
+      displayValue = value.map(v => options.find(o => o.value === v)?.label || v).join(', ')
+    }
+    if (type === 'currency') {
+      const numValue = parseFloat(value) || 0
+      displayValue = `${HR_SALARY_CONFIG.currencySymbol} ${numValue.toLocaleString(undefined, {
+        minimumFractionDigits: HR_SALARY_CONFIG.decimalPlaces,
+        maximumFractionDigits: HR_SALARY_CONFIG.decimalPlaces,
+      })}`
+    }
+    
+    // Render with icon if provided
+    if (icon && type === 'currency') {
+      const IconComponent = HeroIcons[icon] || HeroIcons.BanknotesIcon
+      return (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+          <div className="flex items-center gap-2 mt-1">
+            <IconComponent className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <div className="text-base font-semibold text-slate-900">{displayValue || '—'}</div>
+          </div>
+        </div>
+      )
+    }
+    
+    return <Field label={label} value={displayValue} mono={type === 'tel' || type === 'email'} />
+  }
+
+  // Edit mode
+  const baseInputClasses = `w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+    error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-slate-300'
+  }`
+
+  return (
+    <div>
+      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+        {label} {field.required && <span className="text-red-500">*</span>}
+      </label>
+      
+      {/* Currency input */}
+      {type === 'currency' && (
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">
+            {HR_SALARY_CONFIG.currencySymbol}
+          </span>
+          <input
+            type="number"
+            value={value || ''}
+            onChange={(e) => onChange(id, e.target.value)}
+            placeholder={placeholder}
+            className={`${baseInputClasses} pl-14 font-mono`}
+            min={min}
+            max={max}
+            step={step || 0.01}
+          />
+        </div>
+      )}
+
+      {/* Text, Email, Tel, Number */}
+      {['text', 'email', 'tel', 'number'].includes(type) && (
+        <input
+          type={type}
+          value={value || ''}
+          onChange={(e) => onChange(id, e.target.value)}
+          placeholder={placeholder}
+          className={baseInputClasses}
+          min={min}
+          max={max}
+          step={step}
+          maxLength={maxLength}
+        />
+      )}
+
+      {/* Date */}
+      {type === 'date' && (
+        <input
+          type="date"
+          value={value || ''}
+          onChange={(e) => onChange(id, e.target.value)}
+          className={baseInputClasses}
+        />
+      )}
+
+      {/* Textarea */}
+      {type === 'textarea' && (
+        <textarea
+          value={value || ''}
+          onChange={(e) => onChange(id, e.target.value)}
+          placeholder={placeholder}
+          rows={rows || 3}
+          maxLength={maxLength}
+          className={baseInputClasses}
+        />
+      )}
+
+      {/* Select */}
+      {type === 'select' && options && (
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(id, e.target.value)}
+          className={baseInputClasses}
+        >
+          <option value="">-- Select {label} --</option>
+          {options.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      )}
+
+      {/* Multi-select (checkboxes) */}
+      {type === 'multiselect' && options && (
+        <div className="border border-slate-300 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+          {options.map(opt => {
+            const isChecked = Array.isArray(value) && value.includes(opt.value)
+            return (
+              <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded">
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={(e) => {
+                    const newValue = Array.isArray(value) ? [...value] : []
+                    if (e.target.checked) {
+                      newValue.push(opt.value)
+                    } else {
+                      const idx = newValue.indexOf(opt.value)
+                      if (idx > -1) newValue.splice(idx, 1)
+                    }
+                    onChange(id, newValue)
+                  }}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <span className="flex-1">{opt.label}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      {helpText && <div className="mt-1 text-[11px] text-slate-500">{helpText}</div>}
+      {error && <div className="mt-1 text-[11px] text-red-600">{error}</div>}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Per-user timesheet panel — rendered as a tab inside the drawer.
 // Reuses the existing `/api/v1/timesheet/user/` endpoint (no core change).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1464,15 +1629,686 @@ const EmployeeTimesheetPanel = ({ emp }) => {
   )
 }
 
-const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Compensation Panel Component — Salary & Payroll Management
+// ─────────────────────────────────────────────────────────────────────────────
+const CompensationPanel = ({ emp, isEditing, formData, formErrors, handleFieldChange, canEditSalary, onPayrollLoad }) => {
+  const [payrollProfile, setPayrollProfile] = useState(null)
+  const [loadingPayroll, setLoadingPayroll] = useState(false)
+  const [creatingPayroll, setCreatingPayroll] = useState(false)
+
+  // Load payroll profile when panel opens
+  useEffect(() => {
+    if (!emp?.employee_id) return
+    let cancelled = false
+    setLoadingPayroll(true)
+    
+    // Try to find payroll employee by employee_no
+    payrollEngineService.listEmployees({ search: emp.employee_id })
+      .then((data) => {
+        if (cancelled) return
+        const results = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : []
+        const profile = results.find(p => p.employee_no === emp.employee_id)
+        setPayrollProfile(profile || null)
+        
+        // Notify parent with payroll data for form initialization
+        if (profile && onPayrollLoad) {
+          onPayrollLoad(profile)
+        }
+      })
+      .catch((err) => {
+        console.error('[HR] Failed to load payroll profile:', err)
+      })
+      .finally(() => { if (!cancelled) setLoadingPayroll(false) })
+    
+    return () => { cancelled = true }
+  }, [emp?.employee_id, onPayrollLoad])
+
+  // Calculate total package
+  const totalPackage = useMemo(() => {
+    if (isEditing && formData) {
+      const basic = parseFloat(formData['payroll.basic']) || 0
+      const housing = parseFloat(formData['payroll.housing']) || 0
+      const transport = parseFloat(formData['payroll.transport']) || 0
+      const homeLeave = parseFloat(formData['payroll.home_leave']) || 0
+      return basic + housing + transport + homeLeave
+    }
+    if (payrollProfile) {
+      return parseFloat(payrollProfile.default_gross || 0)
+    }
+    return 0
+  }, [isEditing, formData, payrollProfile])
+
+  // Calculate salary increase percentage if editing
+  const salaryIncreasePct = useMemo(() => {
+    if (!isEditing || !payrollProfile) return 0
+    const oldBasic = parseFloat(payrollProfile.basic) || 0
+    const newBasic = parseFloat(formData['payroll.basic']) || 0
+    if (oldBasic === 0) return 0
+    return ((newBasic - oldBasic) / oldBasic) * 100
+  }, [isEditing, formData, payrollProfile])
+
+  // Handle create payroll profile
+  const handleCreatePayrollProfile = async () => {
+    setCreatingPayroll(true)
+    try {
+      const payload = {
+        employee_no: emp.employee_id,
+        user: emp.id,
+        full_name: fullName(emp),
+        department: emp.department || '',
+        designation: emp.job_title || '',
+        basic: 0,
+        housing: 0,
+        transport: 0,
+        home_leave: 0,
+        is_active: true,
+      }
+      const created = await payrollEngineService.createEmployee(payload)
+      setPayrollProfile(created)
+    } catch (err) {
+      console.error('[HR] Failed to create payroll profile:', err)
+      alert('Failed to create payroll profile. Please try again.')
+    } finally {
+      setCreatingPayroll(false)
+    }
+  }
+
+  if (loadingPayroll) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner className="w-6 h-6 text-blue-600" />
+        <span className="ml-2 text-sm text-slate-600">Loading salary information...</span>
+      </div>
+    )
+  }
+
+  if (!payrollProfile && !isEditing) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center py-12">
+          <HeroIcons.ExclamationTriangleIcon className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <p className="text-sm text-slate-600 mb-4">{HR_EDIT_COPY.noPayrollProfile}</p>
+          {canEditSalary && (
+            <button
+              type="button"
+              onClick={handleCreatePayrollProfile}
+              disabled={creatingPayroll}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium inline-flex items-center gap-2"
+            >
+              {creatingPayroll ? (
+                <>
+                  <Spinner className="w-4 h-4" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <HeroIcons.PlusIcon className="w-4 h-4" />
+                  {HR_EDIT_COPY.createPayrollProfile}
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Total Package Summary */}
+      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Total Monthly Package</div>
+            <div className="text-3xl font-bold text-emerald-900 mt-1 tabular-nums">
+              {HR_SALARY_CONFIG.currencySymbol} {totalPackage.toLocaleString(undefined, {
+                minimumFractionDigits: HR_SALARY_CONFIG.decimalPlaces,
+                maximumFractionDigits: HR_SALARY_CONFIG.decimalPlaces,
+              })}
+            </div>
+          </div>
+          <HeroIcons.BanknotesIcon className="w-12 h-12 text-emerald-600 opacity-50" />
+        </div>
+        
+        {isEditing && salaryIncreasePct !== 0 && (
+          <div className={`mt-3 pt-3 border-t border-emerald-200 flex items-center gap-2 text-sm ${
+            salaryIncreasePct > 0 ? 'text-emerald-700' : 'text-red-700'
+          }`}>
+            {salaryIncreasePct > 0 ? (
+              <HeroIcons.ArrowTrendingUpIcon className="w-4 h-4" />
+            ) : (
+              <HeroIcons.ArrowTrendingDownIcon className="w-4 h-4" />
+            )}
+            <span className="font-semibold">
+              {salaryIncreasePct > 0 ? '+' : ''}{salaryIncreasePct.toFixed(1)}% change
+            </span>
+            {salaryIncreasePct > HR_SALARY_CONFIG.maxIncrementPercent && (
+              <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+                Exceeds limit ({HR_SALARY_CONFIG.maxIncrementPercent}%)
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Salary Components */}
+      <div className="grid grid-cols-2 gap-4">
+        {(HR_EDITABLE_FIELDS.compensation || []).map(field => {
+          // Skip notes field from grid, show it separately below
+          if (field.id === 'payroll.notes') return null
+          
+          const fieldValue = isEditing 
+            ? formData[field.id]
+            : (field.id === 'payroll.basic' ? payrollProfile?.basic :
+               field.id === 'payroll.housing' ? payrollProfile?.housing :
+               field.id === 'payroll.transport' ? payrollProfile?.transport :
+               field.id === 'payroll.home_leave' ? payrollProfile?.home_leave :
+               field.id === 'payroll.designation' ? payrollProfile?.designation :
+               field.id === 'payroll.grade' ? payrollProfile?.grade :
+               field.id === 'payroll.joining_date' ? payrollProfile?.joining_date :
+               '')
+          
+          return (
+            <div key={field.id} className={field.type === 'currency' ? '' : 'col-span-2'}>
+              <EditableField
+                field={field}
+                value={fieldValue}
+                isEditing={isEditing && canEditSalary}
+                onChange={handleFieldChange}
+                error={formErrors[field.id]}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Notes (full width) */}
+      <div>
+        <EditableField
+          field={HR_EDITABLE_FIELDS.compensation.find(f => f.id === 'payroll.notes') || {}}
+          value={isEditing ? formData['payroll.notes'] : payrollProfile?.notes}
+          isEditing={isEditing && canEditSalary}
+          onChange={handleFieldChange}
+          error={formErrors['payroll.notes']}
+        />
+      </div>
+
+      {/* Payroll Details (Read-only) */}
+      {!isEditing && payrollProfile && (
+        <div className="pt-4 border-t border-slate-200">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Payroll Details</div>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Employee No" value={payrollProfile.employee_no} mono />
+            <Field label="Payment Mode" value={payrollProfile.default_payment_mode} />
+            <Field label="Active Status" value={payrollProfile.is_active ? 'Active' : 'Inactive'} />
+            <Field label="IBAN" value={payrollProfile.iban || '—'} mono />
+            <Field label="Bank" value={payrollProfile.bank_name || '—'} />
+            <Field label="Grade" value={payrollProfile.grade || '—'} />
+          </div>
+        </div>
+      )}
+
+      {!canEditSalary && !isEditing && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-sm text-amber-800">
+          <HeroIcons.LockClosedIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{HR_EDIT_COPY.salaryNoPermission}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail Drawer Component — Enhanced with Edit Mode & Salary Management
+// ─────────────────────────────────────────────────────────────────────────────
+const DetailDrawer = ({ emp, loading, onClose, initialTab = null, onUpdate }) => {
   const [tab, setTab] = useState(initialTab || HR_DEFAULT_DETAIL_TAB)
+  const [isEditing, setIsEditing] = useState(false)
+  const [formData, setFormData] = useState({})
+  const [formErrors, setFormErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  
+  // Fetch dynamic options (roles, organizations, managers)
+  const [roles, setRoles] = useState([])
+  const [organizations, setOrganizations] = useState([])
+  const [managers, setManagers] = useState([])
+  const [optionsLoading, setOptionsLoading] = useState(false)
+  
+  // Current logged-in user for permission checks
+  const [currentUser, setCurrentUser] = useState(null)
+  const [currentUserLoading, setCurrentUserLoading] = useState(false)
+
   useEffect(() => { setTab(initialTab || HR_DEFAULT_DETAIL_TAB) }, [emp?.id, initialTab])
+
+  // Load current user for permission checks
+  useEffect(() => {
+    let cancelled = false
+    setCurrentUserLoading(true)
+    rbacService.getCurrentUser()
+      .then((resp) => {
+        if (cancelled) return
+        const user = resp?.data || resp
+        setCurrentUser(user)
+      })
+      .catch((err) => {
+        console.error('[HR] Failed to load current user:', err)
+      })
+      .finally(() => { if (!cancelled) setCurrentUserLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Load dynamic options when drawer opens
+  useEffect(() => {
+    if (!emp?.id || !HR_EDIT_CONFIG.enableEditMode) return
+    let cancelled = false
+    setOptionsLoading(true)
+    Promise.all([
+      rbacService.getRoles().catch(() => ({ data: [] })),
+      rbacService.getOrganizations().catch(() => ({ data: [] })),
+      rbacService.getUsers({ page_size: 500 }).catch(() => ({ data: [] })),  // Fetch potential managers
+    ])
+      .then(([rolesResp, orgsResp, managersResp]) => {
+        if (cancelled) return
+        
+        // Extract roles array - handle both direct array and paginated response
+        let rolesArray = []
+        if (Array.isArray(rolesResp)) {
+          rolesArray = rolesResp
+        } else if (Array.isArray(rolesResp?.data)) {
+          rolesArray = rolesResp.data
+        } else if (Array.isArray(rolesResp?.data?.results)) {
+          rolesArray = rolesResp.data.results
+        } else if (rolesResp?.data && typeof rolesResp.data === 'object') {
+          rolesArray = []
+        }
+        
+        // Extract organizations array - handle both direct array and paginated response
+        let orgsArray = []
+        if (Array.isArray(orgsResp)) {
+          orgsArray = orgsResp
+        } else if (Array.isArray(orgsResp?.data)) {
+          orgsArray = orgsResp.data
+        } else if (Array.isArray(orgsResp?.data?.results)) {
+          orgsArray = orgsResp.data.results
+        } else if (orgsResp?.data && typeof orgsResp.data === 'object') {
+          orgsArray = []
+        }
+        
+        // Extract managers array
+        let managersArray = []
+        if (Array.isArray(managersResp)) {
+          managersArray = managersResp
+        } else if (Array.isArray(managersResp?.data)) {
+          managersArray = managersResp.data
+        } else if (Array.isArray(managersResp?.data?.results)) {
+          managersArray = managersResp.data.results
+        }
+        
+        setRoles(rolesArray)
+        setOrganizations(orgsArray)
+        setManagers(managersArray)
+      })
+      .finally(() => { if (!cancelled) setOptionsLoading(false) })
+    return () => { cancelled = true }
+  }, [emp?.id])
+
+  // Initialize form data from employee when entering edit mode
+  useEffect(() => {
+    if (!isEditing || !emp) return
+    const ep = emp.engineer_profile || {}
+    const user = emp.user || {}
+    setFormData({
+      // User fields
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      email: user.email || '',
+      is_active: user.is_active !== undefined ? user.is_active : true,
+      // Profile fields
+      employee_id: emp.employee_id || '',
+      phone: emp.phone || '',
+      location: emp.location || '',
+      bio: emp.bio || '',
+      is_mfa_enabled: emp.is_mfa_enabled || false,
+      organization: emp.organization?.id || '',
+      department: emp.department || '',
+      job_title: emp.job_title || '',
+      status: emp.status || 'active',
+      manager: emp.manager?.id || emp.manager || '',
+      roles: (emp.roles || []).map(r => r.id),
+      'engineer_profile.discipline': ep.discipline || '',
+      'engineer_profile.certifications': ep.certifications || '',
+      'engineer_profile.skills': ep.skills || '',
+      'engineer_profile.experience_years': ep.experience_years || '',
+      // Payroll fields — will be populated by CompensationPanel
+      'payroll.basic': '',
+      'payroll.housing': '',
+      'payroll.transport': '',
+      'payroll.home_leave': '',
+      'payroll.designation': '',
+      'payroll.grade': '',
+      'payroll.joining_date': '',
+      'payroll.notes': '',
+    })
+    setFormErrors({})
+    setSaveError(null)
+    setSaveSuccess(false)
+  }, [isEditing, emp])
+
+  // Handle form field changes
+  const handleFieldChange = useCallback((fieldId, value) => {
+    setFormData(prev => ({ ...prev, [fieldId]: value }))
+    // Clear error for this field
+    setFormErrors(prev => {
+      const next = { ...prev }
+      delete next[fieldId]
+      return next
+    })
+    setSaveSuccess(false)
+  }, [])
+
+  // Validate form before save
+  const validateForm = useCallback(() => {
+    const errors = {}
+    const allFields = [
+      ...HR_EDITABLE_FIELDS.overview || [],
+      ...HR_EDITABLE_FIELDS.employment || [],
+      ...HR_EDITABLE_FIELDS.competency || [],
+    ]
+    
+    allFields.forEach(field => {
+      const value = formData[field.id]
+      
+      // Required field validation
+      if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
+        errors[field.id] = HR_EDIT_VALIDATION.required(field.label)
+      }
+      
+      // Email validation
+      if (field.type === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        errors[field.id] = HR_EDIT_VALIDATION.email
+      }
+      
+      // Phone validation (basic)
+      if (field.type === 'tel' && value && value.length > 0 && value.length < 7) {
+        errors[field.id] = HR_EDIT_VALIDATION.phone
+      }
+      
+      // Min/max length
+      if (field.minLength && value && value.length < field.minLength) {
+        errors[field.id] = HR_EDIT_VALIDATION.minLength(field.label, field.minLength)
+      }
+      if (field.maxLength && value && value.length > field.maxLength) {
+        errors[field.id] = HR_EDIT_VALIDATION.maxLength(field.label, field.maxLength)
+      }
+    })
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }, [formData])
+
+  // Check if user has edit permission
+  const canEdit = useMemo(() => {
+    if (!HR_EDIT_CONFIG.enableEditMode) return false
+    if (!currentUser || currentUserLoading) return false
+    
+    // Check if current logged-in user has any of the allowed roles
+    const userRoles = (currentUser.roles || []).map(r => r.name || r.display_name)
+    const hasRole = HR_EDIT_CONFIG.allowedRoles.some(role => userRoles.includes(role))
+    
+    // Debug logging (remove in production)
+    console.log('[HR Edit] Permission check:', {
+      currentUser: currentUser.username || currentUser.email,
+      userRoles,
+      allowedRoles: HR_EDIT_CONFIG.allowedRoles,
+      hasRole
+    })
+    
+    return hasRole
+  }, [currentUser, currentUserLoading])
+
+  // Check if user has salary edit permission (stricter than general edit)
+  const canEditSalary = useMemo(() => {
+    if (!currentUser || currentUserLoading) return false
+    
+    // Check if current logged-in user has any of the salary edit roles
+    const userRoles = (currentUser.roles || []).map(r => r.name || r.display_name)
+    return HR_EDIT_CONFIG.salaryEditRoles.some(role => userRoles.includes(role))
+  }, [currentUser, currentUserLoading])
+
+  // Handle save
+  const handleSave = useCallback(async () => {
+    if (!validateForm()) {
+      setSaveError('Please fix validation errors before saving')
+      return
+    }
+
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+
+    try {
+      // Prepare update payload
+      const ep = emp.engineer_profile || {}
+      const payload = {
+        // User model fields
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        is_active: formData.is_active,
+        // Profile fields
+        employee_id: formData.employee_id,
+        phone: formData.phone,
+        location: formData.location,
+        bio: formData.bio,
+        department: formData.department,
+        job_title: formData.job_title,
+        status: formData.status,
+        manager_id: formData.manager || null,  // Use manager_id for backend
+        engineer_profile: {
+          ...ep,
+          discipline: formData['engineer_profile.discipline'],
+          certifications: formData['engineer_profile.certifications'],
+          skills: formData['engineer_profile.skills'],
+          experience_years: formData['engineer_profile.experience_years'],
+        },
+      }
+
+      // Update user profile
+      await rbacService.updateUser(emp.id, payload)
+
+      // Handle role changes (add/remove roles)
+      const currentRoleIds = (emp.roles || []).map(r => r.id)
+      const newRoleIds = formData.roles || []
+      
+      const rolesToAdd = newRoleIds.filter(id => !currentRoleIds.includes(id))
+      const rolesToRemove = currentRoleIds.filter(id => !newRoleIds.includes(id))
+
+      // Add new roles
+      for (const roleId of rolesToAdd) {
+        await rbacService.assignRole(emp.id, roleId, rolesToAdd.indexOf(roleId) === 0)
+      }
+
+      // Remove roles
+      for (const roleId of rolesToRemove) {
+        await rbacService.revokeRole(emp.id, roleId)
+      }
+
+      // Handle payroll updates if salary fields changed and user has permission
+      if (canEditSalary && (
+        formData['payroll.basic'] || 
+        formData['payroll.housing'] || 
+        formData['payroll.transport'] || 
+        formData['payroll.home_leave']
+      )) {
+        // Fetch current payroll profile to check for increases
+        const payrollList = await payrollEngineService.listEmployees({ search: emp.employee_id })
+        const payrollResults = Array.isArray(payrollList?.results) ? payrollList.results : Array.isArray(payrollList) ? payrollList : []
+        const currentPayroll = payrollResults.find(p => p.employee_no === emp.employee_id)
+
+        const newBasic = parseFloat(formData['payroll.basic']) || 0
+        
+        // Validate salary increase if updating existing payroll
+        if (currentPayroll) {
+          const oldBasic = parseFloat(currentPayroll.basic) || 0
+          if (oldBasic > 0) {
+            const increasePct = ((newBasic - oldBasic) / oldBasic) * 100
+            if (increasePct > HR_SALARY_CONFIG.maxIncrementPercent) {
+              throw new Error(`Salary increase (${increasePct.toFixed(1)}%) exceeds maximum allowed (${HR_SALARY_CONFIG.maxIncrementPercent}%)`)
+            }
+            if (increasePct > HR_SALARY_CONFIG.requireNoteAbovePercent && !formData['payroll.notes']) {
+              throw new Error(`Salary increase above ${HR_SALARY_CONFIG.requireNoteAbovePercent}% requires a note explaining the reason`)
+            }
+          }
+
+          // Update existing payroll
+          const payrollPayload = {
+            basic: formData['payroll.basic'] || currentPayroll.basic,
+            housing: formData['payroll.housing'] || currentPayroll.housing,
+            transport: formData['payroll.transport'] || currentPayroll.transport,
+            home_leave: formData['payroll.home_leave'] || currentPayroll.home_leave,
+            designation: formData['payroll.designation'] || currentPayroll.designation,
+            grade: formData['payroll.grade'] || currentPayroll.grade,
+            joining_date: formData['payroll.joining_date'] || currentPayroll.joining_date,
+            notes: formData['payroll.notes'] || currentPayroll.notes,
+          }
+          await payrollEngineService.updateEmployee(currentPayroll.id, payrollPayload)
+        }
+      }
+
+      setSaveSuccess(true)
+      setIsEditing(false)
+      
+      // Callback to parent to refresh data
+      if (onUpdate) {
+        onUpdate()
+      }
+
+      // Show success briefly then close
+      setTimeout(() => {
+        setSaveSuccess(false)
+      }, 3000)
+
+    } catch (err) {
+      console.error('[HR] Failed to update employee:', err)
+      setSaveError(err?.response?.data?.error || err?.response?.data?.detail || err?.message || HR_EDIT_COPY.errorMessage)
+    } finally {
+      setSaving(false)
+    }
+  }, [emp, formData, validateForm, canEditSalary, onUpdate])
+
+  // Handle payroll profile loaded — populate form with payroll data
+  const handlePayrollLoad = useCallback((payrollProfile) => {
+    if (!isEditing || !payrollProfile) return
+    setFormData(prev => ({
+      ...prev,
+      'payroll.basic': payrollProfile.basic || '',
+      'payroll.housing': payrollProfile.housing || '',
+      'payroll.transport': payrollProfile.transport || '',
+      'payroll.home_leave': payrollProfile.home_leave || '',
+      'payroll.designation': payrollProfile.designation || '',
+      'payroll.grade': payrollProfile.grade || '',
+      'payroll.joining_date': payrollProfile.joining_date || '',
+      'payroll.notes': payrollProfile.notes || '',
+    }))
+  }, [isEditing])
+
+  // Handle cancel
+  const handleCancel = useCallback(() => {
+    const hasChanges = JSON.stringify(formData) !== JSON.stringify({
+      employee_id: emp.employee_id || '',
+      phone: emp.phone || '',
+      location: emp.location || '',
+      bio: emp.bio || '',
+      organization: emp.organization?.id || '',
+      department: emp.department || '',
+      job_title: emp.job_title || '',
+      status: emp.status || 'active',
+      roles: (emp.roles || []).map(r => r.id),
+      'engineer_profile.discipline': (emp.engineer_profile || {}).discipline || '',
+      'engineer_profile.certifications': (emp.engineer_profile || {}).certifications || '',
+      'engineer_profile.skills': (emp.engineer_profile || {}).skills || '',
+      'engineer_profile.experience_years': (emp.engineer_profile || {}).experience_years || '',
+    })
+
+    if (hasChanges && !window.confirm(HR_EDIT_COPY.confirmCancelMessage)) {
+      return
+    }
+
+    setIsEditing(false)
+    setFormErrors({})
+    setSaveError(null)
+    setSaveSuccess(false)
+  }, [emp, formData])
+
+  // Get options for a field
+  const getFieldOptions = useCallback((field) => {
+    if (field.options) return field.options
+    if (field.optionsFrom === 'roles') {
+      if (!Array.isArray(roles)) return []
+      return roles.map(r => ({ value: r.id, label: r.display_name || r.name }))
+    }
+    if (field.optionsFrom === 'organizations') {
+      if (!Array.isArray(organizations)) return []
+      return organizations.map(o => ({ value: o.id, label: o.name }))
+    }
+    if (field.optionsFrom === 'managers') {
+      if (!Array.isArray(managers)) return []
+      // Format managers for display: "Name (Job Title)"
+      return managers
+        .filter(m => m.id !== emp?.id)  // Don't allow self as manager
+        .map(m => ({
+          value: m.id,
+          label: `${m.user?.first_name || ''} ${m.user?.last_name || ''} (${m.job_title || 'N/A'})`.trim()
+        }))
+    }
+    return []
+  }, [roles, organizations, managers, emp?.id])
+
+  // Get field value for display (read-only mode)
+  const getFieldValue = useCallback((field, emp) => {
+    if (!emp) return ''
+    const user = emp.user || {}
+    
+    // User model fields
+    if (field.id === 'first_name') return user.first_name || ''
+    if (field.id === 'last_name') return user.last_name || ''
+    if (field.id === 'email') return user.email || ''
+    if (field.id === 'is_active') return user.is_active !== undefined ? user.is_active : true
+    
+    // Overview fields
+    if (field.id === 'employee_id') return emp.employee_id || ''
+    if (field.id === 'phone') return emp.phone || ''
+    if (field.id === 'location') return emp.location || ''
+    if (field.id === 'bio') return emp.bio || ''
+    if (field.id === 'is_mfa_enabled') return emp.is_mfa_enabled || false
+    
+    // Employment fields
+    if (field.id === 'organization') {
+      // For select fields in read-only mode, EditableField will look up the label from options
+      // But we need to return the ID for the lookup to work
+      return emp.organization?.id || emp.organization_id || ''
+    }
+    if (field.id === 'department') return emp.department || ''
+    if (field.id === 'job_title') return emp.job_title || ''
+    if (field.id === 'status') return emp.status || 'active'
+    if (field.id === 'manager') return emp.manager?.id || emp.manager || ''
+    if (field.id === 'roles') return (emp.roles || []).map(r => r.id)
+    
+    // Competency fields (engineer_profile)
+    if (field.id.startsWith('engineer_profile.')) {
+      const ep = emp.engineer_profile || {}
+      const key = field.id.replace('engineer_profile.', '')
+      return ep[key] || ''
+    }
+    
+    return ''
+  }, [])
 
   if (!emp) return null
   const ep = emp.engineer_profile || {}
-  // Soft-coded width: tabs with dense data (timesheet, competency, access)
-  // get a wider canvas; everything else stays compact. Adding a tab id to
-  // HR_DRAWER_WIDTH_BY_TAB in the config widens the drawer for that tab.
   const widthClass = HR_DRAWER_WIDTH_BY_TAB[tab] || HR_DRAWER_WIDTH_DEFAULT
 
   return (
@@ -1512,6 +2348,24 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
               Loading full profile…
             </div>
           )}
+          {isEditing && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] bg-amber-500/20 border border-amber-300/30 rounded px-2 py-1">
+              <HeroIcons.PencilIcon className="w-3 h-3" />
+              <span>Edit Mode — Make your changes below</span>
+            </div>
+          )}
+          {saveSuccess && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] bg-emerald-500/20 border border-emerald-300/30 rounded px-2 py-1">
+              <HeroIcons.CheckCircleIcon className="w-3 h-3" />
+              <span>{HR_EDIT_COPY.successMessage}</span>
+            </div>
+          )}
+          {saveError && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] bg-red-500/20 border border-red-300/30 rounded px-2 py-1">
+              <HeroIcons.XCircleIcon className="w-3 h-3" />
+              <span>{saveError}</span>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -1537,27 +2391,56 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {tab === 'overview' && (
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Employee ID" value={emp.employee_id} mono />
-              <Field label="Years of Service" value={formatYearsOfService(emp.created_at)} />
-              <Field label="Email" value={getEmail(emp)} />
-              <Field label="Phone" value={emp.phone} />
-              <Field label="Location" value={emp.location} />
-              <Field label="Joined" value={formatDate(emp.created_at)} />
-              <div className="col-span-2">
-                <Field label="Bio" value={emp.bio} />
-              </div>
+              {(HR_EDITABLE_FIELDS.overview || []).map(field => (
+                <div key={field.id} className={field.type === 'textarea' ? 'col-span-2' : ''}>
+                  <EditableField
+                    field={field}
+                    value={isEditing ? formData[field.id] : getFieldValue(field, emp)}
+                    isEditing={isEditing}
+                    onChange={handleFieldChange}
+                    error={formErrors[field.id]}
+                  />
+                </div>
+              ))}
+              {!isEditing && (
+                <>
+                  <Field label="Years of Service" value={formatYearsOfService(emp.created_at)} />
+                  <Field label="Joined" value={formatDate(emp.created_at)} />
+                </>
+              )}
             </div>
           )}
 
           {tab === 'employment' && (
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Organisation" value={emp.organization_name} />
-              <Field label="Department" value={emp.department} />
-              <Field label="Designation" value={emp.job_title} />
-              <Field label="Manager" value={emp.manager ? `User #${emp.manager}` : '—'} />
-              <Field label="Status" value={getStatusMeta(emp.status).label} />
-              <Field label="Discipline" value={matchDiscipline(ep.discipline || emp.department)?.label || ep.discipline || '—'} />
+              {(HR_EDITABLE_FIELDS.employment || []).map(field => (
+                <div key={field.id} className={field.id === 'roles' ? 'col-span-2' : ''}>
+                  <EditableField
+                    field={field}
+                    value={isEditing ? formData[field.id] : getFieldValue(field, emp)}
+                    isEditing={isEditing}
+                    onChange={handleFieldChange}
+                    options={getFieldOptions(field)}
+                    error={formErrors[field.id]}
+                  />
+                </div>
+              ))}
+              {!isEditing && (
+                <Field label="Manager" value={emp.manager ? `User #${emp.manager}` : '—'} />
+              )}
             </div>
+          )}
+
+          {tab === 'compensation' && (
+            <CompensationPanel 
+              emp={emp}
+              isEditing={isEditing}
+              formData={formData}
+              formErrors={formErrors}
+              handleFieldChange={handleFieldChange}
+              canEditSalary={canEditSalary}
+              onPayrollLoad={handlePayrollLoad}
+            />
           )}
 
           {tab === 'timesheet' && (
@@ -1566,18 +2449,22 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
 
           {tab === 'competency' && (
             <div className="space-y-3">
-              {Object.keys(ep).length === 0 ? (
-                <div className="text-sm text-slate-500 italic">No engineering competency profile recorded.</div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(ep).map(([k, v]) => (
-                    <Field
-                      key={k}
-                      label={k.replace(/_/g, ' ')}
-                      value={Array.isArray(v) ? v.join(', ') : (typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—'))}
+              <div className="grid grid-cols-2 gap-4">
+                {(HR_EDITABLE_FIELDS.competency || []).map(field => (
+                  <div key={field.id} className={field.type === 'textarea' ? 'col-span-2' : ''}>
+                    <EditableField
+                      field={field}
+                      value={isEditing ? formData[field.id] : getFieldValue(field, emp)}
+                      isEditing={isEditing}
+                      onChange={handleFieldChange}
+                      options={getFieldOptions(field)}
+                      error={formErrors[field.id]}
                     />
-                  ))}
-                </div>
+                  </div>
+                ))}
+              </div>
+              {!isEditing && Object.keys(ep).length === 0 && (
+                <div className="text-sm text-slate-500 italic mt-4">No engineering competency profile recorded.</div>
               )}
             </div>
           )}
@@ -1623,20 +2510,68 @@ const DetailDrawer = ({ emp, loading, onClose, initialTab = null }) => {
         </div>
 
         {/* Footer actions */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <Link
-            to={HR_ADMIN_USER_LINK(emp.id)}
-            className="text-sm font-medium text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
-          >
-            <HeroIcons.PencilSquareIcon className="w-4 h-4" /> Open in Admin
-          </Link>
-          {getEmail(emp) && (
-            <a
-              href={`mailto:${getEmail(emp)}`}
-              className="text-sm font-medium text-slate-700 hover:text-slate-900 inline-flex items-center gap-1"
-            >
-              <HeroIcons.EnvelopeIcon className="w-4 h-4" /> Email
-            </a>
+        <div className="p-4 border-t border-slate-200 bg-slate-50">
+          {isEditing ? (
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
+              >
+                <HeroIcons.XMarkIcon className="w-4 h-4" />
+                {HR_EDIT_COPY.cancelButton}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || Object.keys(formErrors).length > 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium inline-flex items-center gap-2 shadow-sm"
+              >
+                {saving ? (
+                  <>
+                    <Spinner className="w-4 h-4" />
+                    {HR_EDIT_COPY.savingButton}
+                  </>
+                ) : (
+                  <>
+                    <HeroIcons.CheckIcon className="w-4 h-4" />
+                    {HR_EDIT_COPY.saveButton}
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {HR_EDIT_CONFIG.showAdminLink && (
+                  <Link
+                    to={HR_ADMIN_USER_LINK(emp.id)}
+                    className="text-sm font-medium text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                  >
+                    <HeroIcons.PencilSquareIcon className="w-4 h-4" /> Open in Admin
+                  </Link>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <HeroIcons.PencilIcon className="w-4 h-4" />
+                    {HR_EDIT_COPY.editButton}
+                  </button>
+                )}
+              </div>
+              {getEmail(emp) && (
+                <a
+                  href={`mailto:${getEmail(emp)}`}
+                  className="text-sm font-medium text-slate-700 hover:text-slate-900 inline-flex items-center gap-1"
+                >
+                  <HeroIcons.EnvelopeIcon className="w-4 h-4" /> Email
+                </a>
+              )}
+            </div>
           )}
         </div>
       </aside>
@@ -2064,6 +2999,7 @@ export default function HREmployees() {
           loading={detailLoading}
           initialTab={selectedTab}
           onClose={() => { setSelectedEmp(null); setSelectedTab(null) }}
+          onUpdate={fetchEmployees}
         />
       )}
     </div>
