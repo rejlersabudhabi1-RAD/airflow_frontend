@@ -459,8 +459,44 @@ const LiveTab = ({ refreshTick, onManualRefresh }) => {
         </div>
       )}
 
-      {/* ── Soft-coded no-data diagnostic banner (shown only when 0 rows + no filter) ── */}
-      {allRows.length === 0 && !activeFilter && !q && (
+      {/* ── Soft-coded stale sync diagnostic banner (when DB has data but it's too old) ── */}
+      {allRows.length === 0 && !activeFilter && !q && data?.sync_stale && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+          <HeroIcons.ExclamationTriangleIcon className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-semibold text-rose-800">{TIMESHEET_COPY.liveStaleSyncTitle}</div>
+            <div className="text-xs text-rose-700 mt-1">{TIMESHEET_COPY.liveStaleSyncSubtitle}</div>
+            <div className="mt-2 space-y-1">
+              {data.mirror_latest_event && (
+                <div className="text-xs text-rose-600 flex items-center gap-1">
+                  <HeroIcons.ClockIcon className="w-3 h-3" />
+                  {TIMESHEET_COPY.liveStaleSyncLastEvent}{' '}
+                  <span className="font-semibold">
+                    {new Date(data.mirror_latest_event).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+              )}
+              {data.sync_age_days && (
+                <div className="text-xs text-rose-600 flex items-center gap-1">
+                  <HeroIcons.ExclamationCircleIcon className="w-3 h-3" />
+                  {TIMESHEET_COPY.liveStaleSyncAge}{' '}
+                  <span className="font-semibold">
+                    {data.sync_age_days < 1 
+                      ? `${data.sync_age_hours} hours ago`
+                      : `${data.sync_age_days} days ago`}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="mt-3 text-xs font-semibold text-rose-800 bg-rose-100 border border-rose-300 rounded px-3 py-2">
+              🔧 {TIMESHEET_COPY.liveStaleSyncAction}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Soft-coded no-data diagnostic banner (shown only when 0 rows + no filter + no stale data) ── */}
+      {allRows.length === 0 && !activeFilter && !q && !data?.sync_stale && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
           <HeroIcons.ExclamationTriangleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <div>

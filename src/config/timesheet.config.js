@@ -233,6 +233,17 @@ export const TIMESHEET_COPY = {
     'The sync agent pushes data hourly from the office biometric system. ' +
     'If you just arrived, data may appear after the next sync cycle. ' +
     'Check the Setup tab to confirm the agent is running and events are being received.',
+  
+  // Soft-coded stale sync detection (when DB has events but they’re too old)
+  liveStaleSyncTitle: 'Sync agent has stopped running',
+  liveStaleSyncSubtitle: (
+    'The database has attendance records, but they are outside the rolling time window. ' +
+    'This usually means the office-side sync agent has stopped running.'
+  ),
+  liveStaleSyncAction: 'Restart the sync agent on the office server',
+  liveStaleSyncLastEvent: 'Last punch synced:',
+  liveStaleSyncAge: 'Data age:',
+  
   // Soft-coded prefix shown next to the rolling-window cutoff time
   liveWindowPrefix: 'Showing punches since',
   // Soft-coded fallback when as_of / window_from are not in the response
