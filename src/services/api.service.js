@@ -27,6 +27,7 @@ const AUTH_RESILIENCE_CONFIG = {
   // Polling endpoints especially must fail silently — otherwise a single slow worker
   // (e.g. busy with an upload) spams the UI with "Cannot connect to server" toasts.
   // Add any background poller here to keep the foreground UX clean.
+  // CRITICAL: /timesheet/live/ is NOT in this list — errors should surface to user
   SILENT_TIMEOUT_ENDPOINTS: [
     '/notifications/unread_count',
     '/notifications/stats',

@@ -190,8 +190,16 @@ class EnvironmentConfig {
       return '/api/v1'
     }
     
-    // For other environments, use full URL
-    return backendConfig.api_url || 'http://localhost:8000/api/v1'
+    // For production and other remote environments, use full URL
+    const apiUrl = backendConfig.api_url || 'http://localhost:8000/api/v1'
+    
+    // Log API URL in production for debugging (only once)
+    if (this.currentEnv === 'production' && !window.__API_URL_LOGGED) {
+      console.log(`[ENV] 🌐 Production API URL: ${apiUrl}`)
+      window.__API_URL_LOGGED = true
+    }
+    
+    return apiUrl
   }
 
   /**

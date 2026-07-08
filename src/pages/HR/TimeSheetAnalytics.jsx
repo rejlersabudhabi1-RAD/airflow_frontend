@@ -329,9 +329,31 @@ const LiveTab = ({ refreshTick, onManualRefresh }) => {
     setLoading(true)
     // Soft-coded: add cache-busting timestamp to force fresh data
     const cacheBuster = Date.now()
+    
+    // Log fetch attempt for debugging production issues
+    if (window.location.hostname !== 'localhost') {
+      console.log(`[Timesheet] 📡 Fetching live attendance data (tick: ${refreshTick}, cache: ${cacheBuster})`)
+    }
+    
     timesheetService.fetchLive(cacheBuster)
-      .then(d => { if (!cancelled) { setData(d); setError(null) } })
-      .catch(e => { if (!cancelled) setError(fmtError(e)) })
+      .then(d => { 
+        if (!cancelled) { 
+          setData(d); 
+          setError(null);
+          if (window.location.hostname !== 'localhost') {
+            console.log(`[Timesheet] ✅ Live data loaded: ${d?.rows?.length || 0} rows, summary:`, d?.summary)
+          }
+        } 
+      })
+      .catch(e => { 
+        if (!cancelled) {
+          const errMsg = fmtError(e);
+          setError(errMsg);
+          if (window.location.hostname !== 'localhost') {
+            console.error(`[Timesheet] ❌ Failed to fetch live data:`, errMsg, e)
+          }
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [refreshTick])
