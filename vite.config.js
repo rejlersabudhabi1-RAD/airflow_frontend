@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => {
           background_color: '#0A1628',
           display: 'standalone',
           scope: '/',
-          start_url: '/login',
+          start_url: '/',
           orientation: 'any',
           icons: [
             {
@@ -80,6 +80,30 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
+            }
+          ],
+          // Desktop shortcuts for quick access to common features
+          shortcuts: [
+            {
+              name: 'Login',
+              short_name: 'Login',
+              description: 'Quick login to RADAI',
+              url: '/login',
+              icons: [{ src: '/assets/icon-192x192.png', sizes: '192x192' }]
+            },
+            {
+              name: 'Dashboard',
+              short_name: 'Dashboard',
+              description: 'Open RADAI Dashboard',
+              url: '/dashboard',
+              icons: [{ src: '/assets/icon-192x192.png', sizes: '192x192' }]
+            },
+            {
+              name: 'PID Verification',
+              short_name: 'PID',
+              description: 'PID Verification Tool',
+              url: '/engineering/process/pid-verification',
+              icons: [{ src: '/assets/icon-192x192.png', sizes: '192x192' }]
             }
           ]
         },
@@ -106,8 +130,9 @@ export default defineConfig(({ mode }) => {
           ]
         },
         devOptions: {
-          enabled: true,
-          type: 'module'
+          enabled: true, // Enable PWA in development mode
+          type: 'module',
+          navigateFallback: 'index.html'
         }
       })
     ],

@@ -15,6 +15,7 @@ const PWAInstallPrompt = () => {
   const [showInstall, setShowInstall] = useState(true) // Show by default
   const [isInstalled, setIsInstalled] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [debugInfo, setDebugInfo] = useState({ hasPrompt: false, swReady: false })
 
   useEffect(() => {
     console.log('🚀 PWA: Component mounted, checking installation status...')
@@ -41,11 +42,12 @@ const PWAInstallPrompt = () => {
 
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e) => {
-      console.log('✅ PWA: beforeinstallprompt event captured!')
+      console.log('✅✅✅ PWA: beforeinstallprompt event captured! Browser supports native install!')
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault()
       // Stash the event so it can be triggered later
       setDeferredPrompt(e)
+      setDebugInfo(prev => ({ ...prev, hasPrompt: true }))
       // Ensure button is visible
       setShowInstall(true)
     }
@@ -74,6 +76,7 @@ const PWAInstallPrompt = () => {
       
       navigator.serviceWorker.ready.then(() => {
         console.log('✅ PWA: Service Worker is ready and active')
+        setDebugInfo(prev => ({ ...prev, swReady: true }))
       }).catch(err => {
         console.error('❌ PWA: Service Worker error:', err)
       })
@@ -84,6 +87,15 @@ const PWAInstallPrompt = () => {
     // Debug: Log current URL and protocol
     console.log(`📍 PWA: Running on ${window.location.protocol}//${window.location.host}`)
     console.log(`🔐 PWA: HTTPS: ${window.location.protocol === 'https:'}`)
+    
+    // Check after a delay if prompt was captured
+    setTimeout(() => {
+      if (!deferredPrompt) {
+        console.warn('⚠️ PWA: No beforeinstallprompt event after 2 seconds')
+        console.warn('💡 This is NORMAL on localhost - browser may not fire the event in dev mode')
+        console.warn('💡 Users can still install via browser menu (⋮) → "Install app"')
+      }
+    }, 2000)
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -92,43 +104,82 @@ const PWAInstallPrompt = () => {
   }, [])
 
   const handleInstallClick = async () => {
-    // Show our custom modal (works in both dev and production)
-    setShowModal(true)
+    console.log('🖱️ PWA: Install button clicked!')
+    console.log('   - Has deferred prompt:', !!deferredPrompt)
+    console.log('   - Service Worker ready:', debugInfo.swReady)
+    
+    // If we have the native prompt ready, use it immediately
+    if (deferredPrompt) {
+      console.log('🚀 PWA: Using native browser install prompt...')
+      try {
+        // Show the browser's native install prompt
+        await deferredPrompt.prompt()
+
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice
+        console.log('👤 PWA: User choice:', outcome)
+
+        if (outcome === 'accepted') {
+          console.log('✅ PWA: User accepted installation')
+          setShowInstall(false)
+        } else {
+          console.log('❌ PWA: User dismissed installation')
+        }
+
+        // Clear the deferred prompt
+        setDeferredPrompt(null)
+      } catch (error) {
+        console.error('❌ PWA: Install prompt failed:', error)
+        console.log('📱 PWA: Falling back to modal with instructions')
+        // Fallback to modal
+        setShowModal(true)
+      }
+    } else {
+      // No native prompt available - show our custom modal with instructions
+      console.log('ℹ️ PWA: No native prompt available, showing installation modal')
+      console.log('💡 This is normal on localhost - browser may require HTTPS for auto-install')
+      setShowModal(true)
+    }
   }
 
   const handleModalInstall = async () => {
-    // If we have a deferred prompt, use the browser's native install flow
+    // Close modal first
+    setShowModal(false)
+    
+    // If we still have a deferred prompt, try using it
     if (deferredPrompt) {
-      console.log('📱 PWA: Triggering native browser install prompt...')
+      console.log('📱 PWA: Triggering native browser install prompt from modal...')
       
-      // Close modal
-      setShowModal(false)
-
       // Small delay for better UX
       await new Promise(resolve => setTimeout(resolve, 300))
 
-      // Show the browser's native install prompt
-      deferredPrompt.prompt()
+      try {
+        // Show the browser's native install prompt
+        deferredPrompt.prompt()
 
-      // Wait for the user to respond to the prompt
-      const { outcome } = await deferredPrompt.userChoice
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice
 
-      if (outcome === 'accepted') {
-        console.log('✅ PWA: User accepted installation')
-      } else {
-        console.log('❌ PWA: User dismissed installation')
+        if (outcome === 'accepted') {
+          console.log('✅ PWA: User accepted installation')
+          setShowInstall(false)
+        } else {
+          console.log('❌ PWA: User dismissed installation')
+        }
+
+        // Clear the deferred prompt
+        setDeferredPrompt(null)
+        return
+      } catch (error) {
+        console.error('❌ PWA: Install prompt failed:', error)
       }
-
-      // Clear the deferred prompt
-      setDeferredPrompt(null)
-      return
     }
 
-    // No deferred prompt - provide manual installation instructions
-    console.log('ℹ️ PWA: No beforeinstallprompt event - showing manual instructions')
+    // No deferred prompt - provide browser-specific instructions
+    console.log('ℹ️ PWA: No beforeinstallprompt event - showing browser-specific instructions')
     
-    // Close modal
-    setShowModal(false)
+    // Small delay after closing modal
+    await new Promise(resolve => setTimeout(resolve, 300))
     
     // Detect browser
     const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
@@ -136,28 +187,33 @@ const PWAInstallPrompt = () => {
     const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)
     const isFirefox = /Firefox/.test(navigator.userAgent)
     
-    let instructions = 'To install RADAI:\n\n'
+    let instructions = '📱 RADAI Installation Guide\n\n'
     
     if (isChrome || isEdge) {
-      instructions += 'Chrome/Edge:\n'
-      instructions += '1. Click the ⋮ (menu) button in the top-right\n'
-      instructions += '2. Select "Install RADAI" or "Install app"\n'
-      instructions += '3. Click "Install" in the confirmation dialog\n\n'
-      instructions += 'Or look for the 🖥️ install icon in the address bar'
+      instructions += '✅ Chrome/Edge Installation:\n\n'
+      instructions += '1. Look for the 🖥️ install icon in the address bar (right side)\n'
+      instructions += '   OR\n'
+      instructions += '2. Click the ⋮ menu (top-right corner)\n'
+      instructions += '3. Select "Install RADAI" or "Install app"\n'
+      instructions += '4. Click "Install" in the popup\n\n'
+      instructions += '💡 The app will appear on your desktop and start menu!'
     } else if (isSafari) {
-      instructions += 'Safari (iOS/Mac):\n'
-      instructions += '1. Tap the Share button (📤)\n'
+      instructions += '✅ Safari Installation (iOS/Mac):\n\n'
+      instructions += '1. Tap the Share button (📤) at the bottom\n'
       instructions += '2. Scroll down and tap "Add to Home Screen"\n'
-      instructions += '3. Tap "Add" to confirm'
+      instructions += '3. Tap "Add" to confirm\n\n'
+      instructions += '💡 The app icon will appear on your home screen!'
     } else if (isFirefox) {
-      instructions += 'Firefox:\n'
-      instructions += '1. Click the ⋮ (menu) button\n'
+      instructions += '✅ Firefox Installation:\n\n'
+      instructions += '1. Click the ⋮ menu button\n'
       instructions += '2. Select "Install" or "Add to Home Screen"\n'
-      instructions += '3. Confirm installation'
+      instructions += '3. Confirm the installation\n\n'
+      instructions += '💡 The app will be added to your applications!'
     } else {
-      instructions += 'Your browser:\n'
-      instructions += '1. Look for install options in your browser menu\n'
-      instructions += '2. Or visit Chrome/Edge for full PWA support'
+      instructions += '✅ Installation Options:\n\n'
+      instructions += '1. Look for install options in your browser menu (⋮)\n'
+      instructions += '2. Or use Chrome/Edge for best PWA support\n\n'
+      instructions += '💡 For the best experience, we recommend Chrome or Edge!'
     }
     
     alert(instructions)
