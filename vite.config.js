@@ -178,73 +178,10 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
-      // Soft-coded: Increase chunk size warning limit to 1 MB
+      // Soft-coded: Increase chunk size warning limit to 2 MB
       // Production bundles are large due to comprehensive feature set
-      chunkSizeWarningLimit: 1024, // 1 MB (default is 500 KB)
-      rollupOptions: {
-        output: {
-          // CRITICAL: Manual code splitting to reduce main bundle size
-          // Splits large vendor libraries into separate chunks for better caching
-          manualChunks: (id) => {
-            // React ecosystem - core libraries
-            if (id.includes('node_modules/react') || 
-                id.includes('node_modules/react-dom') || 
-                id.includes('node_modules/react-router') ||
-                id.includes('node_modules/scheduler')) {
-              return 'vendor-react'
-            }
-            
-            // Material-UI and styling - heavy UI framework
-            if (id.includes('node_modules/@mui') || 
-                id.includes('node_modules/@emotion') ||
-                id.includes('node_modules/styled-components')) {
-              return 'vendor-mui'
-            }
-            
-            // Data visualization and charts - large libraries
-            if (id.includes('node_modules/recharts') || 
-                id.includes('node_modules/d3') ||
-                id.includes('node_modules/plotly')) {
-              return 'vendor-charts'
-            }
-            
-            // PDF and document processing - heavy dependencies
-            if (id.includes('node_modules/pdfjs-dist') || 
-                id.includes('node_modules/pdf-lib') ||
-                id.includes('node_modules/react-pdf')) {
-              return 'vendor-pdf'
-            }
-            
-            // Excel and spreadsheet processing
-            if (id.includes('node_modules/xlsx') || 
-                id.includes('node_modules/exceljs')) {
-              return 'vendor-excel'
-            }
-            
-            // HTTP and API libraries
-            if (id.includes('node_modules/axios')) {
-              return 'vendor-axios'
-            }
-            
-            // Date and time utilities
-            if (id.includes('node_modules/date-fns') || 
-                id.includes('node_modules/moment')) {
-              return 'vendor-date'
-            }
-            
-            // Icons and assets
-            if (id.includes('node_modules/@mui/icons-material') ||
-                id.includes('node_modules/react-icons')) {
-              return 'vendor-icons'
-            }
-            
-            // All other node_modules go to vendor-misc
-            if (id.includes('node_modules')) {
-              return 'vendor-misc'
-            }
-          }
-        }
-      }
+      // Relying on Vite's automatic chunking to avoid circular dependencies
+      chunkSizeWarningLimit: 2048, // 2 MB (default is 500 KB)
     },
     // Soft-coded: explicitly pre-bundle packages that use non-standard ESM
     // default exports so Vite's esbuild can wrap them correctly.
