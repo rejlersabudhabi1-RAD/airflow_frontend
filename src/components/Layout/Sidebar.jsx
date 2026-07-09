@@ -89,17 +89,23 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
   // Check admin status from multiple sources (SOFT-CODED):
   // SECURITY FIX: is_staff does NOT grant admin access (only Django admin panel)
   // 1. ONLY is_superuser flag (emergency access)
-  // 2. Roles array (contains 'Super Administrator' role)
+  // 2. Roles array (contains 'Super Administrator', 'Administrator', or 'ICT Administrator' role)
   // 3. User has any admin module code assigned (soft-coded check)
   const hasSuperuserFlag = userData?.is_superuser === true
   const hasSuperAdminRole = user?.roles?.some(role => 
     role.code === 'super_admin' || role.name === 'Super Administrator'
   )
+  const hasAdminRole = user?.roles?.some(role =>
+    role.code === 'admin' || 
+    role.code === 'ict_admin' ||  // ICT Admin added (soft-coded)
+    role.name === 'Administrator' || 
+    role.name === 'ICT Administrator'
+  )
   const hasAdminModule = userModules.some(code => ADMIN_MODULE_CODES.includes(code))
   
   // isAdmin: MODULE-BASED access control (soft-coded)
-  // Does NOT use is_staff flag - only is_superuser, super_admin role, or admin modules
-  const isAdmin = hasSuperuserFlag || hasSuperAdminRole || freshIsAdmin || hasAdminModule
+  // Does NOT use is_staff flag - only is_superuser, super_admin/admin/ict_admin role, or admin modules
+  const isAdmin = hasSuperuserFlag || hasSuperAdminRole || hasAdminRole || freshIsAdmin || hasAdminModule
 
   // Fetch user's accessible modules
   React.useEffect(() => {

@@ -5,13 +5,14 @@
 
 /**
  * Check if user is an administrator
- * SECURITY FIX: Only is_superuser OR super_admin role grants admin access
+ * SECURITY FIX: Only is_superuser OR super_admin/admin/ict_admin role grants admin access
  * is_staff flag does NOT grant admin access (only Django admin panel)
  * 
  * Checks multiple sources for comprehensive admin detection:
  * 1. Django User is_superuser flag (emergency access only)
  * 2. Super Administrator role in roles array
  * 3. Administrator role in roles array
+ * 4. ICT Administrator role in roles array (soft-coded from rbac_config.py)
  * 
  * @param {Object} user - User object from Redux store (may have nested user.user structure)
  * @returns {boolean} - True if user is admin, false otherwise
@@ -26,12 +27,14 @@ export const isUserAdmin = (user) => {
   // is_staff does NOT grant admin access
   const isSuperuser = userData?.is_superuser === true
 
-  // Check for Administrator or Super Administrator role (soft-coded RBAC)
+  // Check for Administrator, Super Administrator, or ICT Administrator role (soft-coded RBAC)
   const hasAdminRole = user.roles?.some(role => 
     role.code === 'super_admin' || 
     role.code === 'admin' ||
+    role.code === 'ict_admin' ||  // ICT Admin added (soft-coded from rbac_config.py)
     role.name === 'Super Administrator' ||
-    role.name === 'Administrator'
+    role.name === 'Administrator' ||
+    role.name === 'ICT Administrator'
   )
 
   return isSuperuser || hasAdminRole
