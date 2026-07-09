@@ -5,9 +5,13 @@
 
 /**
  * Check if user is an administrator
+ * SECURITY FIX: Only is_superuser OR super_admin role grants admin access
+ * is_staff flag does NOT grant admin access (only Django admin panel)
+ * 
  * Checks multiple sources for comprehensive admin detection:
- * 1. Django User flags (is_staff, is_superuser) from nested user object
+ * 1. Django User is_superuser flag (emergency access only)
  * 2. Super Administrator role in roles array
+ * 3. Administrator role in roles array
  * 
  * @param {Object} user - User object from Redux store (may have nested user.user structure)
  * @returns {boolean} - True if user is admin, false otherwise
@@ -18,16 +22,19 @@ export const isUserAdmin = (user) => {
   // Extract nested user data (API returns {user: {is_staff: true}, roles: [...]})
   const userData = user.user || user
 
-  // Check Django User flags
-  const hasAdminFlags = userData?.is_staff === true || userData?.is_superuser === true
+  // SECURITY: Only is_superuser bypasses (emergency access)
+  // is_staff does NOT grant admin access
+  const isSuperuser = userData?.is_superuser === true
 
-  // Check for Super Administrator role in roles array
-  const hasSuperAdminRole = user.roles?.some(role => 
+  // Check for Administrator or Super Administrator role (soft-coded RBAC)
+  const hasAdminRole = user.roles?.some(role => 
     role.code === 'super_admin' || 
-    role.name === 'Super Administrator'
+    role.code === 'admin' ||
+    role.name === 'Super Administrator' ||
+    role.name === 'Administrator'
   )
 
-  return hasAdminFlags || hasSuperAdminRole
+  return isSuperuser || hasAdminRole
 }
 
 /**
