@@ -36,6 +36,19 @@ import {
  * Professional hierarchical menu for RADAI platform
  */
 
+// ── SOFT-CODED: Admin Module Codes ────────────────────────────────────────
+// Array of module codes that grant access to the Admin section (9. Admin).
+// Add new admin features here to auto-enable admin section visibility.
+const ADMIN_MODULE_CODES = [
+  'admin_dashboard',
+  'user_mgmt',
+  'role_access_mgmt',
+  'wrench_integration',
+  'ai_champion',
+  'enquiry_management'
+]
+// ───────────────────────────────────────────────────────────────────────────
+
 const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollapsed: setIsCollapsedProp }) => {
   const navigate = useNavigate()
   const location = useLocation()
@@ -72,16 +85,20 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
 
   // Handle nested user object from API response (user.user.is_staff vs user.is_staff)
   const userData = user?.user || user
+  
   // Check admin status from multiple sources:
   // 1. Django User flags (is_staff, is_superuser)
   // 2. Roles array (contains 'Super Administrator' role)
+  // 3. User has any admin module code assigned (soft-coded check)
   const hasAdminFlags = userData?.is_staff || userData?.is_superuser
   const hasSuperAdminRole = user?.roles?.some(role => 
     role.code === 'super_admin' || role.name === 'Super Administrator'
   )
-  // isAdmin: combines stale Redux data with live freshIsAdmin flag so sidebar
-  // shows correctly even when localStorage hasn't been refreshed since login.
-  const isAdmin = hasAdminFlags || hasSuperAdminRole || freshIsAdmin
+  const hasAdminModule = userModules.some(code => ADMIN_MODULE_CODES.includes(code))
+  
+  // isAdmin: combines stale Redux data with live freshIsAdmin flag and module-based
+  // access so sidebar shows correctly even when localStorage hasn't been refreshed.
+  const isAdmin = hasAdminFlags || hasSuperAdminRole || freshIsAdmin || hasAdminModule
 
   // Fetch user's accessible modules
   React.useEffect(() => {
@@ -185,10 +202,15 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
       console.log('=== SIDEBAR DEBUG ===')
       console.log('Full user object:', user)
       console.log('isAdmin:', isAdmin)
+      console.log('hasAdminFlags:', hasAdminFlags)
+      console.log('hasSuperAdminRole:', hasSuperAdminRole)
+      console.log('freshIsAdmin:', freshIsAdmin)
+      console.log('hasAdminModule:', userModules.some(code => ADMIN_MODULE_CODES.includes(code)))
       console.log('User Modules:', userModules)
+      console.log('Admin Module Codes:', ADMIN_MODULE_CODES)
       console.log('==================')  
     }
-  }, [user, isAdmin, userModules])
+  }, [user, isAdmin, userModules, hasAdminFlags, hasSuperAdminRole, freshIsAdmin])
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
       ...prev,
