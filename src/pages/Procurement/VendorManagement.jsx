@@ -28,6 +28,19 @@ import { usePageControls } from '../../hooks/usePageControls';
 import { PROCUREMENT_CONFIG, getVendorRating } from '../../config/procurement.config';
 import AIVendorCreator from './AIVendorCreator';
 
+// Soft-coded layout configuration
+const LAYOUT_CONFIG = {
+  maxWidthDefault: 'max-w-7xl',        // Standard container width
+  maxWidthTable: 'max-w-full',         // Full width for table view
+  tableMinWidth: 'min-w-[1400px]',     // Minimum table width to show all columns
+  cardGridCols: {
+    sm: 'sm:grid-cols-2',
+    lg: 'lg:grid-cols-3',
+    xl: 'xl:grid-cols-4'
+  },
+  scrollIndicator: 'shadow-sm ring-1 ring-gray-900/5' // Visual scroll hint
+};
+
 const VendorManagement = () => {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -321,7 +334,7 @@ const VendorManagement = () => {
     <div className="min-h-screen bg-gray-50" style={pageControls.styles.container}>
       <div className="py-6" style={pageControls.styles.content}>
         {/* Header */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className={`${LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8`}>
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center">
@@ -348,13 +361,13 @@ const VendorManagement = () => {
         </div>
 
         {/* Statistics */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        <div className={`${LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8 mt-8`}>
           <VendorStats />
         </div>
 
         {/* AI Recommendations */}
         {aiRecommendations && aiRecommendations.length > 0 && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+          <div className={`${LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8 mt-6`}>
             <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-6 border-2 border-purple-200">
               <div className="flex items-center space-x-2 mb-4">
                 <SparklesIcon className="h-6 w-6 text-purple-600" />
@@ -383,7 +396,7 @@ const VendorManagement = () => {
 
         {/* Error Message */}
         {error && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+          <div className={`${LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8 mt-6`}>
             <div className={`rounded-md p-4 ${error.type === 'auth' ? 'bg-yellow-50 border-l-4 border-yellow-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
               <div className="flex">
                 <div className="flex-shrink-0">
@@ -426,7 +439,7 @@ const VendorManagement = () => {
         )}
 
         {/* Filters and Search */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        <div className={`${LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8 mt-8`}>
           <div className="bg-white shadow rounded-lg p-6">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               {/* Search */}
@@ -546,7 +559,7 @@ const VendorManagement = () => {
         </div>
 
         {/* Vendors List */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        <div className={`${viewMode === 'table' ? LAYOUT_CONFIG.maxWidthTable : LAYOUT_CONFIG.maxWidthDefault} mx-auto px-4 sm:px-6 lg:px-8 mt-8`}>
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -563,13 +576,22 @@ const VendorManagement = () => {
               </p>
             </div>
           ) : viewMode === 'table' ? (
-            /* Table View */
-            <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+            /* Table View - Full Width with Smooth Scrolling */
+            <div className="bg-white shadow-xl overflow-hidden rounded-lg border border-gray-200">
+              {/* Scroll hint indicator */}
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-2 border-b border-indigo-100">
+                <p className="text-xs text-indigo-700 font-medium flex items-center">
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                  Scroll horizontally to view all columns • Showing {filteredVendors.length} vendors
+                </p>
+              </div>
+              <div className="overflow-x-auto overflow-y-visible" style={{scrollbarWidth: 'thin', scrollbarColor: '#6366f1 #f3f4f6'}}>
+                <table className={`${LAYOUT_CONFIG.tableMinWidth} w-full divide-y divide-gray-200`}>
+                  <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('vendor_code')}>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 bg-gray-50" onClick={() => handleSort('vendor_code')}>
                         <div className="flex items-center space-x-1">
                           <span>Code</span>
                           {sortConfig.key === 'vendor_code' && (
@@ -577,7 +599,7 @@ const VendorManagement = () => {
                           )}
                         </div>
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('name')}>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 bg-gray-50" onClick={() => handleSort('name')}>
                         <div className="flex items-center space-x-1">
                           <span>Vendor Name</span>
                           {sortConfig.key === 'name' && (
@@ -585,14 +607,14 @@ const VendorManagement = () => {
                           )}
                         </div>
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Person</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Number</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ICV</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADNOC</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenure</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Category</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Contact Person</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Contact Number</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Email</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">ICV</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">ADNOC</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Tenure</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Status</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -650,8 +672,8 @@ const VendorManagement = () => {
               </div>
             </div>
           ) : (
-            /* Card View */
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            /* Card View - Responsive Grid */
+            <div className={`grid grid-cols-1 gap-6 ${LAYOUT_CONFIG.cardGridCols.sm} ${LAYOUT_CONFIG.cardGridCols.lg} ${LAYOUT_CONFIG.cardGridCols.xl}`}>
               {filteredVendors.map((vendor) => (
                 <div key={vendor.id} className="bg-white overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-shadow duration-200 border-2 border-transparent hover:border-indigo-500">
                   <div className="p-6">
