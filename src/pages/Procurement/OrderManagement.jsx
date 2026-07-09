@@ -23,7 +23,9 @@ import { PageControlButtons } from '../../components/Common/PageControlButtons';
 import { usePageControls } from '../../hooks/usePageControls';
 import { PROCUREMENT_CONFIG, getCategoryByCode, getStatusConfig, getPriorityConfig, getOrderTabs } from '../../config/procurement.config';
 import AIPurchaseOrderCreator from './AIPurchaseOrderCreator';
-import AIRequisitionCreator from './AIRequisitionCreator';
+import PurchaseRequisitionForm from './PurchaseRequisitionForm';
+import PurchaseRequisitionApproval from './PurchaseRequisitionApproval';
+import PurchaseOrderForm from './PurchaseOrderForm';
 
 const OrderManagement = () => {
   // Soft-coded tabs from configuration
@@ -45,6 +47,11 @@ const OrderManagement = () => {
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [showAICreator, setShowAICreator] = useState(false);
+  const [showPOForm, setShowPOForm] = useState(false);
+  const [showPRForm, setShowPRForm] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [selectedRequisition, setSelectedRequisition] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [projects, setProjects] = useState([]);  // Smart project lookup for PO creation
   const [aiInsights, setAiInsights] = useState(null);
@@ -143,6 +150,29 @@ const OrderManagement = () => {
     }
   };
 
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await apiClient.get('/rbac/users/me/');
+      setCurrentUser(response.data);
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+  };
+
+  const handleOpenApproval = (requisition) => {
+    setSelectedRequisition(requisition);
+    setShowApprovalModal(true);
+  };
+
+  const handleApprovalComplete = (updatedRequisition) => {
+    // Update the requisition in the list
+    setRequisitions(prevReqs => 
+      prevReqs.map(req => req.id === updatedRequisition.id ? updatedRequisition : req)
+    );
+    setShowApprovalModal(false);
+    setSelectedRequisition(null);
+  };
+
   useEffect(() => {
     // Fetch data based on active tab - soft-coded
     if (activeTab === 'purchaseOrders') {
@@ -151,9 +181,10 @@ const OrderManagement = () => {
       fetchRequisitions();
     }
     
-    // Always fetch vendors and projects for both tabs
+    // Always fetch vendors, projects, and current user for both tabs
     fetchVendors();
     fetchProjects();
+    fetchCurrentUser();
   }, [pageControls.isRefreshing, activeTab]);
 
   /**
@@ -551,13 +582,6 @@ const OrderManagement = () => {
           </div>
         </div>
       );
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
     }
   };
 
@@ -829,7 +853,7 @@ const OrderManagement = () => {
               </p>
               <button
                 type="button"
-                onClick={() => setShowAICreator(true)}
+                onClick={() => activeTab === 'purchaseOrders' ? setShowPOForm(true) : setShowPRForm(true)}
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
                 <SparklesIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
@@ -977,10 +1001,10 @@ const OrderManagement = () => {
                     </div>
                   </div>
                 </div>
-              )})}
+              );
+              })}
             </div>
-          )
-          ) : (
+          )) : (
             // Purchase Requisitions Tab Content
             filteredRequisitions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg shadow">
@@ -1103,7 +1127,9 @@ const OrderManagement = () => {
 
                     {/* Actions */}
                     <div className="flex space-x-2">
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-200">
+                      <button 
+                        onClick={() => handleOpenApproval(req)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-200">
                         <span>View Details</span>
                       </button>
                       {req.status === 'approved' && (
@@ -1115,10 +1141,10 @@ const OrderManagement = () => {
                     </div>
                   </div>
                 </div>
-              )})}
+              );
+              })}
             </div>
-          )
-          )}
+          ))}
         </div>
       </div>
 
@@ -1132,12 +1158,51 @@ const OrderManagement = () => {
           projects={projects}
         />
       ) : (
-        <AIRequisitionCreator
+        <PurchaseRequisitionForm
           isOpen={showAICreator}
           onClose={() => setShowAICreator(false)}
-          onRequisitionCreated={handleRequisitionCreated}
+          onSuccess={handleRequisitionCreated}
+          editData={null}
         />
       )}
+
+      {/* Purchase Order Form Modal */}
+      {showPOForm && (
+        <PurchaseOrderForm
+          isOpen={showPOForm}
+          onClose={() => setShowPOForm(false)}
+          onSuccess={(newOrder) => {
+            setShowPOForm(false);
+            fetchOrders();
+          }}
+          editData={null}
+        />
+      )}
+
+      {/* Purchase Requisition Form Modal */}
+      {showPRForm && (
+        <PurchaseRequisitionForm
+          isOpen={showPRForm}
+          onClose={() => setShowPRForm(false)}
+          onSuccess={(newRequisition) => {
+            setShowPRForm(false);
+            fetchRequisitions();
+          }}
+          editData={null}
+        />
+      )}
+
+      {/* Purchase Requisition Approval Modal */}
+      <PurchaseRequisitionApproval
+        isOpen={showApprovalModal}
+        onClose={() => {
+          setShowApprovalModal(false);
+          setSelectedRequisition(null);
+        }}
+        requisition={selectedRequisition}
+        currentUser={currentUser}
+        onApprovalComplete={handleApprovalComplete}
+      />
     </div>
   );
 };
