@@ -10,6 +10,36 @@
  */
 
 export const PROCUREMENT_CONFIG = {
+  // Order Management Tabs - Soft-coded tab configuration
+  orderTabs: {
+    purchaseOrders: {
+      id: 'purchase_orders',
+      label: 'Purchase Orders',
+      description: 'Manage purchase orders sent to vendors',
+      icon: 'ShoppingCartIcon',
+      color: 'indigo',
+      apiEndpoint: '/procurement/orders/',
+      createLabel: 'Create PO',
+      emptyMessage: 'No purchase orders found',
+      emptyDescription: 'Get started by creating a new purchase order.',
+      searchPlaceholder: 'Search by PO number or vendor...',
+      filterFields: ['status', 'vendor', 'project']
+    },
+    purchaseRequisitions: {
+      id: 'purchase_requisitions',
+      label: 'Purchase Requisitions',
+      description: 'Internal purchase requests awaiting approval',
+      icon: 'DocumentTextIcon',
+      color: 'purple',
+      apiEndpoint: '/procurement/requisitions/',
+      createLabel: 'Create PR',
+      emptyMessage: 'No purchase requisitions found',
+      emptyDescription: 'Create a requisition to request materials or services.',
+      searchPlaceholder: 'Search by PR number or title...',
+      filterFields: ['status', 'priority', 'type']
+    }
+  },
+
   // Oil & Gas Procurement Categories
   categories: {
     // Core Equipment
@@ -355,4 +385,15 @@ export const getQualityStandardsList = () => {
     code,
     ...config
   }))
+}
+
+export const getOrderTabs = () => {
+  return Object.entries(PROCUREMENT_CONFIG.orderTabs).map(([key, config]) => ({
+    key,
+    ...config
+  }))
+}
+
+export const getOrderTabByKey = (key) => {
+  return PROCUREMENT_CONFIG.orderTabs[key] || null
 }

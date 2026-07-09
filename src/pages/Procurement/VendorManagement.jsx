@@ -15,7 +15,12 @@ import {
   EnvelopeIcon,
   GlobeAltIcon,
   SparklesIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  TableCellsIcon,
+  Squares2X2Icon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  DocumentArrowDownIcon
 } from '@heroicons/react/24/outline';
 import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -32,6 +37,8 @@ const VendorManagement = () => {
   const [filterRating, setFilterRating] = useState('all');
   const [showAICreator, setShowAICreator] = useState(false);
   const [aiRecommendations, setAiRecommendations] = useState(null);
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'cards'
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
   const pageControls = usePageControls({
     autoRefreshInterval: 60,
@@ -43,7 +50,13 @@ const VendorManagement = () => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get('/procurement/vendors/');
+      // Fetch all vendors with large page_size to avoid pagination issues
+      // Soft-coded: Use query parameter to get all records
+      const response = await apiClient.get('/procurement/vendors/', {
+        params: {
+          page_size: 1000  // Large enough to get all vendors in one request
+        }
+      });
       const data = response.data;
       
       // Soft-coded data normalization - ensure array
@@ -57,6 +70,9 @@ const VendorManagement = () => {
       }
       
       setVendors(normalizedData);
+      
+      // Log for debugging
+      console.log(`✅ Loaded ${normalizedData.length} vendors from API`);
       
       // AI-powered vendor analytics
       generateAIRecommendations(normalizedData);
@@ -181,6 +197,45 @@ const VendorManagement = () => {
     console.log('Creating vendor with AI data:', vendorData);
     // After successful creation, refresh vendor list
     await fetchVendors();
+  };
+
+  /**
+   * Soft-coded sorting function
+   */
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  /**
+   * Soft-coded export to Excel function
+   */
+  const handleExportToExcel = () => {
+    const headers = ['Vendor Code', 'Vendor Name', 'Category', 'Contact Person', 'Contact Number', 'Email', 'Location', 'ICV', 'ADNOC', 'Tenure (yrs)', 'Trade License', 'VAT Number'];
+    const rows = filteredVendors.map(v => [
+      v.vendor_code,
+      v.name,
+      Array.isArray(v.categories) ? v.categories.join(', ') : '',
+      v.contact_person || '',
+      v.phone || '',
+      v.email || '',
+      v.address || '',
+      v.is_icv_certified ? 'Y' : 'N',
+      v.adnoc_approved ? 'Y' : 'N',
+      v.vendor_tenure_years || '',
+      v.trade_license_number || '',
+      v.vat_number || ''
+    ]);
+    
+    const csvContent = [headers, ...rows].map(e => e.join('\t')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Vendors_Export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
   const VendorStats = () => {
@@ -438,14 +493,54 @@ const VendorManagement = () => {
               <p className="text-sm text-gray-500">
                 Showing {filteredVendors.length} of {Array.isArray(vendors) ? vendors.length : 0} vendors
               </p>
-              <button
-                type="button"
-                onClick={() => setShowAICreator(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <SparklesIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-                Create with AI Assistant
-              </button>
+              
+              <div className="flex space-x-2">
+                {/* View Toggle */}
+                <div className="inline-flex rounded-md shadow-sm" role="group">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    className={`px-3 py-2 text-sm font-medium border ${ 
+                      viewMode === 'table'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    } rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  >
+                    <TableCellsIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('cards')}
+                    className={`px-3 py-2 text-sm font-medium border-t border-b border-r ${
+                      viewMode === 'cards'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    } rounded-r-md focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  >
+                    <Squares2X2Icon className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Export Button */}
+                <button
+                  type="button"
+                  onClick={handleExportToExcel}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <DocumentArrowDownIcon className="-ml-1 mr-2 h-5 w-5" />
+                  Export
+                </button>
+
+                {/* AI Create Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAICreator(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <SparklesIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+                  Create with AI
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -467,7 +562,95 @@ const VendorManagement = () => {
                   : 'Get started by creating a new vendor.'}
               </p>
             </div>
+          ) : viewMode === 'table' ? (
+            /* Table View */
+            <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('vendor_code')}>
+                        <div className="flex items-center space-x-1">
+                          <span>Code</span>
+                          {sortConfig.key === 'vendor_code' && (
+                            sortConfig.direction === 'asc' ? <ArrowUpIcon className="h-4 w-4" /> : <ArrowDownIcon className="h-4 w-4" />
+                          )}
+                        </div>
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('name')}>
+                        <div className="flex items-center space-x-1">
+                          <span>Vendor Name</span>
+                          {sortConfig.key === 'name' && (
+                            sortConfig.direction === 'asc' ? <ArrowUpIcon className="h-4 w-4" /> : <ArrowDownIcon className="h-4 w-4" />
+                          )}
+                        </div>
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Person</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact Number</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ICV</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADNOC</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tenure</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredVendors
+                      .sort((a, b) => {
+                        const aVal = a[sortConfig.key] || '';
+                        const bVal = b[sortConfig.key] || '';
+                        if (sortConfig.direction === 'asc') {
+                          return aVal > bVal ? 1 : -1;
+                        }
+                        return aVal < bVal ? 1 : -1;
+                      })
+                      .map((vendor) => (
+                      <tr key={vendor.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{vendor.vendor_code}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{vendor.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {Array.isArray(vendor.categories) && vendor.categories.length > 0 ? vendor.categories[0] : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vendor.contact_person || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vendor.phone || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{vendor.email || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {vendor.is_icv_certified ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {vendor.adnoc_approved ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {vendor.vendor_tenure_years ? `${vendor.vendor_tenure_years} yrs` : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(vendor.status)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
+            /* Card View */
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredVendors.map((vendor) => (
                 <div key={vendor.id} className="bg-white overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-shadow duration-200 border-2 border-transparent hover:border-indigo-500">
