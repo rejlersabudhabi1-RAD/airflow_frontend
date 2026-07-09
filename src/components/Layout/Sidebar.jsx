@@ -86,19 +86,20 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
   // Handle nested user object from API response (user.user.is_staff vs user.is_staff)
   const userData = user?.user || user
   
-  // Check admin status from multiple sources:
-  // 1. Django User flags (is_staff, is_superuser)
+  // Check admin status from multiple sources (SOFT-CODED):
+  // SECURITY FIX: is_staff does NOT grant admin access (only Django admin panel)
+  // 1. ONLY is_superuser flag (emergency access)
   // 2. Roles array (contains 'Super Administrator' role)
   // 3. User has any admin module code assigned (soft-coded check)
-  const hasAdminFlags = userData?.is_staff || userData?.is_superuser
+  const hasSuperuserFlag = userData?.is_superuser === true
   const hasSuperAdminRole = user?.roles?.some(role => 
     role.code === 'super_admin' || role.name === 'Super Administrator'
   )
   const hasAdminModule = userModules.some(code => ADMIN_MODULE_CODES.includes(code))
   
-  // isAdmin: combines stale Redux data with live freshIsAdmin flag and module-based
-  // access so sidebar shows correctly even when localStorage hasn't been refreshed.
-  const isAdmin = hasAdminFlags || hasSuperAdminRole || freshIsAdmin || hasAdminModule
+  // isAdmin: MODULE-BASED access control (soft-coded)
+  // Does NOT use is_staff flag - only is_superuser, super_admin role, or admin modules
+  const isAdmin = hasSuperuserFlag || hasSuperAdminRole || freshIsAdmin || hasAdminModule
 
   // Fetch user's accessible modules
   React.useEffect(() => {
@@ -122,15 +123,18 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
         console.log('🔐 Full user data:', data)
         
         // ── Derive admin status from live API response ────────────────────
-        // This fixes the stale-localStorage bug where is_staff/is_superuser
-        // may be false in cached Redux state even though the DB is correct.
+        // SECURITY FIX: is_staff does NOT grant admin access
+        // Only is_superuser flag or super_admin role grants admin section access
         const apiIsAdmin =
-          data.user?.is_staff === true ||
           data.user?.is_superuser === true ||
-          data.roles?.some(r => r.code === 'super_admin' || r.name === 'Super Administrator')
+          data.roles?.some(r => r.code === 'super_admin' || r.name === 'Super Administrator') ||
+          (data.modules && data.modules.some(m => ADMIN_MODULE_CODES.includes(m.code)))
         if (apiIsAdmin) {
           setFreshIsAdmin(true)
           console.log('✅ Admin status confirmed from live API')
+        } else {
+          setFreshIsAdmin(false)
+          console.log('⚠️  Admin status: FALSE (no admin role or modules)')
         }
 
         // ── Sync Redux store with fresh auth data ─────────────────────────
@@ -199,10 +203,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
   // Debug logging
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('=== SIDEBAR DEBUG ===')
+      console.log('=== SIDEBAR DEBUG (MODULE-BASED RBAC) ===')
       console.log('Full user object:', user)
       console.log('isAdmin:', isAdmin)
-      console.log('hasAdminFlags:', hasAdminFlags)
+      console.log('hasSuperuserFlag:', hasSuperuserFlag)
       console.log('hasSuperAdminRole:', hasSuperAdminRole)
       console.log('freshIsAdmin:', freshIsAdmin)
       console.log('hasAdminModule:', userModules.some(code => ADMIN_MODULE_CODES.includes(code)))
@@ -210,7 +214,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
       console.log('Admin Module Codes:', ADMIN_MODULE_CODES)
       console.log('==================')  
     }
-  }, [user, isAdmin, userModules, hasAdminFlags, hasSuperAdminRole, freshIsAdmin])
+  }, [user, isAdmin, userModules, hasSuperuserFlag, hasSuperAdminRole, freshIsAdmin])
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -549,10 +553,12 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
     if (item.requiresModule === false) return true
     if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
     
-    // Super Administrators and Staff have access to all modules
-    if (isAdmin) return true
+    // SECURITY FIX: Only super_admin role OR is_superuser flag bypass module checks
+    // Regular admin role (level 2) must have specific module access
+    const isSuperAdmin = hasSuperAdminRole || hasSuperuserFlag
+    if (isSuperAdmin) return true  // ONLY super_admin bypasses module checks
     
-    // Check if user has the required module
+    // Check if user has the required module (soft-coded RBAC)
     if (item.moduleCode) {
       return userModules.includes(item.moduleCode)
     }
