@@ -572,7 +572,8 @@ function RoleManagement() {
       const arr = await refreshRoles();
       const r   = arr.find((x) => x.id === selectedRole.id);
       if (r) setSelectedRole(r);
-      notify('success', `Module ${checked ? 'added to' : 'removed from'} ${selectedRole.name}.`);
+      // SOFT-CODED: Notify admin that users with this role need to refresh/re-login for changes to take effect
+      notify('success', `Module ${checked ? 'added to' : 'removed from'} ${selectedRole.name}. Users with this role must refresh browser or re-login.`);
     } catch (err) { notify('error', err?.response?.data?.detail || 'Failed to update module.'); }
     finally { setSavingModule(false); }
   }, [isSuperAdmin, selectedRole, refreshRoles, notify]);
@@ -608,7 +609,8 @@ function RoleManagement() {
       const r   = arr.find((x) => x.id === selectedRole.id);
       if (r) setSelectedRole(r);
       const name = [u.user?.first_name, u.user?.last_name].filter(Boolean).join(' ') || u.user?.email;
-      notify('success', `${name} assigned to ${selectedRole.name}.`);
+      // SOFT-CODED: Notify admin that user needs to refresh browser/re-login for changes to take effect
+      notify('success', `${name} assigned to ${selectedRole.name}. User must refresh browser or re-login to see new permissions.`);
     } catch (err) { notify('error', err?.response?.data?.error || err?.response?.data?.detail || 'Failed to assign.'); }
     finally { setAssigning(false); }
   }, [selectedRole, assigning, userListSearch, loadRoleUsers, refreshRoles, notify]);
