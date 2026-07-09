@@ -429,13 +429,42 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
       if (submitData.icv_percentage === '') submitData.icv_percentage = null;
       if (submitData.vendor_tenure_years === '') submitData.vendor_tenure_years = null;
       
+      // Track empty optional fields for smart notification
+      const emptyOptionalFields = [];
+      if (!submitData.tax_id) emptyOptionalFields.push('Tax ID (TRN)');
+      if (!submitData.trade_license_number) emptyOptionalFields.push('Trade License Number');
+      if (!submitData.vat_number) emptyOptionalFields.push('VAT Number');
+      if (!submitData.vendor_tenure_years) emptyOptionalFields.push('Vendor Tenure (Years)');
+      if (!submitData.contact_person) emptyOptionalFields.push('Contact Person');
+      if (!submitData.address) emptyOptionalFields.push('Address');
+      if (!submitData.payment_terms) emptyOptionalFields.push('Payment Terms');
+      if (!submitData.credit_limit) emptyOptionalFields.push('Credit Limit');
+      if (submitData.categories.length === 0) emptyOptionalFields.push('Procurement Categories');
+      if (submitData.certifications.length === 0) emptyOptionalFields.push('Certifications');
+      if (submitData.quality_standards.length === 0) emptyOptionalFields.push('Quality Standards');
+      if (!submitData.icv_percentage && !submitData.is_icv_certified) emptyOptionalFields.push('ICV Information');
+      if (!submitData.notes) emptyOptionalFields.push('Notes');
+      
       console.log('📤 Submitting vendor data:', submitData);
+      if (emptyOptionalFields.length > 0) {
+        console.log('ℹ️ Empty optional fields:', emptyOptionalFields.join(', '));
+      }
       
       const response = await apiClient.post('/procurement/vendors/', submitData);
       const data = response.data;
       
       console.log('✅ Vendor created successfully:', data);
-      alert(`✅ Vendor "${data.name}" created successfully with code: ${data.vendor_code}`);
+      
+      // Smart success notification with empty field summary
+      let successMessage = `✅ Vendor "${data.name}" created successfully!\n\nVendor Code: ${data.vendor_code}`;
+      
+      if (emptyOptionalFields.length > 0) {
+        successMessage += `\n\nℹ️ Empty Optional Fields (${emptyOptionalFields.length}):\nThese can be added later via Edit:\n\n• ${emptyOptionalFields.join('\n• ')}`;
+      } else {
+        successMessage += '\n\n✨ All fields completed! Great work!';
+      }
+      
+      alert(successMessage);
       
       onVendorCreated(data);
       onClose();
@@ -750,6 +779,109 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="Full address"
                 />
+              </div>
+
+              {/* Financial & Legal Information */}
+              <div className="col-span-2 mt-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <svg className="h-5 w-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Financial & Legal Information
+                </h4>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tax ID (TRN)
+                </label>
+                <input
+                  type="text"
+                  value={formData.tax_id}
+                  onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Tax Identification Number"
+                />
+                <p className="mt-1 text-xs text-gray-500">Tax Registration Number (TRN)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Trade License Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.trade_license_number}
+                  onChange={(e) => setFormData({ ...formData, trade_license_number: e.target.value })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Trade License No."
+                />
+                <p className="mt-1 text-xs text-gray-500">Required for UAE vendors</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  VAT Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.vat_number}
+                  onChange={(e) => setFormData({ ...formData, vat_number: e.target.value })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="VAT Registration No."
+                />
+                <p className="mt-1 text-xs text-gray-500">Value Added Tax registration</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Vendor Tenure (Years)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.vendor_tenure_years}
+                  onChange={(e) => setFormData({ ...formData, vendor_tenure_years: e.target.value })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Years"
+                />
+                <p className="mt-1 text-xs text-gray-500">Years of business relationship</p>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Procurement Categories *
+                </label>
+                <select
+                  multiple
+                  value={formData.categories}
+                  onChange={(e) => setFormData({ 
+                    ...formData, 
+                    categories: Array.from(e.target.selectedOptions, option => option.value)
+                  })}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 h-32"
+                >
+                  {Object.entries(PROCUREMENT_CONFIG.categories).map(([code, category]) => (
+                    <option key={code} value={code}>
+                      {category.name} - {category.description}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">Hold Ctrl/Cmd to select multiple categories. Select at least one.</p>
+              </div>
+
+              <div className="col-span-2">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.adnoc_approved}
+                    onChange={(e) => setFormData({ ...formData, adnoc_approved: e.target.checked })}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">ADNOC Approved Vendor</span>
+                </label>
+                <p className="mt-1 text-xs text-gray-500 ml-6">Check if vendor is approved by ADNOC</p>
               </div>
 
               {/* Certifications & Compliance */}
