@@ -13,30 +13,54 @@ import apiClient from '../../services/api.service';
 
 const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
   const [formData, setFormData] = useState({
+    // Core Information
     name: '',
     vendor_code: '',
     contact_person: '',
     email: '',
     phone: '',
     address: '',
-    city: '',
     country: '',
-    website: '',
-    business_type: '',
-    specialization: '',
-    certifications: [],
-    quality_standards: [],
-    approved_materials: '',
-    hse_rating: '',
+    
+    // Financial & Legal (ADDED - were missing!)
+    tax_id: '',
+    trade_license_number: '',
+    vat_number: '',
     payment_terms: '',
     credit_limit: '',
+    
+    // Categories (CRITICAL - was missing!)
+    categories: [],
+    
+    // Oil & Gas Specific
+    certifications: [],
+    quality_standards: [],
+    approved_materials: [],
+    inspection_authority: '',
+    
+    // HSE Compliance
+    hse_rating: '',
+    safety_certifications: [],
+    
     // ICV (In-Country Value) - Abu Dhabi Market
     icv_percentage: '',
     icv_certificate: '',
     icv_expiry_date: '',
     icv_issuing_authority: 'ADDED',
     is_icv_certified: false,
-    notes: ''
+    
+    // ADNOC & Industry (ADDED - were missing!)
+    adnoc_approved: false,
+    vendor_tenure_years: '',
+    
+    // Metadata
+    notes: '',
+    
+    // UI-only fields (not sent to backend)
+    _ui_business_type: '',      // Soft-coded prefix for UI-only fields
+    _ui_specialization: '',     // Helps with AI suggestions
+    _ui_city: '',               // For display purposes
+    _ui_website: ''             // For reference
   });
 
   const [aiSuggestions, setAiSuggestions] = useState(null);
@@ -76,8 +100,8 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
         .slice(0, 3)
         .join('');
       
-      const typeCode = formData.business_type
-        ? formData.business_type.substring(0, 3).toUpperCase()
+      const typeCode = formData._ui_business_type
+        ? formData._ui_business_type.substring(0, 3).toUpperCase()
         : 'GEN';
       
       const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -100,8 +124,8 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
     setTimeout(() => {
       // Soft-coded certification suggestion logic
       const suggestions = [];
-      const businessType = formData.business_type;
-      const specialization = formData.specialization.toLowerCase();
+      const businessType = formData._ui_business_type;
+      const specialization = (formData._ui_specialization || '').toLowerCase();
 
       // Base certifications for all oil & gas vendors
       suggestions.push('ISO 9001:2015');
@@ -157,7 +181,7 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
     setTimeout(() => {
       // Soft-coded quality standards suggestion
       const standards = [];
-      const specialization = formData.specialization.toLowerCase();
+      const specialization = (formData._ui_specialization || '').toLowerCase();
 
       // Always include base standards
       standards.push('ISO 9001', 'ISO 14001');
@@ -385,21 +409,42 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
     e.preventDefault();
     
     try {
-      // Prepare data for API
-      const submitData = {
-        ...formData,
-        certifications: formData.certifications || [],
-        quality_standards: formData.quality_standards || []
-      };
+      // Soft-coded: Filter out UI-only fields (prefixed with _ui_)
+      const submitData = Object.keys(formData).reduce((acc, key) => {
+        if (!key.startsWith('_ui_')) {
+          acc[key] = formData[key];
+        }
+        return acc;
+      }, {});
+      
+      // Ensure arrays are properly formatted
+      submitData.certifications = submitData.certifications || [];
+      submitData.quality_standards = submitData.quality_standards || [];
+      submitData.categories = submitData.categories || [];
+      submitData.approved_materials = submitData.approved_materials || [];
+      submitData.safety_certifications = submitData.safety_certifications || [];
+      
+      // Convert empty strings to null for numeric fields
+      if (submitData.credit_limit === '') submitData.credit_limit = null;
+      if (submitData.icv_percentage === '') submitData.icv_percentage = null;
+      if (submitData.vendor_tenure_years === '') submitData.vendor_tenure_years = null;
+      
+      console.log('📤 Submitting vendor data:', submitData);
       
       const response = await apiClient.post('/procurement/vendors/', submitData);
       const data = response.data;
-      console.log('Vendor created successfully:', data);
+      
+      console.log('✅ Vendor created successfully:', data);
+      alert(`✅ Vendor "${data.name}" created successfully with code: ${data.vendor_code}`);
+      
       onVendorCreated(data);
       onClose();
     } catch (error) {
-      console.error('Network error:', error);
-      alert('Network error while creating vendor. Please try again.');
+      console.error('❌ Error creating vendor:', error);
+      const errorMsg = error.response?.data 
+        ? JSON.stringify(error.response.data, null, 2)
+        : error.message;
+      alert(`❌ Failed to create vendor:\n\n${errorMsg}\n\nPlease check console for details.`);
     }
   };
 
@@ -585,8 +630,8 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                 </label>
                 <select
                   required
-                  value={formData.business_type}
-                  onChange={(e) => setFormData({ ...formData, business_type: e.target.value })}
+                  value={formData._ui_business_type}
+                  onChange={(e) => setFormData({ ...formData, _ui_business_type: e.target.value })}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                 >
                   <option value="">Select business type</option>
@@ -604,8 +649,8 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                 </label>
                 <input
                   type="text"
-                  value={formData.specialization}
-                  onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
+                  value={formData._ui_specialization}
+                  onChange={(e) => setFormData({ ...formData, _ui_specialization: e.target.value })}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="e.g., Piping materials, Valves, Pumps"
                 />
@@ -658,11 +703,12 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                 </label>
                 <input
                   type="url"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  value={formData._ui_website}
+                  onChange={(e) => setFormData({ ...formData, _ui_website: e.target.value })}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="https://www.vendor.com"
                 />
+                <p className="mt-1 text-xs text-gray-500">For reference only - not stored in database</p>
               </div>
 
               <div>
@@ -685,11 +731,12 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                 </label>
                 <input
                   type="text"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  value={formData._ui_city}
+                  onChange={(e) => setFormData({ ...formData, _ui_city: e.target.value })}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="Dubai"
                 />
+                <p className="mt-1 text-xs text-gray-500">For reference only - not stored in database</p>
               </div>
 
               <div className="col-span-2">
@@ -769,7 +816,7 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                   <button
                     type="button"
                     onClick={suggestQualityStandards}
-                    disabled={generatingAI || !formData.specialization}
+                    disabled={generatingAI || !formData._ui_specialization}
                     className="text-sm text-purple-600 hover:text-purple-800 disabled:opacity-50 flex items-center space-x-1"
                   >
                     <SparklesIcon className={`h-4 w-4 ${generatingAI && activeAIFeature === 'quality_standards' ? 'animate-spin' : ''}`} />
