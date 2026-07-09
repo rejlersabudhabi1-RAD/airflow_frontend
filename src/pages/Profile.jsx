@@ -22,6 +22,30 @@ const ENGINEERING_DISCIPLINES = [
   'Commissioning', 'Materials & Corrosion', 'Environmental', 'Procurement',
 ];
 
+// Soft-coded: Department choices for Oil & Gas engineering organization
+const DEPARTMENTS = [
+  { value: 'process', label: 'Process Engineering' },
+  { value: 'piping', label: 'Piping Engineering' },
+  { value: 'instrument', label: 'Instrument & Control' },
+  { value: 'electrical', label: 'Electrical Engineering' },
+  { value: 'mechanical', label: 'Mechanical Engineering' },
+  { value: 'civil', label: 'Civil & Structural Engineering' },
+  { value: 'safety', label: 'Safety & HSE' },
+  { value: 'project_controls', label: 'Project Controls' },
+  { value: 'commissioning', label: 'Commissioning' },
+  { value: 'materials', label: 'Materials & Corrosion' },
+  { value: 'environmental', label: 'Environmental Engineering' },
+  { value: 'procurement', label: 'Procurement' },
+  { value: 'operations', label: 'Operations' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'quality', label: 'Quality Assurance' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'hr', label: 'Human Resources' },
+  { value: 'it', label: 'Information Technology' },
+  { value: 'admin', label: 'Administration' },
+  { value: 'management', label: 'Management' },
+];
+
 const EXPERTISE_LEVELS = [
   { value: 'junior',    label: 'Junior Engineer',    years: '0–3 yrs',   colorClass: 'bg-blue-100 text-blue-700 border-blue-300',     dotClass: 'bg-blue-500' },
   { value: 'mid',       label: 'Mid-Level Engineer', years: '3–7 yrs',   colorClass: 'bg-cyan-100 text-cyan-700 border-cyan-300',      dotClass: 'bg-cyan-500' },
@@ -502,7 +526,11 @@ const Profile = () => {
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   {formData.job_title && <span className="text-gray-600 font-medium">{formData.job_title}</span>}
                   {formData.job_title && formData.department && <span className="text-gray-300">·</span>}
-                  {formData.department && <span className="text-gray-500">{formData.department}</span>}
+                  {formData.department && (
+                    <span className="text-gray-500">
+                      {DEPARTMENTS.find(d => d.value === formData.department)?.label || formData.department}
+                    </span>
+                  )}
                   {currentExpertise && (
                     <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${currentExpertise.colorClass}`}>
                       {currentExpertise.label}
@@ -613,11 +641,31 @@ const Profile = () => {
                 <div>
                   <label className={labelCls}>Department</label>
                   <div className="relative">
-                    <Building2 className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                    <input type="text" value={formData.department}
+                    <Building2 className="absolute left-3 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <select
+                      value={formData.department}
                       onChange={e => setFormData(p => ({ ...p, department: e.target.value }))}
-                      className={`${inputCls} pl-10`} placeholder="Process Engineering" />
+                      className={`${inputCls} pl-10 appearance-none cursor-pointer`}
+                    >
+                      <option value="">Select department...</option>
+                      {DEPARTMENTS.map(dept => (
+                        <option key={dept.value} value={dept.value}>
+                          {dept.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-3 pointer-events-none text-gray-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
+                  {formData.department && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      {DEPARTMENTS.find(d => d.value === formData.department)?.label || formData.department}
+                    </p>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <label className={labelCls}>Job Title</label>
@@ -638,14 +686,17 @@ const Profile = () => {
                     <option value="">No reporting manager assigned</option>
                     {managers.map(m => (
                       <option key={m.id} value={m.id}>
-                        {m.name}{m.job_title ? ' - ' + m.job_title : ''}
+                        {m.name}{m.job_title ? ' - ' + m.job_title : ''}{m.department ? ' (' + m.department + ')' : ''}
                       </option>
                     ))}
                   </select>
                   {managers.find(m => m.id === formData.manager_id) && (
                     <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                       <Check className="w-3 h-3" />
-                      {managers.find(m => m.id === formData.manager_id)?.department || 'Manager selected'}
+                      Reporting to {managers.find(m => m.id === formData.manager_id)?.name}
+                      {managers.find(m => m.id === formData.manager_id)?.job_title && 
+                        ` (${managers.find(m => m.id === formData.manager_id)?.job_title})`
+                      }
                     </p>
                   )}
                 </div>

@@ -154,8 +154,15 @@ const NON_ENGINEERING_GROUPS = [
     id: 'administration',
     label: 'Administration',
     color: 'gray',
-    description: 'User management, organization settings and audit logs',
-    moduleCodes: ['user_mgmt', 'org_settings', 'audit_logs'],
+    description: 'System administration — dashboard, user management, integrations and engagement analytics',
+    moduleCodes: [
+      'admin_dashboard',       // 9.1 Dashboard
+      'user_mgmt',             // 9.2 Users & Roles
+      'role_access_mgmt',      // 9.3 Role & Access Management
+      'wrench_integration',    // 9.4 Wrench Integration
+      'ai_champion',           // 9.5 AI Champion
+      'enquiry_management',    // 9.6 Enquiry
+    ],
   },
 ];
 

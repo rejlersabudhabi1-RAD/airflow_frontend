@@ -599,42 +599,48 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           title: '9.1 Dashboard',
           icon: ChartBarIcon,
           path: '/admin/dashboard',
-          description: 'System overview & analytics'
+          description: 'System overview & analytics',
+          moduleCode: 'admin_dashboard'
         },
         {
           id: 'userManagement',
           title: '9.2 Users & Roles',
           icon: UsersIcon,
           path: '/admin/users',
-          description: 'User accounts & permissions'
+          description: 'User accounts & permissions',
+          moduleCode: 'user_mgmt'
         },
         {
           id: 'roleManagement',
           title: '9.3 Role & Access Management',
           icon: ShieldCheckIcon,
           path: '/admin/roles',
-          description: 'Roles, module permissions & access request approvals'
+          description: 'Roles, module permissions & access request approvals',
+          moduleCode: 'role_access_mgmt'
         },
         {
           id: 'wrenchIntegration',
           title: '9.4 Wrench Integration',
           icon: WrenchScrewdriverIcon,
           path: '/admin/wrench',
-          description: 'Wrench Project Platform sync'
+          description: 'Wrench Project Platform sync',
+          moduleCode: 'wrench_integration'
         },
         {
           id: 'aiChampion',
           title: '9.5 AI Champion',
           icon: SparklesIcon,
           path: '/admin/ai-champion',
-          description: 'Top AI users leaderboard & badges'
+          description: 'Top AI users leaderboard & badges',
+          moduleCode: 'ai_champion'
         },
         {
           id: 'enquiryManagement',
           title: '9.6 Enquiry',
           icon: EnvelopeIcon,
           path: '/admin/enquiries',
-          description: 'Customer enquiries from public contact form'
+          description: 'Customer enquiries from public contact form',
+          moduleCode: 'enquiry_management'
         }
         // SOFT-CODED: Subscription feature disabled for in-house deployment
         // {
