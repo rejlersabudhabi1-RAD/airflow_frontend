@@ -19,6 +19,8 @@ import {
   ROLE_LEVEL_LABELS,
   CUSTOM_ROLE_PREFIX,
 } from '../config/rbacAccess.config';
+import MULTI_ROLE_CONFIG from '../config/multiRoleConfig';
+import MultiRoleModal from '../components/MultiRoleModal';
 import SimpleCreateUserForm from '../components/UserCreation/SimpleCreateUserForm';
 import EditUserModal from '../components/UserManagement/EditUserModal';
 import PendingActivationAlert from '../components/UserManagement/PendingActivationAlert';
@@ -84,6 +86,16 @@ const UserManagement = ({ pageControls }) => {
   // Local state — password reset modal (replaces window.confirm popup)
   const [resetTarget, setResetTarget] = useState(null); // { userId, email } | null
   
+  // Local state — Inline Role Edit
+  const [editingRoleUserId, setEditingRoleUserId] = useState(null); // User ID being edited
+  const [selectedRoleId, setSelectedRoleId] = useState(null); // Selected role ID
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false); // Dropdown visibility
+  
+  // Local state — Multi-Role Management Modal
+  const [showMultiRoleModal, setShowMultiRoleModal] = useState(false);
+  const [multiRoleTargetUser, setMultiRoleTargetUser] = useState(null);
+  const [multiRoleSaving, setMultiRoleSaving] = useState(false);
+  
   // Local state - Data
   const [organizations, setOrganizations] = useState([]);
   const [departmentSuggestions, setDepartmentSuggestions] = useState([]);
@@ -119,6 +131,18 @@ const UserManagement = ({ pageControls }) => {
       { label: 'Export as Excel', value: 'xlsx', ext: 'xlsx' },
     ],
     filenamePrefix: 'users_export',
+  };
+
+  // Soft-coded configuration for inline role editing
+  const ROLE_EDIT_CONFIG = {
+    defaultRoleCode: 'default',  // Recommended role code
+    defaultRoleLabel: 'Default',  // Display name for recommended role
+    recommendedBadgeText: 'Recommended',
+    recommendedBadgeColor: 'bg-green-50 text-green-700 border border-green-200',
+    dropdownMaxHeight: 'max-h-64',
+    successMessage: 'User role updated successfully',
+    errorMessage: 'Failed to update user role',
+    confirmMessage: 'Are you sure you want to change this user\'s role?',
   };
   
   // Local state - Forms
@@ -611,18 +635,34 @@ const UserManagement = ({ pageControls }) => {
   // Excludes per-user `custom_*` roles (those are internal artefacts, never
   // shown in pickers). Source of truth: /admin/roles.
   const assignableRoles = useMemo(() => {
-    return (roles || []).filter(r => r?.code && !r.code.startsWith(CUSTOM_ROLE_PREFIX));
+    const filtered = (roles || []).filter(r => r?.code && !r.code.startsWith(CUSTOM_ROLE_PREFIX));
+    console.log('[assignableRoles] Filtered roles:', filtered.length);
+    console.log('[assignableRoles] Sample role:', filtered[0]);
+    return filtered;
   }, [roles]);
 
   // Pick the badge to show for a user's primary (or first) role.
   const getUserRoleBadge = (user) => {
     if (!Array.isArray(user?.roles) || user.roles.length === 0) return null;
+    
+    // Find primary role
     const primary = user.roles.find(r => r?.is_primary) || user.roles[0];
     if (!primary) return null;
+    
     const level = primary.level ?? primary.role?.level;
     const name = primary.name || primary.role?.name || primary.code || 'Role';
     const color = ROLE_LEVEL_COLORS[level] || DEFAULT_LEVEL_COLOR;
-    return { name, color, level, extra: Math.max(0, user.roles.length - 1) };
+    const totalRoles = user.roles.length;
+    const extraRoles = Math.max(0, totalRoles - 1);
+    
+    return { 
+      name, 
+      color, 
+      level, 
+      isPrimary: primary.is_primary,
+      extra: extraRoles,
+      totalRoles 
+    };
   };
   
   // ========== MONITOR: ITEMS PER PAGE CHANGES ==========
@@ -923,6 +963,154 @@ const UserManagement = ({ pageControls }) => {
     } finally {
       setActionLoading({ [`reset_${userId}`]: false });
       setResetTarget(null);
+    }
+  };
+
+  // ========== HANDLERS: INLINE ROLE EDIT ==========
+  const handleStartRoleEdit = (user) => {
+    const currentRole = user.roles?.find(r => r?.is_primary) || user.roles?.[0];
+    console.log('[handleStartRoleEdit] User:', user.id, user.user?.email);
+    console.log('[handleStartRoleEdit] Current role:', currentRole);
+    console.log('[handleStartRoleEdit] Available roles:', assignableRoles);
+    setEditingRoleUserId(user.id);
+    setSelectedRoleId(currentRole?.id || null);
+    setShowRoleDropdown(true);
+  };
+
+  const handleCancelRoleEdit = () => {
+    setEditingRoleUserId(null);
+    setSelectedRoleId(null);
+    setShowRoleDropdown(false);
+  };
+
+  const handleRoleChange = async (userId, roleId) => {
+    try {
+      setActionLoading({ [`role_${userId}`]: true });
+      
+      // Validate role ID
+      const selectedRole = assignableRoles.find(r => String(r.id) === String(roleId));
+      if (!selectedRole) {
+        throw new Error(`Role with ID ${roleId} not found in available roles`);
+      }
+      
+      console.log('[handleRoleChange] ===== ROLE ASSIGNMENT DEBUG =====');
+      console.log('[handleRoleChange] User ID:', userId);
+      console.log('[handleRoleChange] Role ID (from dropdown):', roleId);
+      console.log('[handleRoleChange] Role ID type:', typeof roleId);
+      console.log('[handleRoleChange] Selected role:', selectedRole);
+      console.log('[handleRoleChange] Role name:', selectedRole.name);
+      console.log('[handleRoleChange] Role code:', selectedRole.code);
+      console.log('[handleRoleChange] ===================================');
+      
+      // Ensure role ID is string (UUID format)
+      const roleIdString = String(selectedRole.id);
+      
+      // Assign role and set as primary
+      await rbacService.assignRole(userId, roleIdString, true);
+      
+      // Also set as primary role (ensures only one primary)
+      await rbacService.setPrimaryRole(userId, roleIdString);
+      
+      // Refresh users list
+      await dispatch(fetchUsers()).unwrap();
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: ROLE_EDIT_CONFIG.successMessage
+      });
+      
+      // Close the dropdown
+      handleCancelRoleEdit();
+      
+    } catch (error) {
+      console.error('[UserManagement] Update role error:', error);
+      console.error('[UserManagement] Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        roleId: roleId
+      });
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.error || error.response?.data?.message || error.message || ROLE_EDIT_CONFIG.errorMessage
+      });
+    } finally {
+      setActionLoading({ [`role_${userId}`]: false });
+    }
+  };
+
+  const getRecommendedRole = () => {
+    return assignableRoles.find(r => r.code === ROLE_EDIT_CONFIG.defaultRoleCode);
+  };
+
+  // ========== HANDLERS: MULTI-ROLE MANAGEMENT MODAL ==========
+  const handleOpenMultiRoleModal = (user) => {
+    console.log('[handleOpenMultiRoleModal] Opening modal for user:', user.id, user.user?.email);
+    setMultiRoleTargetUser(user);
+    setShowMultiRoleModal(true);
+  };
+
+  const handleCloseMultiRoleModal = () => {
+    setShowMultiRoleModal(false);
+    setMultiRoleTargetUser(null);
+    setMultiRoleSaving(false);
+  };
+
+  const handleSaveMultiRoles = async ({ rolesToAdd, rolesToRemove, primaryRoleId, selectedRoles }) => {
+    if (!multiRoleTargetUser) return;
+
+    try {
+      setMultiRoleSaving(true);
+      const userId = multiRoleTargetUser.id;
+      
+      console.log('[handleSaveMultiRoles] ===== MULTI-ROLE ASSIGNMENT =====');
+      console.log('[handleSaveMultiRoles] User ID:', userId);
+      console.log('[handleSaveMultiRoles] Roles to add:', rolesToAdd);
+      console.log('[handleSaveMultiRoles] Roles to remove:', rolesToRemove);
+      console.log('[handleSaveMultiRoles] Primary role ID:', primaryRoleId);
+      console.log('[handleSaveMultiRoles] Final selected roles:', selectedRoles);
+      console.log('[handleSaveMultiRoles] ====================================');
+
+      // Remove roles that are no longer assigned
+      for (const roleId of rolesToRemove) {
+        console.log('[handleSaveMultiRoles] Removing role:', roleId);
+        await rbacService.revokeRole(userId, roleId);
+      }
+
+      // Add new roles
+      for (const roleId of rolesToAdd) {
+        const isPrimary = roleId === primaryRoleId;
+        console.log('[handleSaveMultiRoles] Adding role:', roleId, 'isPrimary:', isPrimary);
+        await rbacService.assignRole(userId, roleId, isPrimary);
+      }
+
+      // Set primary role (this will also demote other roles automatically)
+      if (primaryRoleId && selectedRoles.includes(primaryRoleId)) {
+        console.log('[handleSaveMultiRoles] Setting primary role:', primaryRoleId);
+        await rbacService.setPrimaryRole(userId, primaryRoleId);
+      }
+
+      // Refresh users list to show updated roles
+      await dispatch(fetchUsers()).unwrap();
+
+      setNotification({
+        show: true,
+        type: 'success',
+        message: MULTI_ROLE_CONFIG.messages.assignSuccess
+      });
+
+      handleCloseMultiRoleModal();
+
+    } catch (error) {
+      console.error('[handleSaveMultiRoles] Error:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.error || error.response?.data?.message || MULTI_ROLE_CONFIG.messages.assignError
+      });
+    } finally {
+      setMultiRoleSaving(false);
     }
   };
   
@@ -1690,25 +1878,125 @@ const UserManagement = ({ pageControls }) => {
                       <div className="text-sm text-gray-500">{user.job_title || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {(() => {
-                        const badge = getUserRoleBadge(user);
-                        if (!badge) {
-                          return <span className="text-xs text-gray-400 italic">No role</span>;
-                        }
-                        return (
-                          <div className="flex items-center gap-1.5">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge.color.bg} ${badge.color.text}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${badge.color.dot}`} />
-                              {badge.name}
-                            </span>
-                            {badge.extra > 0 && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700" title={`+${badge.extra} more role${badge.extra > 1 ? 's' : ''}`}>
-                                +{badge.extra}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      {editingRoleUserId === user.id && showRoleDropdown ? (
+                        // Edit mode - Show dropdown
+                        <div className="relative inline-block min-w-[200px]">
+                          <select
+                            value={selectedRoleId || ''}
+                            onChange={(e) => {
+                              const newRoleId = e.target.value; // Keep as string (UUID)
+                              console.log('[Dropdown onChange] Selected value:', newRoleId, typeof newRoleId);
+                              if (newRoleId && window.confirm(ROLE_EDIT_CONFIG.confirmMessage)) {
+                                handleRoleChange(user.id, newRoleId);
+                              }
+                            }}
+                            onBlur={() => {
+                              // Delay to allow select option click to register
+                              setTimeout(handleCancelRoleEdit, 200);
+                            }}
+                            autoFocus
+                            disabled={actionLoading[`role_${user.id}`]}
+                            className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="">Select Role</option>
+                            {assignableRoles.map((role) => {
+                              const isRecommended = role.code === ROLE_EDIT_CONFIG.defaultRoleCode;
+                              return (
+                                <option key={role.id} value={role.id}>
+                                  {role.name} {isRecommended ? `⭐ ${ROLE_EDIT_CONFIG.recommendedBadgeText}` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {actionLoading[`role_${user.id}`] && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
+                              <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        // View mode - Show badge with multi-role management button
+                        (() => {
+                          const badge = getUserRoleBadge(user);
+                          const userRolesCount = user.roles?.length || 0;
+                          
+                          if (!badge) {
+                            return (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 italic">No role</span>
+                                {MULTI_ROLE_CONFIG.features.enableMultiRole ? (
+                                  <button
+                                    onClick={() => handleOpenMultiRoleModal(user)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                                    title="Assign Roles"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStartRoleEdit(user)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+                                    title="Assign Role"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge.color.bg} ${badge.color.text}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${badge.color.dot}`} />
+                                  {badge.name}
+                                  {badge.isPrimary && (
+                                    <span className="text-[10px] font-bold ml-0.5">★</span>
+                                  )}
+                                </span>
+                                {badge.extra > 0 && (
+                                  <span 
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 cursor-help" 
+                                    title={`User has ${userRolesCount} role${userRolesCount > 1 ? 's' : ''} total. Click 'Manage Roles' to view all.`}
+                                  >
+                                    +{badge.extra}
+                                  </span>
+                                )}
+                              </div>
+                              {MULTI_ROLE_CONFIG.features.enableMultiRole ? (
+                                <button
+                                  onClick={() => handleOpenMultiRoleModal(user)}
+                                  disabled={actionLoading[`role_${user.id}`]}
+                                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Manage Roles"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleStartRoleEdit(user)}
+                                  disabled={actionLoading[`role_${user.id}`]}
+                                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Edit Role"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -2518,6 +2806,19 @@ const UserManagement = ({ pageControls }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Multi-Role Management Modal ──────────────────────────────────
+          Allows assigning multiple roles to a user with primary role selection
+      ─────────────────────────────────────────────────────────────────── */}
+      {showMultiRoleModal && multiRoleTargetUser && MULTI_ROLE_CONFIG.features.enableMultiRole && (
+        <MultiRoleModal
+          user={multiRoleTargetUser}
+          availableRoles={assignableRoles}
+          onClose={handleCloseMultiRoleModal}
+          onSave={handleSaveMultiRoles}
+          loading={multiRoleSaving}
+        />
       )}
     </div>
   );
