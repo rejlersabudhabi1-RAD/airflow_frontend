@@ -358,13 +358,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
       },
       // ── Section 4: Human Resource ──────────────────────────────────────────
       // SOFT-CODED: Controlled by FEATURE_FLAGS.enableHRModule in features.config.js
+      // SECURITY: Super administrators ALWAYS see HR, bypassing feature flag
       {
         id: 'human_resource',
         title: getSectionTitle('human_resource'),
         icon: UsersIcon,
         type: 'section',
         expanded: expandedSections.human_resource,
-        enabled: FEATURE_FLAGS.enableHRModule,  // ⚠️ Feature flag control
+        enabled: FEATURE_FLAGS.enableHRModule || hasSuperAdminRole || hasSuperuserFlag,  // ⚠️ Super admin bypass
         children: [
           {
             id: 'hrDashboard',
