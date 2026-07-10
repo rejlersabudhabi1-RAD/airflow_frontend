@@ -90,9 +90,18 @@ export const FEATURE_FLAGS = {
   enableFeatureFilters: true,
   enableFeatureMetrics: true,
   
-  // Module Visibility — set to false to hide a module without deleting its code
+  // ── Module Visibility ──────────────────────────────────────────────────────
+  // Set to false to hide a module without deleting its code
+  
   // Internal Sales analytics dashboard — re-uses /sales route with new InternalSalesDashboard
   enableSalesModule: import.meta.env.VITE_ENABLE_SALES_MODULE !== 'false',
+  
+  // ⚠️ Human Resource Module — DISABLED FOR ALL USERS
+  // Controls ALL HR features: /hr, /hr/employees, /hr/payroll, /hr/leave, /hr/onboarding
+  // Set to false to completely disable the HR section from sidebar and routes
+  enableHRModule: import.meta.env.VITE_ENABLE_HR_MODULE === 'true' ? true : false,  // ⚠️ DISABLED by default
+  
+  // ───────────────────────────────────────────────────────────────────────────
 
   // Debug & Development
   enableDebugMode: import.meta.env.VITE_ENABLE_DEBUG === 'true' || (import.meta.env.VITE_ENABLE_DEBUG === undefined && isDevelopment),

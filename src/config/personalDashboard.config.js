@@ -3,6 +3,8 @@
  * Soft-coded role layouts, widget visibility, colours, and module-to-icon mapping.
  */
 
+import { FEATURE_FLAGS } from './features.config'
+
 // Polling & timing
 export const PERSONAL_DASHBOARD_CONFIG = {
   pollIntervalMs:   60000,
@@ -105,7 +107,10 @@ export const MODULE_META = {
   finance:               { icon: '💰', label: 'Finance',             route: '/finance',                                  category: 'business',    accent: 'from-emerald-600 to-green-700' },
   procurement:           { icon: '🏭', label: 'Procurement',         route: '/procurement',                              category: 'business',    accent: 'from-amber-600 to-orange-700' },
   sales:                 { icon: '📈', label: 'Sales',               route: '/sales',                                    category: 'business',    accent: 'from-rose-500 to-red-600' },
-  human_resource:        { icon: '👥', label: 'HR',                  route: '/hr',                                       category: 'business',    accent: 'from-cyan-500 to-blue-600' },
+  // SOFT-CODED: human_resource only included if FEATURE_FLAGS.enableHRModule is true
+  ...(FEATURE_FLAGS.enableHRModule ? {
+    human_resource:      { icon: '👥', label: 'HR',                  route: '/hr',                                       category: 'business',    accent: 'from-cyan-500 to-blue-600' },
+  } : {}),
 }
 
 // Category display metadata for grouping in the module grid

@@ -7,6 +7,7 @@ import { getSectionTitle } from '../../config/navigationLabels.config'
 import { getEngineeringDisciplines } from '../../config/engineeringStructure.config'
 import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 import { SIDEBAR } from '../../config/layout.config'
+import { FEATURE_FLAGS } from '../../config/features.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -347,12 +348,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
         ]
       },
       // ── Section 4: Human Resource ──────────────────────────────────────────
+      // SOFT-CODED: Controlled by FEATURE_FLAGS.enableHRModule in features.config.js
       {
         id: 'human_resource',
         title: getSectionTitle('human_resource'),
         icon: UsersIcon,
         type: 'section',
         expanded: expandedSections.human_resource,
+        enabled: FEATURE_FLAGS.enableHRModule,  // ⚠️ Feature flag control
         children: [
           {
             id: 'hrDashboard',
@@ -576,6 +579,11 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
   const filterMenuByModules = (items) => {
     return items.map(item => {
       if ((item.type === 'section' || item.type === 'subsection') && item.children) {
+        // 🔒 SECURITY: Check if section itself is enabled before processing children
+        if (!hasModuleAccess(item)) {
+          return null // Section disabled by feature flag (e.g., HR module)
+        }
+        
         // Recursively filter children
         const accessibleChildren = item.children.map(child => {
           if (child.type === 'subsection' && child.children) {

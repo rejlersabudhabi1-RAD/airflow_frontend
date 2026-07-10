@@ -646,47 +646,58 @@ function App() {
             </ModuleProtectedRoute>
           }
         />
-        {/* Human Resources Routes */}
-        <Route
-          path="hr"
-          element={
-            <ProtectedRoute>
-              <HRDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="hr/employees"
-          element={
-            <ProtectedRoute>
-              <HREmployees />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="hr/payroll"
-          element={
-            <ProtectedRoute>
-              <Payroll />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="hr/leave"
-          element={
-            <ProtectedRoute>
-              <EmployeeSelfService />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="hr/onboarding"
-          element={
-            <ProtectedRoute>
-              <OnboardingOffboarding />
-            </ProtectedRoute>
-          }
-        />
+        {/* ── Human Resources Routes ─────────────────────────────────────────── */}
+        {/* SOFT-CODED: Controlled by FEATURE_FLAGS.enableHRModule in features.config.js */}
+        {FEATURE_FLAGS.enableHRModule ? (
+          <>
+            <Route
+              path="hr"
+              element={
+                <ProtectedRoute>
+                  <HRDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="hr/employees"
+              element={
+                <ProtectedRoute>
+                  <HREmployees />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="hr/payroll"
+              element={
+                <ProtectedRoute>
+                  <Payroll />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="hr/leave"
+              element={
+                <ProtectedRoute>
+                  <EmployeeSelfService />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="hr/onboarding"
+              element={
+                <ProtectedRoute>
+                  <OnboardingOffboarding />
+                </ProtectedRoute>
+              }
+            />
+          </>
+        ) : (
+          // Redirect all /hr/* routes to dashboard when HR module is disabled
+          <>
+            <Route path="hr" element={<Navigate to="/dashboard" replace />} />
+            <Route path="hr/*" element={<Navigate to="/dashboard" replace />} />
+          </>
+        )}
         <Route
           path="hr/site-visits"
           element={
