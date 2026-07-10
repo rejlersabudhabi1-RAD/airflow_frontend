@@ -19,6 +19,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import ProfileAlignedComprehensive from './pages/ProfileAlignedComprehensive'  // ✅ Comprehensive profile with engineering expertise
+import ProfileNew from './pages/ProfileNew'  // ✅ NEW: Modern redesigned profile page
 import NotificationPanel from './pages/NotificationPanel'
 import UsageDashboard from './pages/UsageDashboard'
 // SOFT-CODED: /pid/upload disabled — replaced by Engineering > Process > P&ID Verification
@@ -466,7 +467,7 @@ function App() {
           path="profile"
           element={
             <ProtectedRoute>
-              <ProfileAlignedComprehensive />
+              <ProfileNew />
             </ProtectedRoute>
           }
         />

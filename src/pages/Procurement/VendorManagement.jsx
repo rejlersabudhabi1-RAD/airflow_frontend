@@ -20,7 +20,8 @@ import {
   Squares2X2Icon,
   ArrowDownIcon,
   ArrowUpIcon,
-  DocumentArrowDownIcon
+  DocumentArrowDownIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -49,6 +50,8 @@ const VendorManagement = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterRating, setFilterRating] = useState('all');
   const [showAICreator, setShowAICreator] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedVendor, setSelectedVendor] = useState(null);
   const [aiRecommendations, setAiRecommendations] = useState(null);
   const [viewMode, setViewMode] = useState('table'); // 'table' or 'cards'
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -206,10 +209,25 @@ const VendorManagement = () => {
   };
 
   const handleVendorCreated = async (vendorData) => {
-    // Here you would make API call to create vendor
-    console.log('Creating vendor with AI data:', vendorData);
     // After successful creation, refresh vendor list
     await fetchVendors();
+    setShowAICreator(false);
+    setEditMode(false);
+    setSelectedVendor(null);
+  };
+
+  const handleVendorUpdated = async (updatedVendor) => {
+    // After successful update, refresh vendor list
+    await fetchVendors();
+    setShowAICreator(false);
+    setEditMode(false);
+    setSelectedVendor(null);
+  };
+
+  const handleEditVendor = (vendor) => {
+    setSelectedVendor(vendor);
+    setEditMode(true);
+    setShowAICreator(true);
   };
 
   /**
@@ -615,6 +633,7 @@ const VendorManagement = () => {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">ADNOC</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Tenure</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Status</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -664,6 +683,16 @@ const VendorManagement = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {getStatusBadge(vendor.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => handleEditVendor(vendor)}
+                            className="text-indigo-600 hover:text-indigo-900 inline-flex items-center space-x-1 px-3 py-1.5 rounded-md hover:bg-indigo-50 transition-colors"
+                            title="Edit vendor"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                            <span>Edit</span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -769,8 +798,12 @@ const VendorManagement = () => {
 
                     {/* Actions */}
                     <div className="mt-6 flex space-x-3">
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        View Details
+                      <button
+                        onClick={() => handleEditVendor(vendor)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-indigo-300 shadow-sm text-sm font-medium rounded-md text-indigo-700 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        <PencilSquareIcon className="h-4 w-4 mr-1" />
+                        Edit
                       </button>
                       <button className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         Create PO
@@ -784,11 +817,17 @@ const VendorManagement = () => {
         </div>
       </div>
 
-      {/* AI Vendor Creator Modal */}
+      {/* AI Vendor Creator/Editor Modal */}
       <AIVendorCreator
         isOpen={showAICreator}
-        onClose={() => setShowAICreator(false)}
-        onVendorCreated={handleVendorCreated}
+        onClose={() => {
+          setShowAICreator(false);
+          setEditMode(false);
+          setSelectedVendor(null);
+        }}
+        onVendorCreated={editMode ? handleVendorUpdated : handleVendorCreated}
+        editMode={editMode}
+        vendorData={selectedVendor}
       />
     </div>
   );

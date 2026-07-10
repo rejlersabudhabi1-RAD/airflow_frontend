@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   XMarkIcon,
   SparklesIcon,
@@ -11,7 +11,7 @@ import {
 import { PROCUREMENT_CONFIG, getCertificationsList, getQualityStandardsList } from '../../config/procurement.config';
 import apiClient from '../../services/api.service';
 
-const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
+const AIVendorCreator = ({ isOpen, onClose, onVendorCreated, editMode = false, vendorData = null }) => {
   const [formData, setFormData] = useState({
     // Core Information
     name: '',
@@ -66,6 +66,74 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [activeAIFeature, setActiveAIFeature] = useState(null);
+
+  // Populate form when editing existing vendor
+  useEffect(() => {
+    if (editMode && vendorData) {
+      setFormData({
+        // Core Information
+        name: vendorData.name || '',
+        vendor_code: vendorData.vendor_code || '',
+        contact_person: vendorData.contact_person || '',
+        email: vendorData.email || '',
+        phone: vendorData.phone || '',
+        address: vendorData.address || '',
+        country: vendorData.country || '',
+        
+        // Financial & Legal
+        tax_id: vendorData.tax_id || '',
+        trade_license_number: vendorData.trade_license_number || '',
+        vat_number: vendorData.vat_number || '',
+        payment_terms: vendorData.payment_terms || '',
+        credit_limit: vendorData.credit_limit || '',
+        
+        // Categories
+        categories: vendorData.categories || [],
+        
+        // Oil & Gas Specific
+        certifications: vendorData.certifications || [],
+        quality_standards: vendorData.quality_standards || [],
+        approved_materials: vendorData.approved_materials || [],
+        inspection_authority: vendorData.inspection_authority || '',
+        
+        // HSE Compliance
+        hse_rating: vendorData.hse_rating || '',
+        safety_certifications: vendorData.safety_certifications || [],
+        
+        // ICV
+        icv_percentage: vendorData.icv_percentage || '',
+        icv_certificate: vendorData.icv_certificate || '',
+        icv_expiry_date: vendorData.icv_expiry_date || '',
+        icv_issuing_authority: vendorData.icv_issuing_authority || 'ADDED',
+        is_icv_certified: vendorData.is_icv_certified || false,
+        
+        // ADNOC & Industry
+        adnoc_approved: vendorData.adnoc_approved || false,
+        vendor_tenure_years: vendorData.vendor_tenure_years || '',
+        
+        // Metadata
+        notes: vendorData.notes || '',
+        
+        // UI-only fields (empty in edit mode)
+        _ui_business_type: '',
+        _ui_specialization: '',
+        _ui_city: '',
+        _ui_website: ''
+      });
+    } else if (!isOpen) {
+      // Reset form when modal closes
+      setFormData({
+        name: '', vendor_code: '', contact_person: '', email: '', phone: '',
+        address: '', country: '', tax_id: '', trade_license_number: '', vat_number: '',
+        payment_terms: '', credit_limit: '', categories: [], certifications: [],
+        quality_standards: [], approved_materials: [], inspection_authority: '',
+        hse_rating: '', safety_certifications: [], icv_percentage: '', icv_certificate: '',
+        icv_expiry_date: '', icv_issuing_authority: 'ADDED', is_icv_certified: false,
+        adnoc_approved: false, vendor_tenure_years: '', notes: '',
+        _ui_business_type: '', _ui_specialization: '', _ui_city: '', _ui_website: ''
+      });
+    }
+  }, [editMode, vendorData, isOpen]);
 
   // Soft-coded business types for oil & gas industry
   const BUSINESS_TYPES = [
@@ -450,17 +518,22 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
         console.log('ℹ️ Empty optional fields:', emptyOptionalFields.join(', '));
       }
       
-      const response = await apiClient.post('/procurement/vendors/', submitData);
+      // Use PUT for edit, POST for create
+      const response = editMode
+        ? await apiClient.put(`/procurement/vendors/${vendorData.id}/`, submitData)
+        : await apiClient.post('/procurement/vendors/', submitData);
       const data = response.data;
       
-      console.log('✅ Vendor created successfully:', data);
+      console.log(editMode ? '✅ Vendor updated successfully:' : '✅ Vendor created successfully:', data);
       
       // Smart success notification with empty field summary
-      let successMessage = `✅ Vendor "${data.name}" created successfully!\n\nVendor Code: ${data.vendor_code}`;
+      let successMessage = editMode
+        ? `✅ Vendor "${data.name}" updated successfully!\n\nVendor Code: ${data.vendor_code}`
+        : `✅ Vendor "${data.name}" created successfully!\n\nVendor Code: ${data.vendor_code}`;
       
-      if (emptyOptionalFields.length > 0) {
+      if (!editMode && emptyOptionalFields.length > 0) {
         successMessage += `\n\nℹ️ Empty Optional Fields (${emptyOptionalFields.length}):\nThese can be added later via Edit:\n\n• ${emptyOptionalFields.join('\n• ')}`;
-      } else {
+      } else if (!editMode) {
         successMessage += '\n\n✨ All fields completed! Great work!';
       }
       
@@ -469,11 +542,11 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
       onVendorCreated(data);
       onClose();
     } catch (error) {
-      console.error('❌ Error creating vendor:', error);
+      console.error(editMode ? '❌ Error updating vendor:' : '❌ Error creating vendor:', error);
       const errorMsg = error.response?.data 
         ? JSON.stringify(error.response.data, null, 2)
         : error.message;
-      alert(`❌ Failed to create vendor:\n\n${errorMsg}\n\nPlease check console for details.`);
+      alert(`❌ Failed to ${editMode ? 'update' : 'create'} vendor:\n\n${errorMsg}\n\nPlease check console for details.`);
     }
   };
 
@@ -491,8 +564,12 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
               <div className="flex items-center space-x-3">
                 <SparklesIcon className="h-8 w-8 text-white" />
                 <div>
-                  <h3 className="text-xl font-bold text-white">AI-Powered Vendor Creator</h3>
-                  <p className="text-sm text-indigo-100">Intelligent vendor onboarding with compliance assistance</p>
+                  <h3 className="text-xl font-bold text-white">
+                    {editMode ? 'Edit Vendor' : 'AI-Powered Vendor Creator'}
+                  </h3>
+                  <p className="text-sm text-indigo-100">
+                    {editMode ? 'Update vendor information' : 'Intelligent vendor onboarding with compliance assistance'}
+                  </p>
                 </div>
               </div>
               <button onClick={onClose} className="text-white hover:text-gray-200">
@@ -1145,7 +1222,7 @@ const AIVendorCreator = ({ isOpen, onClose, onVendorCreated }) => {
                 type="submit"
                 className="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
               >
-                Create Vendor
+                {editMode ? 'Update Vendor' : 'Create Vendor'}
               </button>
             </div>
           </form>
