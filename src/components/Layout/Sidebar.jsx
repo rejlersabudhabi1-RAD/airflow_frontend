@@ -315,9 +315,18 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           description: 'AI-powered data integration & transformation',
           moduleCode: 'data_mining',
           badge: 'NEW'
+        },
+        {
+          id: 'myProfile',
+          title: '2.5 My Profile',
+          icon: SparklesIcon,
+          path: '/hr/leave',  // Keep existing route for backward compatibility
+          description: 'My leave, attendance, timesheet & payroll',
+          moduleCode: 'hr_self_service',  // Accessible to all users via DEFAULT_ROLE_MODULES
+          badge: 'SELF'
         }
       ]
-        },
+    },
         // SOFT-CODED: CRS Multi-Revision Manager removed as per user request
         // This duplicate menu item is disabled - use "2.2 Multi-Revision" under CRS section instead
         /*
@@ -382,16 +391,8 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
             moduleCode: 'payroll'  // matches DB module code
           },
           {
-            id: 'hrLeave',
-            title: '4.3 My Profile',
-            icon: SparklesIcon,
-            path: '/hr/leave',
-            description: 'My leave, attendance, timesheet & payroll',
-            moduleCode: 'hr_self_service'
-          },
-          {
             id: 'hrOnboarding',
-            title: '4.4 Onboarding | Offboarding',
+            title: '4.3 Onboarding | Offboarding',
             icon: UsersIcon,
             path: '/hr/onboarding',
             description: 'Employee lifecycle management',
@@ -560,7 +561,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
 
     // Dashboard and admin sections are handled separately
     if (item.requiresModule === false) return true
-    if (item.type === 'section' || item.type === 'subsection') return true // Sections/subsections are shown if they have accessible children
+    
+    // SOFT-CODED: For sections/subsections WITHOUT a moduleCode,
+    // we return true here and let filterMenuByModules check children.
+    // Sections WITH a moduleCode are treated like regular menu items.
+    if ((item.type === 'section' || item.type === 'subsection') && !item.moduleCode) {
+      return true // Will be filtered by child access in filterMenuByModules
+    }
     
     // SECURITY FIX: Only super_admin role OR is_superuser flag bypass module checks
     // Regular admin role (level 2) must have specific module access
@@ -572,6 +579,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
       return userModules.includes(item.moduleCode)
     }
     
+    // Items without moduleCode are accessible by default
     return true
   }
 
@@ -579,9 +587,14 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
   const filterMenuByModules = (items) => {
     return items.map(item => {
       if ((item.type === 'section' || item.type === 'subsection') && item.children) {
-        // 🔒 SECURITY: Check if section itself is enabled before processing children
-        if (!hasModuleAccess(item)) {
+        // 🔒 SECURITY: Check if section itself is explicitly disabled (e.g., feature flag)
+        if (item.enabled === false) {
           return null // Section disabled by feature flag (e.g., HR module)
+        }
+        
+        // 🔒 SECURITY: If section has a moduleCode requirement, check access
+        if (item.moduleCode && !hasModuleAccess(item)) {
+          return null // User doesn't have access to this section's required module
         }
         
         // Recursively filter children
@@ -597,11 +610,13 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           return hasModuleAccess(child) ? child : null
         }).filter(child => child !== null)
         
-        // Only show section if it has accessible children
+        // 🔒 CRITICAL: Only show section if it has accessible children
+        // This ensures Finance, Procurement, QHSE, Admin sections are hidden
+        // when user has NO modules in those sections
         if (accessibleChildren.length > 0) {
           return { ...item, children: accessibleChildren }
         }
-        return null
+        return null // Hide section with no accessible children
       }
       
       // For single items, check module access

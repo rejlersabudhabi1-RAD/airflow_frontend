@@ -98,7 +98,7 @@ const NON_ENGINEERING_GROUPS = [
     label: 'Common & Integration',
     color: 'purple',
     description: 'Cross-discipline tools and document management',
-    moduleCodes: ['crs_documents', 'pfd_to_pid', 'designiq', 'data_mining'],
+    moduleCodes: ['crs_documents', 'pfd_to_pid', 'designiq', 'data_mining', 'hr_self_service'],  // SOFT-CODED: hr_self_service moved from HR to COMMON section
   },
   {
     id: 'qhse',
@@ -147,8 +147,8 @@ const NON_ENGINEERING_GROUPS = [
     id: 'hr',
     label: 'Human Resources',
     color: 'green',
-    description: 'HR management, payroll, self-service and employee lifecycle',
-    moduleCodes: ['hr_management', 'payroll', 'timesheet', 'hr_self_service', 'hr_onboarding'],
+    description: 'HR management, payroll and employee lifecycle',
+    moduleCodes: ['hr_management', 'payroll', 'timesheet', 'hr_onboarding'],  // SOFT-CODED: hr_self_service moved to COMMON group
   },
   {
     id: 'administration',
