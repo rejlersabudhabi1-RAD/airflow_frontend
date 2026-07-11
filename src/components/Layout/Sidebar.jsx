@@ -8,6 +8,7 @@ import { getEngineeringDisciplines } from '../../config/engineeringStructure.con
 import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 import { SIDEBAR } from '../../config/layout.config'
 import { FEATURE_FLAGS } from '../../config/features.config'
+import { QHSE_MODULE_LABELS } from '../../config/qhseModules.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -519,10 +520,10 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
         },
         {
           id: 'healthSafety',
-          title: '8.4 Health & Safety',
+          title: QHSE_MODULE_LABELS.healthSafety.title,
           icon: ShieldCheckIcon,
-          path: '/qhse/general/health-safety',
-          description: 'Health and safety management',
+          path: QHSE_MODULE_LABELS.healthSafety.path,
+          description: QHSE_MODULE_LABELS.healthSafety.description,
           moduleCode: 'qhse_health_safety'
         },
         {

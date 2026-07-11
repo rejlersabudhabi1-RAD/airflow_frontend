@@ -20,6 +20,7 @@ import { ErrorState } from './components/Common/ErrorState';
 import { useQHSERunningProjects } from './hooks/useQHSEProjects';
 import { withDashboardControls } from '../../hoc/withPageControls';
 import { PageControlButtons } from '../../components/PageControlButtons';
+import { QHSE_MODULE_LABELS } from '../../config/qhseModules.config';
 import {
   calculateHealthSafetyMetrics,
   getSafetyPerformance,
@@ -85,10 +86,10 @@ const HealthSafety = ({ pageControls }) => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6">
         <MainHeader 
-          title="Health and Safety"
-          subtitle="Comprehensive workplace safety management system"
+          title={QHSE_MODULE_LABELS.healthSafety.shortTitle}
+          subtitle={QHSE_MODULE_LABELS.healthSafety.description}
         />
-        <LoadingState message="Loading health and safety data..." />
+        <LoadingState message="Loading occupational health and safety data..." />
       </div>
     );
   }
@@ -97,8 +98,8 @@ const HealthSafety = ({ pageControls }) => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6">
         <MainHeader 
-          title="Health and Safety"
-          subtitle="Comprehensive workplace safety management system"
+          title={QHSE_MODULE_LABELS.healthSafety.shortTitle}
+          subtitle={QHSE_MODULE_LABELS.healthSafety.description}
         />
         <ErrorState error={error} onRetry={refetch} />
       </div>
@@ -109,8 +110,8 @@ const HealthSafety = ({ pageControls }) => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6">
         <MainHeader 
-          title="Health and Safety"
-          subtitle="Comprehensive workplace safety management system"
+          title={QHSE_MODULE_LABELS.healthSafety.shortTitle}
+          subtitle={QHSE_MODULE_LABELS.healthSafety.description}
         />
         <SafetyEmptyState message="No safety data available. Start by adding projects to the system." />
       </div>
@@ -124,7 +125,7 @@ const HealthSafety = ({ pageControls }) => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <MainHeader 
-        title="Health and Safety Management"
+        title={QHSE_MODULE_LABELS.healthSafety.shortTitle}
         subtitle={`${projectsData.length} projects • ${safetyMetrics.totalIncidents} incidents • ${safetyMetrics.daysWithoutIncident} days incident-free`}
       >
         <div className="flex items-center gap-3">
