@@ -12,7 +12,8 @@ export const HEALTH_SAFETY_FEATURES = {
   enablePPECompliance: false,  // DISABLED: No PPE data in uploaded projects
   enableSafetyTraining: false, // DISABLED: No training data in uploaded projects
   enableRiskAssessment: true,  // ENABLED: Uses CARs + Observations + Delays
-  enableIncidentTracking: true // ENABLED: Uses CARs (incidents) + Observations (near-miss)
+  enableIncidentTracking: true, // ENABLED: Uses CARs (incidents) + Observations (near-miss)
+  enableHighRiskProjects: false // DISABLED: 2026-07-11 - QHSE Expert requested removal
 };
 
 // DATA SOURCE MAPPING - Documents what real project fields are used

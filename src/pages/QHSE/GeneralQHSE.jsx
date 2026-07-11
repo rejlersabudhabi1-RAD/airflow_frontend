@@ -47,8 +47,9 @@ const GeneralQHSE = () => {
         <Route path="/projects" element={<ProjectsWrapper />} />
         <Route path="/quality" element={<QualityManagement />} />
         <Route path="/health-safety" element={<HealthSafety />} />
-        <Route path="/environmental" element={<Environmental />} />
-        <Route path="/energy" element={<Energy />} />
+        {/* SOFT-CODED: Environmental and Energy routes disabled - not related to project quality */}
+        {/* <Route path="/environmental" element={<Environmental />} /> */}
+        {/* <Route path="/energy" element={<Energy />} /> */}
         <Route path="/ai-dashboard" element={<QHSEAIDashboard />} />
       </Routes>
     </div>

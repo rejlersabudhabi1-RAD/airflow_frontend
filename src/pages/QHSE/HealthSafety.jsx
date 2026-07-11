@@ -169,7 +169,9 @@ const HealthSafety = ({ pageControls }) => {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 ${
+        HEALTH_SAFETY_FEATURES.enableHighRiskProjects ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+      }`}>
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 flex items-center justify-center">
           <SafetyScoreDisplay score={safetyMetrics.safetyScore} size="md" />
         </div>
@@ -198,14 +200,17 @@ const HealthSafety = ({ pageControls }) => {
           badge="🏆"
           description={`${safetyMetrics.projectsIncidentFree} projects incident-free`}
         />
-        <SafetyMetricCard
-          title="High Risk Projects"
-          value={highRiskProjects.length}
-          subtitle="Need immediate attention"
-          icon={Target}
-          color={highRiskProjects.length === 0 ? 'green' : highRiskProjects.length < 3 ? 'orange' : 'red'}
-          description="Priority monitoring"
-        />
+        {/* High Risk Projects Card - Soft-coded feature flag */}
+        {HEALTH_SAFETY_FEATURES.enableHighRiskProjects && (
+          <SafetyMetricCard
+            title="High Risk Projects"
+            value={highRiskProjects.length}
+            subtitle="Need immediate attention"
+            icon={Target}
+            color={highRiskProjects.length === 0 ? 'green' : highRiskProjects.length < 3 ? 'orange' : 'red'}
+            description="Priority monitoring"
+          />
+        )}
       </div>
 
       {/* Dynamic Content Based on Selected View */}
@@ -251,27 +256,31 @@ const HealthSafety = ({ pageControls }) => {
 const OverviewView = ({ safetyMetrics, highRiskProjects, incidentTrend, safetyChecklist, monthlySafetyTrend }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Left Column - High Risk Projects */}
-      <div className="lg:col-span-1">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <AlertTriangle className="text-orange-500" size={20} />
-            High Risk Projects
-          </h3>
-          {highRiskProjects.length > 0 ? (
-            <div className="space-y-3">
-              {highRiskProjects.map((project, idx) => (
-                <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
-              ))}
-            </div>
-          ) : (
-            <SafetyEmptyState message="No high-risk projects identified" icon={Shield} />
-          )}
+      {/* Left Column - High Risk Projects (Soft-coded: Only show if enabled) */}
+      {HEALTH_SAFETY_FEATURES.enableHighRiskProjects && (
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <AlertTriangle className="text-orange-500" size={20} />
+              High Risk Projects
+            </h3>
+            {highRiskProjects.length > 0 ? (
+              <div className="space-y-3">
+                {highRiskProjects.map((project, idx) => (
+                  <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
+                ))}
+              </div>
+            ) : (
+              <SafetyEmptyState message="No high-risk projects identified" icon={Shield} />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Middle & Right Columns */}
-      <div className="lg:col-span-2 space-y-6">
+      <div className={`space-y-6 ${
+        HEALTH_SAFETY_FEATURES.enableHighRiskProjects ? 'lg:col-span-2' : 'lg:col-span-3'
+      }`}>
         {/* Monthly Safety Trend */}
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -342,7 +351,9 @@ const OverviewView = ({ safetyMetrics, highRiskProjects, incidentTrend, safetyCh
 const IncidentsView = ({ incidentTrend, safetyMetrics, highRiskProjects }) => {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${
+        HEALTH_SAFETY_FEATURES.enableHighRiskProjects ? 'lg:grid-cols-2' : ''
+      }`}>
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Incident Trend Analysis</h3>
           <ResponsiveContainer width="100%" height={350}>
@@ -359,18 +370,21 @@ const IncidentsView = ({ incidentTrend, safetyMetrics, highRiskProjects }) => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Projects Requiring Investigation</h3>
-          <div className="space-y-3">
-            {highRiskProjects.length > 0 ? (
-              highRiskProjects.map((project, idx) => (
-                <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
-              ))
-            ) : (
-              <SafetyEmptyState message="No projects require investigation" icon={Shield} />
-            )}
+        {/* High Risk Projects - Soft-coded: Only show if enabled */}
+        {HEALTH_SAFETY_FEATURES.enableHighRiskProjects && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Projects Requiring Investigation</h3>
+            <div className="space-y-3">
+              {highRiskProjects.length > 0 ? (
+                highRiskProjects.map((project, idx) => (
+                  <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
+                ))
+              ) : (
+                <SafetyEmptyState message="No projects require investigation" icon={Shield} />
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -381,16 +395,21 @@ const RiskAssessmentView = ({ highRiskProjects, safetyChecklist, safetyMetrics }
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">High Risk Projects</h3>
-          <div className="space-y-3">
-            {highRiskProjects.map((project, idx) => (
-              <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
-            ))}
+        {/* High Risk Projects - Soft-coded: Only show if enabled */}
+        {HEALTH_SAFETY_FEATURES.enableHighRiskProjects && (
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">High Risk Projects</h3>
+            <div className="space-y-3">
+              {highRiskProjects.map((project, idx) => (
+                <HighRiskProjectCard key={project.projectNo} project={project} rank={idx + 1} />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+        <div className={`bg-white rounded-xl shadow-sm p-6 border border-gray-200 ${
+          HEALTH_SAFETY_FEATURES.enableHighRiskProjects ? '' : 'lg:col-span-2'
+        }`}>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Risk Mitigation Checklist</h3>
           <div className="space-y-3">
             {safetyChecklist.map((item, idx) => (

@@ -8,7 +8,7 @@ import { getEngineeringDisciplines } from '../../config/engineeringStructure.con
 import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 import { SIDEBAR } from '../../config/layout.config'
 import { FEATURE_FLAGS } from '../../config/features.config'
-import { QHSE_MODULE_LABELS } from '../../config/qhseModules.config'
+import { QHSE_MODULE_LABELS, isQHSEModuleEnabled } from '../../config/qhseModules.config'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -525,23 +525,24 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           path: QHSE_MODULE_LABELS.healthSafety.path,
           description: QHSE_MODULE_LABELS.healthSafety.description,
           moduleCode: 'qhse_health_safety'
-        },
-        {
-          id: 'environmental',
-          title: '8.5 Environmental',
-          icon: DocumentTextIcon,
-          path: '/qhse/general/environmental',
-          description: 'Environmental management',
-          moduleCode: 'qhse_environmental'
-        },
-        {
-          id: 'energy',
-          title: '8.6 Energy',
-          icon: ChartBarIcon,
-          path: '/qhse/general/energy',
-          description: 'Energy management',
-          moduleCode: 'qhse_energy'
         }
+        // SOFT-CODED: Environmental (8.5) and Energy (8.6) modules disabled - not related to project quality
+        // {
+        //   id: 'environmental',
+        //   title: '8.5 Environmental',
+        //   icon: DocumentTextIcon,
+        //   path: '/qhse/general/environmental',
+        //   description: 'Environmental management',
+        //   moduleCode: 'qhse_environmental'
+        // },
+        // {
+        //   id: 'energy',
+        //   title: '8.6 Energy',
+        //   icon: ChartBarIcon,
+        //   path: '/qhse/general/energy',
+        //   description: 'Energy management',
+        //   moduleCode: 'qhse_energy'
+        // }
         // SOFT-CODED: AI Interconnected System demo removed (not needed)
         // {
         //   id: 'interconnectedDemo',
@@ -552,7 +553,7 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
         //   moduleCode: 'qhse',
         //   badge: 'AI'
         // }
-      ]
+      ].filter(Boolean) // Filter out undefined/null items
     }
   ]
 

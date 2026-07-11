@@ -19,6 +19,7 @@ import {
   Target,
   Users,
 } from 'lucide-react';
+import { isQHSEModuleEnabled } from '../../config/qhseModules.config';
 
 // ─── Static KPI tiles (soft-coded — replace with real API data when available) ──
 const KPI_TILES = [
@@ -101,6 +102,7 @@ const MODULES = [
     accent: 'emerald',
     iso: 'ISO 14001',
     badge: null,
+    enabled: false, // DISABLED: 2026-07-11 - Not related to project quality
   },
   {
     key: 'energy',
@@ -112,6 +114,7 @@ const MODULES = [
     accent: 'amber',
     iso: 'ISO 50001',
     badge: null,
+    enabled: false, // DISABLED: 2026-07-11 - Not related to project quality
   },
   {
     key: 'projects',
@@ -347,11 +350,13 @@ const QHSEHub = () => {
             <h2 className="text-xl font-bold text-gray-900">Modules</h2>
             <p className="text-sm text-gray-500 mt-0.5">Select a module to dive in</p>
           </div>
-          <span className="text-xs text-gray-400 font-medium">{MODULES.length} modules available</span>
+          <span className="text-xs text-gray-400 font-medium">
+            {MODULES.filter(mod => mod.enabled !== false).length} modules available
+          </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {MODULES.map((mod) => (
+          {MODULES.filter(mod => mod.enabled !== false).map((mod) => (
             <ModuleCard key={mod.key} module={mod} onClick={navigate} />
           ))}
         </div>
