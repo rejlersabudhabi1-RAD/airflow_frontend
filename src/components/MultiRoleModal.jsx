@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MULTI_ROLE_CONFIG from '../config/multiRoleConfig';
+import { CUSTOM_ROLE_PREFIX } from '../config/rbacAccess.config';
 
 /**
  * MultiRoleModal Component
@@ -11,12 +12,19 @@ import MULTI_ROLE_CONFIG from '../config/multiRoleConfig';
  * - onClose: Function to close modal
  * - onSave: Function to save role changes (receives { rolesToAdd, rolesToRemove, primaryRoleId })
  * - loading: Boolean indicating save operation in progress
+ * 
+ * Note: Custom roles (prefixed with 'custom_') are automatically filtered out.
  */
 const MultiRoleModal = ({ user, availableRoles, onClose, onSave, loading = false }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [primaryRoleId, setPrimaryRoleId] = useState(null);
   const [hoveredRole, setHoveredRole] = useState(null);
+
+  // Filter out custom roles from available roles (soft-coded using CUSTOM_ROLE_PREFIX)
+  const systemRoles = useMemo(() => {
+    return availableRoles.filter(role => !role.code?.startsWith(CUSTOM_ROLE_PREFIX));
+  }, [availableRoles]);
 
   // Initialize selected roles from user's current roles
   useEffect(() => {
@@ -35,19 +43,20 @@ const MultiRoleModal = ({ user, availableRoles, onClose, onSave, loading = false
     }
   }, [user]);
 
-  // Filter roles based on search query
+  // Filter roles based on search query (only system roles, no custom roles)
   const filteredRoles = useMemo(() => {
-    if (!searchQuery.trim()) return availableRoles;
+    if (!searchQuery.trim()) return systemRoles;
     
     const query = searchQuery.toLowerCase();
-    return availableRoles.filter(role => 
+    return systemRoles.filter(role => 
       role.name.toLowerCase().includes(query) ||
       role.code?.toLowerCase().includes(query) ||
       role.description?.toLowerCase().includes(query)
     );
-  }, [availableRoles, searchQuery]);
+  }, [systemRoles, searchQuery]);
 
-  // Group roles by type (recommended, admin, user, custom)
+  // Group roles by type (recommended, admin, user)
+  // Note: Custom roles are excluded via systemRoles filter above
   const groupedRoles = useMemo(() => {
     if (!MULTI_ROLE_CONFIG.features.enableRoleGrouping) {
       return { all: filteredRoles };
@@ -57,7 +66,6 @@ const MultiRoleModal = ({ user, availableRoles, onClose, onSave, loading = false
       recommended: [],
       admin: [],
       user: [],
-      custom: [],
     };
 
     filteredRoles.forEach(role => {
@@ -65,8 +73,6 @@ const MultiRoleModal = ({ user, availableRoles, onClose, onSave, loading = false
         groups.recommended.push(role);
       } else if (role.code?.includes('admin')) {
         groups.admin.push(role);
-      } else if (role.code?.includes('custom')) {
-        groups.custom.push(role);
       } else {
         groups.user.push(role);
       }
@@ -353,7 +359,6 @@ const MultiRoleModal = ({ user, availableRoles, onClose, onSave, loading = false
                 <RoleGroupSection title="⭐ Recommended Roles" roles={groupedRoles.recommended} icon="⭐" />
                 <RoleGroupSection title="🛡️ Admin Roles" roles={groupedRoles.admin} icon="🛡️" />
                 <RoleGroupSection title="👤 User Roles" roles={groupedRoles.user} icon="👤" />
-                <RoleGroupSection title="⚙️ Custom Roles" roles={groupedRoles.custom} icon="⚙️" />
               </>
             ) : (
               <div className="space-y-2">

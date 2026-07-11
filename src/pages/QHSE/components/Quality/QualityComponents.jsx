@@ -7,7 +7,8 @@ import {
   Calendar,
   ClipboardCheck,
   Target,
-  Award
+  Award,
+  Eye
 } from 'lucide-react';
 
 /**
@@ -21,7 +22,8 @@ export const QualityMetricCard = ({
   description, 
   trend,
   subtitle,
-  onClick 
+  onClick,
+  showDetailButton = false
 }) => {
   const colorClasses = {
     blue: { bg: 'bg-blue-100', text: 'text-blue-600', ring: 'ring-blue-200' },
@@ -36,7 +38,9 @@ export const QualityMetricCard = ({
 
   return (
     <div 
-      className={`bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100 ${onClick ? 'cursor-pointer' : ''}`}
+      className={`bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100 ${
+        onClick ? 'cursor-pointer hover:border-blue-300' : ''
+      }`}
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
@@ -55,6 +59,12 @@ export const QualityMetricCard = ({
           </div>
           {description && (
             <p className="text-xs text-gray-500 mt-2">{description}</p>
+          )}
+          {showDetailButton && onClick && (
+            <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+              <Eye size={14} />
+              <span>View Details</span>
+            </div>
           )}
         </div>
         <div className={`p-3 rounded-lg ${colors.bg} ring-2 ${colors.ring}`}>

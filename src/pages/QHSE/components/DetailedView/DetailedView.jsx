@@ -19,6 +19,9 @@ import { PageLayout } from '@/layouts/PageLayout';
 import ProjectEditModal from '../Common/ProjectEditModal';
 import CreateProjectModal from './CreateProjectModal';
 
+// Import soft-coded column visibility configuration
+import { getVisibleFieldLabels, isQHSEColumnVisible } from '../../../../config/qhseColumns.config';
+
 // Field labels using the correct Google Sheets field names
 const fieldLabels = {
   srNo: "Sr No",
@@ -54,10 +57,18 @@ const fieldLabels = {
   remarks: "Remarks"
 };
 
+// ========================================================================
+// SOFT-CODED COLUMN VISIBILITY (uses qhseColumns.config.js)
+// ========================================================================
+
+// Filter field labels to only include visible columns
+const visibleFieldLabels = getVisibleFieldLabels(fieldLabels);
+
 // Remove priority/color logic, just use allHeaders with label only
-const allHeaders = Object.keys(fieldLabels).map((key) => ({
+// ✅ Only include visible columns as per configuration
+const allHeaders = Object.keys(visibleFieldLabels).map((key) => ({
   key,
-  label: fieldLabels[key] || key
+  label: visibleFieldLabels[key] || key
 }));
 
 const DetailedView = ({ pageControls }) => {

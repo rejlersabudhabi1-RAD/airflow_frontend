@@ -16,6 +16,9 @@ import {
 } from '@mui/icons-material';
 import { visuallyHidden } from '@mui/utils';
 
+// Import soft-coded column visibility configuration
+import { isQHSEColumnVisible } from '../../../../config/qhseColumns.config';
+
 const getChipColor = (value, type) => {
   const numValue = typeof value === 'string' ? parseFloat(value.replace('%', '')) : Number(value) || 0;
   
@@ -108,93 +111,112 @@ const getRiskLevel = (project) => {
 };
 
 // Enhanced table head with proper column widths including Quality Engineer
+// ✅ SOFT-CODED: Uses qhseColumns.config.js to control column visibility
 const EnhancedTableHead = ({ order, orderBy, onRequestSort }) => {
   const createSortHandler = (property) => (event) => {
     onRequestSort(event, property);
   };
 
-  const headCells = [
+  // Define all possible columns
+  const allHeadCells = [
     { 
       id: 'displaySrNo', 
       label: 'Sr.No', 
       sortable: false, 
       width: '60px',
-      align: 'center'
+      align: 'center',
+      configKey: 'srNo' // Maps to configuration key
     },
     { 
       id: 'projectNo', 
       label: 'Project No', 
       sortable: true, 
-      width: '90px'
+      width: '90px',
+      configKey: 'projectNo'
     },
     { 
       id: 'projectTitle', 
       label: 'Project Title', 
       sortable: true, 
-      width: '170px', // Let this column expand
-      minWidth: '180px'
+      width: '170px',
+      minWidth: '180px',
+      configKey: 'projectTitle'
     },
     { 
       id: 'client', 
       label: 'Client', 
       sortable: true, 
-      width: '140px'
+      width: '140px',
+      configKey: 'client'
     },
     { 
       id: 'projectManager', 
       label: 'Project Manager', 
       sortable: true, 
-      width: '140px'
+      width: '140px',
+      configKey: 'projectManager'
     },
     { 
-      id: 'projectQualityEng', // ✅ Fix: Use correct field name
+      id: 'projectQualityEng',
       label: 'Quality Engineer', 
       sortable: true, 
-      width: '140px'
+      width: '140px',
+      configKey: 'projectQualityEng'
     },
     { 
       id: 'qualityBillabilityPercent', 
       label: 'Billability (%)', 
       sortable: true, 
       width: '100px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'qualityBillabilityPercent' // ✅ This will be hidden via config
     },
     { 
       id: 'carsOpen', 
       label: 'CARs', 
       sortable: true, 
       width: '70px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'carsOpen'
     },
     { 
       id: 'obsOpen', 
       label: 'OBS', 
       sortable: true, 
       width: '70px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'obsOpen'
     },
     { 
       id: 'projectKPIsAchievedPercent', 
       label: 'KPIs (%)', 
       sortable: true, 
       width: '85px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'projectKPIsAchievedPercent'
     },
     { 
       id: 'delayInAuditsNoDays', 
       label: 'Audit Delay', 
       sortable: true, 
       width: '100px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'delayInAuditsNoDays'
     },
     { 
       id: 'projectCompletionPercent', 
       label: 'Completion (%)', 
       sortable: true, 
       width: '110px', 
-      align: 'center' 
+      align: 'center',
+      configKey: 'projectCompletionPercent'
     },
   ];
+
+  // ✅ Filter columns based on configuration
+  const headCells = allHeadCells.filter(cell => 
+    !cell.configKey || isQHSEColumnVisible(cell.configKey)
+  );
 
   return (
     <TableHead>
@@ -652,15 +674,17 @@ const ProjectStatus = ({ projectsData = [], loading = false, onRefresh }) => {
                       </Typography>
                     </TableCell>
                     
-                    {/* Metric columns - All centered with optimized widths */}
-                    <TableCell align="center" className="!border-gray-200 dark:!border-slate-700" sx={{ padding: '8px 4px' }}>
-                      <Chip
-                        label={formatPercentage(project.qualityBillabilityPercent)}
-                        color={getChipColor(project.qualityBillabilityPercent, "billability")}
-                        size="small"
-                        sx={{ minWidth: '55px', fontWeight: 600, fontSize: '0.75rem' }}
-                      />
-                    </TableCell>
+                    {/* ✅ SOFT-CODED: Billability column - only show if configured as visible */}
+                    {isQHSEColumnVisible('qualityBillabilityPercent') && (
+                      <TableCell align="center" className="!border-gray-200 dark:!border-slate-700" sx={{ padding: '8px 4px' }}>
+                        <Chip
+                          label={formatPercentage(project.qualityBillabilityPercent)}
+                          color={getChipColor(project.qualityBillabilityPercent, "billability")}
+                          size="small"
+                          sx={{ minWidth: '55px', fontWeight: 600, fontSize: '0.75rem' }}
+                        />
+                      </TableCell>
+                    )}
                     
                     <TableCell align="center" className="!border-gray-200 dark:!border-slate-700" sx={{ padding: '8px 4px' }}>
                       <Chip
