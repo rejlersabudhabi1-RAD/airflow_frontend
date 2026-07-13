@@ -100,6 +100,7 @@ import ProcurementDashboard from './pages/Procurement/ProcurementDashboard'
 import VendorManagement from './pages/Procurement/VendorManagement'
 import RequisitionManagement from './pages/Procurement/RequisitionManagement'
 import OrderManagement from './pages/Procurement/OrderManagement'
+import PurchaseOrderDetail from './pages/Procurement/PurchaseOrderDetail'
 import ReceiptManagement from './pages/Procurement/ReceiptManagement'
 import ProjectDashboard from './pages/Procurement/ProjectDashboard'
 import ProjectDetail from './pages/Procurement/ProjectDetail'
@@ -764,6 +765,14 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="procurement">
               <OrderManagement />
+            </ModuleProtectedRoute>
+          }
+        />
+        <Route
+          path="procurement/orders/:id"
+          element={
+            <ModuleProtectedRoute moduleCode="procurement">
+              <PurchaseOrderDetail />
             </ModuleProtectedRoute>
           }
         />

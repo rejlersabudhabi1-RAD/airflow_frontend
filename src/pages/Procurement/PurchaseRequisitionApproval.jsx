@@ -1,17 +1,18 @@
 /**
  * Purchase Requisition Approval Component
- * Two-tier approval workflow: PM → VP Operations
+ * Multi-tier approval workflow: PM → Engineering Manager → Manager of Projects → VP Operations
  * 
  * Features:
  * - View full PR details
- * - Approve/Reject with reason
+ * - Approve/Reject with mandatory reason (soft-coded validation)
  * - Digital signature (optional)
  * - Approval history tracking
- * - Status indicators
+ * - Status indicators for all approval tiers
+ * - Dynamic approver type detection
  */
 
 import React, { useState, useRef } from 'react';
-import axios from 'axios';
+import apiClient from '../../services/api.service';
 import {
   XMarkIcon,
   CheckCircleIcon,
@@ -25,40 +26,102 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 
+// Soft-coded rejection validation configuration
+const REJECTION_CONFIG = {
+  MIN_REASON_LENGTH: 10,
+  MAX_REASON_LENGTH: 1000,
+  ERROR_MESSAGES: {
+    missing: 'Please provide a reason for rejection.',
+    too_short: 'Rejection reason must be at least 10 characters long.',
+    too_long: 'Rejection reason cannot exceed 1000 characters.',
+    empty: 'Rejection reason cannot be empty or contain only whitespace.',
+  }
+};
+
 const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser, onApprovalComplete }) => {
   const [loading, setLoading] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [currentApproverType, setCurrentApproverType] = useState(null); // 'pm', 'vp', 'eng_manager', 'manager_projects'
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionError, setRejectionError] = useState('');
   const [signature, setSignature] = useState('');
   const signatureRef = useRef(null);
 
   if (!isOpen || !requisition) return null;
 
-  // Determine approval capability based on user role and PR status
-  const canPMApprove = 
-    requisition.status === 'submitted' && 
-    requisition.pm_approval_status === 'pending';
+  // Soft-coded approver capability detection
+  // Maps approval tier to status check and endpoint configuration
+  const APPROVER_CONFIG = {
+    pm: {
+      label: 'Project Manager',
+      approveEndpoint: 'pm_approve',
+      rejectEndpoint: 'pm_reject',
+      statusField: 'pm_approval_status',
+      canApprove: requisition.status === 'submitted' && requisition.pm_approval_status === 'pending'
+    },
+    eng_manager: {
+      label: 'Engineering Manager',
+      approveEndpoint: 'eng_manager_approve',
+      rejectEndpoint: 'eng_manager_reject',
+      statusField: 'eng_manager_approval_status',
+      canApprove: requisition.eng_manager_approval_status === 'pending'
+    },
+    manager_projects: {
+      label: 'Manager of Projects',
+      approveEndpoint: 'manager_projects_approve',
+      rejectEndpoint: 'manager_projects_reject',
+      statusField: 'manager_projects_approval_status',
+      canApprove: requisition.manager_projects_approval_status === 'pending'
+    },
+    vp: {
+      label: 'Vice President of Operations',
+      approveEndpoint: 'vp_approve',
+      rejectEndpoint: 'vp_reject',
+      statusField: 'vp_op_approval_status',
+      canApprove: requisition.pm_approval_status === 'approved' && requisition.vp_op_approval_status === 'pending'
+    }
+  };
 
-  const canVPApprove = 
-    requisition.status === 'pm_approved' && 
-    requisition.pm_approval_status === 'approved' &&
-    requisition.vp_op_approval_status === 'pending';
-
-  const isFullyApproved = requisition.status === 'fully_approved';
+  const isFullyApproved = requisition.status === 'fully_approved' || requisition.status === 'approved';
   const isRejected = requisition.status === 'rejected';
 
+  // Soft-coded: Check if current user can perform any approval action
+  const hasAnyApprovalCapability = Object.values(APPROVER_CONFIG).some(config => config.canApprove);
+
+  // Soft-coded validation function for rejection reason (frontend)
+  const validateRejectionReason = (reason) => {
+    if (!reason || !reason.trim()) {
+      return { valid: false, error: REJECTION_CONFIG.ERROR_MESSAGES.missing };
+    }
+    
+    const trimmed = reason.trim();
+    
+    if (trimmed.length < REJECTION_CONFIG.MIN_REASON_LENGTH) {
+      return { valid: false, error: REJECTION_CONFIG.ERROR_MESSAGES.too_short };
+    }
+    
+    if (trimmed.length > REJECTION_CONFIG.MAX_REASON_LENGTH) {
+      return { valid: false, error: REJECTION_CONFIG.ERROR_MESSAGES.too_long };
+    }
+    
+    return { valid: true, error: null };
+  };
+
   const handleApprove = async (approverType) => {
+    const config = APPROVER_CONFIG[approverType];
+    if (!config) {
+      alert('Invalid approver type');
+      return;
+    }
+
     setLoading(true);
     try {
-      const endpoint = approverType === 'pm' 
-        ? `/procurement/requisitions/${requisition.id}/pm_approve/`
-        : `/procurement/requisitions/${requisition.id}/vp_approve/`;
+      const response = await apiClient.post(
+        `/procurement/requisitions/${requisition.id}/${config.approveEndpoint}/`,
+        { signature: signature || '' }
+      );
 
-      const response = await axios.post(endpoint, {
-        signature: signature || ''
-      });
-
-      alert(`Requisition ${approverType === 'pm' ? 'PM' : 'VP'} approved successfully!`);
+      alert(`Requisition approved by ${config.label}!`);
       
       if (onApprovalComplete) {
         onApprovalComplete(response.data);
@@ -72,23 +135,37 @@ const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser
     }
   };
 
-  const handleReject = async (approverType) => {
-    if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
+  const handleRejectClick = (approverType) => {
+    setCurrentApproverType(approverType);
+    setRejectionReason('');
+    setRejectionError('');
+    setShowRejectModal(true);
+  };
+
+  const handleRejectSubmit = async () => {
+    const config = APPROVER_CONFIG[currentApproverType];
+    if (!config) {
+      alert('Invalid approver type');
+      return;
+    }
+
+    // Validate rejection reason (soft-coded validation)
+    const validation = validateRejectionReason(rejectionReason);
+    if (!validation.valid) {
+      setRejectionError(validation.error);
       return;
     }
 
     setLoading(true);
+    setRejectionError('');
+    
     try {
-      const endpoint = approverType === 'pm'
-        ? `/procurement/requisitions/${requisition.id}/pm_reject/`
-        : `/procurement/requisitions/${requisition.id}/vp_reject/`;
+      const response = await apiClient.post(
+        `/procurement/requisitions/${requisition.id}/${config.rejectEndpoint}/`,
+        { reason: rejectionReason.trim() }
+      );
 
-      const response = await axios.post(endpoint, {
-        reason: rejectionReason
-      });
-
-      alert(`Requisition rejected by ${approverType === 'pm' ? 'PM' : 'VP'}`);
+      alert(`Requisition rejected by ${config.label}`);
       
       if (onApprovalComplete) {
         onApprovalComplete(response.data);
@@ -97,10 +174,18 @@ const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser
       setShowRejectModal(false);
     } catch (error) {
       console.error('Rejection error:', error);
-      alert(error.response?.data?.error || 'Failed to reject requisition. Please try again.');
+      const errorMsg = error.response?.data?.error || 'Failed to reject requisition. Please try again.';
+      setRejectionError(errorMsg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRejectCancel = () => {
+    setShowRejectModal(false);
+    setRejectionReason('');
+    setRejectionError('');
+    setCurrentApproverType(null);
   };
 
   const formatCurrency = (amount, currency = 'USD') => {
@@ -399,8 +484,8 @@ const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser
                   )}
                 </div>
 
-                {/* Approval Actions */}
-                {(canPMApprove || canVPApprove) && (
+                {/* Approval Actions - Soft-coded visibility check */}
+                {hasAnyApprovalCapability && (
                   <div className="bg-white rounded-lg border-2 border-indigo-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                       <PencilSquareIcon className="h-5 w-5 mr-2 text-indigo-600" />
@@ -421,45 +506,122 @@ const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser
                       />
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="space-y-3">
-                      <button
-                        onClick={() => handleApprove(canPMApprove ? 'pm' : 'vp')}
-                        disabled={loading}
-                        className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium disabled:opacity-50 shadow-lg"
-                      >
-                        {loading ? (
-                          <>
-                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                            <span>Processing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircleIcon className="h-5 w-5" />
-                            <span>Approve Requisition</span>
-                          </>
-                        )}
-                      </button>
+                    {/* Action Buttons - Dynamic Approval Tiers (Soft-Coded) */}
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-gray-900 mb-3">Approval Actions</h4>
+                      
+                      {/* Project Manager Approval */}
+                      {APPROVER_CONFIG.pm.canApprove && (
+                        <div className="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50">
+                          <h5 className="text-sm font-semibold text-indigo-900 mb-2">Project Manager Review</h5>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApprove('pm')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <CheckCircleIcon className="h-5 w-5" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectClick('pm')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <XCircleIcon className="h-5 w-5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-                      <button
-                        onClick={() => setShowRejectModal(true)}
-                        disabled={loading}
-                        className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50 shadow-lg"
-                      >
-                        <XCircleIcon className="h-5 w-5" />
-                        <span>Reject Requisition</span>
-                      </button>
-                    </div>
+                      {/* Engineering Manager Approval */}
+                      {APPROVER_CONFIG.eng_manager.canApprove && (
+                        <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+                          <h5 className="text-sm font-semibold text-purple-900 mb-2">Engineering Manager Review</h5>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApprove('eng_manager')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <CheckCircleIcon className="h-5 w-5" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectClick('eng_manager')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <XCircleIcon className="h-5 w-5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start space-x-2">
-                        <InformationCircleIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-blue-800">
-                          {canPMApprove 
-                            ? 'As Project Manager, your approval is required before VP can review this requisition.'
-                            : 'As VP Operations, this requisition has been approved by PM and requires your final approval.'}
-                        </p>
-                      </div>
+                      {/* Manager of Projects Approval */}
+                      {APPROVER_CONFIG.manager_projects.canApprove && (
+                        <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
+                          <h5 className="text-sm font-semibold text-blue-900 mb-2">Manager of Projects Review</h5>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApprove('manager_projects')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <CheckCircleIcon className="h-5 w-5" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectClick('manager_projects')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <XCircleIcon className="h-5 w-5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VP Operations Approval */}
+                      {APPROVER_CONFIG.vp.canApprove && (
+                        <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
+                          <h5 className="text-sm font-semibold text-orange-900 mb-2">VP Operations Review</h5>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApprove('vp')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <CheckCircleIcon className="h-5 w-5" />
+                              <span>Approve</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectClick('vp')}
+                              disabled={loading}
+                              className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50"
+                            >
+                              <XCircleIcon className="h-5 w-5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No pending actions */}
+                      {!APPROVER_CONFIG.pm.canApprove && !APPROVER_CONFIG.eng_manager.canApprove && 
+                       !APPROVER_CONFIG.manager_projects.canApprove && !APPROVER_CONFIG.vp.canApprove && (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <InformationCircleIcon className="h-5 w-5 text-gray-600 flex-shrink-0 mt-0.5" />
+                            <p className="text-sm text-gray-700">
+                              No approval action available for your role at this time.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -512,46 +674,91 @@ const PurchaseRequisitionApproval = ({ isOpen, onClose, requisition, currentUser
         </div>
       </div>
 
-      {/* Rejection Modal */}
-      {showRejectModal && (
+      {/* Rejection Modal with Mandatory Reason */}
+      {showRejectModal && currentApproverType && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4">
             <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 rounded-t-xl">
               <div className="flex items-center space-x-3">
                 <ExclamationTriangleIcon className="h-6 w-6" />
-                <h3 className="text-xl font-bold">Reject Requisition</h3>
+                <h3 className="text-xl font-bold">Reject Purchase Requisition</h3>
               </div>
             </div>
 
             <div className="p-6">
-              <p className="text-gray-700 mb-4">
-                Please provide a reason for rejecting this purchase requisition. This will be visible to the requester.
-              </p>
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <InformationCircleIcon className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-yellow-800">
+                    <strong>Rejecting as: {APPROVER_CONFIG[currentApproverType]?.label}</strong><br/>
+                    You must provide a detailed reason for rejection (minimum {REJECTION_CONFIG.MIN_REASON_LENGTH} characters).
+                  </p>
+                </div>
+              </div>
 
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
               <textarea
                 value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                placeholder="Enter rejection reason..."
+                onChange={(e) => {
+                  setRejectionReason(e.target.value);
+                  setRejectionError(''); // Clear error on input
+                }}
+                rows={5}
+                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent ${
+                  rejectionError ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Enter a detailed reason for rejecting this purchase requisition..."
               />
+              
+              {/* Character Counter */}
+              <div className="flex justify-between items-center mt-2">
+                <p className={`text-xs ${
+                  rejectionReason.trim().length < REJECTION_CONFIG.MIN_REASON_LENGTH 
+                    ? 'text-red-500' 
+                    : rejectionReason.trim().length > REJECTION_CONFIG.MAX_REASON_LENGTH
+                    ? 'text-red-500'
+                    : 'text-green-600'
+                }`}>
+                  {rejectionReason.trim().length} / {REJECTION_CONFIG.MIN_REASON_LENGTH} characters minimum
+                </p>
+                <p className="text-xs text-gray-500">
+                  {REJECTION_CONFIG.MAX_REASON_LENGTH - rejectionReason.length} remaining
+                </p>
+              </div>
+
+              {/* Validation Error Message */}
+              {rejectionError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 flex items-center space-x-2">
+                    <ExclamationTriangleIcon className="h-4 w-4" />
+                    <span>{rejectionError}</span>
+                  </p>
+                </div>
+              )}
 
               <div className="flex space-x-3 mt-6">
                 <button
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setRejectionReason('');
-                  }}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                  onClick={handleRejectCancel}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleReject(canPMApprove ? 'pm' : 'vp')}
-                  disabled={loading || !rejectionReason.trim()}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50"
+                  onClick={handleRejectSubmit}
+                  disabled={loading || rejectionReason.trim().length < REJECTION_CONFIG.MIN_REASON_LENGTH}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Rejecting...' : 'Confirm Rejection'}
+                  {loading ? (
+                    <span className="flex items-center justify-center space-x-2">
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                      <span>Rejecting...</span>
+                    </span>
+                  ) : (
+                    'Confirm Rejection'
+                  )}
                 </button>
               </div>
             </div>

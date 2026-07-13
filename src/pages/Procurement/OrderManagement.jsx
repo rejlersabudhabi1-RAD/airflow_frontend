@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ShoppingCartIcon,
   MagnifyingGlassIcon,
@@ -16,7 +16,12 @@ import {
   UserGroupIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  Squares2X2Icon,
+  ListBulletIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import apiClient from '../../services/api.service';
 import { PageControlButtons } from '../../components/Common/PageControlButtons';
@@ -28,9 +33,15 @@ import PurchaseRequisitionApproval from './PurchaseRequisitionApproval';
 import PurchaseOrderForm from './PurchaseOrderForm';
 
 const OrderManagement = () => {
+  // Navigation hook for soft-coded routing
+  const navigate = useNavigate();
+  
   // Soft-coded tabs from configuration
   const [activeTab, setActiveTab] = useState('purchaseOrders');
   const orderTabs = getOrderTabs();
+  
+  // View mode state - soft-coded toggle between card and list view
+  const [viewMode, setViewMode] = useState('card'); // 'card' or 'list'
   
   // Purchase Orders state
   const [orders, setOrders] = useState([]);
@@ -55,6 +66,10 @@ const OrderManagement = () => {
   const [vendors, setVendors] = useState([]);
   const [projects, setProjects] = useState([]);  // Smart project lookup for PO creation
   const [aiInsights, setAiInsights] = useState(null);
+  
+  // Soft-coded edit state - track which record is being edited
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editingRequisition, setEditingRequisition] = useState(null);
 
   const pageControls = usePageControls({
     autoRefreshInterval: 60,
@@ -302,6 +317,224 @@ const OrderManagement = () => {
     console.log('Creating requisition with AI data:', reqData);
     // After successful creation, refresh requisition list
     await fetchRequisitions();
+  };
+
+  /**
+   * Soft-coded handler: View Purchase Order Details
+   * Navigates to PO detail page with order ID
+   */
+  const handleViewOrderDetails = (orderId) => {
+    // Soft-coded navigation - can be configured to modal or separate page
+    navigate(`/procurement/orders/${orderId}`);
+  };
+
+  /**
+   * Soft-coded handler: Send Purchase Order to Vendor
+   * Updates PO status from draft to sent via API
+   */
+  const handleSendOrder = async (order) => {
+    if (!order || !order.id) {
+      console.error('Invalid order data');
+      return;
+    }
+
+    try {
+      // Soft-coded confirmation dialog
+      const confirmed = window.confirm(
+        `Send Purchase Order ${order.po_number || order.id} to ${order.vendor_name || 'vendor'}?`
+      );
+      
+      if (!confirmed) return;
+
+      // Soft-coded API endpoint
+      const response = await apiClient.patch(`/procurement/orders/${order.id}/`, {
+        status: 'sent'
+      });
+
+      // Update local state - soft-coded state management
+      setOrders(prevOrders => 
+        prevOrders.map(o => o.id === order.id ? { ...o, status: 'sent' } : o)
+      );
+
+      // Soft-coded success notification
+      alert(`✅ Purchase Order ${order.po_number || order.id} sent successfully!`);
+      
+      // Refresh orders to get latest data
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error sending order:', error);
+      // Soft-coded error handling
+      alert(`❌ Failed to send order: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  /**
+   * Soft-coded handler: Edit Purchase Order
+   * Opens PO form with existing data for editing
+   */
+  const handleEditOrder = (order) => {
+    if (!order) {
+      console.error('Invalid order data');
+      return;
+    }
+    
+    // Set the order to edit and open the form
+    setEditingOrder(order);
+    setShowPOForm(true);
+  };
+
+  /**
+   * Soft-coded handler: Edit Purchase Requisition
+   * Opens PR form with existing data for editing
+   */
+  const handleEditRequisition = (requisition) => {
+    if (!requisition) {
+      console.error('Invalid requisition data');
+      return;
+    }
+    
+    // Set the requisition to edit and open the form
+    setEditingRequisition(requisition);
+    setShowPRForm(true);
+  };
+
+  /**
+   * Soft-coded handler: Delete Purchase Order
+   * Permission-based delete with confirmation dialog
+   * Only allows deletion of draft/pending orders
+   */
+  const handleDeleteOrder = async (order) => {
+    if (!order || !order.id) {
+      console.error('Invalid order data');
+      return;
+    }
+
+    // Soft-coded permission check - only allow delete for certain statuses
+    const DELETABLE_STATUSES = ['draft', 'pending', 'cancelled'];
+    if (!DELETABLE_STATUSES.includes(order.status)) {
+      alert(`Cannot delete order with status '${order.status}'. Only ${DELETABLE_STATUSES.join(', ')} orders can be deleted.`);
+      return;
+    }
+
+    // Confirmation dialog with detailed information
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this Purchase Order?\n\n` +
+      `PO Number: ${order.po_number || 'N/A'}\n` +
+      `Supplier: ${order.supplier_name || 'N/A'}\n` +
+      `Total: ${order.currency || ''} ${order.total_amount?.toLocaleString() || '0'}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await apiClient.delete(`/procurement/orders/${order.id}/`);
+      
+      // Refresh orders list
+      await fetchOrders();
+      
+      alert(`Purchase Order ${order.po_number || order.id} deleted successfully.`);
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      const errorMsg = error.response?.data?.detail || 
+                       error.response?.data?.error || 
+                       'Failed to delete purchase order. Please try again.';
+      alert(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Soft-coded handler: Delete Purchase Requisition
+   * Permission-based delete with confirmation dialog
+   * Only allows deletion of draft/rejected requisitions
+   */
+  const handleDeleteRequisition = async (requisition) => {
+    if (!requisition || !requisition.id) {
+      console.error('Invalid requisition data');
+      return;
+    }
+
+    // Soft-coded permission check - only allow delete for certain statuses
+    const DELETABLE_STATUSES = ['draft', 'rejected', 'withdrawn'];
+    if (!DELETABLE_STATUSES.includes(requisition.status)) {
+      alert(`Cannot delete requisition with status '${requisition.status}'. Only ${DELETABLE_STATUSES.join(', ')} requisitions can be deleted.`);
+      return;
+    }
+
+    // Confirmation dialog with detailed information
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this Purchase Requisition?\n\n` +
+      `PR Number: ${requisition.pr_number || 'N/A'}\n` +
+      `Description: ${requisition.product_service || 'N/A'}\n` +
+      `Status: ${requisition.status}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await apiClient.delete(`/procurement/requisitions/${requisition.id}/`);
+      
+      // Refresh requisitions list
+      await fetchRequisitions();
+      
+      alert(`Purchase Requisition ${requisition.pr_number || requisition.id} deleted successfully.`);
+    } catch (error) {
+      console.error('Error deleting requisition:', error);
+      const errorMsg = error.response?.data?.detail || 
+                       error.response?.data?.error || 
+                       'Failed to delete purchase requisition. Please try again.';
+      alert(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Soft-coded handler: Convert Requisition to Purchase Order
+   * Creates new PO from approved requisition
+   */
+  const handleConvertToPO = async (requisition) => {
+    if (!requisition || !requisition.id) {
+      console.error('Invalid requisition data');
+      return;
+    }
+
+    try {
+      // Soft-coded confirmation
+      const confirmed = window.confirm(
+        `Convert Requisition ${requisition.pr_number || requisition.id} to Purchase Order?`
+      );
+      
+      if (!confirmed) return;
+
+      // Soft-coded API endpoint for conversion
+      const response = await apiClient.post(`/procurement/requisitions/${requisition.id}/convert_to_po/`);
+
+      // Update requisition status - soft-coded state update
+      setRequisitions(prevReqs => 
+        prevReqs.map(r => r.id === requisition.id ? { ...r, status: 'converted' } : r)
+      );
+
+      // Soft-coded success notification
+      alert(`✅ Requisition ${requisition.pr_number || requisition.id} converted to Purchase Order successfully!`);
+      
+      // Refresh data
+      await fetchRequisitions();
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error converting requisition:', error);
+      // Soft-coded error handling
+      alert(`❌ Failed to convert: ${error.response?.data?.detail || error.message}`);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -851,14 +1084,46 @@ const OrderManagement = () => {
                   : `Showing ${filteredRequisitions.length} of ${Array.isArray(requisitions) ? requisitions.length : 0} requisitions`
                 }
               </p>
-              <button
-                type="button"
-                onClick={() => activeTab === 'purchaseOrders' ? setShowPOForm(true) : setShowPRForm(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <SparklesIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-                {activeTab === 'purchaseOrders' ? 'Create Purchase Order' : 'Create Requisition'}
-              </button>
+              <div className="flex items-center space-x-3">
+                {/* View Toggle - Soft-coded */}
+                <div className="inline-flex rounded-lg border border-gray-300 bg-white p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('card')}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      viewMode === 'card'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                    title="Card View"
+                  >
+                    <Squares2X2Icon className="h-4 w-4 mr-1.5" />
+                    Cards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      viewMode === 'list'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                    title="List View"
+                  >
+                    <ListBulletIcon className="h-4 w-4 mr-1.5" />
+                    List
+                  </button>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => activeTab === 'purchaseOrders' ? setShowPOForm(true) : setShowPRForm(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <SparklesIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
+                  {activeTab === 'purchaseOrders' ? 'Create Purchase Order' : 'Create Requisition'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -894,7 +1159,7 @@ const OrderManagement = () => {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredOrders.map((order) => {
                 const isOverdue = order.delivery_date && new Date(order.delivery_date) < new Date() && order.status !== 'completed';
@@ -987,15 +1252,33 @@ const OrderManagement = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Actions - Soft-coded button handlers */}
                     <div className="flex space-x-2">
-                      <button className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200">
+                      <button 
+                        onClick={() => handleViewOrderDetails(order.id)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200">
                         <span>View Details</span>
                       </button>
+                      <button 
+                        onClick={() => handleEditOrder(order)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-yellow-300 shadow-sm text-sm font-semibold rounded-xl text-yellow-700 bg-yellow-50 hover:bg-yellow-100 hover:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-all duration-200">
+                        <PencilIcon className="h-4 w-4 mr-1.5" />
+                        <span>Edit</span>
+                      </button>
                       {order.status === 'draft' && (
-                        <button className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-md hover:shadow-lg transition-all duration-200">
+                        <button 
+                          onClick={() => handleSendOrder(order)}
+                          className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-md hover:shadow-lg transition-all duration-200">
                           <PaperAirplaneIcon className="h-4 w-4 mr-1.5" />
                           <span>Send</span>
+                        </button>
+                      )}
+                      {['draft', 'pending', 'cancelled'].includes(order.status) && (
+                        <button 
+                          onClick={() => handleDeleteOrder(order)}
+                          className="inline-flex justify-center items-center px-3 py-2.5 border-2 border-red-300 shadow-sm text-sm font-semibold rounded-xl text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
+                          title="Delete this purchase order">
+                          <TrashIcon className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -1003,6 +1286,114 @@ const OrderManagement = () => {
                 </div>
               );
               })}
+            </div>
+          ) : (
+            // List View for Purchase Orders
+            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      PO Number
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Vendor
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Delivery Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredOrders.map((order) => {
+                    const isOverdue = order.delivery_date && new Date(order.delivery_date) < new Date() && order.status !== 'completed';
+                    return (
+                      <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-150">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                              <ShoppingCartIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-semibold text-gray-900">{order.po_number || `PO-${order.id}`}</div>
+                              <div className="text-xs text-gray-500">{order.project || 'No project'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{order.vendor_name || 'N/A'}</div>
+                          <div className="text-xs text-gray-500">{order.shipping_address ? order.shipping_address.substring(0, 30) + '...' : ''}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {order.delivery_date ? (
+                            <div className={`text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
+                              {new Date(order.delivery_date).toLocaleDateString()}
+                              {isOverdue && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Overdue</span>}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400">Not set</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-bold text-teal-700">
+                            {order.total_amount ? `$${parseFloat(order.total_amount).toLocaleString()}` : 'N/A'}
+                          </div>
+                          {order.currency && <div className="text-xs text-gray-500">{order.currency}</div>}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(order.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => handleViewOrderDetails(order.id)}
+                              className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            >
+                              <EyeIcon className="h-4 w-4 mr-1" />
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleEditOrder(order)}
+                              className="inline-flex items-center px-3 py-1.5 border border-yellow-300 shadow-sm text-xs font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                            >
+                              <PencilIcon className="h-4 w-4 mr-1" />
+                              Edit
+                            </button>
+                            {order.status === 'draft' && (
+                              <button
+                                onClick={() => handleSendOrder(order)}
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                              >
+                                <PaperAirplaneIcon className="h-4 w-4 mr-1" />
+                                Send
+                              </button>
+                            )}
+                            {['draft', 'pending', 'cancelled'].includes(order.status) && (
+                              <button
+                                onClick={() => handleDeleteOrder(order)}
+                                className="inline-flex items-center px-3 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                title="Delete this purchase order"
+                              >
+                                <TrashIcon className="h-4 w-4 mr-1" />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )) : (
             // Purchase Requisitions Tab Content
@@ -1026,7 +1417,7 @@ const OrderManagement = () => {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : viewMode === 'card' ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredRequisitions.map((req) => {
                 const daysSinceCreation = req.created_date 
@@ -1082,14 +1473,14 @@ const OrderManagement = () => {
                         </div>
                       )}
                       
-                      {req.estimated_value && (
+                      {(req.total_price || req.estimated_value) && (
                         <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg">
                           <div className="flex items-center">
                             <CurrencyDollarIcon className="h-5 w-5 mr-2 text-purple-600" />
                             <span className="text-sm text-gray-600">Estimated Value</span>
                           </div>
                           <span className="text-lg font-bold text-purple-700">
-                            ~${parseFloat(req.estimated_value).toLocaleString()}
+                            ~${parseFloat(req.total_price || req.estimated_value).toLocaleString()}
                           </span>
                         </div>
                       )}
@@ -1125,17 +1516,33 @@ const OrderManagement = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Actions - Soft-coded button handlers */}
                     <div className="flex space-x-2">
                       <button 
                         onClick={() => handleOpenApproval(req)}
                         className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-200">
                         <span>View Details</span>
                       </button>
+                      <button 
+                        onClick={() => handleEditRequisition(req)}
+                        className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-yellow-300 shadow-sm text-sm font-semibold rounded-xl text-yellow-700 bg-yellow-50 hover:bg-yellow-100 hover:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-all duration-200">
+                        <PencilIcon className="h-4 w-4 mr-1.5" />
+                        <span>Edit</span>
+                      </button>
                       {req.status === 'approved' && (
-                        <button className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 shadow-md hover:shadow-lg transition-all duration-200">
+                        <button 
+                          onClick={() => handleConvertToPO(req)}
+                          className="flex-1 inline-flex justify-center items-center px-3 py-2.5 border-2 border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 shadow-md hover:shadow-lg transition-all duration-200">
                           <ShoppingCartIcon className="h-4 w-4 mr-1.5" />
                           <span>Convert to PO</span>
+                        </button>
+                      )}
+                      {['draft', 'rejected', 'withdrawn'].includes(req.status) && (
+                        <button 
+                          onClick={() => handleDeleteRequisition(req)}
+                          className="inline-flex justify-center items-center px-3 py-2.5 border-2 border-red-300 shadow-sm text-sm font-semibold rounded-xl text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200"
+                          title="Delete this purchase requisition">
+                          <TrashIcon className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -1144,9 +1551,139 @@ const OrderManagement = () => {
               );
               })}
             </div>
+          ) : (
+            // List View for Purchase Requisitions
+            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      PR Number
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Title
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Priority
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Estimated Value
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredRequisitions.map((req) => {
+                    const daysSinceCreation = req.created_date 
+                      ? Math.floor((new Date() - new Date(req.created_date)) / (1000 * 60 * 60 * 24))
+                      : 0;
+                    const isUrgent = req.priority === 'urgent' || req.priority === 'high';
+                    return (
+                      <tr key={req.id} className="hover:bg-gray-50 transition-colors duration-150">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                              <DocumentTextIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-semibold text-gray-900">{req.pr_number || `PR-${req.id}`}</div>
+                              <div className="text-xs text-gray-500">{req.requester_name || 'N/A'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 max-w-xs truncate">{req.title || 'No title'}</div>
+                          <div className="text-xs text-gray-500">{req.supplier_name || 'Supplier TBD'}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {isUrgent && (
+                              <span className="flex h-2 w-2 relative mr-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                              </span>
+                            )}
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              req.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                              req.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                              req.priority === 'normal' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {req.priority ? req.priority.charAt(0).toUpperCase() + req.priority.slice(1) : 'N/A'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-bold text-purple-700">
+                            {(req.total_price || req.estimated_value) ? `~$${parseFloat(req.total_price || req.estimated_value).toLocaleString()}` : 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(req.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {req.created_date ? (
+                            <div>
+                              <div>{new Date(req.created_date).toLocaleDateString()}</div>
+                              <div className="text-xs text-gray-400">
+                                {daysSinceCreation === 0 ? 'Today' : `${daysSinceCreation}d ago`}
+                              </div>
+                            </div>
+                          ) : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => handleOpenApproval(req)}
+                              className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                            >
+                              <EyeIcon className="h-4 w-4 mr-1" />
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleEditRequisition(req)}
+                              className="inline-flex items-center px-3 py-1.5 border border-yellow-300 shadow-sm text-xs font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                            >
+                              <PencilIcon className="h-4 w-4 mr-1" />
+                              Edit
+                            </button>
+                            {req.status === 'approved' && (
+                              <button
+                                onClick={() => handleConvertToPO(req)}
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                              >
+                                <ShoppingCartIcon className="h-4 w-4 mr-1" />
+                                Convert
+                              </button>
+                            )}
+                            {['draft', 'rejected', 'withdrawn'].includes(req.status) && (
+                              <button
+                                onClick={() => handleDeleteRequisition(req)}
+                                className="inline-flex items-center px-3 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                title="Delete this purchase requisition"
+                              >
+                                <TrashIcon className="h-4 w-4 mr-1" />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ))}
         </div>
-      </div>
 
       {/* AI Creator Modals - Conditional based on active tab */}
       {activeTab === 'purchaseOrders' ? (
@@ -1170,12 +1707,16 @@ const OrderManagement = () => {
       {showPOForm && (
         <PurchaseOrderForm
           isOpen={showPOForm}
-          onClose={() => setShowPOForm(false)}
+          onClose={() => {
+            setShowPOForm(false);
+            setEditingOrder(null);  // Clear editing state on close
+          }}
           onSuccess={(newOrder) => {
             setShowPOForm(false);
-            fetchOrders();
+            setEditingOrder(null);  // Clear editing state on success
+            fetchOrders();  // Refresh orders to show updated data
           }}
-          editData={null}
+          editData={editingOrder}  // Pass the order being edited
         />
       )}
 
@@ -1183,12 +1724,16 @@ const OrderManagement = () => {
       {showPRForm && (
         <PurchaseRequisitionForm
           isOpen={showPRForm}
-          onClose={() => setShowPRForm(false)}
+          onClose={() => {
+            setShowPRForm(false);
+            setEditingRequisition(null);  // Clear editing state on close
+          }}
           onSuccess={(newRequisition) => {
             setShowPRForm(false);
-            fetchRequisitions();
+            setEditingRequisition(null);  // Clear editing state on success
+            fetchRequisitions();  // Refresh requisitions to show updated data
           }}
-          editData={null}
+          editData={editingRequisition}  // Pass the requisition being edited
         />
       )}
 
@@ -1203,6 +1748,7 @@ const OrderManagement = () => {
         currentUser={currentUser}
         onApprovalComplete={handleApprovalComplete}
       />
+      </div>
     </div>
   );
 };

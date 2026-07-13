@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../../services/api.service';
 import {
   DocumentTextIcon,
   PaperClipIcon,
@@ -19,6 +19,7 @@ import {
   XCircleIcon,
   CloudArrowUpIcon,
   InformationCircleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 
 const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }) => {
@@ -56,8 +57,18 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
     // Reference Section (Field 14)
     po_number_reference: editData?.po_number_reference || '',
     
-    // Special Notes Section (Field 15)
-    special_notes: editData?.special_notes || '',
+    // Purchase Recommendation Section (Field 15) - RENAMED from special_notes
+    purchase_recommendation: editData?.purchase_recommendation || editData?.special_notes || '',
+    
+    // Vendor Integration
+    vendor: editData?.vendor || null,
+    vendor_selection_reason: editData?.vendor_selection_reason || '',
+    
+    // Dynamic Approval Workflow
+    approval_workflow_config: editData?.approval_workflow_config || [],
+    
+    // Price Remarks Data (Advanced)
+    price_remarks_data: editData?.price_remarks_data || {},
     
     // Additional fields
     requisition_type: editData?.requisition_type || 'project',
@@ -68,6 +79,184 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
   const [files, setFiles] = useState([]);
   const [errors, setErrors] = useState({});
   const [autoSaving, setAutoSaving] = useState(false);
+  
+  // New state for dynamic features
+  const [vendors, setVendors] = useState([]);
+  const [vendorRecommendations, setVendorRecommendations] = useState([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+  
+  // Approval workflow state
+  const [projectManagers, setProjectManagers] = useState([]);
+  const [engineeringManagers, setEngineeringManagers] = useState([]);
+  const [managerProjects, setManagerProjects] = useState([]);
+  const [vpOperations, setVpOperations] = useState([]);
+  const [selectedApprovers, setSelectedApprovers] = useState({
+    project_manager: null,
+    engineering_manager: null,
+    manager_projects: null,
+    vp_operations: null,
+  });
+  
+  // Price Remarks Advanced Fields
+  const [showAdvancedPricing, setShowAdvancedPricing] = useState(false);
+  
+  // Autocomplete suggestions state
+  const [productSuggestions, setProductSuggestions] = useState([]);
+  const [projectSuggestions, setProjectSuggestions] = useState([]);
+  const [supplierSuggestions, setSupplierSuggestions] = useState([]);
+  const [poNumberSuggestions, setPoNumberSuggestions] = useState([]);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [showPoDropdown, setShowPoDropdown] = useState(false);
+
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    if (!editData) {
+      const autoSaveInterval = setInterval(() => {
+        if (formData.product_service || formData.description_reason) {
+          handleAutoSave();
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(autoSaveInterval);
+    }
+  }, [formData, editData]);
+  
+  // Fetch vendors on mount
+  useEffect(() => {
+    fetchVendors();
+    fetchApprovers();
+  }, []);
+
+  // Auto-calculate net total when total price changes
+  useEffect(() => {
+    if (formData.total_price) {
+      // Assume VAT = 0 for now (can be made configurable)
+      setFormData(prev => ({
+        ...prev,
+        net_total_excl_vat: prev.total_price
+      }));
+    }
+  }, [formData.total_price]);
+  
+  const fetchVendors = async () => {
+    try {
+      setLoadingVendors(true);
+      const response = await apiClient.get('/procurement/vendors/', {
+        params: { page_size: 1000, status: 'active' }
+      });
+      const vendorData = response.data.results || response.data || [];
+      // Ensure vendorData is always an array
+      setVendors(Array.isArray(vendorData) ? vendorData : []);
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+      setVendors([]); // Set empty array on error
+    } finally {
+      setLoadingVendors(false);
+    }
+  };
+  
+  const fetchApprovers = async () => {
+    try {
+      // Fetch approvers for each role
+      const [pmResponse, emResponse, mpResponse, vpResponse] = await Promise.all([
+        apiClient.get('/procurement/requisitions/get_approvers/', { params: { role: 'project_manager' } }),
+        apiClient.get('/procurement/requisitions/get_approvers/', { params: { role: 'engineering_manager' } }),
+        apiClient.get('/procurement/requisitions/get_approvers/', { params: { role: 'manager_projects' } }),
+        apiClient.get('/procurement/requisitions/get_approvers/', { params: { role: 'vp_operations' } }),
+      ]);
+      
+      setProjectManagers(pmResponse.data.users || []);
+      setEngineeringManagers(emResponse.data.users || []);
+      setManagerProjects(mpResponse.data.users || []);
+      setVpOperations(vpResponse.data.users || []);
+    } catch (error) {
+      console.error('Error fetching approvers:', error);
+    }
+  };
+  
+  const getVendorRecommendations = async () => {
+    if (!formData.product_service && !formData.description_reason) {
+      alert('Please fill in product/service description first');
+      return;
+    }
+    
+    try {
+      // Create a draft PR first if doesn't exist
+      if (!editData) {
+        await handleAutoSave();
+      }
+      
+      const prId = editData?.id || formData.id;
+      if (prId) {
+        const response = await apiClient.post(`/procurement/requisitions/${prId}/recommend_vendors/`);
+        setVendorRecommendations(response.data.recommendations || []);
+      }
+    } catch (error) {
+      console.error('Error getting vendor recommendations:', error);
+    }
+  };
+  
+  // Autocomplete fetch functions
+  const fetchProductSuggestions = async (query) => {
+    if (!query || query.length < 2) {
+      setProductSuggestions([]);
+      return;
+    }
+    
+    try {
+      const response = await apiClient.get('/procurement/requisitions/get_product_services/', {
+        params: { q: query, limit: 20 }
+      });
+      setProductSuggestions(response.data.suggestions || []);
+    } catch (error) {
+      console.error('Error fetching product suggestions:', error);
+    }
+  };
+  
+  const fetchProjectSuggestions = async (query) => {
+    if (!query || query.length < 2) {
+      setProjectSuggestions([]);
+      return;
+    }
+    
+    try {
+      const response = await apiClient.get('/procurement/requisitions/get_projects_departments/', {
+        params: { q: query, limit: 20 }
+      });
+      setProjectSuggestions(response.data.suggestions || []);
+    } catch (error) {
+      console.error('Error fetching project suggestions:', error);
+    }
+  };
+  
+  const fetchSupplierSuggestions = async (query) => {
+    if (!query || query.length < 2) {
+      setSupplierSuggestions([]);
+      return;
+    }
+    
+    try {
+      const response = await apiClient.get('/procurement/requisitions/get_suppliers/', {
+        params: { q: query, limit: 20 }
+      });
+      setSupplierSuggestions(response.data.suggestions || []);
+    } catch (error) {
+      console.error('Error fetching supplier suggestions:', error);
+    }
+  };
+  
+  const fetchPoNumberSuggestions = async (query) => {
+    try {
+      const response = await apiClient.get('/procurement/requisitions/get_po_numbers/', {
+        params: { q: query || '', limit: 20 }
+      });
+      setPoNumberSuggestions(response.data.suggestions || []);
+    } catch (error) {
+      console.error('Error fetching PO number suggestions:', error);
+    }
+  };
 
   // Auto-save draft every 30 seconds
   useEffect(() => {
@@ -98,10 +287,10 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
     try {
       if (editData) {
         // Update existing draft
-        await axios.patch(`/procurement/requisitions/${editData.id}/`, formData);
+        await apiClient.patch(`/procurement/requisitions/${editData.id}/`, formData);
       } else {
         // Create new draft
-        const response = await axios.post('/procurement/requisitions/', {
+        const response = await apiClient.post('/procurement/requisitions/', {
           ...formData,
           status: 'draft'
         });
@@ -178,10 +367,73 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
     try {
       const submitData = new FormData();
       
+      // Build approval workflow from selected approvers
+      const approvalWorkflow = [];
+      let step = 1;
+      
+      if (selectedApprovers.project_manager) {
+        const user = projectManagers.find(u => u.id === selectedApprovers.project_manager);
+        approvalWorkflow.push({
+          step: step++,
+          role: 'Project Manager',
+          user_id: selectedApprovers.project_manager,
+          user_name: user?.full_name || '',
+          status: 'pending',
+          approved_at: null
+        });
+      }
+      
+      if (selectedApprovers.engineering_manager) {
+        const user = engineeringManagers.find(u => u.id === selectedApprovers.engineering_manager);
+        approvalWorkflow.push({
+          step: step++,
+          role: 'Engineering Manager',
+          user_id: selectedApprovers.engineering_manager,
+          user_name: user?.full_name || '',
+          status: 'pending',
+          approved_at: null
+        });
+      }
+      
+      if (selectedApprovers.manager_projects) {
+        const user = managerProjects.find(u => u.id === selectedApprovers.manager_projects);
+        approvalWorkflow.push({
+          step: step++,
+          role: 'Manager of Projects',
+          user_id: selectedApprovers.manager_projects,
+          user_name: user?.full_name || '',
+          status: 'pending',
+          approved_at: null
+        });
+      }
+      
+      if (selectedApprovers.vp_operations) {
+        const user = vpOperations.find(u => u.id === selectedApprovers.vp_operations);
+        approvalWorkflow.push({
+          step: step++,
+          role: 'Vice President of Operations',
+          user_id: selectedApprovers.vp_operations,
+          user_name: user?.full_name || '',
+          status: 'pending',
+          approved_at: null
+        });
+      }
+      
+      // Add approval workflow to form data
+      const formDataWithWorkflow = {
+        ...formData,
+        approval_workflow_config: approvalWorkflow
+      };
+      
       // Append all form fields
-      Object.keys(formData).forEach(key => {
-        if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
-          submitData.append(key, formData[key]);
+      Object.keys(formDataWithWorkflow).forEach(key => {
+        if (formDataWithWorkflow[key] !== null && formDataWithWorkflow[key] !== undefined && formDataWithWorkflow[key] !== '') {
+          // Handle JSON fields
+          if (typeof formDataWithWorkflow[key] === 'object') {
+            submitData.append(key, JSON.stringify(formDataWithWorkflow[key]));
+          } else {
+            submitData.append(key, formDataWithWorkflow[key]);
+          }
         }
       });
       
@@ -206,19 +458,19 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
       let response;
       if (editData) {
         // Update existing PR
-        response = await axios.patch(`/procurement/requisitions/${editData.id}/`, submitData, config);
+        response = await apiClient.patch(`/procurement/requisitions/${editData.id}/`, submitData, config);
         
         // If submitting for approval, call submit endpoint
         if (submitForApproval && response.data.status === 'draft') {
-          response = await axios.post(`/procurement/requisitions/${editData.id}/submit/`);
+          response = await apiClient.post(`/procurement/requisitions/${editData.id}/submit/`);
         }
       } else {
         // Create new PR
-        response = await axios.post('/procurement/requisitions/', submitData, config);
+        response = await apiClient.post('/procurement/requisitions/', submitData, config);
         
         // If submitting for approval, call submit endpoint
         if (submitForApproval && response.data.id) {
-          response = await axios.post(`/procurement/requisitions/${response.data.id}/submit/`);
+          response = await apiClient.post(`/procurement/requisitions/${response.data.id}/submit/`);
         }
       }
       
@@ -343,31 +595,73 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
               Supplier Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Supplier Name
+                  <span className="ml-2 text-xs text-gray-500">(Auto-suggests from database)</span>
                 </label>
                 <input
                   type="text"
                   name="supplier_name"
                   value={formData.supplier_name}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    fetchSupplierSuggestions(e.target.value);
+                    setShowSupplierDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (formData.supplier_name) {
+                      fetchSupplierSuggestions(formData.supplier_name);
+                    }
+                    setShowSupplierDropdown(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 200)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="e.g., Velimor Middle East Consultancy LLC"
+                  placeholder="Start typing to see suggestions..."
                 />
+                {showSupplierDropdown && supplierSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {supplierSuggestions.map((supplier, index) => (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            supplier_name: supplier.supplier_name,
+                            supplier_business_id: supplier.supplier_business_id || ''
+                          }));
+                          setShowSupplierDropdown(false);
+                        }}
+                        className="px-4 py-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-0"
+                      >
+                        <div className="font-medium text-gray-900">{supplier.supplier_name}</div>
+                        {supplier.supplier_business_id && (
+                          <div className="text-sm text-gray-600">ID: {supplier.supplier_business_id}</div>
+                        )}
+                        {supplier.rating && (
+                          <div className="text-xs text-yellow-600">★ {supplier.rating}/5</div>
+                        )}
+                        <div className="text-xs text-gray-400 mt-1">
+                          {supplier.source === 'master' ? '📁 Vendor Database' : '📝 Historical Data'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Supplier Business ID No
+                  <span className="ml-2 text-xs text-gray-500">(Auto-filled)</span>
                 </label>
                 <input
                   type="text"
                   name="supplier_business_id"
                   value={formData.supplier_business_id}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="e.g., CN-3362215"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-gray-50"
+                  placeholder="Auto-filled from supplier selection"
                 />
               </div>
             </div>
@@ -380,39 +674,101 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
               Project & Product Details
             </h3>
             <div className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Product/Service <span className="text-red-500">*</span>
+                  <span className="ml-2 text-xs text-gray-500">(Auto-suggests from past PRs)</span>
                 </label>
                 <textarea
                   name="product_service"
                   value={formData.product_service}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    fetchProductSuggestions(e.target.value);
+                    setShowProductDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (formData.product_service) {
+                      fetchProductSuggestions(formData.product_service);
+                    }
+                    setShowProductDropdown(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
                   rows={2}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
                     errors.product_service ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="Value Engineering Services for 5900927 project"
+                  placeholder="Start typing... e.g., Value Engineering Services"
                 />
+                {showProductDropdown && productSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {productSuggestions.map((product, index) => (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, product_service: product }));
+                          setShowProductDropdown(false);
+                        }}
+                        className="px-4 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-0 text-sm"
+                      >
+                        {product}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {errors.product_service && (
                   <p className="mt-1 text-sm text-red-600">{errors.product_service}</p>
                 )}
               </div>
               
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Project/Department <span className="text-red-500">*</span>
+                  <span className="ml-2 text-xs text-gray-500">(Auto-suggests from projects)</span>
                 </label>
                 <textarea
                   name="project_department"
                   value={formData.project_department}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    fetchProjectSuggestions(e.target.value);
+                    setShowProjectDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (formData.project_department) {
+                      fetchProjectSuggestions(formData.project_department);
+                    }
+                    setShowProjectDropdown(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowProjectDropdown(false), 200)}
                   rows={3}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
                     errors.project_department ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="PACKAGE 1: SEWAGE TREATMENT PLANT (STP) CAPACITY ENHANCEMENT AT ASAB-0..."
+                  placeholder="Start typing to see project suggestions..."
                 />
+                {showProjectDropdown && projectSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {projectSuggestions.map((project, index) => (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, project_department: project.value }));
+                          setShowProjectDropdown(false);
+                        }}
+                        className="px-4 py-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-0"
+                      >
+                        <div className="font-medium text-gray-900 text-sm">{project.label}</div>
+                        {project.department && (
+                          <div className="text-xs text-gray-600 mt-1">Dept: {project.department}</div>
+                        )}
+                        <div className="text-xs text-gray-400 mt-1">
+                          {project.source === 'master' ? '📁 Project Database' : '📝 Historical Data'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {errors.project_department && (
                   <p className="mt-1 text-sm text-red-600">{errors.project_department}</p>
                 )}
@@ -450,20 +806,111 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
           <div className="border-b border-gray-200 pb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">5</span>
-              Preferred Supplier
+              Vendor Selection
             </h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Preferred Supplier (if any)
-              </label>
-              <input
-                type="text"
-                name="preferred_supplier_if_any"
-                value={formData.preferred_supplier_if_any}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="Velimor Middle East Consultancy LLC"
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Vendor from Database
+                </label>
+                <div className="flex space-x-2">
+                  <select
+                    name="vendor"
+                    value={formData.vendor || ''}
+                    onChange={(e) => {
+                      const vendorId = e.target.value;
+                      const selectedVendor = vendors.find(v => v.id === vendorId);
+                      setFormData(prev => ({
+                        ...prev,
+                        vendor: vendorId,
+                        supplier_name: selectedVendor?.name || '',
+                        supplier_business_id: selectedVendor?.trade_license_number || '',
+                      }));
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select Vendor --</option>
+                    {Array.isArray(vendors) && vendors.map(vendor => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name} ({vendor.vendor_code}) - Rating: {vendor.rating || 'N/A'}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={getVendorRecommendations}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
+                    <SparklesIcon className="h-5 w-5" />
+                    <span>AI Recommend</span>
+                  </button>
+                </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  Select from vendor master database or get AI-powered recommendations
+                </p>
+              </div>
+              
+              {vendorRecommendations.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-3">AI Vendor Recommendations</h4>
+                  <div className="space-y-2">
+                    {vendorRecommendations.map((rec, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded border border-blue-100 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-gray-900">{rec.vendor_name}</p>
+                          <p className="text-xs text-gray-600">
+                            Score: {rec.score} | {rec.reasons.join(' • ')}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              vendor: rec.vendor_id,
+                              supplier_name: rec.vendor_name,
+                              vendor_selection_reason: `AI recommended (score: ${rec.score}): ${rec.reasons.join(', ')}`,
+                            }));
+                          }}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                        >
+                          Select
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Preferred Supplier (if any)
+                </label>
+                <input
+                  type="text"
+                  name="preferred_supplier_if_any"
+                  value={formData.preferred_supplier_if_any}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Velimor Middle East Consultancy LLC"
+                />
+              </div>
+              
+              {formData.vendor_selection_reason && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vendor Selection Reason
+                  </label>
+                  <textarea
+                    name="vendor_selection_reason"
+                    value={formData.vendor_selection_reason}
+                    onChange={handleChange}
+                    rows={2}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Reason for selecting this vendor..."
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -561,6 +1008,216 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                   placeholder="Included in HSE budget"
                 />
               </div>
+              
+              {/* Advanced Price Remarks */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedPricing(!showAdvancedPricing)}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center space-x-1"
+                >
+                  <SparklesIcon className="h-4 w-4" />
+                  <span>{showAdvancedPricing ? 'Hide' : 'Show'} Advanced Pricing Details</span>
+                </button>
+              </div>
+              
+              {showAdvancedPricing && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                  <h4 className="text-sm font-semibold text-gray-900">Advanced Pricing Information</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Budget Allocation
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.price_remarks_data?.budget_allocation || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          price_remarks_data: {
+                            ...prev.price_remarks_data,
+                            budget_allocation: e.target.value
+                          }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        placeholder="e.g., HSE Budget"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cost Center
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.price_remarks_data?.cost_center || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          price_remarks_data: {
+                            ...prev.price_remarks_data,
+                            cost_center: e.target.value
+                          }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        placeholder="e.g., CC-001"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Payment Terms
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.price_remarks_data?.payment_terms || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          price_remarks_data: {
+                            ...prev.price_remarks_data,
+                            payment_terms: e.target.value
+                          }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        placeholder="e.g., Net 45 days"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Discount %
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.price_remarks_data?.discount_percentage || ''}
+                        onChange={(e) => {
+                          const discount = parseFloat(e.target.value) || 0;
+                          const totalPrice = parseFloat(formData.total_price) || 0;
+                          const discountAmount = (totalPrice * discount) / 100;
+                          
+                          setFormData(prev => ({
+                            ...prev,
+                            price_remarks_data: {
+                              ...prev.price_remarks_data,
+                              discount_percentage: discount,
+                              discount_amount: discountAmount.toFixed(2)
+                            }
+                          }));
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Dynamic Approval Workflow Section */}
+          <div className="border-b border-gray-200 pb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">9</span>
+              Approval Workflow
+            </h3>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Select approvers for each tier. The workflow will follow the order you configure.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Project Manager
+                  </label>
+                  <select
+                    value={selectedApprovers.project_manager || ''}
+                    onChange={(e) => setSelectedApprovers(prev => ({
+                      ...prev,
+                      project_manager: e.target.value
+                    }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select Project Manager --</option>
+                    {projectManagers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.full_name} - {user.job_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Engineering Manager
+                  </label>
+                  <select
+                    value={selectedApprovers.engineering_manager || ''}
+                    onChange={(e) => setSelectedApprovers(prev => ({
+                      ...prev,
+                      engineering_manager: e.target.value
+                    }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select Engineering Manager --</option>
+                    {engineeringManagers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.full_name} - {user.job_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Manager of Projects
+                  </label>
+                  <select
+                    value={selectedApprovers.manager_projects || ''}
+                    onChange={(e) => setSelectedApprovers(prev => ({
+                      ...prev,
+                      manager_projects: e.target.value
+                    }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select Manager of Projects --</option>
+                    {managerProjects.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.full_name} - {user.job_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vice President of Operations
+                  </label>
+                  <select
+                    value={selectedApprovers.vp_operations || ''}
+                    onChange={(e) => setSelectedApprovers(prev => ({
+                      ...prev,
+                      vp_operations: e.target.value
+                    }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="">-- Select VP Operations --</option>
+                    {vpOperations.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.full_name} - {user.job_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Note:</strong> The approval workflow will be built based on the approvers you select. 
+                  Empty fields will be skipped automatically.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -570,18 +1227,57 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
               <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">7</span>
               Reference
             </h3>
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 PO Number (if applicable)
+                <span className="ml-2 text-xs text-gray-500">(Auto-suggests from existing POs)</span>
               </label>
               <input
                 type="text"
                 name="po_number_reference"
                 value={formData.po_number_reference}
-                onChange={handleChange}
+                onChange={(e) => {
+                  handleChange(e);
+                  fetchPoNumberSuggestions(e.target.value);
+                  setShowPoDropdown(true);
+                }}
+                onFocus={() => {
+                  fetchPoNumberSuggestions(formData.po_number_reference);
+                  setShowPoDropdown(true);
+                }}
+                onBlur={() => setTimeout(() => setShowPoDropdown(false), 200)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="RAD-PRJ-PUR-0014_JAN2025"
+                placeholder="Start typing PO number..."
               />
+              {showPoDropdown && poNumberSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {poNumberSuggestions.map((po, index) => (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, po_number_reference: po.po_number }));
+                        setShowPoDropdown(false);
+                      }}
+                      className="px-4 py-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <div className="font-medium text-gray-900">{po.po_number}</div>
+                      {po.supplier_name && (
+                        <div className="text-sm text-gray-600">Supplier: {po.supplier_name}</div>
+                      )}
+                      {po.total_amount && (
+                        <div className="text-sm text-green-600">
+                          {po.currency} {parseFloat(po.total_amount).toLocaleString()}
+                        </div>
+                      )}
+                      {po.status && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Status: <span className="capitalize">{po.status.replace('_', ' ')}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -589,15 +1285,15 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
           <div className="border-b border-gray-200 pb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">8</span>
-              Special Notes
+              Purchase Recommendation
             </h3>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Special Notes (if any)
+                Purchase Recommendation (if any)
               </label>
               <textarea
-                name="special_notes"
-                value={formData.special_notes}
+                name="purchase_recommendation"
+                value={formData.purchase_recommendation}
                 onChange={handleChange}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -609,8 +1305,8 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
           {/* File Attachments Section */}
           <div className="border-b border-gray-200 pb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">9</span>
-              Attachments
+              <span className="bg-purple-100 text-purple-700 w-8 h-8 rounded-full flex items-center justify-center mr-3 text-sm font-bold">10</span>
+              Attachments (Multiple Files Supported)
             </h3>
             <div className="space-y-4">
               <div className="flex items-center justify-center w-full">
@@ -621,6 +1317,7 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                       <span className="font-semibold">Click to upload</span> or drag and drop
                     </p>
                     <p className="text-xs text-gray-500">PDF, DOC, DOCX, XLS, XLSX, Images (MAX. 10MB each)</p>
+                    <p className="text-xs text-purple-600 font-medium mt-1">Stored securely in AWS S3</p>
                   </div>
                   <input
                     type="file"
@@ -724,3 +1421,4 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
 };
 
 export default PurchaseRequisitionForm;
+
