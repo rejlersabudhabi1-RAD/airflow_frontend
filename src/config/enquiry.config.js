@@ -12,7 +12,7 @@
 export const ENQUIRY_CONFIG = {
   // Email Configuration (SOFT CODED - Easy to update)
   email: {
-    recipient: 'tanzeem.agra@rejlers.ae',
+    recipient: 'radai@rejlers.ae',
     cc: [],
     subject_prefix: '[RADAI Enquiry]',
     replyTo: true // Use customer's email as reply-to
@@ -30,8 +30,8 @@ export const ENQUIRY_CONFIG = {
     {
       icon: '📧',
       title: 'Email Us',
-      value: 'tanzeem.agra@rejlers.ae',
-      link: 'mailto:tanzeem.agra@rejlers.ae'
+      value: 'radai@rejlers.ae',
+      link: 'mailto:radai@rejlers.ae'
     },
     {
       icon: '📞',
