@@ -11,7 +11,10 @@ import {
   validateUserForm, 
   parseBackendError, 
   prepareUserPayload,
-  USER_MANAGEMENT_CONFIG 
+  USER_MANAGEMENT_CONFIG,
+  canPerformEnhancedActions,
+  isOperationalAdmin,
+  hasActionPermission,
 } from '../config/userManagement.config';
 import {
   ROLE_LEVEL_COLORS,
@@ -562,6 +565,15 @@ const UserManagement = ({ pageControls }) => {
     const isDjangoSuperuser = authUser?.is_superuser === true || authUser?.user?.is_superuser === true;
     return hasSuperRole || isDjangoSuperuser;
   }, [currentUser, authUser]);
+
+  // ========== SOFT-CODED PERMISSION CHECK ==========
+  // Check if user can perform enhanced actions (deactivate, delete, reset password)
+  // Uses soft-coded configuration from userManagement.config.js
+  // Operational admins (e.g., radai@rejlers.ae) get enhanced permissions without modifying core logic
+  const canPerformEnhancedUserActions = useMemo(() => {
+    const userEmail = getUserEmail(currentUser) || getUserEmail(authUser) || '';
+    return canPerformEnhancedActions(userEmail, isSuperAdmin);
+  }, [currentUser, authUser, isSuperAdmin]);
   
   // ========== COMPUTED: FILTERED USERS ==========
   const filteredUsers = useMemo(() => {
@@ -2029,8 +2041,8 @@ const UserManagement = ({ pageControls }) => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
-                        {/* Activate / Deactivate — Super Admin only */}
-                        {isSuperAdmin && (
+                        {/* Activate / Deactivate — Super Admin or Operational Admin */}
+                        {canPerformEnhancedUserActions && (
                           <button
                             onClick={() => handleStatusToggle(user.id, user.status)}
                             disabled={actionLoading[`status_${user.id}`]}
@@ -2050,8 +2062,8 @@ const UserManagement = ({ pageControls }) => {
                             </svg>
                           </button>
                         )}
-                        {/* Reset Password — Super Admin only */}
-                        {isSuperAdmin && (
+                        {/* Reset Password — Super Admin or Operational Admin */}
+                        {canPerformEnhancedUserActions && (
                           <button
                             onClick={() => handleResetPassword(user.id, user.user?.email)}
                             disabled={actionLoading[`reset_${user.id}`]}
@@ -2063,8 +2075,8 @@ const UserManagement = ({ pageControls }) => {
                             </svg>
                           </button>
                         )}
-                        {/* Delete — Super Admin only */}
-                        {isSuperAdmin && (
+                        {/* Delete — Super Admin or Operational Admin */}
+                        {canPerformEnhancedUserActions && (
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             disabled={actionLoading[`delete_${user.id}`]}

@@ -546,4 +546,107 @@ export const ROLE_DISCIPLINE_ORDER = [
   'General',
 ]
 
+/**
+ * OPERATIONAL ADMINS
+ * Users with full user management capabilities (view, edit, deactivate, reset password, delete)
+ * These users manage day-to-day operations and user access control
+ * 
+ * SOFT-CODED: Add/remove operational admin emails here without modifying core logic
+ * 
+ * Operational admins have the same user management permissions as super admins, including:
+ * - View user details
+ * - Edit user information and roles
+ * - Deactivate/Activate users
+ * - Reset passwords to default
+ * - Delete users (soft delete)
+ */
+export const OPERATIONAL_ADMINS = [
+  'radai@rejlers.ae',           // RADAI Operational Admin - Full user management
+  'mohammed.agra@rejlers.ae',   // System Administrator
+  // Add more operational admin emails here as needed
+  // Example: 'admin@rejlers.ae',
+]
+
+/**
+ * USER MANAGEMENT ACTION PERMISSIONS
+ * Soft-coded configuration for user management actions visibility
+ */
+export const USER_ACTION_PERMISSIONS = {
+  view: {
+    enabled: true,
+    label: 'View Details',
+    requiredPermission: 'all', // Available to all admins
+  },
+  edit: {
+    enabled: true,
+    label: 'Edit User',
+    requiredPermission: 'all', // Available to all admins
+  },
+  deactivate: {
+    enabled: true,
+    label: 'Deactivate / Activate',
+    requiredPermission: 'operational_admin', // Requires operational admin or super admin
+  },
+  resetPassword: {
+    enabled: true,
+    label: 'Reset Password to Default',
+    requiredPermission: 'operational_admin', // Requires operational admin or super admin
+    defaultPassword: 'Rejlers@123',
+  },
+  delete: {
+    enabled: true,
+    label: 'Delete User',
+    requiredPermission: 'operational_admin', // Requires operational admin or super admin
+  },
+}
+
+/**
+ * Helper: Check if user is an operational admin
+ * @param {string} email - User's email address
+ * @returns {boolean} True if user is in OPERATIONAL_ADMINS list
+ */
+export function isOperationalAdmin(email) {
+  if (!email) return false
+  return OPERATIONAL_ADMINS.includes(email.toLowerCase())
+}
+
+/**
+ * Helper: Check if user has permission for specific action
+ * Used in UserManagement.jsx to show/hide action buttons
+ * 
+ * @param {string} email - User's email address
+ * @param {boolean} isSuperAdmin - Whether user is a super admin
+ * @param {string} actionType - Type of action (view, edit, deactivate, resetPassword, delete)
+ * @returns {boolean} True if user has permission for the action
+ */
+export function hasActionPermission(email, isSuperAdmin, actionType) {
+  const action = USER_ACTION_PERMISSIONS[actionType]
+  if (!action || !action.enabled) return false
+
+  // Super admins have all permissions
+  if (isSuperAdmin) return true
+
+  // Check if action requires operational admin permission
+  if (action.requiredPermission === 'operational_admin') {
+    return isOperationalAdmin(email)
+  }
+
+  // Actions with 'all' permission are available to all admins
+  if (action.requiredPermission === 'all') {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Helper: Check if user can perform enhanced user management actions
+ * @param {string} email - User's email address
+ * @param {boolean} isSuperAdmin - Whether user is a super admin
+ * @returns {boolean} True if user can deactivate, delete, and reset passwords
+ */
+export function canPerformEnhancedActions(email, isSuperAdmin) {
+  return isSuperAdmin || isOperationalAdmin(email)
+}
+
 export default USER_MANAGEMENT_CONFIG
