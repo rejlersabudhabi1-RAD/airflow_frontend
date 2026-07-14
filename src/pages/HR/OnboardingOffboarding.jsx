@@ -2392,49 +2392,43 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
   const [uploading, setUploading] = useState(false)
   const [showUploadForm, setShowUploadForm] = useState(false)
   const [uploadData, setUploadData] = useState({
-    document_type: 'emirates_id',
-    document_name: '',
+    document_type: 'offer_letter',
+    document_number: '',
+    issue_date: '',
+    expiry_date: '',
+    issuing_authority: '',
+    notes: '',
     file: null,
   })
   const [alert, setAlert] = useState(null)
 
-  // Soft-coded document types
-  const DOCUMENT_TYPES = [
-    { value: 'passport', label: 'Passport Copy' },
-    { value: 'visa', label: 'Visa' },
-    { value: 'emirates_id', label: 'Emirates ID' },
-    { value: 'driving_license', label: 'Driving License' },
-    { value: 'degree', label: 'Educational Certificates' },
-    { value: 'certificate', label: 'Professional Certificate' },
-    { value: 'experience', label: 'Experience Letters' },
-    { value: 'offer_letter', label: 'Signed Offer Letter' },
-    { value: 'contract', label: 'Employment Contract' },
-    { value: 'confidentiality', label: 'Confidentiality Agreement' },
-    { value: 'policy_acknowledgment', label: 'Policy Acknowledgment' },
-    { value: 'bank_details', label: 'Bank Account Details' },
-    { value: 'emergency_contact', label: 'Emergency Contact Form' },
-    { value: 'medical', label: 'Medical/Insurance Forms' },
-    { value: 'vaccination', label: 'Vaccination Certificate' },
-    { value: 'police_clearance', label: 'Police Clearance Certificate' },
-    { value: 'other', label: 'Other' },
-  ]
-
+  // ✅ UNIFIED DOCUMENT SYSTEM: Fetch document types from ProfileDocument API (onboarding-filtered)
+  // This ensures both Profile and Onboarding pages use the SAME database table (rbac.ProfileDocument)
+  const [documentTypes, setDocumentTypes] = useState([])
+  
   useEffect(() => {
+    loadDocumentTypes()
     loadDocuments()
   }, [employeeId])
+  
+  const loadDocumentTypes = () => {
+    apiClient
+      .get('/rbac/profile-documents/document-types/onboarding/')
+      .then((res) => {
+        setDocumentTypes(res.data || [])
+      })
+      .catch((err) => console.error('Failed to load document types:', err))
+  }
 
   const loadDocuments = () => {
     setLoading(true)
-    // For now, we'll search for onboarding records by employee email
-    // You may need to adjust this based on your actual data structure
+    // ✅ UNIFIED API: Fetch documents from ProfileDocument table
+    // Filter by user_profile (linked via employee_id)
     apiClient
-      .get(`${API_ENDPOINTS.onboarding}/onboarding/?search=${employeeEmail}`)
+      .get(`/rbac/profile-documents/?user_profile__user=${employeeId}`)
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : (res.data.results || [])
-        if (data.length > 0) {
-          const onboardingRecord = data[0]
-          setDocuments(onboardingRecord.documents || [])
-        }
+        setDocuments(data)
       })
       .catch((err) => console.error('Failed to load documents:', err))
       .finally(() => setLoading(false))
@@ -2443,7 +2437,7 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
-      setUploadData({ ...uploadData, file, document_name: uploadData.document_name || file.name })
+      setUploadData({ ...uploadData, file })
     }
   }
 
@@ -2457,29 +2451,20 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
     setUploading(true)
 
     try {
-      // First, find or create the onboarding record for this employee
-      const onboardingRes = await apiClient.get(`${API_ENDPOINTS.onboarding}/onboarding/?search=${employeeEmail}`)
-      const onboardingData = Array.isArray(onboardingRes.data) ? onboardingRes.data : (onboardingRes.data.results || [])
-      
-      let onboardingRecordId
-      if (onboardingData.length > 0) {
-        onboardingRecordId = onboardingData[0].id
-      } else {
-        setAlert({ type: 'error', message: 'No onboarding record found for this employee. Please create one first.' })
-        setTimeout(() => setAlert(null), 5000)
-        setUploading(false)
-        return
-      }
-
-      // Create FormData for file upload
+      // ✅ UNIFIED API: Upload to ProfileDocument table
+      // Backend auto-assigns user_profile based on authenticated user
       const formData = new FormData()
-      formData.append('file', uploadData.file)
+      formData.append('document_file', uploadData.file)
       formData.append('document_type', uploadData.document_type)
-      formData.append('document_name', uploadData.document_name)
-      formData.append('onboarding_record', onboardingRecordId)
+      
+      if (uploadData.document_number) formData.append('document_number', uploadData.document_number)
+      if (uploadData.issue_date) formData.append('issue_date', uploadData.issue_date)
+      if (uploadData.expiry_date) formData.append('expiry_date', uploadData.expiry_date)
+      if (uploadData.issuing_authority) formData.append('issuing_authority', uploadData.issuing_authority)
+      if (uploadData.notes) formData.append('notes', uploadData.notes)
 
-      // Upload document
-      await apiClient.post(`${API_ENDPOINTS.documents}/`, formData, {
+      // Upload to ProfileDocument API (same table as user profile documents)
+      await apiClient.post('/rbac/profile-documents/', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -2489,23 +2474,36 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
       setTimeout(() => setAlert(null), 3000)
       
       // Reset form and reload documents
-      setUploadData({ document_type: 'emirates_id', document_name: '', file: null })
+      setUploadData({
+        document_type: 'offer_letter',
+        document_number: '',
+        issue_date: '',
+        expiry_date: '',
+        issuing_authority: '',
+        notes: '',
+        file: null
+      })
       setShowUploadForm(false)
       loadDocuments()
     } catch (err) {
-      setAlert({ type: 'error', message: err.response?.data?.error || 'Failed to upload document' })
+      setAlert({ type: 'error', message: err.response?.data?.detail || err.response?.data?.error || 'Failed to upload document' })
       setTimeout(() => setAlert(null), 5000)
     } finally {
       setUploading(false)
     }
   }
 
-  const handleDownload = async (documentId) => {
+  const handleDownload = async (document) => {
     try {
-      const res = await apiClient.get(`${API_ENDPOINTS.documents}/${documentId}/download_url/`)
-      window.open(res.data.download_url, '_blank')
+      // ✅ UNIFIED API: ProfileDocument stores files in S3, presigned URL in document_file_url
+      if (document.document_file_url) {
+        window.open(document.document_file_url, '_blank')
+      } else {
+        setAlert({ type: 'error', message: 'Document file not available' })
+        setTimeout(() => setAlert(null), 3000)
+      }
     } catch (err) {
-      setAlert({ type: 'error', message: 'Failed to generate download link' })
+      setAlert({ type: 'error', message: 'Failed to download document' })
       setTimeout(() => setAlert(null), 3000)
     }
   }
@@ -2514,7 +2512,8 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
     if (!confirm('Are you sure you want to delete this document?')) return
 
     try {
-      await apiClient.delete(`${API_ENDPOINTS.documents}/${documentId}/`)
+      // ✅ UNIFIED API: Delete from ProfileDocument table
+      await apiClient.delete(`/rbac/profile-documents/${documentId}/`)
       setAlert({ type: 'success', message: 'Document deleted successfully' })
       setTimeout(() => setAlert(null), 3000)
       loadDocuments()
@@ -2583,21 +2582,71 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
                 onChange={(e) => setUploadData({ ...uploadData, document_type: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {DOCUMENT_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
+                {documentTypes.map((type) => (
+                  <option key={type.code} value={type.code}>
+                    {type.icon} {type.label} {type.required_for_onboarding && '(Required)'}
+                  </option>
                 ))}
               </select>
+              <p className="text-xs text-slate-500 mt-1">
+                {documentTypes.find(t => t.code === uploadData.document_type)?.description}
+              </p>
             </div>
+            
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Document Name</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Document Number (Optional)</label>
               <input
                 type="text"
-                value={uploadData.document_name}
-                onChange={(e) => setUploadData({ ...uploadData, document_name: e.target.value })}
-                placeholder="e.g., Emirates ID - John Doe"
+                value={uploadData.document_number}
+                onChange={(e) => setUploadData({ ...uploadData, document_number: e.target.value })}
+                placeholder="e.g., Passport number, Contract number"
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Issue Date (Optional)</label>
+                <input
+                  type="date"
+                  value={uploadData.issue_date}
+                  onChange={(e) => setUploadData({ ...uploadData, issue_date: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Expiry Date (Optional)</label>
+                <input
+                  type="date"
+                  value={uploadData.expiry_date}
+                  onChange={(e) => setUploadData({ ...uploadData, expiry_date: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Issuing Authority (Optional)</label>
+              <input
+                type="text"
+                value={uploadData.issuing_authority}
+                onChange={(e) => setUploadData({ ...uploadData, issuing_authority: e.target.value })}
+                placeholder="e.g., UAE Government, Ministry of Labor"
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Notes (Optional)</label>
+              <textarea
+                value={uploadData.notes}
+                onChange={(e) => setUploadData({ ...uploadData, notes: e.target.value })}
+                placeholder="Additional notes or comments"
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">File</label>
               <input
@@ -2606,8 +2655,11 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-slate-500 mt-1">Accepted formats: PDF, JPG, PNG, DOC, DOCX (Max 10MB)</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Accepted formats: {documentTypes.find(t => t.code === uploadData.document_type)?.allowed_formats?.join(', ').toUpperCase()} (Max {documentTypes.find(t => t.code === uploadData.document_type)?.max_file_size_mb}MB)
+              </p>
             </div>
+            
             <button
               onClick={handleUpload}
               disabled={uploading}
@@ -2643,25 +2695,45 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
       ) : (
         <div className="space-y-2">
           {documents.map((doc) => {
-            const docType = DOCUMENT_TYPES.find(t => t.value === doc.document_type) || { label: doc.document_type }
+            const docType = documentTypes.find(t => t.code === doc.document_type) || { label: doc.document_type, icon: '📄', bg_color: 'bg-slate-100' }
+            
+            // Verification status badges
+            const statusBadges = {
+              pending: { label: 'Pending', className: 'bg-amber-100 text-amber-700 border-amber-300' },
+              verified: { label: 'Verified', className: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+              rejected: { label: 'Rejected', className: 'bg-rose-100 text-rose-700 border-rose-300' },
+              expired: { label: 'Expired', className: 'bg-slate-100 text-slate-700 border-slate-300' },
+            }
+            const statusBadge = statusBadges[doc.verification_status] || statusBadges.pending
+            
             return (
               <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
-                    <HeroIcons.DocumentTextIcon className="w-5 h-5 text-violet-600" />
+                  <div className={`w-10 h-10 rounded-lg ${docType.bg_color} flex items-center justify-center`}>
+                    <span className="text-xl">{docType.icon}</span>
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-700">{doc.document_name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-slate-500">{docType.label}</span>
-                      <span className="text-xs text-slate-400">•</span>
-                      <span className="text-xs text-slate-500">{formatFileSize(doc.file_size)}</span>
-                      {doc.verified && (
+                    <p className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                      {docType.label}
+                      {doc.document_number && (
+                        <span className="text-xs text-slate-500 font-normal">({doc.document_number})</span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border ${statusBadge.className}`}>
+                        {statusBadge.label}
+                      </span>
+                      {doc.document_file_name && (
                         <>
                           <span className="text-xs text-slate-400">•</span>
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                            <HeroIcons.CheckBadgeIcon className="w-3 h-3" />
-                            Verified
+                          <span className="text-xs text-slate-500">{doc.document_file_name}</span>
+                        </>
+                      )}
+                      {doc.expiry_date && (
+                        <>
+                          <span className="text-xs text-slate-400">•</span>
+                          <span className={`text-xs ${doc.is_expired ? 'text-rose-600 font-medium' : doc.expires_soon ? 'text-amber-600 font-medium' : 'text-slate-500'}`}>
+                            Expires: {new Date(doc.expiry_date).toLocaleDateString()}
                           </span>
                         </>
                       )}
@@ -2669,9 +2741,9 @@ function DocumentManagementSection({ employeeId, employeeEmail }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {doc.file_path && (
+                  {doc.document_file_url && (
                     <button
-                      onClick={() => handleDownload(doc.id)}
+                      onClick={() => handleDownload(doc)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="Download"
                     >

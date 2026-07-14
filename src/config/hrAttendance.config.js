@@ -511,12 +511,97 @@ export const ATT_EDIT_COPY = {
 //     Change codes/labels here to match any leave type seeded in the backend.
 //     Override via VITE_ env vars without touching this file.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * SUMMARY_LEAVE_TYPES — Dynamic leave columns for attendance Summary view.
+ * 
+ * Each leave type displayed as a separate column in the attendance summary table.
+ * Configure which leave types to track and display here.
+ * 
+ * Fields:
+ * - code: Leave type code from backend (must match LeaveType.code in database)
+ * - label: Column header label
+ * - shortLabel: Abbreviated label for narrow columns (optional)
+ * - showBalance: If true, show remaining balance from DB; if false, show days taken this month
+ * - enabled: Set to false to hide this column without removing the config
+ * - displayOrder: Sort order in the table (lower numbers appear first)
+ * - color: Tailwind color class for visual identification (optional)
+ * 
+ * To add a new leave type column:
+ * 1. Add an entry here with the leave type code from the database
+ * 2. Set enabled: true
+ * 3. No code changes needed — the table will automatically add the column
+ * 
+ * To hide a leave type column:
+ * - Set enabled: false (keeps config for future use)
+ * - Or remove the entry entirely
+ */
+export const SUMMARY_LEAVE_TYPES = [
+  {
+    code: 'AL',
+    label: 'Annual Leave',
+    shortLabel: 'Annual',
+    showBalance: import.meta.env?.VITE_AL_SHOW_BALANCE !== 'false', // Show remaining balance by default
+    enabled: true,
+    displayOrder: 1,
+    color: 'emerald',
+    description: 'Paid annual leave entitlement',
+  },
+  {
+    code: 'SL',
+    label: 'Sick Leave',
+    shortLabel: 'Sick',
+    showBalance: false,  // Show days taken, not balance
+    enabled: true,
+    displayOrder: 2,
+    color: 'blue',
+    description: 'Medical/sick leave taken this month',
+  },
+  {
+    code: 'EL',
+    label: 'Emergency Leave',
+    shortLabel: 'Emergency',
+    showBalance: false,
+    enabled: true,
+    displayOrder: 3,
+    color: 'amber',
+    description: 'Emergency leave taken this month',
+  },
+  {
+    code: 'UL',
+    label: 'Unpaid Leave',
+    shortLabel: 'Unpaid',
+    showBalance: false,
+    enabled: true,
+    displayOrder: 4,
+    color: 'red',
+    description: 'Unpaid leave taken this month',
+  },
+  {
+    code: 'ML',
+    label: 'Maternity Leave',
+    shortLabel: 'Maternity',
+    showBalance: false,
+    enabled: true,
+    displayOrder: 5,
+    color: 'purple',
+    description: 'Maternity leave taken this month',
+  },
+  {
+    code: 'PL',
+    label: 'Paternity Leave',
+    shortLabel: 'Paternity',
+    showBalance: false,
+    enabled: true,
+    displayOrder: 6,
+    color: 'indigo',
+    description: 'Paternity leave taken this month',
+  },
+]
+
+// Legacy constants for backward compatibility (deprecated — use SUMMARY_LEAVE_TYPES instead)
 export const SUMMARY_ANNUAL_LEAVE_CODE  = import.meta.env?.VITE_ANNUAL_LEAVE_CODE  || 'AL'
 export const SUMMARY_UNPAID_LEAVE_CODE  = import.meta.env?.VITE_UNPAID_LEAVE_CODE  || 'UL'
 export const SUMMARY_ANNUAL_LEAVE_LABEL = import.meta.env?.VITE_ANNUAL_LEAVE_LABEL || 'Annual Leave'
 export const SUMMARY_UNPAID_LEAVE_LABEL = import.meta.env?.VITE_UNPAID_LEAVE_LABEL || 'Unpaid Leave'
-
-// Annual leave balance column: show computed DB balance in the column header tooltip.
-// When true, the cell shows remaining balance (from DB); when false, shows days taken this month.
-// Override via VITE_AL_SHOW_BALANCE=false to revert to "days taken" display.
 export const SUMMARY_AL_SHOW_BALANCE    = import.meta.env?.VITE_AL_SHOW_BALANCE !== 'false'

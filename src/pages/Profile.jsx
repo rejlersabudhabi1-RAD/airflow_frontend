@@ -6,11 +6,16 @@ import {
   User, Mail, Phone, Briefcase, MapPin,
   Camera, X, Check, Loader,
   Building2, Shield, Save, Star, Award, Globe, Clock,
-  Plus, Trash2, Calendar, FolderOpen, TrendingUp,
+  Plus, Trash2, Calendar, FolderOpen, TrendingUp, Trophy,
+  FileText,
 } from 'lucide-react';
 import { API_BASE_URL } from '../config/api.config';
 import { S3_UPLOAD_CONFIG, validateFile, formatFileSize } from '../config/s3Upload.config';
 import PeopleNav from '../components/PeopleNav/PeopleNav';
+import AchievementSection from '../components/Profile/AchievementSection';
+import WorkExperienceSection from '../components/Profile/WorkExperienceSection';
+import SocialMediaLinksSection from '../components/Profile/SocialMediaLinksSection';
+import DocumentUploadSection from '../components/Profile/DocumentUploadSection';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Soft-coded engineering constants
@@ -231,9 +236,13 @@ const Profile = () => {
     fetch(`${API_BASE_URL}/rbac/users/engineers/`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.ok ? r.json() : [])
-      .then(d => setManagers(Array.isArray(d) ? d : (d?.results ?? [])))
-      .catch(() => {});
+      .then(r => r.ok ? r.json() : { engineers: [] })
+      .then(d => {
+        // Soft-coded: API returns { engineers: [...], count: X }
+        const managerList = Array.isArray(d) ? d : (d?.engineers ?? d?.results ?? []);
+        setManagers(managerList);
+      })
+      .catch(() => setManagers([]));
   }, []);
 
   // Load EmployeeMaster org fields (branch, join_date, division, etc.)
@@ -465,6 +474,10 @@ const Profile = () => {
     { id: 'personal',       label: 'Personal',       icon: User       },
     { id: 'expertise',      label: 'Engineering',    icon: Briefcase  },
     { id: 'certifications', label: 'Certifications', icon: Award      },
+    { id: 'achievements',   label: 'Achievements',   icon: Trophy     },
+    { id: 'experience',     label: 'Experience',     icon: TrendingUp },
+    { id: 'social',         label: 'Social Links',   icon: Globe      },
+    { id: 'documents',      label: 'Documents',      icon: FileText   },
     { id: 'availability',   label: 'Availability',   icon: Calendar   },
     { id: 'projects',       label: 'Projects',       icon: FolderOpen },
   ];
@@ -482,7 +495,7 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
 
         {/* ── Cross-link nav (Profile / HR Directory / User Management) ── */}
         <PeopleNav activeId="profile" />
@@ -1308,6 +1321,34 @@ const Profile = () => {
                   Save Projects
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── Tab: Achievements ───────────────────────────────────────────── */}
+          {activeTab === 'achievements' && (
+            <div className="p-6 sm:p-8">
+              <AchievementSection />
+            </div>
+          )}
+
+          {/* ── Tab: Work Experience ────────────────────────────────────────── */}
+          {activeTab === 'experience' && (
+            <div className="p-6 sm:p-8">
+              <WorkExperienceSection />
+            </div>
+          )}
+
+          {/* ── Tab: Social Media Links ─────────────────────────────────────── */}
+          {activeTab === 'social' && (
+            <div className="p-6 sm:p-8">
+              <SocialMediaLinksSection />
+            </div>
+          )}
+
+          {/* ── Tab: Documents ──────────────────────────────────────────────── */}
+          {activeTab === 'documents' && (
+            <div className="p-6 sm:p-8">
+              <DocumentUploadSection />
             </div>
           )}
         </div>

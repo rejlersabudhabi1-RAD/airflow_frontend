@@ -988,11 +988,11 @@ export default function LeaveDashboard() {
         <div className="flex items-start gap-2 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
           <HeroIcons.InformationCircleIcon className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
           <span>
-            <strong>Two-stage leave approval:</strong>{' '}
-            Employee submits → <strong className="text-amber-700">Reporting Manager</strong> approves →{' '}
+            <strong>Two-stage leave approval (direct manager only):</strong>{' '}
+            Employee submits → <strong className="text-amber-700">Direct Reporting Manager</strong> approves →{' '}
             <strong className="text-blue-700">HR Manager</strong> gives final approval.
-            {reqTab === 'rm_pending' && ' ← You are on Stage 1.'}
-            {reqTab === 'hr_pending' && ' ← You are on Stage 2 (HR final approval).'}
+            {reqTab === 'rm_pending' && ' ← Stage 1: You see only your direct reports.'}
+            {reqTab === 'hr_pending' && ' ← Stage 2: HR final approval for all employees.'}
           </span>
         </div>
       )}

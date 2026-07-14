@@ -157,6 +157,8 @@ import AdvancedAnalytics from './pages/Admin/AdvancedAnalytics'
 import RoleManagement from './pages/Admin/RoleManagement'
 import AccessRequests from './pages/Admin/AccessRequests'
 import RequestAccess from './pages/RequestAccess'
+// Approvals Page - Dynamic with Manager Hierarchy
+import ApprovalsPageDynamic from './pages/ApprovalsPageDynamic'
 // Debug Components
 import FeaturesDebug from './pages/FeaturesDebug'
 // AI Champion telemetry — fires per-route activity events to keep
@@ -457,6 +459,14 @@ function App() {
           }
         />
         <Route
+          path="approvals"
+          element={
+            <ProtectedRoute>
+              <ApprovalsPageDynamic />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="features-debug"
           element={
             <ProtectedRoute>
@@ -468,7 +478,7 @@ function App() {
           path="profile"
           element={
             <ProtectedRoute>
-              <ProfileNew />
+              <Profile />
             </ProtectedRoute>
           }
         />

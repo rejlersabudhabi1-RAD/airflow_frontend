@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import { toggleTheme } from '../../store/slices/themeSlice'
@@ -7,6 +7,13 @@ import { Bars3Icon } from '@heroicons/react/24/outline'
 import { LOGO_CONFIG, getLogoPath } from '../../config/logo.config'
 import NotificationBell from '../notifications/NotificationBell'
 import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
+import { 
+  getAuthenticatedNavItems, 
+  getPublicNavItems, 
+  getNavItemClass, 
+  getNavIcon,
+  NAV_ITEM_TYPES
+} from '../../config/headerNavigation.config'
 
 /**
  * Header Component - REJLERS RADAI  
@@ -15,8 +22,10 @@ import { USER_DISPLAY_CONFIG } from '../../config/userDisplay.config'
 
 const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
   const navigate = useNavigate()
+  const location = useLocation()
   const dispatch = useDispatch()
   const { isAuthenticated, user } = useSelector((state) => state.auth)
+  const rbacData = useSelector((state) => state.rbac?.currentUser)
   const { mode } = useSelector((state) => state.theme)
 
   const handleLogout = () => {
@@ -26,6 +35,46 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
 
   const handleThemeToggle = () => {
     dispatch(toggleTheme())
+  }
+
+  // SOFT-CODED: Get navigation items based on authentication state and RBAC
+  const navItems = isAuthenticated 
+    ? getAuthenticatedNavItems(user, rbacData)
+    : getPublicNavItems()
+
+  // Render a single navigation item
+  const renderNavItem = (item) => {
+    const isActive = location.pathname === item.path
+    const itemClass = getNavItemClass(item, isActive)
+    const iconPath = getNavIcon(item.icon)
+
+    if (item.type === NAV_ITEM_TYPES.BUTTON) {
+      return (
+        <Link
+          key={item.id}
+          to={item.path}
+          className={itemClass}
+        >
+          {iconPath && (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={iconPath} />
+            </svg>
+          )}
+          <span>{item.label}</span>
+        </Link>
+      )
+    }
+
+    // Default: regular link
+    return (
+      <Link
+        key={item.id}
+        to={item.path}
+        className={itemClass}
+      >
+        {item.label}
+      </Link>
+    )
   }
 
   return (
@@ -88,57 +137,12 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
               {mode === 'light' ? '🌙' : '☀️'}
             </button>
 
-            {isAuthenticated ? (
+            {/* SOFT-CODED: Dynamic navigation items from configuration */}
+            {navItems.map(item => renderNavItem(item))}
+
+            {/* User greeting and logout - only for authenticated users */}
+            {isAuthenticated && (
               <>
-                <Link
-                  to="/"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Home
-                </Link>
-                <Link
-                  to="/solutions"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Solutions
-                </Link>
-                {/* SOFT-CODED: Subscription link disabled for in-house deployment */}
-                {/* <Link
-                  to="/pricing"
-                  className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-bold rounded-lg shadow-lg hover:shadow-purple-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Subscription</span>
-                </Link> */}
-                <Link
-                  to="/about"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  About
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/profile"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Profile
-                </Link>
-                <Link
-                  to="/change-password"
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-amber-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  <span>Change Password</span>
-                </Link>
                 <span className="text-blue-200 font-medium">
                   Hello, {USER_DISPLAY_CONFIG.formatting.getDisplayName(user)}
                 </span>
@@ -148,43 +152,6 @@ const Header = ({ sidebarOpen, setSidebarOpen, showSidebar }) => {
                 >
                   Logout
                 </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Home
-                </Link>
-                <Link
-                  to="/solutions"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  Solutions
-                </Link>
-                {/* SOFT-CODED: Subscription link disabled for in-house deployment */}
-                {/* <Link
-                  to="/pricing"
-                  className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-bold rounded-lg shadow-lg hover:shadow-purple-500/50 transition-all transform hover:scale-105 flex items-center space-x-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Subscription</span>
-                </Link> */}
-                <Link
-                  to="/about"
-                  className="text-blue-100 hover:text-amber-300 font-semibold transition-colors"
-                >
-                  About
-                </Link>
-                <Link
-                  to="/login"
-                  className="px-5 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold rounded-lg shadow-lg hover:shadow-blue-500/50 transition-all transform hover:scale-105"
-                >
-                  Login
-                </Link>
               </>
             )}
           </div>

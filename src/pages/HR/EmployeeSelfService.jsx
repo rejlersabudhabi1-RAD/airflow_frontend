@@ -615,6 +615,44 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
   const encashed  = Number(leaveRecord?.total_encashed) || 0
   const balance   = Number(leaveRecord?.leave_balance)  || 0
 
+  // Calculate taken days per leave type from requests (approved only)
+  const approvedRequests = (requests || []).filter(r => r.status?.toUpperCase() === 'APPROVED')
+  
+  // Group approved requests by leave type and calculate total days taken
+  const leaveTypeUsage = approvedRequests.reduce((acc, req) => {
+    // Extract leave type name from API response
+    // API returns: leave_type (ID) and leave_type_detail (object with name, code, etc.)
+    let leaveTypeName = ''
+    if (req.leave_type_detail && req.leave_type_detail.name) {
+      leaveTypeName = req.leave_type_detail.name
+    } else if (req.leave_type_detail && req.leave_type_detail.code) {
+      leaveTypeName = req.leave_type_detail.code
+    } else if (typeof req.leave_type_display === 'string') {
+      leaveTypeName = req.leave_type_display
+    } else if (typeof req.leave_type === 'string') {
+      leaveTypeName = req.leave_type
+    } else {
+      leaveTypeName = 'annual'  // default fallback
+    }
+    
+    leaveTypeName = String(leaveTypeName).toLowerCase()
+    const days = Number(req.duration_days || req.days_requested || req.days || 0)
+    
+    // Match to config key (annual, sick, emergency, etc.)
+    let configKey = 'annual'  // default
+    if (leaveTypeName.includes('sick')) configKey = 'sick'
+    else if (leaveTypeName.includes('emergency')) configKey = 'emergency'
+    else if (leaveTypeName.includes('compassionate')) configKey = 'compassionate'
+    else if (leaveTypeName.includes('maternity')) configKey = 'maternity'
+    else if (leaveTypeName.includes('paternity')) configKey = 'paternity'
+    else if (leaveTypeName.includes('study')) configKey = 'study'
+    else if (leaveTypeName.includes('unpaid')) configKey = 'unpaid'
+    else if (leaveTypeName.includes('annual')) configKey = 'annual'
+    
+    acc[configKey] = (acc[configKey] || 0) + days
+    return acc
+  }, {})
+
   // Filter to only show enabled leave types (soft-coded control)
   const leaveTypes = Object.entries(LEAVE_TYPE_CONFIG)
     .filter(([key, cfg]) => cfg.enabled !== false)  // Default to true if enabled flag not set
@@ -622,7 +660,7 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
       ...cfg,
       key,
       balance: key === 'annual' ? balance : 0,
-      taken:   key === 'annual' ? taken : 0,
+      taken:   leaveTypeUsage[key] || 0,  // Use calculated usage from requests
     }))
 
   const pieData = [
@@ -693,7 +731,20 @@ const LeaveBalanceSection = ({ leaveRecord, requests, loading }) => {
                   </div>
                 </>
               ) : (
-                <div className={`text-xl font-bold ${lt.text} opacity-50`}>N/A</div>
+                <>
+                  <div className={`text-3xl font-bold ${lt.text}`}>{lt.taken.toFixed(1)}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">days taken this year</div>
+                  {lt.entitlement > 0 && (
+                    <div className="mt-3">
+                      <ProgressBar
+                        value={lt.taken}
+                        max={lt.entitlement}
+                        color={lt.bar}
+                        label="Used"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ))}

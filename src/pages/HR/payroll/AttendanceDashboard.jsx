@@ -31,7 +31,9 @@ import {
   OPEN_SHIFT_INDICATOR,
   // ── Reports catalogue
   ATT_REPORT_TYPES, ATT_DOWNLOAD_METHOD_MAP,
-  // ── Summary leave columns
+  // ── Summary leave columns (NEW: dynamic soft-coded leave types)
+  SUMMARY_LEAVE_TYPES,
+  // ── Legacy leave column constants (deprecated but kept for backward compatibility)
   SUMMARY_ANNUAL_LEAVE_CODE, SUMMARY_UNPAID_LEAVE_CODE,
   SUMMARY_ANNUAL_LEAVE_LABEL, SUMMARY_UNPAID_LEAVE_LABEL,
   SUMMARY_AL_SHOW_BALANCE,
@@ -584,6 +586,14 @@ function SummaryTab() {
             s + ((slot?.type === 'worked' || slot?.type === 'override') ? (slot.hours || 0) : 0), 0)
         )
         const normalHrs = workingDays * ATT_STANDARD_DAILY_HOURS
+        
+        // ✅ NEW: Dynamic leave days calculation for ALL enabled leave types (soft-coded)
+        // Counts approved leave days per type from the leave calendar
+        const leaveDays = {}
+        SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false).forEach(leaveType => {
+          leaveDays[leaveType.code] = Object.values(empLeave).filter(lv => lv.code === leaveType.code).length
+        })
+        
         return {
           name:        empName(r),
           dept:        empDept(r),
@@ -593,9 +603,10 @@ function SummaryTab() {
           daysPresent: r.days_present || 0,
           normalHrs,
           diff:        round2(totalHrs - normalHrs),
-          // Soft-coded: count approved leave days per type from the leave calendar
-          annualLeaveDays: Object.values(empLeave).filter(lv => lv.code === SUMMARY_ANNUAL_LEAVE_CODE).length,
-          unpaidLeaveDays: Object.values(empLeave).filter(lv => lv.code === SUMMARY_UNPAID_LEAVE_CODE).length,
+          leaveDays,   // ✅ NEW: Dynamic object with all leave type counts (e.g., { AL: 2, SL: 1, EL: 0, ... })
+          // ⚠️ DEPRECATED: Legacy fields kept for backward compatibility
+          annualLeaveDays: leaveDays.AL || 0,
+          unpaidLeaveDays: leaveDays.UL || 0,
         }
       })
   }, [rows, search, workingDays, leaveCalendar, branchCodes, overrideMap])
@@ -604,22 +615,41 @@ function SummaryTab() {
   const totals = useMemo(() => {
     const dayMap = {}
     let totalHrs = 0, normalHrs = 0, daysPresent = 0
-    let annualLeaveDays = 0, unpaidLeaveDays = 0
+    
+    // ✅ NEW: Dynamic leave totals for ALL enabled leave types
+    const leaveTotals = {}
+    SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false).forEach(leaveType => {
+      leaveTotals[leaveType.code] = 0
+    })
+    
     pivotRows.forEach(r => {
       Object.entries(r.dayMap).forEach(([d, slot]) => {
         const day  = parseInt(d, 10)
         const hrs  = (slot?.type === 'worked' || slot?.type === 'override') ? (slot.hours || 0) : 0
         dayMap[day] = round2((dayMap[day] || 0) + hrs)
       })
-      totalHrs        += r.totalHrs
-      normalHrs       += r.normalHrs
-      daysPresent     += r.daysPresent
-      annualLeaveDays += r.annualLeaveDays || 0
-      unpaidLeaveDays += r.unpaidLeaveDays || 0
+      totalHrs    += r.totalHrs
+      normalHrs   += r.normalHrs
+      daysPresent += r.daysPresent
+      
+      // ✅ NEW: Sum leave days for each type
+      Object.keys(leaveTotals).forEach(code => {
+        leaveTotals[code] += (r.leaveDays?.[code] || 0)
+      })
     })
     totalHrs  = round2(totalHrs)
     normalHrs = round2(normalHrs)
-    return { dayMap, totalHrs, daysPresent, normalHrs, diff: round2(totalHrs - normalHrs), annualLeaveDays, unpaidLeaveDays }
+    return {
+      dayMap,
+      totalHrs,
+      daysPresent,
+      normalHrs,
+      diff: round2(totalHrs - normalHrs),
+      leaveTotals,  // ✅ NEW: Dynamic object { AL: 15, SL: 8, EL: 2, ... }
+      // ⚠️ DEPRECATED: Legacy fields kept for backward compatibility
+      annualLeaveDays: leaveTotals.AL || 0,
+      unpaidLeaveDays: leaveTotals.UL || 0,
+    }
   }, [pivotRows])
 
   return (
@@ -917,11 +947,33 @@ function SummaryTab() {
                   })}
                   <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap border-l-2 border-slate-500 bg-slate-800">Total</th>
                   <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-slate-800">Days</th>
-                  <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-emerald-800">
-                    {SUMMARY_ANNUAL_LEAVE_LABEL}
-                    {SUMMARY_AL_SHOW_BALANCE && <div className="text-[9px] font-normal opacity-70">Balance</div>}
-                  </th>
-                  <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap bg-red-900">{SUMMARY_UNPAID_LEAVE_LABEL}</th>
+                  
+                  {/* ✅ DYNAMIC LEAVE COLUMNS — Soft-coded from SUMMARY_LEAVE_TYPES */}
+                  {SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false)
+                    .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99))
+                    .map(leaveType => {
+                      const colorMap = {
+                        emerald: 'bg-emerald-800',
+                        blue: 'bg-blue-800',
+                        amber: 'bg-amber-800',
+                        red: 'bg-red-900',
+                        purple: 'bg-purple-800',
+                        indigo: 'bg-indigo-800',
+                      }
+                      const bgClass = colorMap[leaveType.color] || 'bg-slate-800'
+                      return (
+                        <th
+                          key={leaveType.code}
+                          className={`px-3 py-2.5 text-center font-semibold whitespace-nowrap ${bgClass}`}
+                          title={leaveType.description}>
+                          {leaveType.label}
+                          {leaveType.showBalance && leaveType.code === 'AL' && SUMMARY_AL_SHOW_BALANCE && (
+                            <div className="text-[9px] font-normal opacity-70">Balance</div>
+                          )}
+                        </th>
+                      )
+                    })}
+                  
                   <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap bg-slate-800 border-r border-slate-600">
                     Normal Hrs
                   </th>
@@ -947,7 +999,7 @@ function SummaryTab() {
                       </td>
                     )
                   })}
-                  <td colSpan={6} className="bg-slate-600 border-l-2 border-slate-500" />
+                  <td colSpan={2 + SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false).length + 2} className="bg-slate-600 border-l-2 border-slate-500" />
                 </tr>
               </thead>
 
@@ -1044,34 +1096,60 @@ function SummaryTab() {
                     <td className="px-3 py-1.5 text-center font-semibold text-slate-700 bg-slate-50">
                       {r.daysPresent}
                     </td>
-                    <td className="px-3 py-1.5 text-center font-semibold bg-emerald-50 text-emerald-700 whitespace-nowrap">
-                      {(() => {
-                        if (SUMMARY_AL_SHOW_BALANCE && annualLeaveLoading) {
-                          return <span className="text-[9px] text-slate-400 italic">…</span>
+                    
+                    {/* ✅ DYNAMIC LEAVE CELLS — Soft-coded from SUMMARY_LEAVE_TYPES */}
+                    {SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false)
+                      .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99))
+                      .map(leaveType => {
+                        const leaveDays = r.leaveDays?.[leaveType.code] || 0
+                        const colorMap = {
+                          emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', balBg: 'bg-emerald-50', balText: 'text-emerald-700' },
+                          blue: { bg: 'bg-blue-50', text: 'text-blue-700', balBg: 'bg-blue-50', balText: 'text-blue-700' },
+                          amber: { bg: 'bg-amber-50', text: 'text-amber-700', balBg: 'bg-amber-50', balText: 'text-amber-700' },
+                          red: { bg: 'bg-red-50', text: 'text-red-700', balBg: 'bg-red-50', balText: 'text-red-700' },
+                          purple: { bg: 'bg-purple-50', text: 'text-purple-700', balBg: 'bg-purple-50', balText: 'text-purple-700' },
+                          indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', balBg: 'bg-indigo-50', balText: 'text-indigo-700' },
                         }
-                        const dbEntry = getAnnualLeaveEntry(r.code, r.name)
-                        if (SUMMARY_AL_SHOW_BALANCE && dbEntry) {
-                          const bal    = parseFloat(dbEntry.balance ?? 0).toFixed(2)
-                          const taken  = parseFloat(dbEntry.taken_ytd  ?? 0).toFixed(2)
-                          const earned = parseFloat(dbEntry.earned_ytd ?? 0).toFixed(2)
-                          const balNum = parseFloat(dbEntry.balance ?? 0)
-                          const color  = balNum < 0 ? 'text-rose-700 bg-rose-50' : balNum < 2 ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50'
-                          return (
-                            <span
-                              className={`inline-flex flex-col items-center leading-tight px-1 py-0.5 rounded text-[10px] font-bold ${color}`}
-                              title={`Balance: ${bal} days | Earned YTD: ${earned} | Taken YTD: ${taken} | CF: ${parseFloat(dbEntry.carryforward ?? 0).toFixed(2)}`}
-                            >
-                              <span>{bal} d</span>
-                              {r.annualLeaveDays > 0 && <span className="font-normal opacity-70">{r.annualLeaveDays} taken</span>}
-                            </span>
-                          )
+                        const colors = colorMap[leaveType.color] || { bg: 'bg-slate-50', text: 'text-slate-700', balBg: 'bg-slate-50', balText: 'text-slate-700' }
+                        
+                        // Special handling for Annual Leave balance display
+                        if (leaveType.showBalance && leaveType.code === 'AL' && SUMMARY_AL_SHOW_BALANCE) {
+                          if (annualLeaveLoading) {
+                            return (
+                              <td key={leaveType.code} className={`px-3 py-1.5 text-center font-semibold ${colors.bg} ${colors.text} whitespace-nowrap`}>
+                                <span className="text-[9px] text-slate-400 italic">…</span>
+                              </td>
+                            )
+                          }
+                          const dbEntry = getAnnualLeaveEntry(r.code, r.name)
+                          if (dbEntry) {
+                            const bal    = parseFloat(dbEntry.balance ?? 0).toFixed(2)
+                            const taken  = parseFloat(dbEntry.taken_ytd  ?? 0).toFixed(2)
+                            const earned = parseFloat(dbEntry.earned_ytd ?? 0).toFixed(2)
+                            const balNum = parseFloat(dbEntry.balance ?? 0)
+                            const balColor = balNum < 0 ? 'text-rose-700 bg-rose-50' : balNum < 2 ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50'
+                            return (
+                              <td key={leaveType.code} className={`px-3 py-1.5 text-center font-semibold ${colors.bg} ${colors.text} whitespace-nowrap`}>
+                                <span
+                                  className={`inline-flex flex-col items-center leading-tight px-1 py-0.5 rounded text-[10px] font-bold ${balColor}`}
+                                  title={`Balance: ${bal} days | Earned YTD: ${earned} | Taken YTD: ${taken} | CF: ${parseFloat(dbEntry.carryforward ?? 0).toFixed(2)}`}
+                                >
+                                  <span>{bal} d</span>
+                                  {leaveDays > 0 && <span className="font-normal opacity-70">{leaveDays} taken</span>}
+                                </span>
+                              </td>
+                            )
+                          }
                         }
-                        return r.annualLeaveDays > 0 ? r.annualLeaveDays : '—'
-                      })()}
-                    </td>
-                    <td className="px-3 py-1.5 text-center font-semibold bg-red-50 text-red-700 whitespace-nowrap">
-                      {r.unpaidLeaveDays > 0 ? r.unpaidLeaveDays : '—'}
-                    </td>
+                        
+                        // Standard display: days taken this month
+                        return (
+                          <td key={leaveType.code} className={`px-3 py-1.5 text-center font-semibold ${colors.bg} ${colors.text} whitespace-nowrap`}>
+                            {leaveDays > 0 ? leaveDays : '—'}
+                          </td>
+                        )
+                      })}
+                    
                     <td className="px-3 py-1.5 text-right text-slate-600 bg-slate-50 whitespace-nowrap tabular-nums border-r border-slate-200">
                       {r.normalHrs} h
                     </td>
@@ -1115,15 +1193,32 @@ function SummaryTab() {
                     {totals.totalHrs.toFixed(2)}
                   </td>
                   <td className="px-3 py-2.5 text-center">{totals.daysPresent}</td>
-                  <td className="px-3 py-2.5 text-center font-semibold text-emerald-300">
-                    {totals.annualLeaveDays > 0 ? totals.annualLeaveDays : '—'}
-                    {SUMMARY_AL_SHOW_BALANCE && Object.keys(annualLeaveDb).length > 0 && (
-                      <div className="text-[9px] font-normal opacity-70">taken</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-center font-semibold text-red-300">
-                    {totals.unpaidLeaveDays > 0 ? totals.unpaidLeaveDays : '—'}
-                  </td>
+                  
+                  {/* ✅ DYNAMIC LEAVE TOTALS — Soft-coded from SUMMARY_LEAVE_TYPES */}
+                  {SUMMARY_LEAVE_TYPES.filter(lt => lt.enabled !== false)
+                    .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99))
+                    .map(leaveType => {
+                      const totalDays = totals.leaveTotals?.[leaveType.code] || 0
+                      const colorMap = {
+                        emerald: 'text-emerald-300',
+                        blue: 'text-blue-300',
+                        amber: 'text-amber-300',
+                        red: 'text-red-300',
+                        purple: 'text-purple-300',
+                        indigo: 'text-indigo-300',
+                      }
+                      const textColor = colorMap[leaveType.color] || 'text-slate-300'
+                      
+                      return (
+                        <td key={leaveType.code} className={`px-3 py-2.5 text-center font-semibold ${textColor}`}>
+                          {totalDays > 0 ? totalDays : '—'}
+                          {leaveType.showBalance && leaveType.code === 'AL' && SUMMARY_AL_SHOW_BALANCE && Object.keys(annualLeaveDb).length > 0 && (
+                            <div className="text-[9px] font-normal opacity-70">taken</div>
+                          )}
+                        </td>
+                      )
+                    })}
+                  
                   <td className="px-3 py-2.5 text-right tabular-nums border-r border-slate-600">
                     {totals.normalHrs} h
                   </td>
