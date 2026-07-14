@@ -253,19 +253,24 @@ const UserManagement = ({ pageControls }) => {
   
   // ========== HELPER: SAFE DATA EXTRACTION ==========
   // Handle both nested (user.user.email) and flat (user.email) data structures
+  // ⚠️ IMPORTANT: Always check for null/undefined to prevent "Cannot read properties of null" errors
   const getUserEmail = (user) => {
+    if (!user) return null;
     return user.user?.email || user.email || null;
   };
   
   const getUserFirstName = (user) => {
+    if (!user) return null;
     return user.user?.first_name || user.first_name || null;
   };
   
   const getUserLastName = (user) => {
+    if (!user) return null;
     return user.user?.last_name || user.last_name || null;
   };
   
   const getUserUsername = (user) => {
+    if (!user) return null;
     return user.user?.username || user.username || null;
   };
   
