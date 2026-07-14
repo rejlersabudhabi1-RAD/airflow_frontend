@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { Formik, Form, Field, ErrorMessage } from 'formik'
 import { Link } from 'react-router-dom'
+import { getNavItems } from '../../config/navigation.config'
 import {
   BRANDING,
   PAGE_CONTENT,
@@ -448,15 +449,21 @@ const LoginForm = ({ loginSchema, isLoading, onSubmit, loginGate, onDismissGate 
 
         {/* Footer - Industrial Style - Compact */}
         <div className="mt-4 pt-3 border-t border-gray-200">
-          {/* Copyright & Links Combined */}
-          <div className="flex items-center justify-center space-x-3 mb-2">
-            <a href="#" className="text-xs text-gray-500 hover:text-blue-600 transition-colors">Help</a>
-            <span className="text-gray-300">|</span>
-            <a href="#" className="text-xs text-gray-500 hover:text-blue-600 transition-colors">Docs</a>
-            <span className="text-gray-300">|</span>
-            <a href="/privacy-policy" className="text-xs text-gray-500 hover:text-blue-600 transition-colors">Privacy</a>
-            <span className="text-gray-300">|</span>
-            <a href="/terms-of-service" className="text-xs text-gray-500 hover:text-blue-600 transition-colors">Terms</a>
+          {/* Soft-coded Navigation Links - From navigation.config.js */}
+          <div className="flex items-center justify-center flex-wrap gap-2 mb-2">
+            {getNavItems('public')
+              .filter(item => item.id !== 'home')
+              .map((item, index, array) => (
+                <React.Fragment key={item.id}>
+                  <Link 
+                    to={item.path}
+                    className="text-xs text-gray-500 hover:text-blue-600 transition-colors font-medium"
+                  >
+                    {item.label}
+                  </Link>
+                  {index < array.length - 1 && <span className="text-gray-300">|</span>}
+                </React.Fragment>
+              ))}
           </div>
 
           {/* Copyright & Status Combined */}

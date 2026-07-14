@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { REJLERS_COLORS, BRAND_TEXT } from '../config/theme.config'
 import { LOGO_CONFIG, getLogoPath } from '../config/logo.config'
 import { FOOTER_CONFIG } from '../config/footer.config'
+import { getNavItems, getMobileNavItems, NAV_STYLES, getActiveNavItem } from '../config/navigation.config'
 import {
   HERO_CONFIG,
   PLATFORM_STATS,
@@ -349,6 +350,8 @@ function Particle({ style }) {
 
 
 const Home = () => {
+  const location = useLocation();
+  
   // - Particles (generated once on mount) -
   const particles = useRef(
     Array.from({ length: LANDING_CONFIG.particleCount }, (_, i) => ({
@@ -362,6 +365,11 @@ const Home = () => {
       color: ['#7FCAB5','#2AA784','#73bdc8','#a78bfa','#0ea5e9'][i % 5],
     }))
   ).current
+
+  // - Soft-coded navigation items -
+  const navItems = getNavItems('public').filter(item => item.id !== 'home'); // Hide 'Home' from nav
+  const mobileNavItems = getMobileNavItems('public').filter(item => item.id !== 'home');
+  const activeItem = getActiveNavItem(location.pathname, 'public');
 
   // - Nav scroll state -
   const [scrolled, setScrolled] = useState(false)
@@ -656,10 +664,13 @@ const Home = () => {
               {/* Desktop nav links */}
               <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
                 <PWAInstallButton />
-                {['Solutions','About','Contact'].map(label => (
-                  <Link key={label} to={`/${label.toLowerCase()}`}
-                    className="text-gray-300 hover:text-white text-sm font-semibold transition-colors duration-200 hover:text-[#7FCAB5]">
-                    {label}
+                {navItems.map(item => (
+                  <Link 
+                    key={item.id} 
+                    to={item.path}
+                    className={`${NAV_STYLES.desktop.linkBase} ${NAV_STYLES.desktop.linkHover} ${activeItem?.id === item.id ? NAV_STYLES.desktop.linkActive : ''}`}
+                  >
+                    {item.label}
                   </Link>
                 ))}
                 <Link to="/login"
@@ -683,10 +694,14 @@ const Home = () => {
             {mobileOpen && (
               <div className="md:hidden pb-4 border-t border-gray-700/50 pt-3 space-y-2">
                 <PWAInstallButton mobile onClose={() => setMobileOpen(false)} />
-                {['Solutions','About','Contact'].map(label => (
-                  <Link key={label} to={`/${label.toLowerCase()}`} onClick={() => setMobileOpen(false)}
-                    className="block text-gray-300 hover:text-[#7FCAB5] py-2 text-sm font-semibold transition-colors">
-                    {label}
+                {mobileNavItems.map(item => (
+                  <Link 
+                    key={item.id} 
+                    to={item.path} 
+                    onClick={() => setMobileOpen(false)}
+                    className={`${NAV_STYLES.mobile.linkBase} ${activeItem?.id === item.id ? NAV_STYLES.mobile.linkActive : ''}`}
+                  >
+                    {item.label}
                   </Link>
                 ))}
                 <Link to="/login" onClick={() => setMobileOpen(false)}

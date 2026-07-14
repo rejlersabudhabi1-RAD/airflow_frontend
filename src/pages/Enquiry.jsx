@@ -4,25 +4,32 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiService from '../services/api.service';
 import { ENQUIRY_CONFIG } from '../config/enquiry.config';
 import { REJLERS_COLORS } from '../config/theme.config';
 
 const Enquiry = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [progress, setProgress] = useState(0);
+  
+  // Initialize form data from URL params (for universal enquiry support)
+  const preSelectedService = searchParams.get('service') || '';
+  const preSelectedSubject = searchParams.get('subject') || '';
+  const preSelectedMessage = searchParams.get('message') || '';
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     company: '',
-    subject: '',
-    message: '',
-    service: '',
+    subject: preSelectedSubject,
+    message: preSelectedMessage,
+    service: preSelectedService,
     urgency: 'normal'
   });
   const [errors, setErrors] = useState({});
