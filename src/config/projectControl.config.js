@@ -33,6 +33,10 @@ export const PROJECT_CONTROL_ENDPOINTS = {
   snapshots:       '/project-control/cost-snapshots/',
   changes:         '/project-control/change-events/',
 
+  // Planning Packages
+  planningPackages: '/project-control/planning-packages/',
+  planningPackageStats: '/project-control/planning-packages/statistics/',
+
   // Analytics
   costKpis:        '/project-control/analytics/cost-kpis/',
   variance:        '/project-control/analytics/estimate-variance/',
@@ -57,6 +61,88 @@ export const PROJECT_VIEW_MODES = [
   { key: 'ai-takeoff',        label: 'AI Take-Off',       phaseFlag: 'phase_2_ai_takeoff',        icon: 'sparkles', phaseLabel: 'Phase 2' },
   { key: 'evm',               label: 'EVM Forecast',      phaseFlag: 'phase_3_evm_forecast',      icon: 'trending', phaseLabel: 'Phase 3' },
   { key: 'risk',              label: 'Risk Analytics',    phaseFlag: 'phase_4_risk_analytics',    icon: 'shield',   phaseLabel: 'Phase 4' },
+]
+
+// ───────────────────────────────────────────────────────────────────────────
+// 2b. Project Control Features — REFERENCE ONLY
+//     Features are dynamically loaded from backend /api/v1/features/ endpoint.
+//     This config exists for documentation purposes and potential future use
+//     (e.g., custom feature ordering, local overrides, or offline mode).
+//     The Dashboard displays features directly from the backend feature registry.
+// ───────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+// 2c. Project Control Sub-Features Navigation
+//     This defines the hierarchical sub-features under "6. Project Control"
+//     that appear as navigation links in the Projects page.
+//     SOFT-CODED: Add new sub-features by appending to this array.
+// ───────────────────────────────────────────────────────────────────────────
+export const PROJECT_CONTROL_SUBFEATURES = [
+  {
+    id: 'project-management',
+    number: '6.1',
+    name: 'Projects',
+    fullName: 'Project Management',
+    description: 'Create and manage engineering projects with cost tracking and milestones',
+    icon: '📊',
+    route: '/projects',
+    color: 'indigo',
+    bgColor: 'bg-indigo-50',
+    textColor: 'text-indigo-700',
+    borderColor: 'border-indigo-200',
+    hoverBg: 'hover:bg-indigo-100',
+    isActive: true,
+    isDefault: true,
+  },
+  {
+    id: 'planning-package',
+    number: '6.2',
+    name: 'Planning Packages',
+    fullName: 'Planning Package',
+    description: 'Work package planning with budgets, schedules, and deliverables',
+    icon: '📦',
+    route: '/planning-packages',
+    color: 'violet',
+    bgColor: 'bg-violet-50',
+    textColor: 'text-violet-700',
+    borderColor: 'border-violet-200',
+    hoverBg: 'hover:bg-violet-100',
+    isActive: true,
+    isNew: true,
+    badge: 'NEW',
+    badgeColor: 'bg-green-100 text-green-700',
+  },
+]
+
+export const PROJECT_CONTROL_FEATURES = [
+  {
+    id: 'project-management',
+    number: '6.1',
+    name: 'Project Management',
+    description: 'Create and manage engineering projects with timelines and milestones',
+    icon: '📊',
+    route: '/projects',
+    color: 'indigo',
+    isActive: true,
+    isDefault: true, // This is the main/default view
+  },
+  {
+    id: 'planning-package',
+    number: '6.2',
+    name: 'Planning Package',
+    description: 'Work package planning with budgets, schedules, and deliverables',
+    icon: '📦',
+    route: '/planning-packages',
+    color: 'violet',
+    isActive: true,
+    isNew: true,
+    capabilities: [
+      'Package creation & management',
+      'Budget allocation & tracking',
+      'Schedule planning',
+      'Progress monitoring',
+      'WBS integration',
+    ],
+  },
 ]
 
 // Default tab for first-time visitors — Project Dashboard surfaces key facts

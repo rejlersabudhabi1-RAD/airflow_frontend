@@ -663,6 +663,32 @@ const Dashboard = () => {
     }, {}) || {}
   , [features])
 
+  // DEBUG: Log categorizedFeatures to console
+  useEffect(() => {
+    console.log('🔍 Dashboard: features from Redux:', features);
+    console.log('🔍 Dashboard: features length:', features?.length);
+    if (features && features.length > 0) {
+      const pc = features.filter(f => f.category === 'project_control');
+      console.log('🎯 PROJECT_CONTROL features in Redux:', pc);
+      pc.forEach(f => {
+        console.log(`  - ${f.name} (order: ${f.order}, route: ${f.frontendRoute || f.frontend_route})`);
+      });
+    }
+    
+    if (categorizedFeatures && Object.keys(categorizedFeatures).length > 0) {
+      console.log('✅ Dashboard: categorizedFeatures loaded:', {
+        categories: Object.keys(categorizedFeatures),
+        totalFeatures: Object.values(categorizedFeatures).flat().length,
+        project_control: categorizedFeatures.project_control || 'NOT FOUND'
+      });
+      if (categorizedFeatures.project_control) {
+        console.log('🎯 PROJECT_CONTROL in categorizedFeatures:', categorizedFeatures.project_control);
+      }
+    } else {
+      console.log('⚠️ Dashboard: categorizedFeatures is empty or not loaded');
+    }
+  }, [categorizedFeatures, features]);
+
   const categoryTabs = useMemo(() => {
     const active = Object.keys(categorizedFeatures).filter(k => k !== 'other' && categorizedFeatures[k].length > 0)
     return [{ id: 'all', label: 'All' }, ...active.map(k => ({ id: k, label: CATEGORY_META[k]?.label || k }))]
@@ -670,6 +696,7 @@ const Dashboard = () => {
 
   const featureActivity = useMemo(() => {
     if (!features) return []
+    console.log('🔍 featureActivity: Processing features:', features.length);
     const USES  = [2100, 1847, 1203, 956, 743, 520]
     const TREND = [4,    7,    -2,   5,   8,   -1]
     const CONF  = [94,   91,   88,   95,  87,   92]
@@ -678,12 +705,17 @@ const Dashboard = () => {
     const accessibleCats = isAdmin
       ? null  // null = show all
       : new Set(userModuleCodes.map(m => MODULE_CATEGORY_MAP[m]).filter(Boolean))
-    return features
+    
+    const result = features
       .filter(f => f.category !== 'other')
       .filter(f => isAdmin || !accessibleCats || accessibleCats.has(f.category))
-      .filter(f => { if (seen.has(f.frontendRoute)) return false; seen.add(f.frontendRoute); return true })
+      .filter(f => { if (seen.has(f.frontendRoute || f.frontend_route)) return false; seen.add(f.frontendRoute || f.frontend_route); return true })
       .slice(0, 6)
       .map((f, i) => ({ ...f, uses: USES[i] || 400 + i * 200, trend: TREND[i] || 3, conf: CONF[i] || 90 }))
+    
+    console.log('🔍 featureActivity: Result:', result.length, 'features');
+    result.forEach(f => console.log(`  - ${f.name} (${f.category})`));
+    return result;
   }, [features, isAdmin, userModuleCodes])
 
   const filteredActivity = useMemo(() =>
@@ -1485,6 +1517,94 @@ const Dashboard = () => {
                 </ul>
               </div>
             )}
+
+            {/* SOFT-CODED: Feature Navigator - Hierarchical feature display */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50 flex items-center gap-2"
+                style={{ background: 'linear-gradient(90deg, #f3f4f6 0%, white 100%)' }}>
+                <div className="w-5 h-5 rounded-md flex items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600">
+                  <FolderOpenIcon className="w-3 h-3 text-white" />
+                </div>
+                <span className="text-xs font-bold text-gray-800">Features Navigator</span>
+                <span className="ml-auto text-[9px] text-gray-400">
+                  {categorizedFeatures ? Object.keys(categorizedFeatures).length : 0} categories
+                </span>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                {categorizedFeatures && Object.keys(categorizedFeatures).length > 0 ? (
+                  Object.entries(categorizedFeatures)
+                    .filter(([cat]) => cat !== 'other')
+                    .sort((a, b) => {
+                      // Sort by category order: engineering, document_management, project_control, quality_assurance, etc.
+                      const order = ['engineering', 'document_management', 'project_control', 'quality_assurance', 'sales', 'finance', 'procurement', 'human_resource'];
+                      return order.indexOf(a[0]) - order.indexOf(b[0]);
+                    })
+                    .map(([category, categoryFeatures], catIdx) => {
+                      const meta = CATEGORY_META[category] || {};
+                      const sortedFeatures = [...categoryFeatures].sort((a, b) => (a.order || 999) - (b.order || 999));
+                      const categoryNumber = catIdx + 1;
+                      
+                      return (
+                        <div key={category} className="border-b border-gray-50 last:border-b-0">
+                          {/* Category Header */}
+                          <div className={`px-4 py-2.5 ${meta.bg || 'bg-gray-50'} flex items-center gap-2`}>
+                            <span className="text-[10px] font-bold text-gray-500">{categoryNumber}.</span>
+                            <span className={`text-[11px] font-bold ${meta.color || 'text-gray-700'} flex-1`}>
+                              {meta.label || category}
+                            </span>
+                            <span className="text-[9px] font-semibold text-gray-400">
+                              {sortedFeatures.length} feature{sortedFeatures.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          
+                          {/* Sub-features */}
+                          <ul className="divide-y divide-gray-50">
+                            {sortedFeatures.map((feature, idx) => (
+                              <li
+                                key={feature.id}
+                                onClick={() => navigate(feature.frontendRoute)}
+                                className="flex items-start gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-violet-50/40 transition group"
+                              >
+                                {/* Icon */}
+                                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 text-sm group-hover:scale-105 transition-transform">
+                                  {feature.icon || '📄'}
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-0.5">
+                                    <span className="text-[9px] font-semibold text-violet-600">
+                                      {categoryNumber}.{idx + 1}
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-gray-700 truncate group-hover:text-violet-700 transition">
+                                      {feature.name}
+                                    </span>
+                                    {feature.is_new && (
+                                      <span className="text-[8px] font-bold px-1 py-0.5 rounded-full bg-green-100 text-green-700 flex-shrink-0">
+                                        NEW
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[9px] text-gray-400 line-clamp-1">{feature.description}</p>
+                                </div>
+                                
+                                {/* Arrow */}
+                                <ChevronRightIcon className="w-3 h-3 text-gray-300 group-hover:text-violet-500 flex-shrink-0 mt-1 transition" />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="px-4 py-8 text-center">
+                    <FolderOpenIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-[11px] text-gray-400">Loading features...</p>
+                    <p className="text-[9px] text-gray-300 mt-1">Please wait or refresh the page</p>
+                  </div>
+                )}
+                </div>
+              </div>
 
             {/* Your Access card */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

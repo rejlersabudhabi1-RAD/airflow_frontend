@@ -397,6 +397,35 @@ export const FEATURES_CATALOG = {
           totalUses: 28790,
           avgRating: 4.7
         }
+      },
+      {
+        id: 'planning-package',
+        name: 'Planning Package',
+        shortName: 'Planning',
+        description: 'Work package planning and tracking',
+        longDescription: 'Break down projects into manageable work packages with budgets, timelines, deliverables, and progress tracking for enhanced project control.',
+        path: '/planning-packages',
+        moduleCode: 'project_control',
+        status: FEATURE_STATUS.ACTIVE,
+        badges: [FEATURE_BADGES.NEW],
+        capabilities: [
+          'Package creation & management',
+          'Budget allocation & tracking',
+          'Schedule planning',
+          'Progress monitoring',
+          'WBS integration',
+          'Deliverable tracking'
+        ],
+        metrics: {
+          totalPackages: 0,
+          activePackages: 0,
+          avgProgress: '0%'
+        },
+        usageStats: {
+          monthlyUses: 0,
+          totalUses: 0,
+          avgRating: 0
+        }
       }
     ]
   },

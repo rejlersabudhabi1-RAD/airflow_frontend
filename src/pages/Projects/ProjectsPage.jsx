@@ -9,8 +9,10 @@ import {
 
 import {
   PROJECT_VIEW_MODES, PROJECT_DEFAULT_VIEW, PROJECT_COPY,
+  PROJECT_CONTROL_SUBFEATURES,
 } from '../../config/projectControl.config'
 import * as PC from '../../services/projectControl.service'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 import ProjectSelector from './components/ProjectSelector'
 import ProjectHeaderStrip from './components/ProjectHeaderStrip'
@@ -46,6 +48,8 @@ const TAB_COMPONENTS = {
 }
 
 export default function ProjectsPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [projects, setProjects] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [phaseFlags, setPhaseFlags] = useState({})
@@ -232,7 +236,7 @@ export default function ProjectsPage() {
                   <SparklesIcon className="h-5 w-5" />
                 </span>
                 <h1 className="text-2xl font-semibold tracking-tight bg-gradient-to-r from-slate-900 via-indigo-700 to-violet-700 bg-clip-text text-transparent">
-                  Project Management
+                  Project Control
                 </h1>
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
                   <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
@@ -242,6 +246,40 @@ export default function ProjectsPage() {
               <p className="text-sm text-slate-500 mt-1.5 max-w-2xl">
                 Cost intelligence, estimates, documents and predictive analytics — phased rollout.
               </p>
+              
+              {/* SOFT-CODED: Sub-features navigation */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {PROJECT_CONTROL_SUBFEATURES.filter(sf => sf.isActive).map((subFeature) => {
+                  const isCurrentPage = location.pathname === subFeature.route
+                  return (
+                    <button
+                      key={subFeature.id}
+                      onClick={() => !isCurrentPage && navigate(subFeature.route)}
+                      className={[
+                        'group relative inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all',
+                        isCurrentPage
+                          ? `${subFeature.bgColor} ${subFeature.textColor} ${subFeature.borderColor} border-2 shadow-sm`
+                          : `bg-white text-slate-600 border border-slate-200 ${subFeature.hoverBg} hover:border-slate-300 hover:shadow`,
+                      ].join(' ')}
+                      disabled={isCurrentPage}
+                    >
+                      <span className="text-base">{subFeature.icon}</span>
+                      <span className="font-mono text-[10px] opacity-60">{subFeature.number}</span>
+                      <span>{subFeature.name}</span>
+                      {subFeature.isNew && subFeature.badge && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${subFeature.badgeColor}`}>
+                          {subFeature.badge}
+                        </span>
+                      )}
+                      {!isCurrentPage && (
+                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Primary CTA — always visible, never clipped */}

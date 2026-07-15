@@ -31,6 +31,7 @@ import {
   RocketLaunchIcon,
   WrenchScrewdriverIcon,
   EnvelopeIcon,
+  CubeIcon,
 } from '@heroicons/react/24/outline'
 
 /**
@@ -427,6 +428,15 @@ const Sidebar = ({ isOpen, setIsOpen, isCollapsed: isCollapsedProp, setIsCollaps
           path: '/projects',
           description: 'Manage and track projects',
           moduleCode: 'project_control'
+        },
+        {
+          id: 'planningPackage',
+          title: '6.2 Planning Package',
+          icon: CubeIcon,
+          path: '/planning-packages',
+          description: 'Work package planning and tracking',
+          moduleCode: 'project_control',
+          badge: 'NEW'
         }
       ]
     },

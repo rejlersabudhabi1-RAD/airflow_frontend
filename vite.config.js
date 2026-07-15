@@ -112,6 +112,9 @@ export default defineConfig(({ mode }) => {
           // CRITICAL: Increase file size limit for precaching large bundles
           // Default 2 MB is too small for production builds with all features
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB
+          // SOFT-CODED: Allow navigation to all routes (not just /)
+          navigateFallback: 'index.html',
+          navigateFallbackAllowlist: [/.*/], // Allow all paths for SPA routing
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/radai\.ae\/api\/.*/i,
@@ -132,7 +135,8 @@ export default defineConfig(({ mode }) => {
         devOptions: {
           enabled: true, // Enable PWA in development mode
           type: 'module',
-          navigateFallback: 'index.html'
+          navigateFallback: 'index.html',
+          navigateFallbackAllowlist: [/.*/] // Allow all paths in dev mode
         }
       })
     ],
