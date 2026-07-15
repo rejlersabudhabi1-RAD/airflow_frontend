@@ -49,6 +49,7 @@ const DEPARTMENTS = [
   { value: 'it', label: 'Information Technology' },
   { value: 'admin', label: 'Administration' },
   { value: 'management', label: 'Management' },
+  { value: 'radai', label: 'RadAI' },  // SOFT-CODED: Added for AI/ML department
 ];
 
 const EXPERTISE_LEVELS = [

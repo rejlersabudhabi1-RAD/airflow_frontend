@@ -35,6 +35,7 @@ const DEPARTMENTS = [
   { value: 'it', label: 'Information Technology', icon: '💻', color: 'violet' },
   { value: 'admin', label: 'Administration', icon: '📋', color: 'gray' },
   { value: 'management', label: 'Management', icon: '👔', color: 'indigo' },
+  { value: 'radai', label: 'RadAI', icon: '🤖', color: 'fuchsia' },  // SOFT-CODED: AI/ML department
 ];
 
 const ENGINEERING_DISCIPLINES = [
