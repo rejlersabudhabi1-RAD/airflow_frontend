@@ -13,6 +13,11 @@
 // Fields marked with `highlighted: true` are the yellow-highlighted fields in the PDF
 // ──────────────────────────────────────────────────────────────────────────────
 
+// Soft-coded project name length constraints (kept in sync with the backend
+// PROJECT_NAME_MIN_LENGTH / MAX_LENGTH constants in serializers.py).
+export const PROJECT_NAME_MIN_LENGTH = 3;
+export const PROJECT_NAME_MAX_LENGTH = 200;
+
 export const CHECKLIST_TEMPLATE = {
   id: 'ups_battery_inspection',
   name: 'UPS/Battery System Inspection Checklist',

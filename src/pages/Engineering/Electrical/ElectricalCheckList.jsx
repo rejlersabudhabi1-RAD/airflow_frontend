@@ -32,7 +32,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
-import { CHECKLIST_TEMPLATE, EXTRACTION_CONFIG, UI_CONFIG } from '../../../config/electricalChecklist.config';
+import { CHECKLIST_TEMPLATE, EXTRACTION_CONFIG, UI_CONFIG, PROJECT_NAME_MIN_LENGTH, PROJECT_NAME_MAX_LENGTH } from '../../../config/electricalChecklist.config';
 import { PROJECT_ENDPOINTS, PROJECT_TEMPLATES } from '../../../config/electricalChecklistProject.config';
 import { 
   TEMPLATE_SECTIONS, 
@@ -260,13 +260,22 @@ const ElectricalCheckList = () => {
 
   // Create new project
   const handleCreateProject = async () => {
-    if (!newProjectData.project_name.trim()) {
+    const trimmedName = newProjectData.project_name.trim();
+    if (!trimmedName) {
       setError('Project name is required');
+      return;
+    }
+    if (trimmedName.length < PROJECT_NAME_MIN_LENGTH) {
+      setError(`Project name must be at least ${PROJECT_NAME_MIN_LENGTH} characters long`);
+      return;
+    }
+    if (trimmedName.length > PROJECT_NAME_MAX_LENGTH) {
+      setError(`Project name cannot exceed ${PROJECT_NAME_MAX_LENGTH} characters`);
       return;
     }
 
     try {
-      const response = await apiClient.post(PROJECT_ENDPOINTS.create, newProjectData);
+      const response = await apiClient.post(PROJECT_ENDPOINTS.create, { ...newProjectData, project_name: trimmedName });
       
       if (response.data.success) {
         setProjects(prev => [response.data.project, ...prev]);
@@ -290,7 +299,9 @@ const ElectricalCheckList = () => {
       }
     } catch (err) {
       console.error('Error creating project:', err);
-      setError(err.response?.data?.message || 'Failed to create project');
+      const fieldErrors = err.response?.data?.errors;
+      const firstFieldError = fieldErrors && Object.values(fieldErrors)[0]?.[0];
+      setError(firstFieldError || err.response?.data?.message || 'Failed to create project');
     }
   };
 
