@@ -16,7 +16,8 @@ import {
   TableCellsIcon,
   DocumentChartBarIcon,
   CircleStackIcon,
-  DocumentMagnifyingGlassIcon
+  DocumentMagnifyingGlassIcon,
+  DocumentCheckIcon
 } from '@heroicons/react/24/outline'
 
 // SOFT-CODED: P&ID Feature Naming Configuration
@@ -231,6 +232,17 @@ export const ENGINEERING_DISCIPLINES = {
         path: '/engineering/electrical/sld',
         description: 'Single line diagram design and analysis',
         moduleCode: 'electrical_sld',
+        badge: 'New'
+      },
+      // SOFT-CODED: Electrical Check List - NEW FEATURE
+      {
+        id: 'electricalCheckList',
+        name: 'Check List',
+        fullName: 'Electrical Check List',
+        icon: DocumentCheckIcon,
+        path: '/engineering/electrical/checklist',
+        description: 'Electrical engineering quality check lists and compliance verification',
+        moduleCode: 'electrical_checklist',
         badge: 'New'
       },
       // SOFT-CODED: Electrical Datasheet - RE-ENABLED

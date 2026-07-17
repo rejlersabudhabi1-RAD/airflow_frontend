@@ -126,6 +126,7 @@ import ElectricalDatasheetPage from './pages/Engineering/Electrical/ElectricalDa
 import ElectricalEquipmentDatasheet from './pages/Engineering/Electrical/ElectricalEquipmentDatasheet'
 import ElectricalDatasheetFormPage from './pages/Engineering/Electrical/ElectricalDatasheetFormPage'
 import SingleLineDiagram from './pages/Engineering/Electrical/SingleLineDiagram'
+import ElectricalCheckList from './pages/Engineering/Electrical/ElectricalCheckList'
 import ExcelQualityCheckerPage from './pages/Engineering/Electrical/ExcelQualityCheckerPage'
 import UnifiedElectricalQualityChecker from './pages/Engineering/Electrical/UnifiedElectricalQualityChecker'
 import SmartElectricalDatasheetPage from './pages/Engineering/Electrical/SmartElectricalDatasheetPage'
@@ -987,6 +988,16 @@ function App() {
             <ProtectedRoute>
               <SingleLineDiagram />
             </ProtectedRoute>
+          }
+        />
+
+        {/* SOFT-CODED: Electrical Check List - NEW FEATURE */}
+        <Route
+          path="engineering/electrical/checklist"
+          element={
+            <ModuleProtectedRoute moduleCode="electrical_checklist">
+              <ElectricalCheckList />
+            </ModuleProtectedRoute>
           }
         />
 
