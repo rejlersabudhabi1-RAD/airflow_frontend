@@ -1142,7 +1142,7 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                     <option value="">-- Select Project Manager --</option>
                     {projectManagers.map(user => (
                       <option key={user.id} value={user.id}>
-                        {user.full_name} - {user.job_title}
+                        {user.job_title_match ? '★ ' : ''}{user.full_name}{user.job_title ? ` - ${user.job_title}` : ''}
                       </option>
                     ))}
                   </select>
@@ -1163,7 +1163,7 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                     <option value="">-- Select Engineering Manager --</option>
                     {engineeringManagers.map(user => (
                       <option key={user.id} value={user.id}>
-                        {user.full_name} - {user.job_title}
+                        {user.job_title_match ? '★ ' : ''}{user.full_name}{user.job_title ? ` - ${user.job_title}` : ''}
                       </option>
                     ))}
                   </select>
@@ -1184,7 +1184,7 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                     <option value="">-- Select Manager of Projects --</option>
                     {managerProjects.map(user => (
                       <option key={user.id} value={user.id}>
-                        {user.full_name} - {user.job_title}
+                        {user.job_title_match ? '★ ' : ''}{user.full_name}{user.job_title ? ` - ${user.job_title}` : ''}
                       </option>
                     ))}
                   </select>
@@ -1205,7 +1205,7 @@ const PurchaseRequisitionForm = ({ isOpen, onClose, onSuccess, editData = null }
                     <option value="">-- Select VP Operations --</option>
                     {vpOperations.map(user => (
                       <option key={user.id} value={user.id}>
-                        {user.full_name} - {user.job_title}
+                        {user.job_title_match ? '★ ' : ''}{user.full_name}{user.job_title ? ` - ${user.job_title}` : ''}
                       </option>
                     ))}
                   </select>
