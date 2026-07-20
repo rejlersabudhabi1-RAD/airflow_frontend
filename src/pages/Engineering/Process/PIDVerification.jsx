@@ -60,6 +60,14 @@ const KEYFRAMES = `
     from { transform: scaleY(0); opacity: 0; }
     to   { transform: scaleY(1); opacity: 1; }
   }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
 `;
 
 // ── Soft-coded: INNOVATIVE 3-PANEL DASHBOARD LAYOUT Configuration ────────────
@@ -1253,6 +1261,34 @@ const PIDVerification = () => {
   // ── Smart Workflow UI Controls (Collapsible + Compact Mode) ──────────────
   const [workflowCollapsed, setWorkflowCollapsed] = useState(WORKFLOW_DEFAULT_COLLAPSED);
   const [workflowCompact,   setWorkflowCompact]   = useState(WORKFLOW_COMPACT_DEFAULT);
+  
+  // Workflow diagram zoom & fullscreen state
+  const [workflowZoom, setWorkflowZoom] = useState(100); // Zoom percentage: 50-200%
+  const [workflowFullscreen, setWorkflowFullscreen] = useState(false);
+  const [workflowImageLoaded, setWorkflowImageLoaded] = useState(false);
+  const [workflowImageError, setWorkflowImageError] = useState(false);
+
+  // ESC key handler for fullscreen modal
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && workflowFullscreen) {
+        setWorkflowFullscreen(false);
+      }
+    };
+    
+    if (workflowFullscreen) {
+      document.addEventListener('keydown', handleEsc);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [workflowFullscreen]);
 
   // ── Documentation Workspace UI State ──────────────────────────────────────
   const [docActiveTab,      setDocActiveTab]      = useState('quickstart'); // 'quickstart'|'rules'|'practices'|'faq'|'formats'
@@ -2965,260 +3001,278 @@ const PIDVerification = () => {
               {/* Workflow Content (Collapsible) */}
               {!workflowCollapsed && (
                 <div style={{
-                  padding: workflowCompact ? `${16 * COMPACT_PADDING}px` : '24px',
-                  transform: workflowCompact 
-                    ? `scale(${COMPACT_SCALE_X}, ${COMPACT_SCALE_Y})`
-                    : 'scale(1, 1)',
-                  transformOrigin: 'top center',
-                  transition: `transform ${WORKFLOW_COLLAPSE_DURATION} ${WORKFLOW_TRANSITION_EASING}`,
+                  padding: workflowCompact ? '16px' : '24px',
                   background: 'linear-gradient(135deg, rgba(15,23,42,0.02) 0%, rgba(30,41,59,0.04) 100%)'
                 }}>
                   
-                  {/* P&ID Verification Workflow Diagram */}
+                  {/* Zoom Controls Bar */}
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: workflowCompact ? '8px' : '12px',
-                    width: '100%',
-                    maxWidth: '100%',
-                    paddingBottom: '8px'
+                    justifyContent: 'space-between',
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(99,102,241,0.05) 100%)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(59,130,246,0.15)'
                   }}>
-                    
-                    {/* PHASE 1: Input */}
-                    <div style={{
-                      flex: '1 1 0',
-                      textAlign: 'center',
-                      maxWidth: workflowCompact ? '200px' : '280px',
-                      minWidth: workflowCompact ? '150px' : '200px'
-                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={{
-                        width: workflowCompact ? '48px' : '64px',
-                        height: workflowCompact ? '48px' : '64px',
-                        margin: '0 auto',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
-                        marginBottom: workflowCompact ? '8px' : '12px'
-                      }}>
-                        <UploadIcon style={{ 
-                          width: workflowCompact ? '24px' : '32px', 
-                          height: workflowCompact ? '24px' : '32px', 
-                          color: 'white' 
-                        }} />
-                      </div>
-                      <div style={{
-                        display: 'inline-block',
-                        padding: workflowCompact ? '4px 10px' : '6px 14px',
-                        borderRadius: '20px',
-                        background: 'rgba(59,130,246,0.1)',
-                        border: '1px solid rgba(59,130,246,0.2)',
-                        fontSize: workflowCompact ? '10px' : '11px',
-                        fontWeight: 600,
-                        color: COLOR_PRIMARY,
-                        marginBottom: workflowCompact ? '6px' : '10px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
-                        Phase 1
-                      </div>
-                      <h3 style={{
-                        fontSize: workflowCompact ? '13px' : '15px',
-                        fontWeight: 700,
-                        color: COLOR_TEXT_PRIMARY,
-                        margin: '0 0 6px',
-                        lineHeight: 1.3
-                      }}>
-                        Upload P&ID
-                      </h3>
-                      <p style={{
-                        fontSize: workflowCompact ? '11px' : '12px',
-                        color: COLOR_TEXT_SECONDARY,
-                        margin: 0,
-                        lineHeight: 1.4
-                      }}>
-                        Upload drawing + legends<br/>
-                        <span style={{ color: COLOR_PRIMARY, fontSize: workflowCompact ? '10px' : '11px' }}>
-                          PDF • DWG • PNG
-                        </span>
-                      </p>
-                    </div>
-
-                    {/* Arrow 1 */}
-                    <div style={{ 
-                      flex: '0 0 auto',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: '#cbd5e1'
-                    }}>
-                      <ChevronRight style={{ 
-                        width: workflowCompact ? '20px' : '28px', 
-                        height: workflowCompact ? '20px' : '28px' 
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: workflowImageLoaded ? COLOR_SUCCESS : (workflowImageError ? COLOR_ERROR : COLOR_WARNING),
+                        boxShadow: `0 0 8px ${workflowImageLoaded ? COLOR_SUCCESS : (workflowImageError ? COLOR_ERROR : COLOR_WARNING)}`
                       }} />
+                      <span style={{ fontSize: '12px', color: COLOR_TEXT_SECONDARY, fontWeight: 500 }}>
+                        {workflowImageError ? 'Failed to load diagram' : (workflowImageLoaded ? 'Workflow Diagram' : 'Loading...')}
+                      </span>
                     </div>
-
-                    {/* PHASE 2: AI Analysis */}
-                    <div style={{
-                      flex: '1 1 0',
-                      textAlign: 'center',
-                      maxWidth: workflowCompact ? '200px' : '280px',
-                      minWidth: workflowCompact ? '150px' : '200px'
-                    }}>
-                      <div style={{
-                        width: workflowCompact ? '48px' : '64px',
-                        height: workflowCompact ? '48px' : '64px',
-                        margin: '0 auto',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
-                        marginBottom: workflowCompact ? '8px' : '12px',
-                        position: 'relative'
-                      }}>
-                        <Brain style={{ 
-                          width: workflowCompact ? '24px' : '32px', 
-                          height: workflowCompact ? '24px' : '32px', 
-                          color: 'white' 
-                        }} />
-                        <div style={{
-                          position: 'absolute',
-                          top: '-4px',
-                          right: '-4px',
-                          width: workflowCompact ? '16px' : '20px',
-                          height: workflowCompact ? '16px' : '20px',
-                          borderRadius: '50%',
-                          background: COLOR_SUCCESS,
+                    
+                    {/* Always show controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* Zoom Out */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Zoom out clicked, current:', workflowZoom);
+                          setWorkflowZoom(Math.max(50, workflowZoom - 10));
+                        }}
+                        disabled={workflowZoom <= 50}
+                        style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          boxShadow: '0 2px 8px rgba(16,185,129,0.4)'
-                        }}>
-                          <Zap style={{ 
-                            width: workflowCompact ? '10px' : '12px', 
-                            height: workflowCompact ? '10px' : '12px', 
-                            color: 'white' 
-                          }} />
-                        </div>
-                      </div>
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(148,163,184,0.2)',
+                          background: workflowZoom <= 50 ? 'rgba(148,163,184,0.05)' : 'rgba(59,130,246,0.08)',
+                          color: workflowZoom <= 50 ? '#94a3b8' : COLOR_PRIMARY,
+                          cursor: workflowZoom <= 50 ? 'not-allowed' : 'pointer',
+                          transition: 'all 200ms ease',
+                          fontSize: '18px',
+                          fontWeight: 600,
+                          opacity: workflowZoom <= 50 ? 0.5 : 1
+                        }}
+                        title="Zoom Out (Min 50%)"
+                      >
+                        −
+                      </button>
+                      
+                      {/* Zoom Level Display */}
                       <div style={{
-                        display: 'inline-block',
-                        padding: workflowCompact ? '4px 10px' : '6px 14px',
-                        borderRadius: '20px',
-                        background: 'rgba(245,158,11,0.1)',
-                        border: '1px solid rgba(245,158,11,0.2)',
-                        fontSize: workflowCompact ? '10px' : '11px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        background: 'rgba(59,130,246,0.1)',
+                        border: '1px solid rgba(59,130,246,0.2)',
+                        fontSize: '13px',
                         fontWeight: 600,
-                        color: COLOR_WARNING,
-                        marginBottom: workflowCompact ? '6px' : '10px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
+                        color: COLOR_PRIMARY,
+                        minWidth: '60px',
+                        textAlign: 'center'
                       }}>
-                        Phase 2
+                        {workflowZoom}%
                       </div>
-                      <h3 style={{
-                        fontSize: workflowCompact ? '13px' : '15px',
-                        fontWeight: 700,
-                        color: COLOR_TEXT_PRIMARY,
-                        margin: '0 0 6px',
-                        lineHeight: 1.3
-                      }}>
-                        AI Analysis
-                      </h3>
-                      <p style={{
-                        fontSize: workflowCompact ? '11px' : '12px',
-                        color: COLOR_TEXT_SECONDARY,
-                        margin: 0,
-                        lineHeight: 1.4
-                      }}>
-                        20+ quality rules<br/>
-                        <span style={{ color: COLOR_WARNING, fontSize: workflowCompact ? '10px' : '11px' }}>
-                          OCR • Vision • ML
-                        </span>
-                      </p>
-                    </div>
-
-                    {/* Arrow 2 */}
-                    <div style={{ 
-                      flex: '0 0 auto',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: '#cbd5e1'
-                    }}>
-                      <ChevronRight style={{ 
-                        width: workflowCompact ? '20px' : '28px', 
-                        height: workflowCompact ? '20px' : '28px' 
-                      }} />
-                    </div>
-
-                    {/* PHASE 3: Results */}
-                    <div style={{
-                      flex: '1 1 0',
-                      textAlign: 'center',
-                      maxWidth: workflowCompact ? '200px' : '280px',
-                      minWidth: workflowCompact ? '150px' : '200px'
-                    }}>
-                      <div style={{
-                        width: workflowCompact ? '48px' : '64px',
-                        height: workflowCompact ? '48px' : '64px',
-                        margin: '0 auto',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
-                        marginBottom: workflowCompact ? '8px' : '12px'
-                      }}>
-                        <CheckCircle style={{ 
-                          width: workflowCompact ? '24px' : '32px', 
-                          height: workflowCompact ? '24px' : '32px', 
-                          color: 'white' 
-                        }} />
-                      </div>
-                      <div style={{
-                        display: 'inline-block',
-                        padding: workflowCompact ? '4px 10px' : '6px 14px',
-                        borderRadius: '20px',
-                        background: 'rgba(16,185,129,0.1)',
-                        border: '1px solid rgba(16,185,129,0.2)',
-                        fontSize: workflowCompact ? '10px' : '11px',
-                        fontWeight: 600,
-                        color: COLOR_SUCCESS,
-                        marginBottom: workflowCompact ? '6px' : '10px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
-                        Phase 3
-                      </div>
-                      <h3 style={{
-                        fontSize: workflowCompact ? '13px' : '15px',
-                        fontWeight: 700,
-                        color: COLOR_TEXT_PRIMARY,
-                        margin: '0 0 6px',
-                        lineHeight: 1.3
-                      }}>
-                        Quality Report
-                      </h3>
-                      <p style={{
-                        fontSize: workflowCompact ? '11px' : '12px',
-                        color: COLOR_TEXT_SECONDARY,
-                        margin: 0,
-                        lineHeight: 1.4
-                      }}>
-                        Interactive findings<br/>
-                        <span style={{ color: COLOR_SUCCESS, fontSize: workflowCompact ? '10px' : '11px' }}>
-                          Export • Review • Fix
-                        </span>
-                      </p>
+                      
+                      {/* Zoom In */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Zoom in clicked, current:', workflowZoom);
+                          setWorkflowZoom(Math.min(200, workflowZoom + 10));
+                        }}
+                        disabled={workflowZoom >= 200}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(148,163,184,0.2)',
+                          background: workflowZoom >= 200 ? 'rgba(148,163,184,0.05)' : 'rgba(59,130,246,0.08)',
+                          color: workflowZoom >= 200 ? '#94a3b8' : COLOR_PRIMARY,
+                          cursor: workflowZoom >= 200 ? 'not-allowed' : 'pointer',
+                          transition: 'all 200ms ease',
+                          fontSize: '18px',
+                          fontWeight: 600,
+                          opacity: workflowZoom >= 200 ? 0.5 : 1
+                        }}
+                        title="Zoom In (Max 200%)"
+                      >
+                        +
+                      </button>
+                      
+                      {/* Reset Zoom */}
+                      {workflowZoom !== 100 && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Reset zoom clicked');
+                            setWorkflowZoom(100);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(148,163,184,0.2)',
+                            background: 'rgba(99,102,241,0.08)',
+                            color: '#6366f1',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease',
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}
+                          title="Reset to 100%"
+                        >
+                          <Minimize2 style={{ width: '14px', height: '14px' }} />
+                          Reset
+                        </button>
+                      )}
+                      
+                      {/* Fullscreen */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Fullscreen clicked');
+                          setWorkflowFullscreen(true);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(16,185,129,0.2)',
+                          background: 'rgba(16,185,129,0.08)',
+                          color: COLOR_SUCCESS,
+                          cursor: 'pointer',
+                          transition: 'all 200ms ease',
+                          fontSize: '11px',
+                          fontWeight: 600
+                        }}
+                        title="View Fullscreen"
+                      >
+                        <Maximize2 style={{ width: '14px', height: '14px' }} />
+                        Fullscreen
+                      </button>
                     </div>
                   </div>
+                  
+                  {/* P&ID Verification Workflow Diagram - Interactive Image */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    maxWidth: '100%',
+                    overflow: 'auto'
+                  }}>
+                    
+                    {/* Workflow Image Container */}
+                    <div style={{
+                      width: workflowCompact ? '90%' : '95%',
+                      maxWidth: '1400px',
+                      margin: '0 auto',
+                      borderRadius: '12px',
+                      overflow: workflowZoom === 100 ? 'hidden' : 'auto',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+                      background: 'white',
+                      border: '2px solid rgba(59,130,246,0.2)',
+                      position: 'relative',
+                      transition: 'all 300ms ease'
+                    }}>
+                      {/* Loading State */}
+                      {!workflowImageLoaded && !workflowImageError && (
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(99,102,241,0.05) 100%)',
+                          zIndex: 10
+                        }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <Loader style={{ width: '32px', height: '32px', color: COLOR_PRIMARY, animation: 'spin 1s linear infinite' }} />
+                            <p style={{ marginTop: '12px', fontSize: '13px', color: COLOR_TEXT_SECONDARY }}>Loading workflow diagram...</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Error State */}
+                      {workflowImageError && (
+                        <div style={{
+                          padding: '40px 20px',
+                          textAlign: 'center',
+                          background: 'linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(220,38,38,0.05) 100%)'
+                        }}>
+                          <AlertTriangle style={{ width: '48px', height: '48px', color: COLOR_ERROR, margin: '0 auto' }} />
+                          <h3 style={{ marginTop: '16px', fontSize: '16px', color: COLOR_ERROR, fontWeight: 600 }}>Failed to Load Workflow Diagram</h3>
+                          <p style={{ marginTop: '8px', fontSize: '13px', color: COLOR_TEXT_SECONDARY }}>Please refresh the page or contact support.</p>
+                        </div>
+                      )}
+                      
+                      {/* Actual Image */}
+                      <img 
+                        src="/assets/images/PID_Workflow.png" 
+                        alt="P&ID Verification Workflow - 3 Stage Process: Upload Documents, AI Analysis, Quality Report"
+                        onLoad={() => { setWorkflowImageLoaded(true); setWorkflowImageError(false); }}
+                        onError={() => { setWorkflowImageError(true); setWorkflowImageLoaded(false); }}
+                        style={{
+                          width: `${workflowZoom}%`,
+                          height: 'auto',
+                          display: 'block',
+                          margin: '0 auto',
+                          transition: 'transform 300ms ease',
+                          cursor: workflowZoom < 200 ? 'zoom-in' : 'default',
+                          minHeight: '200px'
+                        }}
+                        onClick={() => {
+                          if (workflowZoom < 200) {
+                            setWorkflowZoom(Math.min(200, workflowZoom + 25));
+                          }
+                        }}
+                      />
+                    </div>
 
-                  {/* Workflow Features Bar */}
+                    {/* Workflow Caption */}
+                    <div style={{
+                      marginTop: '16px',
+                      textAlign: 'center',
+                      maxWidth: '900px',
+                      padding: '12px 20px',
+                      background: 'rgba(59,130,246,0.05)',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(59,130,246,0.1)'
+                    }}>
+                      <p style={{
+                        fontSize: '13px',
+                        color: COLOR_TEXT_SECONDARY,
+                        margin: 0,
+                        lineHeight: 1.6
+                      }}>
+                        <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>✓ 3-Stage AI Process:</span> <span style={{ fontWeight: 500 }}>Stage 1</span> Upload P&ID drawings & legends (PDF/DWG/PNG) → <span style={{ fontWeight: 500 }}>Stage 2</span> AI Analysis with 20+ verification rules (OCR, Vision, ML) → <span style={{ fontWeight: 500 }}>Stage 3</span> Interactive quality report with export capabilities
+                      </p>
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#6366f1', fontStyle: 'italic' }}>
+                        💡 Tip: Click image to zoom in • Use controls above for zoom/fullscreen
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Workflow Features Bar - Key Capabilities */}
                   {!workflowCompact && (
                     <div style={{
                       marginTop: '24px',
@@ -3230,23 +3284,40 @@ const PIDVerification = () => {
                       flexWrap: 'wrap'
                     }}>
                       {[
-                        { icon: Tag, label: 'Tag Validation', color: '#3b82f6' },
-                        { icon: Network, label: 'Connectivity', color: '#8b5cf6' },
-                        { icon: Ruler, label: 'Line Sizing', color: '#f59e0b' },
-                        { icon: Shield, label: 'Compliance', color: '#10b981' }
+                        { icon: Tag, label: 'Tag Validation', color: '#3b82f6', desc: 'Equipment & instrument tags' },
+                        { icon: Network, label: 'Connectivity', color: '#8b5cf6', desc: 'Line continuity checks' },
+                        { icon: Ruler, label: 'Line Sizing', color: '#f59e0b', desc: 'Diameter consistency' },
+                        { icon: Shield, label: 'Compliance', color: '#10b981', desc: 'Industry standards' }
                       ].map((feature, i) => (
-                        <div key={i} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '8px 14px',
-                          borderRadius: '10px',
-                          background: 'rgba(148,163,184,0.05)',
-                          border: '1px solid rgba(148,163,184,0.15)',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: COLOR_TEXT_SECONDARY
-                        }}>
+                        <div 
+                          key={i} 
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '10px 16px',
+                            borderRadius: '10px',
+                            background: 'rgba(148,163,184,0.05)',
+                            border: '1px solid rgba(148,163,184,0.15)',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: COLOR_TEXT_SECONDARY,
+                            cursor: 'help',
+                            transition: 'all 200ms ease',
+                            position: 'relative'
+                          }}
+                          title={feature.desc}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(148,163,184,0.1)';
+                            e.currentTarget.style.borderColor = feature.color;
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(148,163,184,0.05)';
+                            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.15)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                          }}
+                        >
                           <feature.icon style={{ width: '16px', height: '16px', color: feature.color }} />
                           {feature.label}
                         </div>
@@ -16310,6 +16381,157 @@ const PIDVerification = () => {
         </div>
       )}
       {/* ── End Legend Sheet Detail Panel ────────────────────────────────── */}
+
+      {/* ── Fullscreen Workflow Modal ──────────────────────────────────────── */}
+      {workflowFullscreen && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.95)',
+            zIndex: 10000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 200ms ease'
+          }}
+          onClick={(e) => {
+            // Only close if clicking the backdrop, not the content
+            if (e.target === e.currentTarget) {
+              console.log('Backdrop clicked, closing fullscreen');
+              setWorkflowFullscreen(false);
+            }
+          }}
+        >
+          {/* Header Bar */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            padding: '16px 24px',
+            background: 'linear-gradient(135deg, rgba(15,23,42,0.9) 0%, rgba(30,41,59,0.9) 100%)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Factory style={{ width: '24px', height: '24px', color: 'white' }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'white', margin: 0 }}>
+                  P&ID Verification Workflow
+                </h2>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
+                  Full Screen View \u2022 Click anywhere to close
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Close fullscreen clicked');
+                setWorkflowFullscreen(false);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                background: 'rgba(239,68,68,0.15)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 200ms ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239,68,68,0.25)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239,68,68,0.15)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              <X style={{ width: '16px', height: '16px' }} />
+              Close
+            </button>
+          </div>
+
+          {/* Workflow Image - Fullscreen */}
+          <div 
+            style={{
+              maxWidth: '95%',
+              maxHeight: '85vh',
+              marginTop: '80px',
+              overflow: 'auto',
+              borderRadius: '16px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              background: 'white'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src="/assets/images/PID_Workflow.png" 
+              alt="P&ID Verification Workflow - Full Screen"
+              style={{
+                width: '100%',
+                height: 'auto',
+                display: 'block'
+              }}
+            />
+          </div>
+
+          {/* Instruction Footer */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 24px',
+            borderRadius: '10px',
+            background: 'rgba(15,23,42,0.9)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: '13px',
+            color: 'white',
+            fontWeight: 500,
+            textAlign: 'center'
+          }}>
+            Press <kbd style={{
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: 'rgba(59,130,246,0.3)',
+              border: '1px solid rgba(59,130,246,0.5)',
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              margin: '0 4px'
+            }}>ESC</kbd> or click anywhere to exit fullscreen
+          </div>
+        </div>
+      )}
+      {/* ── End Fullscreen Workflow Modal ──────────────────────────────────── */}
 
     </DarkBg>
   );
