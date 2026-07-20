@@ -3440,80 +3440,689 @@ const PIDVerification = () => {
                   padding: '20px 24px'
                 }}>
                   
-                  {/* QUICK START TAB */}
+                  {/* QUICK START TAB - COMPREHENSIVE GUIDE */}
                   {docActiveTab === 'quickstart' && (
                     <div>
+                      {/* Welcome Banner */}
                       <div style={{
                         background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.12) 100%)',
                         border: `1px solid rgba(59,130,246,0.2)`,
                         borderRadius: '12px',
                         padding: '16px',
-                        marginBottom: '20px'
+                        marginBottom: '24px'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                          <Lightbulb style={{ width: '20px', height: '20px', color: COLOR_PRIMARY, marginTop: '2px' }} />
+                          <Sparkles style={{ width: '22px', height: '22px', color: COLOR_PRIMARY, marginTop: '2px' }} />
                           <div>
-                            <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 6px' }}>
-                              {projects.length === 0 ? 'Welcome to P&ID Verification!' : 'Continue Your Workflow'}
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px' }}>
+                              {projects.length === 0 ? '🎯 Welcome to AI-Powered P&ID Verification' : '✅ Ready to Continue'}
                             </h4>
-                            <p style={{ fontSize: '0.8rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                            <p style={{ fontSize: '0.8rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.6 }}>
                               {projects.length === 0 
-                                ? 'Follow these steps to verify your first P&ID drawing with AI-powered quality analysis.'
-                                : 'Select a project below or create a new one to continue verifying P&ID drawings.'
+                                ? 'This comprehensive guide walks you through every step of verifying your P&ID drawings with cutting-edge AI technology. Follow the detailed instructions below to ensure accurate, compliant engineering documentation.'
+                                : 'Select an existing project below or create a new one. Each step includes detailed instructions to help you get the most from AI-powered quality verification.'
                               }
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Step-by-step guide */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        {[
-                          { num: 1, title: 'Create Project', desc: 'Click "New Project" and enter a descriptive name', icon: FolderPlus, color: '#3b82f6' },
-                          { num: 2, title: 'Upload P&ID', desc: 'Upload your drawing (PDF/DWG/PNG) + legend symbols', icon: UploadIcon, color: '#8b5cf6' },
-                          { num: 3, title: 'AI Analysis', desc: 'Our AI scans 20+ quality rules automatically', icon: Brain, color: '#f59e0b' },
-                          { num: 4, title: 'Review Results', desc: 'Interactive findings table with visual markers', icon: CheckCircle, color: '#10b981' },
-                          { num: 5, title: 'Export Report', desc: 'Download PDF quality report for your team', icon: Download, color: '#6366f1' }
-                        ].map((step, i) => (
-                          <div key={i} style={{
-                            display: 'flex',
-                            gap: '12px',
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: i === 0 && projects.length === 0 
-                              ? 'rgba(59,130,246,0.05)' 
-                              : 'transparent',
-                            border: `1px solid ${i === 0 && projects.length === 0 ? 'rgba(59,130,246,0.15)' : 'transparent'}`,
-                            transition: 'all 200ms ease'
-                          }}>
+                      {/* Step 1: Create Project - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(59,130,246,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid rgba(59,130,246,0.2)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              background: `linear-gradient(135deg, ${step.color}15, ${step.color}25)`,
-                              border: `2px solid ${step.color}40`,
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: '0.85rem',
+                              fontSize: '1rem',
                               fontWeight: 700,
-                              color: step.color,
-                              flexShrink: 0
-                            }}>
-                              {step.num}
-                            </div>
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
+                            }}>1</div>
                             <div style={{ flex: 1 }}>
-                              <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 4px' }}>
-                                {step.title}
-                              </h5>
-                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.4 }}>
-                                {step.desc}
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Create Project
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Organize your P&ID verification work
                               </p>
                             </div>
-                            <step.icon style={{ width: '18px', height: '18px', color: step.color, flexShrink: 0, marginTop: '6px' }} />
+                            <FolderPlus style={{ width: '20px', height: '20px', color: '#3b82f6' }} />
                           </div>
-                        ))}
+                        </div>
+                        
+                        <div style={{ padding: '16px', background: 'white' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>📋</span> How to Create a Project
+                            </h5>
+                            <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
+                              <li><strong>Click "New Project"</strong> button in the top-right corner of the Project Workspace section</li>
+                              <li><strong>Enter Project Name:</strong> Use a descriptive, meaningful name (e.g., "Plant-A Expansion - P&ID Rev 2.1" or "Unit 300 Process Area - Q4 2026")</li>
+                              <li><strong>Add Description</strong> (optional): Include project scope, revision number, or team notes</li>
+                              <li><strong>Click "Create"</strong> to initialize your new verification workspace</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                              <Lightbulb style={{ width: '16px', height: '16px', color: COLOR_SUCCESS, marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>💡 Pro Tips:</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li>Use consistent naming across all projects for easy searching</li>
+                                  <li>Include client name, area/unit, and revision in project name</li>
+                                  <li>One project can contain multiple P&ID sheets (upload them all together)</li>
+                                  <li>Projects are saved automatically - no need to manually save</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(245,158,11,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(245,158,11,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_WARNING }}>⚠️ Important:</strong> Each project acts as an isolated workspace. Upload related drawings (all sheets of a multi-page P&ID) into the same project for cross-sheet validation.
+                            </p>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Step 2: Upload P&ID - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(139,92,246,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid rgba(139,92,246,0.2)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(139,92,246,0.3)'
+                            }}>2</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Upload P&ID Drawings & Legends
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Critical step for accurate AI analysis
+                              </p>
+                            </div>
+                            <UploadIcon style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
+                          </div>
+                        </div>
+                        
+                        <div style={{ padding: '16px', background: 'white' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>📤</span> Upload Process
+                            </h5>
+                            <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
+                              <li><strong>Select your project</strong> from the list below (the project card will highlight)</li>
+                              <li><strong>Click "Upload P&ID"</strong> or drag files into the upload zone</li>
+                              <li><strong>Select files:</strong>
+                                <ul style={{ marginTop: '4px', paddingLeft: '20px' }}>
+                                  <li><strong>Main P&ID Drawing:</strong> The primary process diagram (PDF/DWG recommended)</li>
+                                  <li><strong>Legend Sheet:</strong> Symbol definitions and abbreviations (CRITICAL for accuracy)</li>
+                                  <li><strong>Additional Sheets:</strong> Any continuation or related drawings</li>
+                                </ul>
+                              </li>
+                              <li><strong>Wait for upload confirmation</strong> - you'll see progress bars for each file</li>
+                              <li><strong>Click "Start Analysis"</strong> when all files are uploaded</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(59,130,246,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59,130,246,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>📁 Supported Formats & Recommendations:</strong>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY }}>
+                              <div style={{ padding: '8px', background: 'rgba(16,185,129,0.08)', borderRadius: '6px', border: '1px solid rgba(16,185,129,0.2)' }}>
+                                <strong style={{ color: COLOR_SUCCESS, display: 'block', marginBottom: '4px' }}>✅ Best Quality:</strong>
+                                <div>• PDF (vector-based)</div>
+                                <div>• DWG (CAD format)</div>
+                                <div style={{ marginTop: '4px', fontSize: '0.7rem', fontStyle: 'italic' }}>~95-98% OCR accuracy</div>
+                              </div>
+                              <div style={{ padding: '8px', background: 'rgba(245,158,11,0.08)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                                <strong style={{ color: COLOR_WARNING, display: 'block', marginBottom: '4px' }}>⚠️ Good (300+ DPI):</strong>
+                                <div>• PNG / JPG / JPEG</div>
+                                <div>• TIFF / TIF</div>
+                                <div style={{ marginTop: '4px', fontSize: '0.7rem', fontStyle: 'italic' }}>~85-92% OCR accuracy</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>🎯 Upload Best Practices:</strong>
+                            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                              <li><strong>Always include legend sheets</strong> - AI accuracy improves by 20-30% with legends</li>
+                              <li><strong>High resolution:</strong> Use 300 DPI minimum for scanned images</li>
+                              <li><strong>Clear scans:</strong> Avoid shadows, folds, or torn edges</li>
+                              <li><strong>Orientation:</strong> Upload in correct orientation (AI can handle rotation but accuracy drops)</li>
+                              <li><strong>Multiple sheets:</strong> Upload all related sheets together (Sheet 1, 2, 3... of the same drawing)</li>
+                              <li><strong>File naming:</strong> Use descriptive names like "P16093-PID-001-Rev-A.pdf" not "scan123.pdf"</li>
+                            </ul>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(239,68,68,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(239,68,68,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_ERROR }}>🚫 Common Mistakes:</strong> Uploading only the main drawing without legends, using low-resolution scans (&lt;150 DPI), or mixing unrelated drawings in one project. These reduce AI accuracy significantly.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step 3: AI Analysis - DEEP DIVE */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(245,158,11,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,88,12,0.08) 100%)',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid rgba(245,158,11,0.2)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(245,158,11,0.3)'
+                            }}>3</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                AI Analysis - Deep Quality Check
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Automated verification with 20+ engineering rules
+                              </p>
+                            </div>
+                            <Brain style={{ width: '20px', height: '20px', color: '#f59e0b' }} />
+                          </div>
+                        </div>
+                        
+                        <div style={{ padding: '16px', background: 'white' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>🤖</span> What Happens During Analysis
+                            </h5>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '0 0 12px', lineHeight: 1.6 }}>
+                              Once you click "Start Analysis", our AI engine performs a comprehensive 5-phase verification process. This typically takes 2-5 minutes depending on drawing complexity. Here's the detailed breakdown:
+                            </p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                              {[
+                                { 
+                                  phase: 'Phase 1: Document Processing',
+                                  desc: 'PDF/DWG parsing, image extraction, coordinate mapping',
+                                  time: '~30 sec',
+                                  color: '#3b82f6'
+                                },
+                                { 
+                                  phase: 'Phase 2: OCR & Text Extraction',
+                                  desc: 'Multi-engine OCR (Tesseract + Google Vision), text recognition, tag identification',
+                                  time: '~1 min',
+                                  color: '#8b5cf6'
+                                },
+                                { 
+                                  phase: 'Phase 3: Legend Analysis',
+                                  desc: 'Symbol library creation, abbreviation mapping, instrument prefix detection',
+                                  time: '~30 sec',
+                                  color: '#f59e0b'
+                                },
+                                { 
+                                  phase: 'Phase 4: Quality Rule Engine',
+                                  desc: '20+ verification rules, connectivity checks, tag validation, compliance scanning',
+                                  time: '~1-2 min',
+                                  color: '#10b981'
+                                },
+                                { 
+                                  phase: 'Phase 5: Results Compilation',
+                                  desc: 'Findings aggregation, severity classification, marker positioning, report generation',
+                                  time: '~20 sec',
+                                  color: '#6366f1'
+                                }
+                              ].map((phase, i) => (
+                                <div key={i} style={{
+                                  padding: '10px 12px',
+                                  borderRadius: '8px',
+                                  background: `${phase.color}08`,
+                                  border: `1px solid ${phase.color}30`
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    <div style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '6px',
+                                      background: `${phase.color}20`,
+                                      border: `1.5px solid ${phase.color}`,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      color: phase.color
+                                    }}>{i + 1}</div>
+                                    <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, flex: 1 }}>{phase.phase}</strong>
+                                    <span style={{ fontSize: '0.7rem', color: COLOR_TEXT_SECONDARY, fontStyle: 'italic' }}>{phase.time}</span>
+                                  </div>
+                                  <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, paddingLeft: '32px', lineHeight: 1.5 }}>
+                                    {phase.desc}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(59,130,246,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59,130,246,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '8px' }}>🔍 20+ Quality Verification Rules:</strong>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY }}>
+                              <div>
+                                <strong style={{ color: '#3b82f6', display: 'block', marginBottom: '4px' }}>Tag Validation (6 rules)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: 1.6 }}>
+                                  <li>Duplicate tag detection</li>
+                                  <li>Missing tag identification</li>
+                                  <li>Format compliance (ISA-5.1)</li>
+                                  <li>Prefix consistency check</li>
+                                  <li>Tag visibility verification</li>
+                                  <li>Legend cross-reference</li>
+                                </ul>
+                              </div>
+                              <div>
+                                <strong style={{ color: '#8b5cf6', display: 'block', marginBottom: '4px' }}>Connectivity (5 rules)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: 1.6 }}>
+                                  <li>Orphaned equipment</li>
+                                  <li>Open-ended lines</li>
+                                  <li>Disconnected segments</li>
+                                  <li>Missing valve placement</li>
+                                  <li>Flow direction errors</li>
+                                </ul>
+                              </div>
+                              <div>
+                                <strong style={{ color: '#f59e0b', display: 'block', marginBottom: '4px' }}>Line Sizing (4 rules)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: 1.6 }}>
+                                  <li>Consistent line sizing</li>
+                                  <li>Size change notation</li>
+                                  <li>Branch sizing logic</li>
+                                  <li>Reducer placement</li>
+                                </ul>
+                              </div>
+                              <div>
+                                <strong style={{ color: '#10b981', display: 'block', marginBottom: '4px' }}>Compliance (5+ rules)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: 1.6 }}>
+                                  <li>API/ASME standards</li>
+                                  <li>Symbol consistency</li>
+                                  <li>Legend alignment</li>
+                                  <li>Drawing completeness</li>
+                                  <li>Industry best practices</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                              <Activity style={{ width: '16px', height: '16px', color: COLOR_SUCCESS, marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>📊 Real-Time Progress:</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                                  Watch the progress bar and phase indicators in real-time. You'll see: <strong>Current phase</strong>, <strong>Percentage complete</strong>, <strong>Estimated time remaining</strong>, and <strong>Items processed</strong>. The browser tab stays active - you can work on other tasks.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step 4: Review Results - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(16,185,129,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.08) 100%)',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid rgba(16,185,129,0.2)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #10b981, #34d399)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(16,185,129,0.3)'
+                            }}>4</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Review Findings & Results
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Interactive analysis with visual markers
+                              </p>
+                            </div>
+                            <Eye style={{ width: '20px', height: '20px', color: '#10b981' }} />
+                          </div>
+                        </div>
+                        
+                        <div style={{ padding: '16px', background: 'white' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>📊</span> Understanding Your Results
+                            </h5>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '0 0 12px', lineHeight: 1.6 }}>
+                              After analysis completes, you'll see an interactive findings dashboard with three main sections:
+                            </p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>1️⃣ Summary Statistics (Top)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>Total Findings:</strong> Count of all detected issues</li>
+                                  <li><strong>Severity Breakdown:</strong> Critical (red), High (orange), Medium (yellow), Low (blue)</li>
+                                  <li><strong>Quality Score:</strong> Overall drawing quality percentage (100% = perfect)</li>
+                                  <li><strong>Analysis Time:</strong> How long the verification took</li>
+                                </ul>
+                              </div>
+
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>2️⃣ Findings Table (Center)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>ID:</strong> Unique finding reference number</li>
+                                  <li><strong>Rule:</strong> Which quality check flagged this issue</li>
+                                  <li><strong>Severity:</strong> Impact level (Critical/High/Medium/Low)</li>
+                                  <li><strong>Description:</strong> What the issue is and why it matters</li>
+                                  <li><strong>Location:</strong> Sheet number and coordinates (X, Y)</li>
+                                  <li><strong>Actions:</strong> View on drawing, mark resolved, add comments</li>
+                                </ul>
+                              </div>
+
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>3️⃣ Visual Overlay (Right)</strong>
+                                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>Drawing Preview:</strong> Your original P&ID with markers overlaid</li>
+                                  <li><strong>Colored Markers:</strong> Each finding shown at exact coordinates (click to zoom)</li>
+                                  <li><strong>Marker Colors:</strong> Red (Critical), Orange (High), Yellow (Medium), Blue (Low)</li>
+                                  <li><strong>Interactive:</strong> Hover over markers to see finding details, click to highlight in table</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(59,130,246,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59,130,246,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '8px' }}>🎯 How to Review Effectively:</strong>
+                            <ol style={{ margin: 0, paddingLeft: '22px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.7 }}>
+                              <li><strong>Start with Critical/High severity</strong> - These need immediate attention</li>
+                              <li><strong>Click "View" on each finding</strong> - See the exact location on the drawing</li>
+                              <li><strong>Verify AI detection</strong> - Check if the finding is a true issue or false positive</li>
+                              <li><strong>Mark as resolved</strong> or add comments explaining why it's acceptable</li>
+                              <li><strong>Use filters</strong> - Filter by severity, rule type, or status to focus your review</li>
+                              <li><strong>Sort table</strong> - Sort by severity, rule, or location for systematic review</li>
+                              <li><strong>Save progress</strong> - Your review status is saved automatically</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>💡 Interpreting Severity Levels:</strong>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', fontSize: '0.75rem' }}>
+                              <div style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)' }}>
+                                <strong style={{ color: COLOR_ERROR }}>🔴 Critical:</strong> Must fix before approval (safety hazards, major compliance violations)
+                              </div>
+                              <div style={{ padding: '6px', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)' }}>
+                                <strong style={{ color: COLOR_WARNING }}>🟠 High:</strong> Significant issues affecting functionality or standards compliance
+                              </div>
+                              <div style={{ padding: '6px', background: 'rgba(234,179,8,0.1)', borderRadius: '6px', border: '1px solid rgba(234,179,8,0.3)' }}>
+                                <strong style={{ color: '#eab308' }}>🟡 Medium:</strong> Quality improvements recommended, may cause confusion
+                              </div>
+                              <div style={{ padding: '6px', background: 'rgba(59,130,246,0.1)', borderRadius: '6px', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                <strong style={{ color: COLOR_PRIMARY }}>🔵 Low:</strong> Minor suggestions, best practice recommendations
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(245,158,11,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(245,158,11,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_WARNING }}>⚠️ Remember:</strong> AI achieves 92-97% accuracy but is not infallible. Always apply engineering judgment - some "findings" may be acceptable design choices or false positives. Use AI as an assistant, not a replacement for expert review.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Step 5: Export Report - DETAILED */}
+                      <div style={{
+                        marginBottom: '8px',
+                        border: '2px solid rgba(99,102,241,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(59,130,246,0.08) 100%)',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid rgba(99,102,241,0.2)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(99,102,241,0.3)'
+                            }}>5</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Export Quality Report
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Professional documentation for your team
+                              </p>
+                            </div>
+                            <Download style={{ width: '20px', height: '20px', color: '#6366f1' }} />
+                          </div>
+                        </div>
+                        
+                        <div style={{ padding: '16px', background: 'white' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>📄</span> Export Options
+                            </h5>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '0 0 12px', lineHeight: 1.6 }}>
+                              Generate professional quality reports in multiple formats for different stakeholders:
+                            </p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                  <FileText style={{ width: '18px', height: '18px', color: COLOR_ERROR, flexShrink: 0 }} />
+                                  <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>1. PDF Quality Report (Recommended)</strong>
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: '26px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>What's included:</strong> Executive summary, findings table, severity charts, annotated drawings with markers</li>
+                                  <li><strong>Best for:</strong> Client deliverables, management reviews, audit documentation</li>
+                                  <li><strong>How to:</strong> Click "Export PDF" → Select findings to include → Add custom notes → Generate</li>
+                                  <li><strong>Format:</strong> Professional 20-50 page report with company branding</li>
+                                </ul>
+                              </div>
+
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                  <Database style={{ width: '18px', height: '18px', color: COLOR_SUCCESS, flexShrink: 0 }} />
+                                  <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>2. Excel Spreadsheet</strong>
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: '26px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>What's included:</strong> Detailed findings table with all metadata, filterable columns, pivot-ready data</li>
+                                  <li><strong>Best for:</strong> Engineering teams needing to track fixes, project managers, further analysis</li>
+                                  <li><strong>How to:</strong> Click "Export Excel" → Choose columns → Download .xlsx file</li>
+                                  <li><strong>Format:</strong> Structured spreadsheet with separate tabs for Summary, Findings, Legend Data</li>
+                                </ul>
+                              </div>
+
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                  <Cog style={{ width: '18px', height: '18px', color: '#6366f1', flexShrink: 0 }} />
+                                  <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>3. JSON Data Export</strong>
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: '26px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>What's included:</strong> Raw analysis data, coordinates, confidence scores, metadata</li>
+                                  <li><strong>Best for:</strong> System integrations, custom reporting tools, API consumers</li>
+                                  <li><strong>How to:</strong> Click "Export JSON" → Full data payload downloaded</li>
+                                  <li><strong>Format:</strong> Structured JSON with nested findings, rules, and drawing data</li>
+                                </ul>
+                              </div>
+
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                  <Download style={{ width: '18px', height: '18px', color: COLOR_WARNING, flexShrink: 0 }} />
+                                  <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>4. Annotated Drawing (PDF)</strong>
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: '26px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                                  <li><strong>What's included:</strong> Original P&ID with color-coded markers and callouts</li>
+                                  <li><strong>Best for:</strong> Field engineers, markup sessions, visual walkthroughs</li>
+                                  <li><strong>How to:</strong> Click "Export Marked Drawing" → Severity filter → Download PDF</li>
+                                  <li><strong>Format:</strong> High-res PDF with transparent overlay layer</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(59,130,246,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59,130,246,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>🎯 Export Best Practices:</strong>
+                            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
+                              <li><strong>Include context:</strong> Add custom notes explaining project background and review status</li>
+                              <li><strong>Filter findings:</strong> Export only relevant severity levels for specific audiences</li>
+                              <li><strong>Timestamp exports:</strong> File names include date/time for version tracking</li>
+                              <li><strong>Archive reports:</strong> Keep PDF copies for compliance and audit trail requirements</li>
+                              <li><strong>Share securely:</strong> Reports may contain sensitive project information - use secure channels</li>
+                            </ul>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                              <CheckCircle style={{ width: '16px', height: '16px', color: COLOR_SUCCESS, marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>✅ Report Contents Include:</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                                  • Project information & metadata • Analysis timestamp & duration • Quality score & statistics • Detailed findings breakdown • Severity distribution charts • Rule-wise summary • Annotated drawing snapshots • Legend cross-reference • Recommendations & next steps • Digital signature block (for approvals)
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   )}
 
