@@ -339,6 +339,21 @@ const specCustomizationAPI = {
     return data;
   },
 
+  /**
+   * List extraction jobs for a project (for history table).
+   * Mirrors electrical_checklist pattern.
+   * 
+   * @param {string} projectId - Project UUID
+   * @param {object} params - {status?, page?, page_size?}
+   * @returns {Promise<{success, jobs, pagination}>}
+   */
+  async listProjectJobs(projectId, params = {}) {
+    const { data } = await apiClient.get(`/spec-customization/projects/${projectId}/jobs/`, {
+      params,
+    });
+    return data;
+  },
+
   async getConfig() {
     const { data } = await apiClient.get(path(SPEC_API_CONFIG.configPath));
     return data;

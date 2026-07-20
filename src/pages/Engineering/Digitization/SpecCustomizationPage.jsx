@@ -34,6 +34,7 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import apiClient from '../../../services/api.service';
+import specCustomizationAPI from '../../../services/specCustomizationAPI';
 import PaperSpecExtractor from './components/PaperSpecExtractor';
 
 // ─── Soft-coded feature flags ──────────────────────────────────────────────
@@ -70,6 +71,14 @@ const roadmapTools = [
   { id: 'spec_catalogue',      name: 'Spec Catalogue',          description: 'Central library of approved specs, BOQs and standard drawings for reuse.', icon: TableCellsIcon, gradient: 'from-purple-600 to-rose-500', badge: 'Planned' },
 ];
 
+// ─── Cost formatting helper ────────────────────────────────────────────────
+const SPEC_COST_DECIMAL_PLACES = 4;
+const formatSpecCost = (costUsd) => {
+  const cost = Number(costUsd) || 0;
+  if (cost <= 0) return 'Free';
+  return `$${cost.toFixed(SPEC_COST_DECIMAL_PLACES)}`;
+};
+
 // ───────────────────────────────────────────────────────────────────────────
 const SpecCustomizationPage = () => {
   const navigate = useNavigate();
@@ -81,6 +90,11 @@ const SpecCustomizationPage = () => {
   const [switcherOpen, setSwitcherOpen]       = useState(false);
   const [createOpen, setCreateOpen]           = useState(false);
   const [busy, setBusy]                       = useState(false);
+  const [viewingJobId, setViewingJobId]       = useState(null); // for history table → detail view
+
+  // Job history state
+  const [projectJobs, setProjectJobs]         = useState([]);
+  const [loadingJobs, setLoadingJobs]         = useState(false);
 
   // ── Fetch projects + restore active project from localStorage on mount.
   const loadProjects = useCallback(async () => {
@@ -149,6 +163,32 @@ const SpecCustomizationPage = () => {
     setActiveProject(p);
     setSwitcherOpen(false);
   };
+
+  // ── Fetch job history for the selected project ──
+  const fetchProjectJobs = useCallback(async (projectId) => {
+    if (!projectId) return;
+    try {
+      setLoadingJobs(true);
+      const data = await specCustomizationAPI.listProjectJobs(projectId, { page: 1, page_size: 50 });
+      if (data.success) {
+        setProjectJobs(data.jobs || []);
+      }
+    } catch (err) {
+      console.error('Error loading job history:', err);
+      setProjectJobs([]);
+    } finally {
+      setLoadingJobs(false);
+    }
+  }, []);
+
+  // Load job history when activeProject changes
+  useEffect(() => {
+    if (activeProject?.project_id) {
+      fetchProjectJobs(activeProject.project_id);
+    } else {
+      setProjectJobs([]);
+    }
+  }, [activeProject?.project_id, fetchProjectJobs]);
 
   const handleClearActive = () => {
     setActiveProject(null);
@@ -257,8 +297,104 @@ const SpecCustomizationPage = () => {
               </div>
             </div>
 
+            {/* Job History Table */}
+            {HUB_FEATURE_FLAGS.SHOW_PAPER_SPEC_EXTRACTOR && !viewingJobId && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <DocumentTextIcon className="h-5 w-5 text-pink-500" />
+                    Extraction History
+                  </h3>
+                  <button
+                    onClick={() => fetchProjectJobs(activeProject.project_id)}
+                    className="text-sm text-pink-700 dark:text-pink-300 hover:text-pink-900 dark:hover:text-pink-100 flex items-center gap-1"
+                    disabled={loadingJobs}
+                  >
+                    <ArrowPathIcon className={`h-4 w-4 ${loadingJobs ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {loadingJobs ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Loading history...</div>
+                ) : projectJobs.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
+                    No extraction jobs yet for this project. Upload a document below to get started.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                          <th className="py-2 pr-4 font-medium">Name</th>
+                          <th className="py-2 pr-4 font-medium">Date</th>
+                          <th className="py-2 pr-4 font-medium">Engineer</th>
+                          <th className="py-2 pr-4 font-medium">Status</th>
+                          <th className="py-2 pr-4 font-medium">Components</th>
+                          <th className="py-2 pr-4 font-medium">Classes</th>
+                          <th className="py-2 pr-4 font-medium">Cost</th>
+                          <th className="py-2 pr-4 font-medium text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projectJobs.map((job) => (
+                          <tr key={job.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="py-3 pr-4 font-medium text-gray-900 dark:text-white max-w-[220px] truncate" title={job.document_name}>
+                              {job.document_name || `Job #${job.id}`}
+                            </td>
+                            <td className="py-3 pr-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
+                              {job.created_at ? new Date(job.created_at).toLocaleString() : '-'}
+                            </td>
+                            <td className="py-3 pr-4 text-gray-700 dark:text-gray-300">{job.user_name || '-'}</td>
+                            <td className="py-3 pr-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                job.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                job.status === 'failed'    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                              }`}>
+                                {job.status}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-4 text-gray-700 dark:text-gray-300">{job.components_count ?? 0}</td>
+                            <td className="py-3 pr-4 text-gray-700 dark:text-gray-300">{job.classes_count ?? 0}</td>
+                            <td className="py-3 pr-4 whitespace-nowrap text-gray-700 dark:text-gray-300" title="AI extraction cost">
+                              {formatSpecCost(job.cost_usd)}
+                            </td>
+                            <td className="py-3 pr-4 text-right">
+                              {job.status === 'completed' ? (
+                                <button
+                                  onClick={() => setViewingJobId(job.id)}
+                                  className="px-3 py-1.5 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-all font-medium text-xs"
+                                >
+                                  View
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400 dark:text-gray-500">{job.status}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* PRIMARY: Paper Spec Extractor (live AI panel) */}
-            {HUB_FEATURE_FLAGS.SHOW_PAPER_SPEC_EXTRACTOR && (
+            {HUB_FEATURE_FLAGS.SHOW_PAPER_SPEC_EXTRACTOR && viewingJobId && (
+              <div className="mb-10">
+                <button
+                  type="button"
+                  onClick={() => setViewingJobId(null)}
+                  className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  ← Back to History
+                </button>
+                <PaperSpecExtractor projectId={activeProject.project_id} jobId={viewingJobId} />
+              </div>
+            )}
+            {HUB_FEATURE_FLAGS.SHOW_PAPER_SPEC_EXTRACTOR && !viewingJobId && (
               <div className="mb-10">
                 <PaperSpecExtractor projectId={activeProject.project_id} />
               </div>

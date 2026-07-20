@@ -631,7 +631,7 @@ const ProcessingConsole = ({ job, partialCount, tipIndex }) => {
   );
 };
 
-const PaperSpecExtractor = ({ projectId = null } = {}) => {
+const PaperSpecExtractor = ({ projectId = null, jobId = null } = {}) => {
   const [file, setFile]                     = useState(null);
   const [uploading, setUploading]           = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -670,6 +670,28 @@ const PaperSpecExtractor = ({ projectId = null } = {}) => {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Resume/view existing job if jobId prop provided (history table click).
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const jobData = await specCustomizationAPI.getJob(jobId);
+        if (cancelled) return;
+        setJob(jobData);
+        setDocument(jobData.document || null);
+        // If completed, load classes immediately
+        if (['completed', 'failed', 'cancelled'].includes(jobData.status)) {
+          const classList = await specCustomizationAPI.getJobClasses(jobId);
+          if (!cancelled) setClasses(classList);
+        }
+      } catch (err) {
+        console.error('[SpecExtractor] Failed to load job:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [jobId]);
 
   const isTerminal = useMemo(() => {
     if (!job) return false;
