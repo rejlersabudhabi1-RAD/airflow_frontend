@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 
 import {
 
@@ -30,6 +31,15 @@ import {
 
 } from '@heroicons/react/24/outline';
 
+import {
+  ZoomIn, ZoomOut, Maximize2, RotateCcw, ChevronDown, ChevronUp,
+  BookOpen, PlayCircle, List, Star, HelpCircle, FileCheck, Lightbulb,
+  Upload as UploadIcon, FileText, AlertTriangle, Activity, Brain,
+  Eye, Download, Settings, Sparkles, CheckCircle, Rocket, Target,
+  TrendingUp, Zap, Shield, Award, Package, Cpu, Database,
+  FolderPlus, Folder, Edit2, Trash2, ChevronRight, Loader, X, Save
+} from 'lucide-react';
+
 import { usePageControls } from '../../../hooks/usePageControls';
 
 import { PageControlButtons } from '../../../components/Common/PageControlButtons';
@@ -43,6 +53,12 @@ import { apiClientLongTimeout } from '../../../services/api.service';
 import * as XLSX from 'xlsx';
 
 import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
+
+// ─── Authentication Helper ────────────────────────────────────────────────
+const authHeader = () => {
+  const token = localStorage.getItem('access_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
 
 
 
@@ -98,6 +114,140 @@ const CLL_CHIPS = [
   { icon: '🧩', label: `${CLL_TOTAL_COLS}-column enrichment` },
   { icon: '🤖', label: 'AI-assisted extraction' },
   { icon: '📐', label: 'Format-aware regex' },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORKFLOW & SMART DOCUMENTATION Configuration
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Color palette for UI components
+const CLL_COLORS = {
+  PRIMARY:          '#4f46e5',  // Indigo
+  PRIMARY_LIGHT:    '#818cf8',
+  SUCCESS:          '#10b981',  // Green
+  WARNING:          '#f59e0b',  // Amber
+  DANGER:           '#ef4444',  // Red
+  INFO:             '#0891b2',  // Cyan
+  TEXT_PRIMARY:     '#0f172a',
+  TEXT_SECONDARY:   '#64748b',
+  TEXT_TERTIARY:    '#94a3b8',
+  BORDER_DEFAULT:   '#e2e8f0',
+};
+
+// Workflow Diagram Configuration
+const CLL_WORKFLOW_CONFIG = {
+  ENABLED:                true,      // Master toggle for workflow section
+  COLLAPSIBLE:            true,      // Allow collapse/expand
+  DEFAULT_COLLAPSED:      false,     // Start expanded
+  SHOW_CONTROLS:          true,      // Show zoom/fullscreen controls
+  SPLIT_SCREEN:           true,      // Side-by-side with documentation
+  WORKFLOW_WIDTH_PERCENT: 48,        // Workflow column width
+  DOC_WIDTH_PERCENT:      52,        // Documentation column width
+  SPLIT_GAP:              '20px',    // Gap between columns
+  MIN_SCREEN_WIDTH:       1024,      // px - minimum for split layout
+  
+  // Image zoom settings
+  ZOOM_MIN:               50,        // Minimum zoom %
+  ZOOM_MAX:               200,       // Maximum zoom %
+  ZOOM_STEP:              10,        // Increment/decrement step
+  ZOOM_DEFAULT:           100,       // Starting zoom level
+  
+  // Styling
+  BG_COLOR:               '#ffffff',
+  BORDER_COLOR:           '#e2e8f0',
+  BORDER_RADIUS:          '16px',
+  SHADOW:                 '0 1px 3px rgba(0,0,0,0.08)',
+  COLLAPSED_HEIGHT:       '60px',
+  
+  // Animation
+  TRANSITION_DURATION:    '400ms',
+  TRANSITION_EASING:      'cubic-bezier(0.4, 0, 0.2, 1)',
+};
+
+// Smart Documentation Configuration
+const CLL_DOC_CONFIG = {
+  ENABLED:                true,      // Master toggle for documentation section
+  DEFAULT_TAB:            'quickstart', // Initial tab
+  ENABLE_COLLAPSE:        true,      // Allow collapsing doc panel
+  DEFAULT_DOC_COLLAPSED:  false,     // Start expanded
+  
+  // Default expanded steps (true = expanded on load)
+  DEFAULT_EXPANDED_STEPS: {
+    step1: true,   // Project Setup
+    step2: false,  // Document Upload
+    step3: false,  // AI Processing
+    step4: false,  // Review Results
+    step5: false,  // Export Excel
+  },
+};
+
+// Workflow Steps with Enhanced Metadata
+const CLL_WORKFLOW_STEPS = [
+  {
+    id:          'setup',
+    number:      1,
+    title:       'Project Setup',
+    subtitle:    'Configure project type and AI assistance',
+    color:       '#4f46e5', // Indigo
+    gradient:    'linear-gradient(135deg, #4f46e5, #6366f1)',
+    icon:        Settings,
+    duration:    '2 min',
+    description: 'Select project classification (Onshore/General/Offshore) and enable optional AI document assist from Wrench DMS.',
+    keyActions:  ['Select project type', 'Enable AI assist (optional)', 'Configure format detection'],
+    proTips:     ['Choose "General" for auto-format detection', 'AI assist accelerates document lookup'],
+  },
+  {
+    id:          'upload',
+    number:      2,
+    title:       'Document Upload',
+    subtitle:    'Upload 5 document types for enrichment',
+    color:       '#0891b2', // Cyan
+    gradient:    'linear-gradient(135deg, #0891b2, #06b6d4)',
+    icon:        UploadIcon,
+    duration:    '5-10 min',
+    description: 'Upload P&ID, HMB/PFD, PMS, NACE, and Stress Criticality documents. All 5 documents are required for complete 35-column enrichment.',
+    keyActions:  ['Upload P&ID drawing', 'Upload HMB/PFD data', 'Upload PMS specification', 'Upload NACE requirements', 'Upload Stress Criticality list'],
+    proTips:     ['Ensure all documents are from the same project revision', 'Higher DPI (300+) improves AI accuracy'],
+  },
+  {
+    id:          'processing',
+    number:      3,
+    title:       'AI Processing',
+    subtitle:    'Extract and merge document data',
+    color:       '#7c3aed', // Purple
+    gradient:    'linear-gradient(135deg, #7c3aed, #8b5cf6)',
+    icon:        Brain,
+    duration:    '3-8 min',
+    description: 'AI extracts data from all 5 documents, cross-references line numbers, and merges into unified 35-column register.',
+    keyActions:  ['OCR text extraction', 'Table detection', 'Line number matching', 'Data normalization', 'Column mapping'],
+    proTips:     ['Processing time scales with document size', 'Watch real-time progress indicators'],
+  },
+  {
+    id:          'review',
+    number:      4,
+    title:       'Review Results',
+    subtitle:    'Validate extracted line list data',
+    color:       '#10b981', // Green
+    gradient:    'linear-gradient(135deg, #10b981, #34d399)',
+    icon:        Eye,
+    duration:    '10-20 min',
+    description: 'Review extracted critical line list in interactive table. Verify line numbers, sizing, materials, and stress criticality flags.',
+    keyActions:  ['Check line count accuracy', 'Verify material grades', 'Validate stress tags', 'Spot-check key lines'],
+    proTips:     ['Use filters to isolate high-criticality lines', 'Export for detailed offline review'],
+  },
+  {
+    id:          'export',
+    number:      5,
+    title:       'Export Excel',
+    subtitle:    'Generate final deliverable',
+    color:       '#059669', // Dark green
+    gradient:    'linear-gradient(135deg, #059669, #10b981)',
+    icon:        Download,
+    duration:    '1 min',
+    description: 'Generate Excel workbook with all 35 columns, formatted for engineering review and project handover.',
+    keyActions:  ['Generate Excel file', 'Download to local', 'Share with team', 'Archive for compliance'],
+    proTips:     ['Excel includes metadata sheet with extraction timestamps', 'Files auto-named with project ID'],
+  },
 ];
 
 // ─── AI Document Assist (Wrench) — soft-coded panel config ─────────────────
@@ -170,6 +320,8 @@ const CLL_KEYFRAMES = `
   @keyframes cllBarGlow  { 0%,100% { box-shadow: 0 0 12px rgba(124,58,237,0.45);} 50% { box-shadow: 0 0 22px rgba(124,58,237,0.85);} }
   @keyframes cllTipSlide { 0% { opacity: 0; transform: translateY(8px);} 10% { opacity: 1; transform: translateY(0);} 90% { opacity: 1; transform: translateY(0);} 100% { opacity: 0; transform: translateY(-6px);} }
   @keyframes cllScan     { 0% { transform: translateY(-100%);} 100% { transform: translateY(200%);} }
+  @keyframes fadeIn      { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes spin        { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .cll-fade-up    { animation: cllFadeUp 0.5s ease both; }
   .cll-count-in   { animation: cllCountIn 0.55s cubic-bezier(0.4,0,0.2,1) both; }
   .cll-grad-bar   { background-size: 280% 280%; animation: cllGradShift 7s ease infinite; }
@@ -213,6 +365,54 @@ const CLL_PROC_TIPS = [
   { icon: '📈', text: 'Stress-critical lines are auto-flagged from Section 7 + temperature analysis.' },
 ];
 const CLL_PROC_TIP_ROTATE_MS = 5000;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROJECT MANAGEMENT CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════
+const CLL_PROJECT_CONFIG = {
+  ENABLED: true,
+  API_ENDPOINT: 'designiq/projects/',
+  DESIGN_TYPE: 'piping', // Maps to DesignProject.design_type
+  
+  // UI Configuration
+  SHOW_EMPTY_STATE: true,
+  EMPTY_STATE_TITLE: 'No Critical Line List Projects Yet',
+  EMPTY_STATE_SUBTITLE: 'Create your first project to start generating 35-column critical line lists with AI-powered document analysis',
+  
+  // Project Card UI
+  CARD_GRID_COLUMNS: 'repeat(auto-fill, minmax(280px, 1fr))',
+  CARD_GAP: '18px',
+  CARD_BORDER_RADIUS: '12px',
+  CARD_PADDING: '20px',
+  CARD_HOVER_LIFT: '-4px',
+  CARD_HOVER_SCALE: '1.02',
+  CARD_TRANSITION: '300ms',
+  CARD_ACCENT_HEIGHT: '4px',
+  CARD_ICON_SIZE: '44px',
+  CARD_SHOW_STATS: true,
+  CARD_SHOW_TIMESTAMPS: true,
+  CARD_SHOW_STATUS_BADGE: true,
+  
+  // Modal Configuration
+  MODAL_BG: 'rgba(0, 0, 0, 0.75)',
+  MODAL_BACKDROP_BLUR: '8px',
+  MODAL_BORDER_RADIUS: '16px',
+  MODAL_MAX_WIDTH: '500px',
+  MODAL_PADDING: '28px',
+  
+  // Animation
+  ANIMATION_ENTRANCE: 'cllFadeUp',
+  ANIMATION_DURATION: '0.4s',
+  ANIMATION_DELAY: '0.05s',
+  
+  // Flash Messages
+  FLASH_DURATION: 4000,
+  FLASH_POSITION: 'top-right',
+  
+  // Workflow & Documentation on Project Selector
+  SHOW_WORKFLOW_ON_SELECTOR: true, // Display workflow & docs before project selection
+  SELECTOR_WORKFLOW_MARGIN_TOP: '32px', // Space between project grid and workflow
+};
 
 
 
@@ -308,6 +508,24 @@ const CriticalLineList = () => {
   // AI Document Assist — which of the 5 doc slots receives the next Wrench file.
   const [aiAssistSlot, setAiAssistSlot] = useState(CLL_AI_ASSIST_CONFIG.slots[0].id);
 
+  // ─── Project Management State ──────────────────────────────────────────────
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [updatingProject, setUpdatingProject] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [flashMessage, setFlashMessage] = useState({ type: '', text: '' });
+
   const hmbRef = useRef(null);
 
   const pmsRef = useRef(null);
@@ -315,6 +533,185 @@ const CriticalLineList = () => {
   const naceRef = useRef(null);
 
   const stressRef = useRef(null);
+
+  // ─── Workflow & Documentation UI State ────────────────────────────────────
+  const [workflowCollapsed, setWorkflowCollapsed] = useState(CLL_WORKFLOW_CONFIG.DEFAULT_COLLAPSED);
+  const [workflowZoom, setWorkflowZoom] = useState(CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT);
+  const [workflowFullscreen, setWorkflowFullscreen] = useState(false);
+  const [workflowImageLoaded, setWorkflowImageLoaded] = useState(false);
+  const [workflowImageError, setWorkflowImageError] = useState(false);
+  
+  const [docPanelCollapsed, setDocPanelCollapsed] = useState(CLL_DOC_CONFIG.DEFAULT_DOC_COLLAPSED);
+  const [docActiveTab, setDocActiveTab] = useState(CLL_DOC_CONFIG.DEFAULT_TAB);
+  const [expandedSteps, setExpandedSteps] = useState(CLL_DOC_CONFIG.DEFAULT_EXPANDED_STEPS);
+  
+  // Toggle individual documentation step
+  const toggleStep = (stepKey) => {
+    setExpandedSteps(prev => ({ ...prev, [stepKey]: !prev[stepKey] }));
+  };
+  
+  // Expand all documentation steps
+  const expandAllSteps = () => {
+    setExpandedSteps({
+      step1: true, step2: true, step3: true, step4: true, step5: true,
+    });
+  };
+  
+  // Collapse all documentation steps
+  const collapseAllSteps = () => {
+    setExpandedSteps({
+      step1: false, step2: false, step3: false, step4: false, step5: false,
+    });
+  };
+  
+  // ESC key handler for fullscreen modal
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && workflowFullscreen) {
+        setWorkflowFullscreen(false);
+      }
+    };
+    
+    if (workflowFullscreen) {
+      document.addEventListener('keydown', handleEsc);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [workflowFullscreen]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROJECT MANAGEMENT FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Flash message helper
+  const flash = (type, text) => {
+    setFlashMessage({ type, text });
+    setTimeout(() => setFlashMessage({ type: '', text: '' }), CLL_PROJECT_CONFIG.FLASH_DURATION);
+  };
+
+  // Fetch projects on mount
+  useEffect(() => {
+    if (CLL_PROJECT_CONFIG.ENABLED) {
+      fetchProjects();
+    }
+  }, []);
+
+  const fetchProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const res = await apiClientLongTimeout.get(
+        `${CLL_PROJECT_CONFIG.API_ENDPOINT}?design_type=${CLL_PROJECT_CONFIG.DESIGN_TYPE}`
+      );
+      // Handle both paginated {results: [...]} and direct array responses
+      const projectData = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setProjects(projectData);
+    } catch (error) {
+      console.error('[CLL] Error fetching projects:', error);
+      flash('error', 'Failed to load projects');
+      setProjects([]); // Ensure projects is always an array
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    
+    setCreatingProject(true);
+    try {
+      const res = await apiClientLongTimeout.post(
+        CLL_PROJECT_CONFIG.API_ENDPOINT,
+        {
+          project_name: newProjectName,
+          description: newProjectDesc,
+          design_type: CLL_PROJECT_CONFIG.DESIGN_TYPE,
+        }
+      );
+      const newProject = res.data;
+      setProjects(prev => [newProject, ...prev]);
+      setShowCreateModal(false);
+      setNewProjectName('');
+      setNewProjectDesc('');
+      flash('success', `Project "${newProject.project_name}" created successfully`);
+    } catch (error) {
+      console.error('[CLL] Error creating project:', error);
+      flash('error', error.response?.data?.project_name?.[0] || 'Failed to create project');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleUpdateProject = async (e) => {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    
+    setUpdatingProject(true);
+    try {
+      const res = await apiClientLongTimeout.put(
+        `${CLL_PROJECT_CONFIG.API_ENDPOINT}${editingProject.id}/`,
+        {
+          project_name: editName,
+          description: editDesc,
+          design_type: CLL_PROJECT_CONFIG.DESIGN_TYPE,
+        }
+      );
+      setProjects(prev => prev.map(p => p.id === editingProject.id ? res.data : p));
+      if (selectedProject?.id === editingProject.id) setSelectedProject(res.data);
+      setShowEditModal(false);
+      setEditingProject(null);
+      flash('success', 'Project updated successfully');
+    } catch (error) {
+      console.error('[CLL] Error updating project:', error);
+      flash('error', 'Failed to update project');
+    } finally {
+      setUpdatingProject(false);
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    setIsDeleting(true);
+    try {
+      await apiClientLongTimeout.delete(
+        `${CLL_PROJECT_CONFIG.API_ENDPOINT}${deletingProject.id}/`
+      );
+      setProjects(prev => prev.filter(p => p.id !== deletingProject.id));
+      if (selectedProject?.id === deletingProject.id) setSelectedProject(null);
+      setShowDeleteConfirm(false);
+      setDeletingProject(null);
+      flash('success', 'Project deleted successfully');
+    } catch (error) {
+      console.error('[CLL] Error deleting project:', error);
+      flash('error', 'Failed to delete project');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSelectProject = (project) => {
+    setSelectedProject(project);
+    // Reset document state when switching projects
+    setPidDocument(null);
+    setHmbDocument(null);
+    setPmsDocument(null);
+    setNaceDocument(null);
+    setStressCriticalityDocument(null);
+    setExtractedData(null);
+    setShowPreviewModal(false);
+  };
+
+  const handleBackToProjects = () => {
+    setSelectedProject(null);
+    // Preserve documents but clear extracted data
+    setExtractedData(null);
+    setShowPreviewModal(false);
+  };
 
   
 
@@ -1797,7 +2194,1471 @@ const CriticalLineList = () => {
       <style>{pageControls.styles}</style>
       <style>{CLL_KEYFRAMES}</style>
 
+      {/* Flash Message */}
+      {flashMessage.text && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          zIndex: 9999,
+          padding: '14px 18px',
+          borderRadius: '10px',
+          background: flashMessage.type === 'success' 
+            ? 'linear-gradient(135deg, #10b981, #059669)'
+            : 'linear-gradient(135deg, #ef4444, #dc2626)',
+          color: 'white',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          animation: 'cllFadeUp 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          {flashMessage.type === 'success' ? (
+            <CheckCircle style={{ width: '18px', height: '18px' }} />
+          ) : (
+            <AlertTriangle style={{ width: '18px', height: '18px' }} />
+          )}
+          {flashMessage.text}
+        </div>
+      )}
 
+      {/* ═══════════════════════════════════════════════════════════════════
+          PROJECT SELECTOR OR MAIN CONTENT
+          ═══════════════════════════════════════════════════════════════════ */}
+      {!selectedProject ? (
+        /* ─── PROJECT SELECTION SCREEN ─── */
+        <>
+          {/* Page Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+            borderRadius: '16px',
+            padding: '32px',
+            marginBottom: '28px',
+            boxShadow: '0 12px 36px rgba(79,70,229,0.25)',
+            animation: `${CLL_PROJECT_CONFIG.ANIMATION_ENTRANCE} ${CLL_PROJECT_CONFIG.ANIMATION_DURATION} ease`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Folder style={{ width: '28px', height: '28px', color: 'white' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h1 style={{
+                  fontSize: '1.75rem',
+                  fontWeight: 800,
+                  color: 'white',
+                  margin: 0,
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                }}>
+                  Critical Line List Projects
+                </h1>
+                <p style={{
+                  fontSize: '0.9rem',
+                  color: 'rgba(255,255,255,0.85)',
+                  margin: '6px 0 0',
+                  lineHeight: 1.4,
+                }}>
+                  AI-powered 35-column critical line list generation from 5 source documents
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '12px 20px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#4f46e5',
+                  background: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  transition: 'all 200ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                }}
+              >
+                <FolderPlus style={{ width: '18px', height: '18px' }} />
+                New Project
+              </button>
+            </div>
+          </div>
+
+          {/* Project Grid */}
+          {loadingProjects ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '80px 20px',
+              gap: '16px',
+            }}>
+              <div style={{ animation: 'spin 1s linear infinite' }}>
+                <Loader style={{ width: '48px', height: '48px', color: CLL_COLORS.PRIMARY }} />
+              </div>
+              <p style={{ fontSize: '0.875rem', color: CLL_COLORS.TEXT_SECONDARY }}>
+                Loading projects...
+              </p>
+            </div>
+          ) : !Array.isArray(projects) || projects.length === 0 ? (
+            /* Empty State */
+            CLL_PROJECT_CONFIG.SHOW_EMPTY_STATE && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '80px 20px',
+                background: 'white',
+                borderRadius: '16px',
+                border: `2px dashed ${CLL_COLORS.BORDER_DEFAULT}`,
+                animation: `${CLL_PROJECT_CONFIG.ANIMATION_ENTRANCE} ${CLL_PROJECT_CONFIG.ANIMATION_DURATION} ease`,
+              }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, rgba(79,70,229,0.1), rgba(124,58,237,0.15))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '20px',
+                }}>
+                  <FolderPlus style={{ width: '36px', height: '36px', color: CLL_COLORS.PRIMARY }} />
+                </div>
+                <h3 style={{
+                  fontSize: '1.25rem',
+                  fontWeight: 700,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  marginBottom: '8px',
+                }}>
+                  {CLL_PROJECT_CONFIG.EMPTY_STATE_TITLE}
+                </h3>
+                <p style={{
+                  fontSize: '0.875rem',
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  maxWidth: '500px',
+                  textAlign: 'center',
+                  lineHeight: 1.6,
+                  marginBottom: '24px',
+                }}>
+                  {CLL_PROJECT_CONFIG.EMPTY_STATE_SUBTITLE}
+                </p>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px 24px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'white',
+                    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(79,70,229,0.3)',
+                    transition: 'all 200ms ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 18px rgba(79,70,229,0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,70,229,0.3)';
+                  }}
+                >
+                  <FolderPlus style={{ width: '18px', height: '18px' }} />
+                  Create First Project
+                </button>
+
+                {/* Quick Start Steps */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  marginTop: '40px',
+                  fontSize: '0.75rem',
+                  color: CLL_COLORS.TEXT_TERTIARY,
+                }}>
+                  {[
+                    { step: 1, label: 'Create Project' },
+                    { step: 2, label: 'Upload Docs' },
+                    { step: 3, label: 'AI Analysis' },
+                    { step: 4, label: 'Export Excel' },
+                  ].map((item, idx) => (
+                    <React.Fragment key={item.step}>
+                      {idx > 0 && <ChevronRight style={{ width: '14px', height: '14px', opacity: 0.4 }} />}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          background: `${CLL_COLORS.PRIMARY}15`,
+                          color: CLL_COLORS.PRIMARY,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                        }}>
+                          {item.step}
+                        </div>
+                        <span>{item.label}</span>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )
+          ) : (
+            /* Project Cards Grid */
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: CLL_PROJECT_CONFIG.CARD_GRID_COLUMNS,
+              gap: CLL_PROJECT_CONFIG.CARD_GAP,
+            }}>
+              {(Array.isArray(projects) ? projects : []).map((project, idx) => (
+                <div
+                  key={project.id}
+                  onClick={() => handleSelectProject(project)}
+                  style={{
+                    position: 'relative',
+                    background: 'white',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    borderRadius: CLL_PROJECT_CONFIG.CARD_BORDER_RADIUS,
+                    padding: CLL_PROJECT_CONFIG.CARD_PADDING,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    transition: `all ${CLL_PROJECT_CONFIG.CARD_TRANSITION} ease`,
+                    overflow: 'hidden',
+                    animation: `${CLL_PROJECT_CONFIG.ANIMATION_ENTRANCE} ${CLL_PROJECT_CONFIG.ANIMATION_DURATION} ease ${idx * parseFloat(CLL_PROJECT_CONFIG.ANIMATION_DELAY)}s both`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = `translateY(${CLL_PROJECT_CONFIG.CARD_HOVER_LIFT}) scale(${CLL_PROJECT_CONFIG.CARD_HOVER_SCALE})`;
+                    e.currentTarget.style.boxShadow = '0 12px 32px rgba(79,70,229,0.15)';
+                    e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY;
+                    const accentLine = e.currentTarget.querySelector('.project-accent-line');
+                    if (accentLine) accentLine.style.opacity = '1';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                    e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT;
+                    const accentLine = e.currentTarget.querySelector('.project-accent-line');
+                    if (accentLine) accentLine.style.opacity = '0';
+                  }}
+                >
+                  {/* Top Accent Line */}
+                  <div
+                    className="project-accent-line"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: CLL_PROJECT_CONFIG.CARD_ACCENT_HEIGHT,
+                      background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
+                      opacity: 0,
+                      transition: `opacity ${CLL_PROJECT_CONFIG.CARD_TRANSITION} ease`,
+                    }}
+                  />
+
+                  {/* Header: Icon + Actions */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <div style={{
+                      width: `${CLL_PROJECT_CONFIG.CARD_ICON_SIZE}px`,
+                      height: `${CLL_PROJECT_CONFIG.CARD_ICON_SIZE}px`,
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, rgba(79,70,229,0.1), rgba(124,58,237,0.15))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Folder style={{ width: '24px', height: '24px', color: CLL_COLORS.PRIMARY }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingProject(project);
+                          setEditName(project.project_name);
+                          setEditDesc(project.description || '');
+                          setShowEditModal(true);
+                        }}
+                        style={{
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(100,116,139,0.1)',
+                          color: CLL_COLORS.TEXT_SECONDARY,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          transition: 'all 200ms ease',
+                        }}
+                        title="Edit Project"
+                      >
+                        <Edit2 style={{ width: '14px', height: '14px' }} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingProject(project);
+                          setShowDeleteConfirm(true);
+                        }}
+                        style={{
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(239,68,68,0.1)',
+                          color: CLL_COLORS.DANGER,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          transition: 'all 200ms ease',
+                        }}
+                        title="Delete Project"
+                      >
+                        <Trash2 style={{ width: '14px', height: '14px' }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Project Name */}
+                  <h3 style={{
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    color: CLL_COLORS.TEXT_PRIMARY,
+                    marginBottom: '6px',
+                    lineHeight: 1.3,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}>
+                    {project.project_name}
+                  </h3>
+
+                  {/* Description */}
+                  {project.description && (
+                    <p style={{
+                      fontSize: '0.8rem',
+                      color: CLL_COLORS.TEXT_SECONDARY,
+                      marginBottom: '16px',
+                      lineHeight: 1.5,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>
+                      {project.description}
+                    </p>
+                  )}
+
+                  {/* Metadata Footer */}
+                  {CLL_PROJECT_CONFIG.CARD_SHOW_TIMESTAMPS && (
+                    <div style={{
+                      fontSize: '0.7rem',
+                      color: CLL_COLORS.TEXT_TERTIARY,
+                      marginTop: 'auto',
+                      paddingTop: '12px',
+                      borderTop: `1px solid ${CLL_COLORS.BORDER_LIGHT}`,
+                    }}>
+                      Created {new Date(project.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              WORKFLOW & DOCUMENTATION ON PROJECT SELECTOR
+              ═══════════════════════════════════════════════════════════== */}
+          {CLL_PROJECT_CONFIG.SHOW_WORKFLOW_ON_SELECTOR && CLL_WORKFLOW_CONFIG.ENABLED && (
+            <div style={{
+              marginTop: CLL_PROJECT_CONFIG.SELECTOR_WORKFLOW_MARGIN_TOP,
+              animation: `${CLL_PROJECT_CONFIG.ANIMATION_ENTRANCE} ${CLL_PROJECT_CONFIG.ANIMATION_DURATION} ease`,
+              animationDelay: '0.2s',
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: CLL_WORKFLOW_CONFIG.SPLIT_SCREEN 
+                  ? `${CLL_WORKFLOW_CONFIG.WORKFLOW_WIDTH_PERCENT}% ${CLL_WORKFLOW_CONFIG.DOC_WIDTH_PERCENT}%`
+                  : '1fr',
+                gap: CLL_WORKFLOW_CONFIG.SPLIT_GAP,
+                '@media (max-width: 1024px)': {
+                  gridTemplateColumns: '1fr',
+                },
+              }}>
+                
+                {/* ─── LEFT COLUMN: Workflow Diagram ─── */}
+                <div style={{
+                  background: CLL_WORKFLOW_CONFIG.BG_COLOR,
+                  border: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                  borderRadius: CLL_WORKFLOW_CONFIG.BORDER_RADIUS,
+                  boxShadow: CLL_WORKFLOW_CONFIG.SHADOW,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: workflowCollapsed ? CLL_WORKFLOW_CONFIG.COLLAPSED_HEIGHT : 'auto',
+                  transition: `all ${CLL_WORKFLOW_CONFIG.TRANSITION_DURATION} ${CLL_WORKFLOW_CONFIG.TRANSITION_EASING}`,
+                }}>
+                  {/* Workflow Header */}
+                  <div
+                    onClick={() => CLL_WORKFLOW_CONFIG.COLLAPSIBLE && setWorkflowCollapsed(!workflowCollapsed)}
+                    style={{
+                      padding: '16px 20px',
+                      borderBottom: workflowCollapsed ? 'none' : `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                      background: 'linear-gradient(135deg, rgba(79,70,229,0.04) 0%, rgba(124,58,237,0.06) 100%)',
+                      cursor: CLL_WORKFLOW_CONFIG.COLLAPSIBLE ? 'pointer' : 'default',
+                      transition: 'all 200ms ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (CLL_WORKFLOW_CONFIG.COLLAPSIBLE) {
+                        e.currentTarget.style.background = 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(124,58,237,0.12) 100%)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, rgba(79,70,229,0.04) 0%, rgba(124,58,237,0.06) 100%)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <Rocket style={{ width: '24px', height: '24px', color: CLL_COLORS.PRIMARY }} />
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{
+                          fontSize: '1.05rem',
+                          fontWeight: 700,
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          margin: 0,
+                          lineHeight: 1,
+                        }}>
+                          Critical Line List Workflow
+                        </h3>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: CLL_COLORS.TEXT_SECONDARY,
+                          margin: '4px 0 0',
+                          lineHeight: 1,
+                        }}>
+                          5-step process from document upload to Excel export
+                        </p>
+                      </div>
+                      {CLL_WORKFLOW_CONFIG.COLLAPSIBLE && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWorkflowCollapsed(!workflowCollapsed);
+                          }}
+                          style={{
+                            padding: '6px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: 'rgba(79,70,229,0.1)',
+                            color: CLL_COLORS.PRIMARY,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 200ms ease',
+                          }}
+                          title={workflowCollapsed ? 'Expand Workflow' : 'Collapse Workflow'}
+                        >
+                          {workflowCollapsed ? (
+                            <ChevronDown style={{ width: '18px', height: '18px' }} />
+                          ) : (
+                            <ChevronUp style={{ width: '18px', height: '18px' }} />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Workflow Content */}
+                  {!workflowCollapsed && (
+                    <div style={{ padding: '20px' }}>
+                      {/* Zoom Controls */}
+                      {CLL_WORKFLOW_CONFIG.SHOW_CONTROLS && (
+                        <div style={{
+                          display: 'flex',
+                          gap: '8px',
+                          marginBottom: '16px',
+                          justifyContent: 'flex-end',
+                          flexWrap: 'wrap',
+                        }}>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (workflowZoom > CLL_WORKFLOW_CONFIG.ZOOM_MIN) {
+                                setWorkflowZoom(workflowZoom - CLL_WORKFLOW_CONFIG.ZOOM_STEP);
+                              }
+                            }}
+                            disabled={workflowZoom <= CLL_WORKFLOW_CONFIG.ZOOM_MIN}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                              background: 'white',
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              cursor: workflowZoom > CLL_WORKFLOW_CONFIG.ZOOM_MIN ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              opacity: workflowZoom <= CLL_WORKFLOW_CONFIG.ZOOM_MIN ? 0.5 : 1,
+                              transition: 'all 200ms ease',
+                            }}
+                          >
+                            <ZoomOut style={{ width: '14px', height: '14px' }} />
+                            Zoom Out
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX) {
+                                setWorkflowZoom(workflowZoom + CLL_WORKFLOW_CONFIG.ZOOM_STEP);
+                              }
+                            }}
+                            disabled={workflowZoom >= CLL_WORKFLOW_CONFIG.ZOOM_MAX}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                              background: 'white',
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              cursor: workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              opacity: workflowZoom >= CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 0.5 : 1,
+                              transition: 'all 200ms ease',
+                            }}
+                          >
+                            <ZoomIn style={{ width: '14px', height: '14px' }} />
+                            Zoom In
+                          </button>
+                          {workflowZoom !== CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setWorkflowZoom(CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT);
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '0.75rem',
+                                borderRadius: '6px',
+                                border: `1px solid ${CLL_COLORS.PRIMARY}`,
+                                background: 'rgba(79,70,229,0.08)',
+                                color: CLL_COLORS.PRIMARY,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontWeight: 500,
+                                transition: 'all 200ms ease',
+                              }}
+                            >
+                              <RotateCcw style={{ width: '14px', height: '14px' }} />
+                              Reset ({CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT}%)
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setWorkflowFullscreen(true);
+                            }}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                              background: 'white',
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              transition: 'all 200ms ease',
+                            }}
+                          >
+                            <Maximize2 style={{ width: '14px', height: '14px' }} />
+                            Fullscreen
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Workflow Image */}
+                      <div style={{
+                        overflow: 'auto',
+                        borderRadius: '10px',
+                        border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                        background: '#fafafa',
+                        textAlign: 'center',
+                        maxHeight: '500px',
+                      }}>
+                        {workflowImageError ? (
+                          <div style={{
+                            padding: '40px',
+                            color: CLL_COLORS.TEXT_SECONDARY,
+                            fontSize: '0.875rem',
+                          }}>
+                            <AlertTriangle style={{
+                              width: '48px',
+                              height: '48px',
+                              color: CLL_COLORS.WARNING,
+                              margin: '0 auto 12px',
+                            }} />
+                            <p>Failed to load workflow diagram</p>
+                          </div>
+                        ) : !workflowImageLoaded ? (
+                          <div style={{
+                            padding: '40px',
+                            color: CLL_COLORS.TEXT_SECONDARY,
+                            fontSize: '0.875rem',
+                          }}>
+                            <div style={{
+                              width: '48px',
+                              height: '48px',
+                              margin: '0 auto 12px',
+                              animation: 'spin 1s linear infinite',
+                            }}>
+                              <Activity style={{ width: '100%', height: '100%', color: CLL_COLORS.PRIMARY }} />
+                            </div>
+                            <p>Loading workflow...</p>
+                          </div>
+                        ) : null}
+                        <img
+                          src="/assets/images/CriticalLineList_Workflow.png"
+                          alt="Critical Line List Workflow"
+                          style={{
+                            width: `${workflowZoom}%`,
+                            height: 'auto',
+                            cursor: workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 'zoom-in' : 'default',
+                            display: workflowImageLoaded ? 'inline-block' : 'none',
+                            transition: 'width 200ms ease',
+                          }}
+                          onLoad={() => {
+                            setWorkflowImageLoaded(true);
+                            setWorkflowImageError(false);
+                          }}
+                          onError={() => {
+                            setWorkflowImageError(true);
+                            setWorkflowImageLoaded(false);
+                          }}
+                          onClick={() => {
+                            if (workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX) {
+                              setWorkflowZoom(Math.min(workflowZoom + 25, CLL_WORKFLOW_CONFIG.ZOOM_MAX));
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ─── RIGHT COLUMN: Smart Documentation ─── */}
+                {CLL_DOC_CONFIG.ENABLED && CLL_WORKFLOW_CONFIG.SPLIT_SCREEN && (
+                  <div style={{
+                    background: CLL_WORKFLOW_CONFIG.BG_COLOR,
+                    border: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                    borderRadius: CLL_WORKFLOW_CONFIG.BORDER_RADIUS,
+                    boxShadow: CLL_WORKFLOW_CONFIG.SHADOW,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    maxHeight: '600px',
+                  }}>
+                    {/* Documentation Header */}
+                    <div style={{
+                      padding: '20px 24px',
+                      borderBottom: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                      background: 'linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(59,130,246,0.06) 100%)',
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '12px',
+                      }}>
+                        <BookOpen style={{ width: '24px', height: '24px', color: CLL_COLORS.PRIMARY }} />
+                        <div style={{ flex: 1 }}>
+                          <h3 style={{
+                            fontSize: '1.1rem',
+                            fontWeight: 700,
+                            color: CLL_COLORS.TEXT_PRIMARY,
+                            margin: 0,
+                            lineHeight: 1,
+                          }}>
+                            Smart Documentation
+                          </h3>
+                          <p style={{
+                            fontSize: '0.75rem',
+                            color: CLL_COLORS.TEXT_SECONDARY,
+                            margin: '4px 0 0',
+                            lineHeight: 1,
+                          }}>
+                            Step-by-step guide to Critical Line List generation
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setDocPanelCollapsed(!docPanelCollapsed)}
+                          style={{
+                            padding: '8px 14px',
+                            fontSize: '0.75rem',
+                            borderRadius: '8px',
+                            border: `1px solid ${docPanelCollapsed ? 'rgba(16,185,129,0.3)' : 'rgba(100,116,139,0.3)'}`,
+                            background: docPanelCollapsed ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.06)',
+                            color: docPanelCollapsed ? CLL_COLORS.SUCCESS : CLL_COLORS.TEXT_SECONDARY,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 500,
+                            transition: 'all 200ms ease',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={docPanelCollapsed ? 'Expand Documentation' : 'Collapse Documentation'}
+                        >
+                          {docPanelCollapsed ? (
+                            <>
+                              <ChevronDown style={{ width: '14px', height: '14px' }} />
+                              Show Guide
+                            </>
+                          ) : (
+                            <>
+                              <ChevronUp style={{ width: '14px', height: '14px' }} />
+                              Hide Guide
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Tab Navigation - Only show when not collapsed */}
+                      {!docPanelCollapsed && (
+                        <div style={{
+                          display: 'flex',
+                          gap: '8px',
+                          overflowX: 'auto',
+                          paddingBottom: '4px',
+                        }}>
+                          {[
+                            { id: 'quickstart', label: 'Quick Start', icon: PlayCircle, color: '#4f46e5' },
+                            { id: 'documents', label: 'Documents Guide', icon: FileCheck, color: '#0891b2' },
+                            { id: 'bestpractices', label: 'Best Practices', icon: Star, color: '#f59e0b' },
+                            { id: 'faq', label: 'FAQ', icon: HelpCircle, color: '#10b981' },
+                          ].map(tab => (
+                            <button
+                              key={tab.id}
+                              onClick={() => setDocActiveTab(tab.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                borderRadius: '10px',
+                                border: 'none',
+                                background: docActiveTab === tab.id 
+                                  ? 'rgba(79,70,229,0.12)'
+                                  : 'transparent',
+                                color: docActiveTab === tab.id ? tab.color : CLL_COLORS.TEXT_SECONDARY,
+                                fontSize: '0.8rem',
+                                fontWeight: docActiveTab === tab.id ? 600 : 500,
+                                cursor: 'pointer',
+                                transition: 'all 200ms ease',
+                                whiteSpace: 'nowrap',
+                                borderBottom: docActiveTab === tab.id 
+                                  ? `2px solid ${tab.color}` 
+                                  : '2px solid transparent',
+                              }}
+                            >
+                              <tab.icon style={{ width: '14px', height: '14px' }} />
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Documentation Content - Only show when not collapsed */}
+                    {!docPanelCollapsed && (
+                      <div style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        padding: '20px 24px',
+                      }}>
+                        {/* Quick Start Tab - 5 Step Accordion */}
+                        {docActiveTab === 'quickstart' && (
+                          <>
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '16px',
+                            }}>
+                              <h4 style={{
+                                fontSize: '0.95rem',
+                                fontWeight: 600,
+                                color: CLL_COLORS.TEXT_PRIMARY,
+                                margin: 0,
+                              }}>
+                                5-Step Quick Start Guide
+                              </h4>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  onClick={expandAllSteps}
+                                  style={{
+                                    padding: '6px 10px',
+                                    fontSize: '0.7rem',
+                                    borderRadius: '6px',
+                                    border: `1px solid ${CLL_COLORS.PRIMARY}`,
+                                    background: 'rgba(79,70,229,0.08)',
+                                    color: CLL_COLORS.PRIMARY,
+                                    cursor: 'pointer',
+                                    fontWeight: 500,
+                                    transition: 'all 200ms ease',
+                                  }}
+                                >
+                                  Expand All
+                                </button>
+                                <button
+                                  onClick={collapseAllSteps}
+                                  style={{
+                                    padding: '6px 10px',
+                                    fontSize: '0.7rem',
+                                    borderRadius: '6px',
+                                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                                    background: 'white',
+                                    color: CLL_COLORS.TEXT_SECONDARY,
+                                    cursor: 'pointer',
+                                    fontWeight: 500,
+                                    transition: 'all 200ms ease',
+                                  }}
+                                >
+                                  Collapse All
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Step Accordion - Reuse same component logic */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {CLL_WORKFLOW_STEPS.map((step, idx) => {
+                                const isExpanded = expandedSteps[`step${step.number}`];
+                                const StepIcon = step.icon;
+                                
+                                return (
+                                  <div
+                                    key={step.id}
+                                    style={{
+                                      border: `1px solid ${isExpanded ? step.color : CLL_COLORS.BORDER_DEFAULT}`,
+                                      borderRadius: '10px',
+                                      overflow: 'hidden',
+                                      background: isExpanded ? `${step.color}05` : 'white',
+                                      transition: 'all 300ms ease',
+                                      boxShadow: isExpanded ? `0 4px 12px ${step.color}15` : '0 1px 3px rgba(0,0,0,0.05)',
+                                    }}
+                                  >
+                                    {/* Step Header */}
+                                    <div
+                                      onClick={() => toggleStep(`step${step.number}`)}
+                                      style={{
+                                        padding: '14px 16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        cursor: 'pointer',
+                                        background: isExpanded ? step.gradient : 'transparent',
+                                        transition: 'all 300ms ease',
+                                      }}
+                                    >
+                                      {/* Step Number Badge */}
+                                      <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        background: isExpanded ? 'white' : `${step.color}15`,
+                                        color: step.color,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '0.875rem',
+                                        fontWeight: 700,
+                                        flexShrink: 0,
+                                        transition: 'all 300ms ease',
+                                      }}>
+                                        {step.number}
+                                      </div>
+                                      
+                                      {/* Icon */}
+                                      <div style={{
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '8px',
+                                        background: isExpanded ? 'rgba(255,255,255,0.9)' : `${step.color}10`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        flexShrink: 0,
+                                        transition: 'all 300ms ease',
+                                      }}>
+                                        <StepIcon style={{
+                                          width: '20px',
+                                          height: '20px',
+                                          color: step.color,
+                                        }} />
+                                      </div>
+                                      
+                                      {/* Title & Description */}
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{
+                                          fontSize: '0.875rem',
+                                          fontWeight: 600,
+                                          color: isExpanded ? 'white' : CLL_COLORS.TEXT_PRIMARY,
+                                          lineHeight: 1.3,
+                                          marginBottom: '2px',
+                                        }}>
+                                          {step.title}
+                                        </div>
+                                        <div style={{
+                                          fontSize: '0.7rem',
+                                          color: isExpanded ? 'rgba(255,255,255,0.9)' : CLL_COLORS.TEXT_SECONDARY,
+                                          lineHeight: 1.3,
+                                        }}>
+                                          {step.description}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Duration Badge */}
+                                      <div style={{
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        background: isExpanded ? 'rgba(255,255,255,0.25)' : `${step.color}10`,
+                                        color: isExpanded ? 'white' : step.color,
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 300ms ease',
+                                      }}>
+                                        {step.duration}
+                                      </div>
+                                      
+                                      {/* Chevron */}
+                                      <div style={{
+                                        width: '24px',
+                                        height: '24px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: isExpanded ? 'white' : CLL_COLORS.TEXT_SECONDARY,
+                                        transition: 'transform 300ms ease',
+                                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                      }}>
+                                        <ChevronDown style={{ width: '18px', height: '18px' }} />
+                                      </div>
+                                    </div>
+
+                                    {/* Step Content */}
+                                    {isExpanded && (
+                                      <div style={{
+                                        padding: '16px 20px',
+                                        background: 'white',
+                                        borderTop: `1px solid ${step.color}20`,
+                                      }}>
+                                        {/* Key Actions */}
+                                        <div style={{ marginBottom: '16px' }}>
+                                          <div style={{
+                                            fontSize: '0.75rem',
+                                            fontWeight: 600,
+                                            color: CLL_COLORS.TEXT_PRIMARY,
+                                            marginBottom: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                          }}>
+                                            <CheckCircle style={{ width: '14px', height: '14px', color: step.color }} />
+                                            Key Actions:
+                                          </div>
+                                          <ul style={{
+                                            margin: 0,
+                                            paddingLeft: '20px',
+                                            fontSize: '0.75rem',
+                                            color: CLL_COLORS.TEXT_SECONDARY,
+                                            lineHeight: 1.6,
+                                          }}>
+                                            {step.keyActions.map((action, i) => (
+                                              <li key={i} style={{ marginBottom: '6px' }}>{action}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+
+                                        {/* Pro Tips */}
+                                        <div style={{
+                                          padding: '12px',
+                                          borderRadius: '8px',
+                                          background: `${step.color}08`,
+                                          border: `1px solid ${step.color}20`,
+                                        }}>
+                                          <div style={{
+                                            fontSize: '0.75rem',
+                                            fontWeight: 600,
+                                            color: step.color,
+                                            marginBottom: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                          }}>
+                                            <Lightbulb style={{ width: '14px', height: '14px' }} />
+                                            Pro Tips:
+                                          </div>
+                                          <ul style={{
+                                            margin: 0,
+                                            paddingLeft: '20px',
+                                            fontSize: '0.72rem',
+                                            color: CLL_COLORS.TEXT_SECONDARY,
+                                            lineHeight: 1.6,
+                                          }}>
+                                            {step.proTips.map((tip, i) => (
+                                              <li key={i} style={{ marginBottom: '6px' }}>{tip}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Documents Guide Tab - Same as selected project view */}
+                        {docActiveTab === 'documents' && (
+                          <div>
+                            <h4 style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 600,
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                            }}>
+                              <FileCheck style={{ width: '18px', height: '18px', color: CLL_COLORS.PRIMARY }} />
+                              Required Documents Guide
+                            </h4>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {[
+                                {
+                                  title: 'P&ID (Piping & Instrumentation Diagram)',
+                                  color: '#0891b2',
+                                  icon: FileCheck,
+                                  format: 'PDF, PNG, JPG',
+                                  purpose: 'Primary source for line numbers, equipment connections, and instrument tags',
+                                  tips: [
+                                    'Ensure all line numbers are clearly visible',
+                                    'Multi-page P&IDs are automatically processed',
+                                    'OCR quality improves with high-resolution scans (300+ DPI)',
+                                  ],
+                                },
+                                {
+                                  title: 'HMB/PFD (Heat & Material Balance / Process Flow Diagram)',
+                                  color: '#8b5cf6',
+                                  icon: TrendingUp,
+                                  format: 'PDF, Excel, CSV',
+                                  purpose: 'Provides stream data, temperatures, pressures, and flow rates',
+                                  tips: [
+                                    'Excel format preferred for direct data extraction',
+                                    'Ensure stream numbers match P&ID line tags',
+                                    'Include units (°C, bar, kg/h) for automatic conversion',
+                                  ],
+                                },
+                                {
+                                  title: 'PMS (Piping Material Specification)',
+                                  color: '#f59e0b',
+                                  icon: Package,
+                                  format: 'PDF, Excel',
+                                  purpose: 'Defines pipe materials, classes, ratings, and construction standards',
+                                  tips: [
+                                    'Must include pipe class codes referenced in P&ID',
+                                    'Material grade and schedule information critical',
+                                    'Flange ratings and insulation specs auto-mapped',
+                                  ],
+                                },
+                                {
+                                  title: 'NACE (Corrosion Standards)',
+                                  color: '#10b981',
+                                  icon: Shield,
+                                  format: 'PDF, Excel',
+                                  purpose: 'Corrosion allowances, material restrictions, and inspection requirements',
+                                  tips: [
+                                    'Links corrosion zones to specific line services',
+                                    'Auto-flags lines requiring special materials',
+                                    'Inspection frequency auto-calculated',
+                                  ],
+                                },
+                                {
+                                  title: 'Stress Criticality List',
+                                  color: '#ef4444',
+                                  icon: AlertTriangle,
+                                  format: 'PDF, Excel',
+                                  purpose: 'Identifies lines requiring stress analysis based on temperature, pressure, or size',
+                                  tips: [
+                                    'Excel format enables direct criticality tagging',
+                                    'Automatically cross-references with generated line list',
+                                    'Flags high-priority lines for engineering review',
+                                  ],
+                                },
+                              ].map((doc, idx) => {
+                                const DocIcon = doc.icon;
+                                return (
+                                  <div
+                                    key={idx}
+                                    style={{
+                                      padding: '14px 16px',
+                                      border: `1px solid ${doc.color}30`,
+                                      borderRadius: '10px',
+                                      background: `${doc.color}05`,
+                                    }}
+                                  >
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      marginBottom: '10px',
+                                    }}>
+                                      <div style={{
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '8px',
+                                        background: `${doc.color}15`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}>
+                                        <DocIcon style={{ width: '18px', height: '18px', color: doc.color }} />
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{
+                                          fontSize: '0.8rem',
+                                          fontWeight: 600,
+                                          color: doc.color,
+                                          marginBottom: '2px',
+                                        }}>
+                                          {doc.title}
+                                        </div>
+                                        <div style={{
+                                          fontSize: '0.7rem',
+                                          color: CLL_COLORS.TEXT_SECONDARY,
+                                          fontWeight: 500,
+                                        }}>
+                                          Formats: {doc.format}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div style={{
+                                      fontSize: '0.75rem',
+                                      color: CLL_COLORS.TEXT_SECONDARY,
+                                      marginBottom: '10px',
+                                      fontStyle: 'italic',
+                                    }}>
+                                      <strong>Purpose:</strong> {doc.purpose}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '0.72rem',
+                                      color: CLL_COLORS.TEXT_SECONDARY,
+                                      paddingLeft: '12px',
+                                      borderLeft: `2px solid ${doc.color}`,
+                                    }}>
+                                      {doc.tips.map((tip, i) => (
+                                        <div key={i} style={{ marginBottom: '4px' }}>• {tip}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Best Practices Tab - Same as selected project view */}
+                        {docActiveTab === 'bestpractices' && (
+                          <div>
+                            <h4 style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 600,
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                            }}>
+                              <Star style={{ width: '18px', height: '18px', color: '#f59e0b' }} />
+                              Best Practices & Tips
+                            </h4>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                              {[
+                                {
+                                  category: 'Document Preparation',
+                                  color: '#4f46e5',
+                                  icon: Database,
+                                  tips: [
+                                    'Scan documents at 300 DPI or higher for optimal OCR accuracy',
+                                    'Remove password protection from PDFs before upload',
+                                    'Organize multi-page documents in logical sequence',
+                                    'Use consistent naming conventions for easy identification',
+                                  ],
+                                },
+                                {
+                                  category: 'Data Quality',
+                                  color: '#0891b2',
+                                  icon: Award,
+                                  tips: [
+                                    'Verify line numbering system matches project standards',
+                                    'Cross-check equipment tags between P&ID and HMB',
+                                    'Ensure material class codes are defined in PMS',
+                                    'Review AI-extracted data for unusual values or outliers',
+                                  ],
+                                },
+                                {
+                                  category: 'AI Processing',
+                                  color: '#8b5cf6',
+                                  icon: Brain,
+                                  tips: [
+                                    'Allow 2-5 minutes for AI analysis depending on document size',
+                                    'Use "Preview Results" before generating full Excel output',
+                                    'Re-upload documents if extraction confidence is below 85%',
+                                    'Leverage AI suggestions for missing or ambiguous data',
+                                  ],
+                                },
+                                {
+                                  category: 'Output & Export',
+                                  color: '#10b981',
+                                  icon: Download,
+                                  tips: [
+                                    'Export to Excel for further engineering analysis',
+                                    'Use filters to isolate critical lines for stress analysis',
+                                    'Export includes all 35 columns as per industry standards',
+                                    'Save project before export to preserve AI analysis state',
+                                  ],
+                                },
+                              ].map((section, idx) => {
+                                const SectionIcon = section.icon;
+                                return (
+                                  <div
+                                    key={idx}
+                                    style={{
+                                      padding: '14px 16px',
+                                      border: `1px solid ${section.color}25`,
+                                      borderRadius: '10px',
+                                      background: 'white',
+                                      boxShadow: `0 2px 8px ${section.color}10`,
+                                    }}
+                                  >
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      marginBottom: '12px',
+                                    }}>
+                                      <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        background: `${section.color}15`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}>
+                                        <SectionIcon style={{ width: '16px', height: '16px', color: section.color }} />
+                                      </div>
+                                      <div style={{
+                                        fontSize: '0.85rem',
+                                        fontWeight: 600,
+                                        color: section.color,
+                                      }}>
+                                        {section.category}
+                                      </div>
+                                    </div>
+                                    <ul style={{
+                                      margin: 0,
+                                      paddingLeft: '20px',
+                                      fontSize: '0.75rem',
+                                      color: CLL_COLORS.TEXT_SECONDARY,
+                                      lineHeight: 1.6,
+                                    }}>
+                                      {section.tips.map((tip, i) => (
+                                        <li key={i} style={{ marginBottom: '8px' }}>{tip}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* FAQ Tab - Same as selected project view */}
+                        {docActiveTab === 'faq' && (
+                          <div>
+                            <h4 style={{
+                              fontSize: '0.95rem',
+                              fontWeight: 600,
+                              color: CLL_COLORS.TEXT_PRIMARY,
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                            }}>
+                              <HelpCircle style={{ width: '18px', height: '18px', color: '#10b981' }} />
+                              Frequently Asked Questions
+                            </h4>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {[
+                                {
+                                  q: 'How long does AI processing take?',
+                                  a: 'Typically 2-5 minutes depending on document size and complexity. Large multi-page P&IDs may take up to 10 minutes. Progress is shown in real-time.',
+                                },
+                                {
+                                  q: 'Can I upload documents in batches?',
+                                  a: 'Yes! Upload all 5 documents at once. The system processes them in parallel and automatically merges data. You can also upload individually in any order.',
+                                },
+                                {
+                                  q: 'What if OCR extraction has errors?',
+                                  a: 'Review the confidence scores in the results table. Values below 85% are flagged in yellow. You can manually correct data in the table before exporting to Excel.',
+                                },
+                                {
+                                  q: 'How are line numbers matched across documents?',
+                                  a: 'AI uses fuzzy matching algorithms to handle variations in line numbering (e.g., "10-IA-001-A1" vs "10IA001A1"). Unmatched lines are flagged for manual review.',
+                                },
+                                {
+                                  q: 'Can I reprocess documents if results are incorrect?',
+                                  a: 'Absolutely. Delete the current analysis and re-upload corrected documents. The system preserves your project setup but reprocesses all data from scratch.',
+                                },
+                                {
+                                  q: 'What Excel format is the output?',
+                                  a: 'Industry-standard 35-column Critical Line List format (.xlsx) with headers, data validation, and conditional formatting for critical lines.',
+                                },
+                                {
+                                  q: 'Is there a limit on document file sizes?',
+                                  a: 'Maximum 50 MB per document. For larger files, split multi-page PDFs or compress images. Contact support for special requirements.',
+                                },
+                                {
+                                  q: 'How do I mark lines as stress-critical?',
+                                  a: 'Upload a Stress Criticality document (Excel preferred) with line tags marked. The system auto-flags these lines in the output with red highlighting.',
+                                },
+                              ].map((faq, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    padding: '14px 16px',
+                                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                                    borderRadius: '10px',
+                                    background: idx % 2 === 0 ? 'white' : '#f9fafb',
+                                  }}
+                                >
+                                  <div style={{
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    color: CLL_COLORS.PRIMARY,
+                                    marginBottom: '8px',
+                                    lineHeight: 1.4,
+                                  }}>
+                                    Q: {faq.q}
+                                  </div>
+                                  <div style={{
+                                    fontSize: '0.75rem',
+                                    color: CLL_COLORS.TEXT_SECONDARY,
+                                    lineHeight: 1.6,
+                                    paddingLeft: '12px',
+                                    borderLeft: `2px solid ${CLL_COLORS.PRIMARY}`,
+                                  }}>
+                                    {faq.a}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+        </>
+      ) : (
+        /* ─── MAIN CONTENT (SELECTED PROJECT) ─── */
+        <>
+          {/* Back Button */}
+          <button
+            onClick={handleBackToProjects}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 16px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: CLL_COLORS.PRIMARY,
+              background: 'white',
+              border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+              borderRadius: '10px',
+              cursor: 'pointer',
+              marginBottom: '16px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+              transition: 'all 200ms ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(79,70,229,0.05)';
+              e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'white';
+              e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT;
+            }}
+          >
+            <ChevronRight style={{ width: '16px', height: '16px', transform: 'rotate(180deg)' }} />
+            Back to Projects
+          </button>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          WORKFLOW & SMART DOCUMENTATION SECTION (MOVED UP) - REMOVED TO FIX DUPLICATE
+          This section was causing duplicate workflow displays. The workflow now appears
+          only once in its proper location further down in the component.
+          ═══════════════════════════════════════════════════════════════════ */}
+      {/* 
+      REMOVED DUPLICATE SECTION (Previously lines 3656-4662)
+      Workflow and Smart Documentation now render only in their original location below.
+      */}
 
       {/* ── Hero Header ─────────────────────────────────────────────────── */}
 
@@ -1863,7 +3724,7 @@ const CriticalLineList = () => {
                   margin: 0, color: '#fff', fontSize: '1.6rem', fontWeight: 800,
                   letterSpacing: '-0.02em', lineHeight: 1.15,
                 }}>
-                  Stress Critical Line List
+                  {selectedProject ? selectedProject.project_name : 'Critical Line List'}
                 </h1>
                 <span style={{
                   background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)',
@@ -1875,8 +3736,12 @@ const CriticalLineList = () => {
                 margin: '4px 0 10px', color: 'rgba(255,255,255,0.88)',
                 fontSize: '0.85rem', lineHeight: 1.5, maxWidth: 620,
               }}>
-                Upload a P&ID with HMB, PMS, NACE and Stress Criticality documents — RAD AI builds a {CLL_TOTAL_COLS}-column
-                stress-critical register in one pass.
+                {selectedProject && selectedProject.description ? (
+                  selectedProject.description
+                ) : (
+                  <>Upload a P&ID with HMB, PMS, NACE and Stress Criticality documents — RAD AI builds a {CLL_TOTAL_COLS}-column
+                  stress-critical register in one pass.</>
+                )}
               </p>
 
               {/* Capability chip strip */}
@@ -1929,7 +3794,1082 @@ const CriticalLineList = () => {
 
       </div>
 
+      {/* ──── Workflow & Documentation Section ──── */}
 
+      {CLL_WORKFLOW_CONFIG.ENABLED && (
+        <div
+          className="cll-fade-up"
+          style={{
+            marginBottom: 22,
+            animationDelay: '0.08s',
+          }}
+        >
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: CLL_WORKFLOW_CONFIG.SPLIT_SCREEN 
+              ? `${CLL_WORKFLOW_CONFIG.WORKFLOW_WIDTH_PERCENT}% ${CLL_WORKFLOW_CONFIG.DOC_WIDTH_PERCENT}%`
+              : '1fr',
+            gap: CLL_WORKFLOW_CONFIG.SPLIT_GAP,
+          }}>
+            
+            {/* ─── LEFT COLUMN: Workflow Diagram ─── */}
+            <div style={{
+              background: CLL_WORKFLOW_CONFIG.BG_COLOR,
+              border: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+              borderRadius: CLL_WORKFLOW_CONFIG.BORDER_RADIUS,
+              boxShadow: CLL_WORKFLOW_CONFIG.SHADOW,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              height: workflowCollapsed ? CLL_WORKFLOW_CONFIG.COLLAPSED_HEIGHT : 'auto',
+              transition: `all ${CLL_WORKFLOW_CONFIG.TRANSITION_DURATION} ${CLL_WORKFLOW_CONFIG.TRANSITION_EASING}`,
+            }}>
+              {/* Workflow Header */}
+              <div
+                onClick={() => CLL_WORKFLOW_CONFIG.COLLAPSIBLE && setWorkflowCollapsed(!workflowCollapsed)}
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: workflowCollapsed ? 'none' : `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                  background: 'linear-gradient(135deg, rgba(79,70,229,0.04) 0%, rgba(124,58,237,0.06) 100%)',
+                  cursor: CLL_WORKFLOW_CONFIG.COLLAPSIBLE ? 'pointer' : 'default',
+                  transition: 'all 200ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (CLL_WORKFLOW_CONFIG.COLLAPSIBLE) {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(124,58,237,0.12) 100%)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(79,70,229,0.04) 0%, rgba(124,58,237,0.06) 100%)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Rocket style={{ width: '24px', height: '24px', color: CLL_COLORS.PRIMARY }} />
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{
+                      fontSize: '1.05rem',
+                      fontWeight: 700,
+                      color: CLL_COLORS.TEXT_PRIMARY,
+                      margin: 0,
+                      lineHeight: 1,
+                    }}>
+                      Critical Line List Workflow
+                    </h3>
+                    <p style={{
+                      fontSize: '0.75rem',
+                      color: CLL_COLORS.TEXT_SECONDARY,
+                      margin: '4px 0 0',
+                      lineHeight: 1,
+                    }}>
+                      5-step process from document upload to Excel export
+                    </p>
+                  </div>
+                  {CLL_WORKFLOW_CONFIG.COLLAPSIBLE && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWorkflowCollapsed(!workflowCollapsed);
+                      }}
+                      style={{
+                        padding: '6px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: 'rgba(79,70,229,0.1)',
+                        color: CLL_COLORS.PRIMARY,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        transition: 'all 200ms ease',
+                      }}
+                      title={workflowCollapsed ? 'Expand Workflow' : 'Collapse Workflow'}
+                    >
+                      {workflowCollapsed ? (
+                        <ChevronDown style={{ width: '18px', height: '18px' }} />
+                      ) : (
+                        <ChevronUp style={{ width: '18px', height: '18px' }} />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Workflow Content */}
+              {!workflowCollapsed && (
+                <div style={{ padding: '20px' }}>
+                  {/* Zoom Controls */}
+                  {CLL_WORKFLOW_CONFIG.SHOW_CONTROLS && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      marginBottom: '16px',
+                      justifyContent: 'flex-end',
+                      flexWrap: 'wrap',
+                    }}>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (workflowZoom > CLL_WORKFLOW_CONFIG.ZOOM_MIN) {
+                            setWorkflowZoom(workflowZoom - CLL_WORKFLOW_CONFIG.ZOOM_STEP);
+                          }
+                        }}
+                        disabled={workflowZoom <= CLL_WORKFLOW_CONFIG.ZOOM_MIN}
+                        style={{
+                          padding: '8px 12px',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                          background: 'white',
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          cursor: workflowZoom > CLL_WORKFLOW_CONFIG.ZOOM_MIN ? 'pointer' : 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          opacity: workflowZoom <= CLL_WORKFLOW_CONFIG.ZOOM_MIN ? 0.5 : 1,
+                          transition: 'all 200ms ease',
+                        }}
+                      >
+                        <ZoomOut style={{ width: '14px', height: '14px' }} />
+                        Zoom Out
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX) {
+                            setWorkflowZoom(workflowZoom + CLL_WORKFLOW_CONFIG.ZOOM_STEP);
+                          }
+                        }}
+                        disabled={workflowZoom >= CLL_WORKFLOW_CONFIG.ZOOM_MAX}
+                        style={{
+                          padding: '8px 12px',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                          background: 'white',
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          cursor: workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 'pointer' : 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          opacity: workflowZoom >= CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 0.5 : 1,
+                          transition: 'all 200ms ease',
+                        }}
+                      >
+                        <ZoomIn style={{ width: '14px', height: '14px' }} />
+                        Zoom In
+                      </button>
+                      {workflowZoom !== CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setWorkflowZoom(CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT);
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            border: `1px solid ${CLL_COLORS.PRIMARY}`,
+                            background: 'rgba(79,70,229,0.08)',
+                            color: CLL_COLORS.PRIMARY,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 500,
+                            transition: 'all 200ms ease',
+                          }}
+                        >
+                          <RotateCcw style={{ width: '14px', height: '14px' }} />
+                          Reset ({CLL_WORKFLOW_CONFIG.ZOOM_DEFAULT}%)
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setWorkflowFullscreen(true);
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                          background: 'white',
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 200ms ease',
+                        }}
+                      >
+                        <Maximize2 style={{ width: '14px', height: '14px' }} />
+                        Fullscreen
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Workflow Image */}
+                  <div style={{
+                    overflow: 'auto',
+                    borderRadius: '10px',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    background: '#fafafa',
+                    textAlign: 'center',
+                    maxHeight: '500px',
+                  }}>
+                    {workflowImageError ? (
+                      <div style={{
+                        padding: '40px',
+                        color: CLL_COLORS.TEXT_SECONDARY,
+                        fontSize: '0.875rem',
+                      }}>
+                        <AlertTriangle style={{
+                          width: '48px',
+                          height: '48px',
+                          color: CLL_COLORS.WARNING,
+                          margin: '0 auto 12px',
+                        }} />
+                        <p>Failed to load workflow diagram</p>
+                      </div>
+                    ) : !workflowImageLoaded ? (
+                      <div style={{
+                        padding: '40px',
+                        color: CLL_COLORS.TEXT_SECONDARY,
+                        fontSize: '0.875rem',
+                      }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          margin: '0 auto 12px',
+                          animation: 'spin 1s linear infinite',
+                        }}>
+                          <Activity style={{ width: '100%', height: '100%', color: CLL_COLORS.PRIMARY }} />
+                        </div>
+                        <p>Loading workflow...</p>
+                      </div>
+                    ) : null}
+                    <img
+                      src="/assets/images/CriticalLineList_Workflow.png"
+                      alt="Critical Line List Workflow"
+                      style={{
+                        width: `${workflowZoom}%`,
+                        height: 'auto',
+                        cursor: workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX ? 'zoom-in' : 'default',
+                        display: workflowImageLoaded ? 'inline-block' : 'none',
+                        transition: 'width 200ms ease',
+                      }}
+                      onLoad={() => {
+                        setWorkflowImageLoaded(true);
+                        setWorkflowImageError(false);
+                      }}
+                      onError={() => {
+                        setWorkflowImageError(true);
+                        setWorkflowImageLoaded(false);
+                      }}
+                      onClick={() => {
+                        if (workflowZoom < CLL_WORKFLOW_CONFIG.ZOOM_MAX) {
+                          setWorkflowZoom(Math.min(workflowZoom + 25, CLL_WORKFLOW_CONFIG.ZOOM_MAX));
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ─── RIGHT COLUMN: Smart Documentation ─── */}
+            {CLL_DOC_CONFIG.ENABLED && CLL_WORKFLOW_CONFIG.SPLIT_SCREEN && (
+              <div style={{
+                background: CLL_WORKFLOW_CONFIG.BG_COLOR,
+                border: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                borderRadius: CLL_WORKFLOW_CONFIG.BORDER_RADIUS,
+                boxShadow: CLL_WORKFLOW_CONFIG.SHADOW,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: '600px',
+              }}>
+                {/* Documentation Header */}
+                <div style={{
+                  padding: '20px 24px',
+                  borderBottom: `1px solid ${CLL_WORKFLOW_CONFIG.BORDER_COLOR}`,
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(59,130,246,0.06) 100%)',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '12px',
+                  }}>
+                    <BookOpen style={{ width: '24px', height: '24px', color: CLL_COLORS.PRIMARY }} />
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        color: CLL_COLORS.TEXT_PRIMARY,
+                        margin: 0,
+                        lineHeight: 1,
+                      }}>
+                        Smart Documentation
+                      </h3>
+                      <p style={{
+                        fontSize: '0.75rem',
+                        color: CLL_COLORS.TEXT_SECONDARY,
+                        margin: '4px 0 0',
+                        lineHeight: 1,
+                      }}>
+                        Step-by-step guide to Critical Line List generation
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDocPanelCollapsed(!docPanelCollapsed)}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: '0.75rem',
+                        borderRadius: '8px',
+                        border: `1px solid ${docPanelCollapsed ? 'rgba(16,185,129,0.3)' : 'rgba(100,116,139,0.3)'}`,
+                        background: docPanelCollapsed ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.06)',
+                        color: docPanelCollapsed ? CLL_COLORS.SUCCESS : CLL_COLORS.TEXT_SECONDARY,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontWeight: 500,
+                        transition: 'all 200ms ease',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={docPanelCollapsed ? 'Expand Documentation' : 'Collapse Documentation'}
+                    >
+                      {docPanelCollapsed ? (
+                        <>
+                          <ChevronDown style={{ width: '14px', height: '14px' }} />
+                          Show Guide
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp style={{ width: '14px', height: '14px' }} />
+                          Hide Guide
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Tab Navigation - Only show when not collapsed */}
+                  {!docPanelCollapsed && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      overflowX: 'auto',
+                      paddingBottom: '4px',
+                    }}>
+                      {[
+                        { id: 'quickstart', label: 'Quick Start', icon: PlayCircle, color: '#4f46e5' },
+                        { id: 'documents', label: 'Documents Guide', icon: FileCheck, color: '#0891b2' },
+                        { id: 'bestpractices', label: 'Best Practices', icon: Star, color: '#f59e0b' },
+                        { id: 'faq', label: 'FAQ', icon: HelpCircle, color: '#10b981' },
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setDocActiveTab(tab.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 14px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: docActiveTab === tab.id 
+                              ? 'rgba(79,70,229,0.12)'
+                              : 'transparent',
+                            color: docActiveTab === tab.id ? tab.color : CLL_COLORS.TEXT_SECONDARY,
+                            fontSize: '0.8rem',
+                            fontWeight: docActiveTab === tab.id ? 600 : 500,
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease',
+                            whiteSpace: 'nowrap',
+                            borderBottom: docActiveTab === tab.id 
+                              ? `2px solid ${tab.color}` 
+                              : '2px solid transparent',
+                          }}
+                        >
+                          <tab.icon style={{ width: '14px', height: '14px' }} />
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Documentation Content - Only show when not collapsed */}
+                {!docPanelCollapsed && (
+                  <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '20px 24px',
+                  }}>
+                    {/* Quick Start Tab - 5 Step Accordion */}
+                    {docActiveTab === 'quickstart' && (
+                      <>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '16px',
+                        }}>
+                          <h4 style={{
+                            fontSize: '0.95rem',
+                            fontWeight: 600,
+                            color: CLL_COLORS.TEXT_PRIMARY,
+                            margin: 0,
+                          }}>
+                            5-Step Quick Start Guide
+                          </h4>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={expandAllSteps}
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '0.7rem',
+                                borderRadius: '6px',
+                                border: `1px solid ${CLL_COLORS.PRIMARY}`,
+                                background: 'rgba(79,70,229,0.08)',
+                                color: CLL_COLORS.PRIMARY,
+                                cursor: 'pointer',
+                                fontWeight: 500,
+                                transition: 'all 200ms ease',
+                              }}
+                            >
+                              Expand All
+                            </button>
+                            <button
+                              onClick={collapseAllSteps}
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '0.7rem',
+                                borderRadius: '6px',
+                                border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                                background: 'white',
+                                color: CLL_COLORS.TEXT_SECONDARY,
+                                cursor: 'pointer',
+                                fontWeight: 500,
+                                transition: 'all 200ms ease',
+                              }}
+                            >
+                              Collapse All
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Step Accordion */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {CLL_WORKFLOW_STEPS.map((step, idx) => {
+                            const isExpanded = expandedSteps[`step${step.number}`];
+                            const StepIcon = step.icon;
+                            
+                            return (
+                              <div
+                                key={step.id}
+                                style={{
+                                  border: `1px solid ${isExpanded ? step.color : CLL_COLORS.BORDER_DEFAULT}`,
+                                  borderRadius: '10px',
+                                  overflow: 'hidden',
+                                  background: isExpanded ? `${step.color}05` : 'white',
+                                  transition: 'all 300ms ease',
+                                  boxShadow: isExpanded ? `0 4px 12px ${step.color}15` : '0 1px 3px rgba(0,0,0,0.05)',
+                                }}
+                              >
+                                {/* Step Header */}
+                                <div
+                                  onClick={() => toggleStep(`step${step.number}`)}
+                                  style={{
+                                    padding: '14px 16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    cursor: 'pointer',
+                                    background: isExpanded ? step.gradient : 'transparent',
+                                    transition: 'all 300ms ease',
+                                  }}
+                                >
+                                  {/* Step Number Badge */}
+                                  <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: isExpanded ? 'white' : `${step.color}15`,
+                                    color: step.color,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 700,
+                                    flexShrink: 0,
+                                    transition: 'all 300ms ease',
+                                  }}>
+                                    {step.number}
+                                  </div>
+                                  
+                                  {/* Icon */}
+                                  <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '8px',
+                                    background: isExpanded ? 'rgba(255,255,255,0.9)' : `${step.color}10`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    transition: 'all 300ms ease',
+                                  }}>
+                                    <StepIcon style={{
+                                      width: '20px',
+                                      height: '20px',
+                                      color: step.color,
+                                    }} />
+                                  </div>
+                                  
+                                  {/* Title & Description */}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                      fontSize: '0.875rem',
+                                      fontWeight: 600,
+                                      color: isExpanded ? 'white' : CLL_COLORS.TEXT_PRIMARY,
+                                      lineHeight: 1.3,
+                                      marginBottom: '2px',
+                                    }}>
+                                      {step.title}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '0.7rem',
+                                      color: isExpanded ? 'rgba(255,255,255,0.9)' : CLL_COLORS.TEXT_SECONDARY,
+                                      lineHeight: 1.3,
+                                    }}>
+                                      {step.description}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Duration Badge */}
+                                  <div style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    background: isExpanded ? 'rgba(255,255,255,0.25)' : `${step.color}10`,
+                                    color: isExpanded ? 'white' : step.color,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 300ms ease',
+                                  }}>
+                                    {step.duration}
+                                  </div>
+                                  
+                                  {/* Chevron */}
+                                  <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: isExpanded ? 'white' : CLL_COLORS.TEXT_SECONDARY,
+                                    transition: 'transform 300ms ease',
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  }}>
+                                    <ChevronDown style={{ width: '18px', height: '18px' }} />
+                                  </div>
+                                </div>
+
+                                {/* Step Content */}
+                                {isExpanded && (
+                                  <div style={{
+                                    padding: '16px 20px',
+                                    background: 'white',
+                                    borderTop: `1px solid ${step.color}20`,
+                                  }}>
+                                    {/* Key Actions */}
+                                    <div style={{ marginBottom: '16px' }}>
+                                      <div style={{
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        color: CLL_COLORS.TEXT_PRIMARY,
+                                        marginBottom: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                      }}>
+                                        <CheckCircle style={{ width: '14px', height: '14px', color: step.color }} />
+                                        Key Actions:
+                                      </div>
+                                      <ul style={{
+                                        margin: 0,
+                                        paddingLeft: '20px',
+                                        fontSize: '0.75rem',
+                                        color: CLL_COLORS.TEXT_SECONDARY,
+                                        lineHeight: 1.6,
+                                      }}>
+                                        {step.keyActions.map((action, i) => (
+                                          <li key={i} style={{ marginBottom: '6px' }}>{action}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+
+                                    {/* Pro Tips */}
+                                    <div style={{
+                                      padding: '12px',
+                                      borderRadius: '8px',
+                                      background: `${step.color}08`,
+                                      border: `1px solid ${step.color}20`,
+                                    }}>
+                                      <div style={{
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        color: step.color,
+                                        marginBottom: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                      }}>
+                                        <Lightbulb style={{ width: '14px', height: '14px' }} />
+                                        Pro Tips:
+                                      </div>
+                                      <ul style={{
+                                        margin: 0,
+                                        paddingLeft: '20px',
+                                        fontSize: '0.72rem',
+                                        color: CLL_COLORS.TEXT_SECONDARY,
+                                        lineHeight: 1.6,
+                                      }}>
+                                        {step.proTips.map((tip, i) => (
+                                          <li key={i} style={{ marginBottom: '6px' }}>{tip}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Documents Guide Tab */}
+                    {docActiveTab === 'documents' && (
+                      <div>
+                        <h4 style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 600,
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          marginBottom: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <FileCheck style={{ width: '18px', height: '18px', color: CLL_COLORS.PRIMARY }} />
+                          Required Documents Guide
+                        </h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {[
+                            {
+                              title: 'P&ID (Piping & Instrumentation Diagram)',
+                              color: '#0891b2',
+                              icon: FileCheck,
+                              format: 'PDF, PNG, JPG',
+                              purpose: 'Primary source for line numbers, equipment connections, and instrument tags',
+                              tips: [
+                                'Ensure all line numbers are clearly visible',
+                                'Multi-page P&IDs are automatically processed',
+                                'OCR quality improves with high-resolution scans (300+ DPI)',
+                              ],
+                            },
+                            {
+                              title: 'HMB/PFD (Heat & Material Balance / Process Flow Diagram)',
+                              color: '#8b5cf6',
+                              icon: TrendingUp,
+                              format: 'PDF, Excel, CSV',
+                              purpose: 'Provides stream data, temperatures, pressures, and flow rates',
+                              tips: [
+                                'Excel format preferred for direct data extraction',
+                                'Ensure stream numbers match P&ID line tags',
+                                'Include units (°C, bar, kg/h) for automatic conversion',
+                              ],
+                            },
+                            {
+                              title: 'PMS (Piping Material Specification)',
+                              color: '#f59e0b',
+                              icon: Package,
+                              format: 'PDF, Excel',
+                              purpose: 'Defines pipe materials, classes, ratings, and construction standards',
+                              tips: [
+                                'Must include pipe class codes referenced in P&ID',
+                                'Material grade and schedule information critical',
+                                'Flange ratings and insulation specs auto-mapped',
+                              ],
+                            },
+                            {
+                              title: 'NACE (Corrosion Standards)',
+                              color: '#10b981',
+                              icon: Shield,
+                              format: 'PDF, Excel',
+                              purpose: 'Corrosion allowances, material restrictions, and inspection requirements',
+                              tips: [
+                                'Links corrosion zones to specific line services',
+                                'Auto-flags lines requiring special materials',
+                                'Inspection frequency auto-calculated',
+                              ],
+                            },
+                            {
+                              title: 'Stress Criticality List',
+                              color: '#ef4444',
+                              icon: AlertTriangle,
+                              format: 'PDF, Excel',
+                              purpose: 'Identifies lines requiring stress analysis based on temperature, pressure, or size',
+                              tips: [
+                                'Excel format enables direct criticality tagging',
+                                'Automatically cross-references with generated line list',
+                                'Flags high-priority lines for engineering review',
+                              ],
+                            },
+                          ].map((doc, idx) => {
+                            const DocIcon = doc.icon;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: '14px 16px',
+                                  border: `1px solid ${doc.color}30`,
+                                  borderRadius: '10px',
+                                  background: `${doc.color}05`,
+                                }}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  marginBottom: '10px',
+                                }}>
+                                  <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '8px',
+                                    background: `${doc.color}15`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}>
+                                    <DocIcon style={{ width: '18px', height: '18px', color: doc.color }} />
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{
+                                      fontSize: '0.8rem',
+                                      fontWeight: 600,
+                                      color: doc.color,
+                                      marginBottom: '2px',
+                                    }}>
+                                      {doc.title}
+                                    </div>
+                                    <div style={{
+                                      fontSize: '0.7rem',
+                                      color: CLL_COLORS.TEXT_SECONDARY,
+                                      fontWeight: 500,
+                                    }}>
+                                      Formats: {doc.format}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{
+                                  fontSize: '0.75rem',
+                                  color: CLL_COLORS.TEXT_SECONDARY,
+                                  marginBottom: '10px',
+                                  fontStyle: 'italic',
+                                }}>
+                                  <strong>Purpose:</strong> {doc.purpose}
+                                </div>
+                                <div style={{
+                                  fontSize: '0.72rem',
+                                  color: CLL_COLORS.TEXT_SECONDARY,
+                                  paddingLeft: '12px',
+                                  borderLeft: `2px solid ${doc.color}`,
+                                }}>
+                                  {doc.tips.map((tip, i) => (
+                                    <div key={i} style={{ marginBottom: '4px' }}>• {tip}</div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Best Practices Tab */}
+                    {docActiveTab === 'bestpractices' && (
+                      <div>
+                        <h4 style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 600,
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          marginBottom: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <Star style={{ width: '18px', height: '18px', color: '#f59e0b' }} />
+                          Best Practices & Tips
+                        </h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {[
+                            {
+                              category: 'Document Preparation',
+                              color: '#4f46e5',
+                              icon: Database,
+                              tips: [
+                                'Scan documents at 300 DPI or higher for optimal OCR accuracy',
+                                'Remove password protection from PDFs before upload',
+                                'Organize multi-page documents in logical sequence',
+                                'Use consistent naming conventions for easy identification',
+                              ],
+                            },
+                            {
+                              category: 'Data Quality',
+                              color: '#0891b2',
+                              icon: Award,
+                              tips: [
+                                'Verify line numbering system matches project standards',
+                                'Cross-check equipment tags between P&ID and HMB',
+                                'Ensure material class codes are defined in PMS',
+                                'Review AI-extracted data for unusual values or outliers',
+                              ],
+                            },
+                            {
+                              category: 'AI Processing',
+                              color: '#8b5cf6',
+                              icon: Brain,
+                              tips: [
+                                'Allow 2-5 minutes for AI analysis depending on document size',
+                                'Use "Preview Results" before generating full Excel output',
+                                'Re-upload documents if extraction confidence is below 85%',
+                                'Leverage AI suggestions for missing or ambiguous data',
+                              ],
+                            },
+                            {
+                              category: 'Output & Export',
+                              color: '#10b981',
+                              icon: Download,
+                              tips: [
+                                'Export to Excel for further engineering analysis',
+                                'Use filters to isolate critical lines for stress analysis',
+                                'Export includes all 35 columns as per industry standards',
+                                'Save project before export to preserve AI analysis state',
+                              ],
+                            },
+                          ].map((section, idx) => {
+                            const SectionIcon = section.icon;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: '14px 16px',
+                                  border: `1px solid ${section.color}25`,
+                                  borderRadius: '10px',
+                                  background: 'white',
+                                  boxShadow: `0 2px 8px ${section.color}10`,
+                                }}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  marginBottom: '12px',
+                                }}>
+                                  <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: `${section.color}15`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}>
+                                    <SectionIcon style={{ width: '16px', height: '16px', color: section.color }} />
+                                  </div>
+                                  <div style={{
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600,
+                                    color: section.color,
+                                  }}>
+                                    {section.category}
+                                  </div>
+                                </div>
+                                <ul style={{
+                                  margin: 0,
+                                  paddingLeft: '20px',
+                                  fontSize: '0.75rem',
+                                  color: CLL_COLORS.TEXT_SECONDARY,
+                                  lineHeight: 1.6,
+                                }}>
+                                  {section.tips.map((tip, i) => (
+                                    <li key={i} style={{ marginBottom: '8px' }}>{tip}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* FAQ Tab */}
+                    {docActiveTab === 'faq' && (
+                      <div>
+                        <h4 style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 600,
+                          color: CLL_COLORS.TEXT_PRIMARY,
+                          marginBottom: '16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <HelpCircle style={{ width: '18px', height: '18px', color: '#10b981' }} />
+                          Frequently Asked Questions
+                        </h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {[
+                            {
+                              q: 'How long does AI processing take?',
+                              a: 'Typically 2-5 minutes depending on document size and complexity. Large multi-page P&IDs may take up to 10 minutes. Progress is shown in real-time.',
+                            },
+                            {
+                              q: 'Can I upload documents in batches?',
+                              a: 'Yes! Upload all 5 documents at once. The system processes them in parallel and automatically merges data. You can also upload individually in any order.',
+                            },
+                            {
+                              q: 'What if OCR extraction has errors?',
+                              a: 'Review the confidence scores in the results table. Values below 85% are flagged in yellow. You can manually correct data in the table before exporting to Excel.',
+                            },
+                            {
+                              q: 'How are line numbers matched across documents?',
+                              a: 'AI uses fuzzy matching algorithms to handle variations in line numbering (e.g., "10-IA-001-A1" vs "10IA001A1"). Unmatched lines are flagged for manual review.',
+                            },
+                            {
+                              q: 'Can I reprocess documents if results are incorrect?',
+                              a: 'Absolutely. Delete the current analysis and re-upload corrected documents. The system preserves your project setup but reprocesses all data from scratch.',
+                            },
+                            {
+                              q: 'What Excel format is the output?',
+                              a: 'Industry-standard 35-column Critical Line List format (.xlsx) with headers, data validation, and conditional formatting for critical lines.',
+                            },
+                            {
+                              q: 'Is there a limit on document file sizes?',
+                              a: 'Maximum 50 MB per document. For larger files, split multi-page PDFs or compress images. Contact support for special requirements.',
+                            },
+                            {
+                              q: 'How do I mark lines as stress-critical?',
+                              a: 'Upload a Stress Criticality document (Excel preferred) with line tags marked. The system auto-flags these lines in the output with red highlighting.',
+                            },
+                          ].map((faq, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '14px 16px',
+                                border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                                borderRadius: '10px',
+                                background: idx % 2 === 0 ? 'white' : '#f9fafb',
+                              }}
+                            >
+                              <div style={{
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                color: CLL_COLORS.PRIMARY,
+                                marginBottom: '8px',
+                                lineHeight: 1.4,
+                              }}>
+                                Q: {faq.q}
+                              </div>
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: CLL_COLORS.TEXT_SECONDARY,
+                                lineHeight: 1.6,
+                                paddingLeft: '12px',
+                                borderLeft: `2px solid ${CLL_COLORS.PRIMARY}`,
+                              }}>
+                                {faq.a}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Fullscreen Modal for Workflow */}
+          {workflowFullscreen && (
+            <div
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setWorkflowFullscreen(false);
+                }
+              }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.95)',
+                zIndex: 10000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px',
+              }}
+            >
+              <button
+                onClick={() => setWorkflowFullscreen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  transition: 'all 200ms ease',
+                  zIndex: 10001,
+                }}
+              >
+                <ChevronUp style={{ width: '18px', height: '18px' }} />
+                Close (ESC)
+              </button>
+              <img
+                src="/assets/images/CriticalLineList_Workflow.png"
+                alt="Critical Line List Workflow - Fullscreen"
+                style={{
+                  maxWidth: '95%',
+                  maxHeight: '95%',
+                  objectFit: 'contain',
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Stats cards — glass tiles with icons & subtle hover lift ─── */}
 
@@ -5048,6 +7988,523 @@ const CriticalLineList = () => {
 
         </div>
 
+      )}
+
+      </>
+      )}
+      {/* End conditional: selectedProject */}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          PROJECT MANAGEMENT MODALS
+          ═══════════════════════════════════════════════════════════════════ */}
+      
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div
+          onClick={() => setShowCreateModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: CLL_PROJECT_CONFIG.MODAL_BG,
+            backdropFilter: `blur(${CLL_PROJECT_CONFIG.MODAL_BACKDROP_BLUR})`,
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: CLL_PROJECT_CONFIG.MODAL_BORDER_RADIUS,
+              padding: CLL_PROJECT_CONFIG.MODAL_PADDING,
+              maxWidth: CLL_PROJECT_CONFIG.MODAL_MAX_WIDTH,
+              width: '90%',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+              animation: 'cllFadeUp 0.3s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{
+                  fontSize: '1.4rem',
+                  fontWeight: 700,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  margin: 0,
+                  marginBottom: '4px',
+                }}>
+                  Create New Project
+                </h2>
+                <p style={{
+                  fontSize: '0.8rem',
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  margin: 0,
+                }}>
+                  Set up a project for critical line list generation
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'rgba(100,116,139,0.1)',
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  transition: 'all 200ms ease',
+                }}
+              >
+                <X style={{ width: '18px', height: '18px' }} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProject}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  marginBottom: '8px',
+                }}>
+                  Project Name <span style={{ color: CLL_COLORS.DANGER }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="e.g., ADNOC Offshore Phase 2 - Critical Lines"
+                  autoFocus
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: '0.875rem',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    borderRadius: '8px',
+                    outline: 'none',
+                    transition: 'all 200ms ease',
+                  }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY}
+                  onBlur={(e) => e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT}
+                />
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  marginBottom: '8px',
+                }}>
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={newProjectDesc}
+                  onChange={(e) => setNewProjectDesc(e.target.value)}
+                  placeholder="Add project description, scope, or notes..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: '0.875rem',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    borderRadius: '8px',
+                    outline: 'none',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    transition: 'all 200ms ease',
+                  }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY}
+                  onBlur={(e) => e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewProjectName('');
+                    setNewProjectDesc('');
+                  }}
+                  style={{
+                    padding: '10px 18px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: CLL_COLORS.TEXT_SECONDARY,
+                    background: 'rgba(100,116,139,0.1)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProject || !newProjectName.trim()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'white',
+                    background: creatingProject || !newProjectName.trim()
+                      ? 'rgba(100,116,139,0.4)'
+                      : 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: creatingProject || !newProjectName.trim() ? 'not-allowed' : 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  {creatingProject ? (
+                    <>
+                      <Loader style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle style={{ width: '16px', height: '16px' }} />
+                      Create Project
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {showEditModal && editingProject && (
+        <div
+          onClick={() => setShowEditModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: CLL_PROJECT_CONFIG.MODAL_BG,
+            backdropFilter: `blur(${CLL_PROJECT_CONFIG.MODAL_BACKDROP_BLUR})`,
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: CLL_PROJECT_CONFIG.MODAL_BORDER_RADIUS,
+              padding: CLL_PROJECT_CONFIG.MODAL_PADDING,
+              maxWidth: CLL_PROJECT_CONFIG.MODAL_MAX_WIDTH,
+              width: '90%',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+              animation: 'cllFadeUp 0.3s ease',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{
+                  fontSize: '1.4rem',
+                  fontWeight: 700,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  margin: 0,
+                  marginBottom: '4px',
+                }}>
+                  Edit Project
+                </h2>
+                <p style={{
+                  fontSize: '0.8rem',
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  margin: 0,
+                }}>
+                  Update project details
+                </p>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'rgba(100,116,139,0.1)',
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  transition: 'all 200ms ease',
+                }}
+              >
+                <X style={{ width: '18px', height: '18px' }} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProject}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  marginBottom: '8px',
+                }}>
+                  Project Name <span style={{ color: CLL_COLORS.DANGER }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: '0.875rem',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    borderRadius: '8px',
+                    outline: 'none',
+                    transition: 'all 200ms ease',
+                  }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY}
+                  onBlur={(e) => e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT}
+                />
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: CLL_COLORS.TEXT_PRIMARY,
+                  marginBottom: '8px',
+                }}>
+                  Description
+                </label>
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: '0.875rem',
+                    border: `1px solid ${CLL_COLORS.BORDER_DEFAULT}`,
+                    borderRadius: '8px',
+                    outline: 'none',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    transition: 'all 200ms ease',
+                  }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = CLL_COLORS.PRIMARY}
+                  onBlur={(e) => e.currentTarget.style.borderColor = CLL_COLORS.BORDER_DEFAULT}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  style={{
+                    padding: '10px 18px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: CLL_COLORS.TEXT_SECONDARY,
+                    background: 'rgba(100,116,139,0.1)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingProject || !editName.trim()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 18px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'white',
+                    background: updatingProject || !editName.trim()
+                      ? 'rgba(100,116,139,0.4)'
+                      : 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: updatingProject || !editName.trim() ? 'not-allowed' : 'pointer',
+                    transition: 'all 200ms ease',
+                  }}
+                >
+                  {updatingProject ? (
+                    <>
+                      <Loader style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Save style={{ width: '16px', height: '16px' }} />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletingProject && (
+        <div
+          onClick={() => setShowDeleteConfirm(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: CLL_PROJECT_CONFIG.MODAL_BG,
+            backdropFilter: `blur(${CLL_PROJECT_CONFIG.MODAL_BACKDROP_BLUR})`,
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: CLL_PROJECT_CONFIG.MODAL_BORDER_RADIUS,
+              padding: CLL_PROJECT_CONFIG.MODAL_PADDING,
+              maxWidth: '450px',
+              width: '90%',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+              animation: 'cllFadeUp 0.3s ease',
+            }}
+          >
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: 'rgba(239,68,68,0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <AlertTriangle style={{ width: '28px', height: '28px', color: CLL_COLORS.DANGER }} />
+            </div>
+
+            <h2 style={{
+              fontSize: '1.3rem',
+              fontWeight: 700,
+              color: CLL_COLORS.TEXT_PRIMARY,
+              textAlign: 'center',
+              marginBottom: '8px',
+            }}>
+              Delete Project?
+            </h2>
+
+            <p style={{
+              fontSize: '0.875rem',
+              color: CLL_COLORS.TEXT_SECONDARY,
+              textAlign: 'center',
+              lineHeight: 1.6,
+              marginBottom: '8px',
+            }}>
+              Are you sure you want to delete <strong>{deletingProject.project_name}</strong>?
+            </p>
+
+            <p style={{
+              fontSize: '0.8rem',
+              color: CLL_COLORS.DANGER,
+              textAlign: 'center',
+              lineHeight: 1.5,
+              marginBottom: '24px',
+            }}>
+              This action cannot be undone. All associated data will be permanently removed.
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeletingProject(null);
+                }}
+                disabled={isDeleting}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: CLL_COLORS.TEXT_SECONDARY,
+                  background: 'rgba(100,116,139,0.1)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  transition: 'all 200ms ease',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                disabled={isDeleting}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '12px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: 'white',
+                  background: isDeleting
+                    ? 'rgba(239,68,68,0.6)'
+                    : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  transition: 'all 200ms ease',
+                }}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 style={{ width: '16px', height: '16px' }} />
+                    Delete Project
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
