@@ -178,6 +178,7 @@ const COLOR_PRIMARY_LIGHT        = '#60a5fa';  // Light blue
 const COLOR_SUCCESS              = '#10b981';  // Green
 const COLOR_WARNING              = '#f59e0b';  // Amber
 const COLOR_DANGER               = '#ef4444';  // Red
+const COLOR_ERROR                = '#ef4444';  // Error red (same as danger)
 const COLOR_TEXT_PRIMARY         = '#0f172a';  // Dark text
 const COLOR_TEXT_SECONDARY       = '#64748b';  // Medium gray text
 const COLOR_TEXT_TERTIARY        = '#94a3b8';  // Light gray text
@@ -1267,6 +1268,48 @@ const PIDVerification = () => {
   const [workflowFullscreen, setWorkflowFullscreen] = useState(false);
   const [workflowImageLoaded, setWorkflowImageLoaded] = useState(false);
   const [workflowImageError, setWorkflowImageError] = useState(false);
+
+  // Documentation accordion state - track expanded steps
+  const [expandedSteps, setExpandedSteps] = useState({
+    step1: true,  // Create Project - expanded by default
+    step2: false, // Upload P&ID
+    step3: false, // AI Analysis
+    step4: false, // Review Results
+    step5: false  // Export Report
+  });
+
+  // Toggle individual step
+  const toggleStep = (stepKey) => {
+    setExpandedSteps(prev => ({
+      ...prev,
+      [stepKey]: !prev[stepKey]
+    }));
+  };
+
+  // Expand all steps
+  const expandAllSteps = () => {
+    setExpandedSteps({
+      step1: true,
+      step2: true,
+      step3: true,
+      step4: true,
+      step5: true
+    });
+  };
+
+  // Collapse all steps
+  const collapseAllSteps = () => {
+    setExpandedSteps({
+      step1: false,
+      step2: false,
+      step3: false,
+      step4: false,
+      step5: false
+    });
+  };
+
+  // Smart Documentation panel collapse state
+  const [docPanelCollapsed, setDocPanelCollapsed] = useState(false);
 
   // ESC key handler for fullscreen modal
   useEffect(() => {
@@ -3354,7 +3397,7 @@ const PIDVerification = () => {
                     marginBottom: '12px'
                   }}>
                     <BookOpen style={{ width: '24px', height: '24px', color: COLOR_PRIMARY }} />
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <h3 style={{
                         fontSize: '1.1rem',
                         fontWeight: 700,
@@ -3376,15 +3419,54 @@ const PIDVerification = () => {
                         }
                       </p>
                     </div>
+                    {/* Collapse Workflow Button */}
+                    <button
+                      onClick={() => setDocPanelCollapsed(!docPanelCollapsed)}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: '0.75rem',
+                        borderRadius: '8px',
+                        border: `1px solid ${docPanelCollapsed ? 'rgba(16,185,129,0.3)' : 'rgba(100,116,139,0.3)'}`,
+                        background: docPanelCollapsed ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.06)',
+                        color: docPanelCollapsed ? COLOR_SUCCESS : COLOR_TEXT_SECONDARY,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontWeight: 500,
+                        transition: 'all 200ms ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = docPanelCollapsed ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.12)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = docPanelCollapsed ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.06)';
+                      }}
+                      title={docPanelCollapsed ? 'Expand Documentation' : 'Collapse Documentation'}
+                    >
+                      {docPanelCollapsed ? (
+                        <>
+                          <ChevronDown style={{ width: '14px', height: '14px' }} />
+                          Show Guide
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp style={{ width: '14px', height: '14px' }} />
+                          Hide Guide
+                        </>
+                      )}
+                    </button>
                   </div>
 
-                  {/* Tab Navigation */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    overflowX: 'auto',
-                    paddingBottom: '4px'
-                  }}>
+                  {/* Tab Navigation - Only show when not collapsed */}
+                  {!docPanelCollapsed && (
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      overflowX: 'auto',
+                      paddingBottom: '4px'
+                    }}>
                     {[
                       { id: 'quickstart', label: 'Quick Start', icon: PlayCircle, color: '#3b82f6' },
                       { id: 'rules', label: 'Quality Rules', icon: List, color: '#8b5cf6' },
@@ -3430,41 +3512,72 @@ const PIDVerification = () => {
                         {tab.label}
                       </button>
                     ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Content Area (Scrollable) */}
-                <div style={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  padding: '20px 24px'
-                }}>
+                {/* Content Area (Scrollable) - Only show when not collapsed */}
+                {!docPanelCollapsed && (
+                  <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '20px 24px'
+                  }}>
                   
                   {/* QUICK START TAB - COMPREHENSIVE GUIDE */}
                   {docActiveTab === 'quickstart' && (
                     <div>
-                      {/* Welcome Banner */}
+                      {/* Expand/Collapse All Controls */}
                       <div style={{
-                        background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.12) 100%)',
-                        border: `1px solid rgba(59,130,246,0.2)`,
-                        borderRadius: '12px',
-                        padding: '16px',
-                        marginBottom: '24px'
+                        display: 'flex',
+                        gap: '8px',
+                        marginBottom: '16px',
+                        justifyContent: 'flex-end'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                          <Sparkles style={{ width: '22px', height: '22px', color: COLOR_PRIMARY, marginTop: '2px' }} />
-                          <div>
-                            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px' }}>
-                              {projects.length === 0 ? '🎯 Welcome to AI-Powered P&ID Verification' : '✅ Ready to Continue'}
-                            </h4>
-                            <p style={{ fontSize: '0.8rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.6 }}>
-                              {projects.length === 0 
-                                ? 'This comprehensive guide walks you through every step of verifying your P&ID drawings with cutting-edge AI technology. Follow the detailed instructions below to ensure accurate, compliant engineering documentation.'
-                                : 'Select an existing project below or create a new one. Each step includes detailed instructions to help you get the most from AI-powered quality verification.'
-                              }
-                            </p>
-                          </div>
-                        </div>
+                        <button
+                          onClick={expandAllSteps}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(59,130,246,0.3)',
+                            background: 'rgba(59,130,246,0.06)',
+                            color: COLOR_PRIMARY,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 500,
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.12)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.06)'}
+                        >
+                          <ChevronDown style={{ width: '14px', height: '14px' }} />
+                          Expand All
+                        </button>
+                        <button
+                          onClick={collapseAllSteps}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(100,116,139,0.3)',
+                            background: 'rgba(148,163,184,0.06)',
+                            color: COLOR_TEXT_SECONDARY,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 500,
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(148,163,184,0.12)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(148,163,184,0.06)'}
+                        >
+                          <ChevronUp style={{ width: '14px', height: '14px' }} />
+                          Collapse All
+                        </button>
                       </div>
 
                       {/* Step 1: Create Project - DETAILED */}
@@ -3472,13 +3585,21 @@ const PIDVerification = () => {
                         marginBottom: '20px',
                         border: '2px solid rgba(59,130,246,0.2)',
                         borderRadius: '12px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
                       }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
-                          padding: '14px 16px',
-                          borderBottom: '1px solid rgba(59,130,246,0.2)'
-                        }}>
+                        <div 
+                          onClick={() => toggleStep('step1')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step1 ? '1px solid rgba(59,130,246,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(99,102,241,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 100%)'}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
                               width: '36px',
@@ -3501,11 +3622,16 @@ const PIDVerification = () => {
                                 Organize your P&ID verification work
                               </p>
                             </div>
-                            <FolderPlus style={{ width: '20px', height: '20px', color: '#3b82f6' }} />
+                            {expandedSteps.step1 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#3b82f6', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#3b82f6', transition: 'transform 200ms ease' }} />
+                            )}
                           </div>
                         </div>
                         
-                        <div style={{ padding: '16px', background: 'white' }}>
+                        {expandedSteps.step1 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>📋</span> How to Create a Project
@@ -3550,6 +3676,7 @@ const PIDVerification = () => {
                             </p>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Step 2: Upload P&ID - DETAILED */}
@@ -3557,13 +3684,21 @@ const PIDVerification = () => {
                         marginBottom: '20px',
                         border: '2px solid rgba(139,92,246,0.2)',
                         borderRadius: '12px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
                       }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
-                          padding: '14px 16px',
-                          borderBottom: '1px solid rgba(139,92,246,0.2)'
-                        }}>
+                        <div 
+                          onClick={() => toggleStep('step2')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step2 ? '1px solid rgba(139,92,246,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(99,102,241,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.08) 100%)'}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
                               width: '36px',
@@ -3586,11 +3721,16 @@ const PIDVerification = () => {
                                 Critical step for accurate AI analysis
                               </p>
                             </div>
-                            <UploadIcon style={{ width: '20px', height: '20px', color: '#8b5cf6' }} />
+                            {expandedSteps.step2 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#8b5cf6', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#8b5cf6', transition: 'transform 200ms ease' }} />
+                            )}
                           </div>
                         </div>
                         
-                        <div style={{ padding: '16px', background: 'white' }}>
+                        {expandedSteps.step2 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>📤</span> Upload Process
@@ -3663,6 +3803,7 @@ const PIDVerification = () => {
                             </p>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Step 3: AI Analysis - DEEP DIVE */}
@@ -3670,13 +3811,21 @@ const PIDVerification = () => {
                         marginBottom: '20px',
                         border: '2px solid rgba(245,158,11,0.2)',
                         borderRadius: '12px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
                       }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,88,12,0.08) 100%)',
-                          padding: '14px 16px',
-                          borderBottom: '1px solid rgba(245,158,11,0.2)'
-                        }}>
+                        <div 
+                          onClick={() => toggleStep('step3')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,88,12,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step3 ? '1px solid rgba(245,158,11,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(234,88,12,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,88,12,0.08) 100%)'}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
                               width: '36px',
@@ -3699,11 +3848,16 @@ const PIDVerification = () => {
                                 Automated verification with 20+ engineering rules
                               </p>
                             </div>
-                            <Brain style={{ width: '20px', height: '20px', color: '#f59e0b' }} />
+                            {expandedSteps.step3 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#f59e0b', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#f59e0b', transition: 'transform 200ms ease' }} />
+                            )}
                           </div>
                         </div>
                         
-                        <div style={{ padding: '16px', background: 'white' }}>
+                        {expandedSteps.step3 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>🤖</span> What Happens During Analysis
@@ -3845,6 +3999,7 @@ const PIDVerification = () => {
                             </div>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Step 4: Review Results - DETAILED */}
@@ -3852,13 +4007,21 @@ const PIDVerification = () => {
                         marginBottom: '20px',
                         border: '2px solid rgba(16,185,129,0.2)',
                         borderRadius: '12px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
                       }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.08) 100%)',
-                          padding: '14px 16px',
-                          borderBottom: '1px solid rgba(16,185,129,0.2)'
-                        }}>
+                        <div 
+                          onClick={() => toggleStep('step4')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step4 ? '1px solid rgba(16,185,129,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(52,211,153,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.08) 100%)'}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
                               width: '36px',
@@ -3881,11 +4044,16 @@ const PIDVerification = () => {
                                 Interactive analysis with visual markers
                               </p>
                             </div>
-                            <Eye style={{ width: '20px', height: '20px', color: '#10b981' }} />
+                            {expandedSteps.step4 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#10b981', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#10b981', transition: 'transform 200ms ease' }} />
+                            )}
                           </div>
                         </div>
                         
-                        <div style={{ padding: '16px', background: 'white' }}>
+                        {expandedSteps.step4 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>📊</span> Understanding Your Results
@@ -3983,6 +4151,7 @@ const PIDVerification = () => {
                             </p>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Step 5: Export Report - DETAILED */}
@@ -3990,13 +4159,21 @@ const PIDVerification = () => {
                         marginBottom: '8px',
                         border: '2px solid rgba(99,102,241,0.2)',
                         borderRadius: '12px',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
                       }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(59,130,246,0.08) 100%)',
-                          padding: '14px 16px',
-                          borderBottom: '1px solid rgba(99,102,241,0.2)'
-                        }}>
+                        <div 
+                          onClick={() => toggleStep('step5')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(59,130,246,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step5 ? '1px solid rgba(99,102,241,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(59,130,246,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(59,130,246,0.08) 100%)'}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                             <div style={{
                               width: '36px',
@@ -4019,11 +4196,16 @@ const PIDVerification = () => {
                                 Professional documentation for your team
                               </p>
                             </div>
-                            <Download style={{ width: '20px', height: '20px', color: '#6366f1' }} />
+                            {expandedSteps.step5 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#6366f1', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#6366f1', transition: 'transform 200ms ease' }} />
+                            )}
                           </div>
                         </div>
                         
-                        <div style={{ padding: '16px', background: 'white' }}>
+                        {expandedSteps.step5 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>📄</span> Export Options
@@ -4121,6 +4303,7 @@ const PIDVerification = () => {
                             </div>
                           </div>
                         </div>
+                        )}
                       </div>
 
                     </div>
@@ -4385,7 +4568,8 @@ const PIDVerification = () => {
                     </div>
                   )}
 
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
