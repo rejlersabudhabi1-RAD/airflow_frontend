@@ -644,6 +644,17 @@ const PaperSpecExtractor = ({ projectId = null, jobId = null } = {}) => {
   const [procTipIndex, setProcTipIndex]     = useState(0);
   const uploadStartRef                      = useRef(0);
   const lastTickRef                         = useRef({ t: 0, loaded: 0 });
+
+  // BYOK (Bring Your Own Key) — optional user-supplied fields for attribution and custom AI usage.
+  const [documentName, setDocumentName]     = useState('');
+  const [engineerName, setEngineerName]     = useState('');
+  const [userApiKey, setUserApiKey]         = useState(() => {
+    try {
+      return sessionStorage.getItem('radai_spec_user_openai_key') || '';
+    } catch (_) { return ''; }
+  });
+  const [showApiKey, setShowApiKey]         = useState(false);
+
   const [job, setJob]                       = useState(null);
   const [document, setDocument]             = useState(null);
   const [classes, setClasses]               = useState([]);
@@ -827,6 +838,9 @@ const PaperSpecExtractor = ({ projectId = null, jobId = null } = {}) => {
       const resp = await specCustomizationAPI.upload({
         file,
         projectId,
+        title: documentName.trim(),                    // BYOK: document name
+        engineerName: engineerName.trim(),             // BYOK: engineer attribution
+        userOpenaiApiKey: userApiKey.trim(),           // BYOK: user's OpenAI API key
         onUploadProgress: (evt) => {
           if (!evt.total) return;
           const pct = Math.round((evt.loaded / evt.total) * 100);
@@ -1082,6 +1096,79 @@ const PaperSpecExtractor = ({ projectId = null, jobId = null } = {}) => {
                 onChange={handleFilePick}
                 className="hidden"
               />
+
+              {/* BYOK (Bring Your Own Key) — optional attribution & custom API key fields */}
+              {file && (
+                <div className="mt-4 p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Document Name <span className="text-slate-400 font-normal">(optional — helps identify this spec in history)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={documentName}
+                      onChange={(e) => setDocumentName(e.target.value)}
+                      placeholder="e.g. Q4 2026 Piping Spec Rev A"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm bg-white dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Spec Engineer <span className="text-slate-400 font-normal">(optional — for attribution)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={engineerName}
+                      onChange={(e) => setEngineerName(e.target.value)}
+                      placeholder="e.g. John Smith, Lead Piping Engineer"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm bg-white dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                      <span>
+                        Your OpenAI API Key <span className="text-slate-400 font-normal">(optional — BYOK)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(v => !v)}
+                        className="text-xs text-pink-700 dark:text-pink-300 hover:text-pink-900 dark:hover:text-pink-100"
+                      >
+                        {showApiKey ? 'Hide' : 'Show'}
+                      </button>
+                    </label>
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={userApiKey}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setUserApiKey(val);
+                        try {
+                          if (val) sessionStorage.setItem('radai_spec_user_openai_key', val);
+                          else sessionStorage.removeItem('radai_spec_user_openai_key');
+                        } catch (_) { /* ignore */ }
+                      }}
+                      placeholder="sk-... (leave empty to use platform key)"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm font-mono ${
+                        userApiKey.trim() && !/^sk-[A-Za-z0-9_\-]{18,}$/.test(userApiKey.trim())
+                          ? 'border-red-400 bg-red-50 dark:bg-red-900/20'
+                          : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 dark:text-white'
+                      }`}
+                    />
+                    {userApiKey.trim() && !/^sk-[A-Za-z0-9_\-]{18,}$/.test(userApiKey.trim()) && (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 font-medium">
+                        This does not look like an OpenAI API key. Valid keys start with <code>sk-</code> and are 20+ characters. Your key will be ignored and the platform key will be used instead.
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Your key is used for OpenAI GPT-4o Vision calls during extraction. Held in your browser session and wiped from our servers immediately after extraction completes.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 flex-wrap justify-center">
                 <label
                   htmlFor="paper-spec-file"
