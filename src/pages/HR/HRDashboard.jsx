@@ -989,13 +989,13 @@ export default function HRDashboard() {
     return () => clearInterval(id)
   }, [])
 
-  // ── Approval tracker (super-admin only, non-blocking, one-time on mount)
-  useEffect(() => {
-    if (!isSuperAdmin) return
-    payrollService.getApprovalTracker()
-      .then(data => setTrackerData(data))
-      .catch(() => { /* non-fatal — widget stays hidden */ })
-  }, [isSuperAdmin])
+  // ── Approval tracker (DISABLED - feature not implemented yet)
+  // useEffect(() => {
+  //   if (!isSuperAdmin) return
+  //   payrollService.getApprovalTracker()
+  //     .then(data => setTrackerData(data))
+  //     .catch(() => { /* non-fatal — widget stays hidden */ })
+  // }, [isSuperAdmin])
 
   // ── Derived data (memoised so re-renders stay cheap)
   const ctx = useMemo(
@@ -1191,13 +1191,13 @@ export default function HRDashboard() {
           </div>
         )}
 
-        {/* ── Approval Pipeline Tracker (super-admin only) ─────────────── */}
-        {isSuperAdmin && trackerData && (
+        {/* ── Approval Pipeline Tracker (DISABLED - feature not implemented yet) ─────────────── */}
+        {/* {isSuperAdmin && trackerData && (
           <ApprovalPipelineWidget
             data={trackerData}
             onViewAll={() => navigate('/hr/payroll')}
           />
-        )}
+        )} */}
 
         {/* ── Pending Actions inbox ────────────────────────────────────── */}
         {HR_DASHBOARD_SECTIONS.pendingActions && (
