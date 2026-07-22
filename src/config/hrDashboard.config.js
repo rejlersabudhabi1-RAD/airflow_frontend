@@ -26,6 +26,16 @@ import {
 } from './hrEmployees.config'
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper to format leave records for consolidated report
+// ─────────────────────────────────────────────────────────────────────────────
+export const formatLeaveRecord = (record) => ({
+  ...record,
+  employee_display: record.employee_name || `${record.employee?.first_name || ''} ${record.employee?.last_name || ''}`.trim() || 'Unknown',
+  leave_type_display: record.leave_type_detail?.name || record.leave_type || 'Unknown',
+  status_display: (record.status || 'UNKNOWN').replace('_', ' '),
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 1. POLLING — how often the live tiles refresh (ms)
 //    Overridable via env var so production can dial it up/down without a rebuild
 //    of the page component.
@@ -194,7 +204,7 @@ export const HR_DASHBOARD_KPIS = [
 // ─────────────────────────────────────────────────────────────────────────────
 export const HR_DASHBOARD_SECTIONS = {
   liveFeed: true,
-  workforceComposition: true,
+  workforceComposition: false,  // SOFT-CODED: Disabled to hide "Workforce composition" and "Engineering disciplines" sections
   todayPunctuality: true,
   monthRollup: true,
   recentJoiners: true,
@@ -202,6 +212,7 @@ export const HR_DASHBOARD_SECTIONS = {
   aiChampion: true,
   pendingActions: true,    // Inbox: leave + alerts + salary + slips
   payrollSnapshot: true,   // Second KPI row from 4.2 + 4.3 data
+  leaveRecordsConsolidated: true,  // Consolidated leave report for all users
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,6 +349,91 @@ export const HR_DASHBOARD_PAYROLL_KPIS = [
     compute: (d) => d.payrollSummary?.total_runs ?? d.payrollSummary?.payroll_runs ?? null,
   },
 ]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4e. CONSOLIDATED LEAVE RECORDS REPORT — Configuration for HR Manager dashboard
+//     Shows all users' leave records with filtering by status, employee, type
+// ─────────────────────────────────────────────────────────────────────────────
+export const HR_DASHBOARD_LEAVE_REPORT = {
+  title: 'Consolidated Leave Records',
+  subtitle: 'All employees leave history and status',
+  icon: 'ClipboardDocumentListIcon',
+  accentGradient: 'from-amber-500 to-orange-600',
+  
+  // Status filter options (soft-coded for easy modification)
+  statusFilters: [
+    { value: 'ALL', label: 'All Status', color: 'slate' },
+    { value: 'PENDING', label: 'Pending', color: 'amber' },
+    { value: 'RM_APPROVED', label: 'RM Approved', color: 'blue' },
+    { value: 'APPROVED', label: 'Approved', color: 'green' },
+    { value: 'REJECTED', label: 'Rejected', color: 'red' },
+    { value: 'RM_REJECTED', label: 'RM Rejected', color: 'rose' },
+    { value: 'CANCELLED', label: 'Cancelled', color: 'slate' },
+  ],
+  
+  // Leave type options for filtering
+  leaveTypeFilters: [
+    { value: 'ALL', label: 'All Types' },
+    { value: 'annual', label: 'Annual Leave' },
+    { value: 'sick', label: 'Sick Leave' },
+    { value: 'unpaid', label: 'Unpaid Leave' },
+    { value: 'maternity', label: 'Maternity Leave' },
+    { value: 'paternity', label: 'Paternity Leave' },
+    { value: 'compassionate', label: 'Compassionate Leave' },
+    { value: 'study', label: 'Study Leave' },
+    { value: 'other', label: 'Other' },
+  ],
+  
+  // Table columns configuration (soft-coded for easy reordering/modification)
+  columns: [
+    { key: 'employee_name', label: 'Employee', width: 'w-48', sortable: true },
+    { key: 'leave_type', label: 'Type', width: 'w-32', type: 'badge', sortable: true },
+    { key: 'start_date', label: 'Start Date', width: 'w-32', type: 'date', sortable: true },
+    { key: 'end_date', label: 'End Date', width: 'w-32', type: 'date', sortable: true },
+    { key: 'days_requested', label: 'Days', width: 'w-20', type: 'number', sortable: true },
+    { key: 'status', label: 'Status', width: 'w-32', type: 'status-badge', sortable: true },
+    { key: 'created_at', label: 'Submitted', width: 'w-32', type: 'datetime', sortable: true },
+    { key: 'reason', label: 'Reason', width: 'flex-1', type: 'text' },
+  ],
+  
+  // Status badge color mapping (soft-coded)
+  statusColors: {
+    PENDING: { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200' },
+    RM_APPROVED: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200' },
+    APPROVED: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200' },
+    REJECTED: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200' },
+    RM_REJECTED: { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-200' },
+    CANCELLED: { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200' },
+  },
+  
+  // Leave type badge colors (soft-coded)
+  leaveTypeColors: {
+    annual: { bg: 'bg-blue-100', text: 'text-blue-700' },
+    sick: { bg: 'bg-red-100', text: 'text-red-700' },
+    unpaid: { bg: 'bg-gray-100', text: 'text-gray-700' },
+    maternity: { bg: 'bg-pink-100', text: 'text-pink-700' },
+    paternity: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+    compassionate: { bg: 'bg-purple-100', text: 'text-purple-700' },
+    study: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
+    other: { bg: 'bg-slate-100', text: 'text-slate-600' },
+  },
+  
+  // Pagination (soft-coded)
+  defaultPageSize: 25,
+  pageSizeOptions: [10, 25, 50, 100],
+  
+  // Export functionality
+  exportEnabled: true,
+  exportFilename: 'leave_records',
+  
+  // Quick stats to show above the table
+  quickStats: [
+    { key: 'total', label: 'Total Records', icon: 'ClipboardDocumentListIcon', color: 'slate' },
+    { key: 'pending', label: 'Pending Approval', icon: 'ClockIcon', color: 'amber' },
+    { key: 'approved', label: 'Approved', icon: 'CheckCircleIcon', color: 'green' },
+    { key: 'rejected', label: 'Rejected', icon: 'XCircleIcon', color: 'red' },
+  ],
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4b. AI CHAMPION SPOTLIGHT — configuration for the embedded AI Champion card.

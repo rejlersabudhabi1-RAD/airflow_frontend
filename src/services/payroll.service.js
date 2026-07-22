@@ -55,6 +55,13 @@ const payrollService = {
   clearExpiredInsights: () =>
     unwrap(apiClient.delete(`${BASE}/ai-insights/clear-expired/`)),
 
+  // ── Chatbot Messages ───────────────────────────────────────────────────────
+  getChatHistory: (sessionId) =>
+    unwrap(apiClient.get(`${BASE}/chatbot-messages/`, { params: { session_id: sessionId } })),
+
+  saveChatMessage: (data) =>
+    unwrap(apiClient.post(`${BASE}/chatbot-messages/`, data)),
+
   // ── Leave Records (imported from HR Excel) ─────────────────────────────────
   getLeaveRecords: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/leave-records/`, { params })),
@@ -73,21 +80,19 @@ const payrollService = {
   getLeaveRequest: (id) =>
     unwrap(apiClient.get(`${BASE}/leave-requests/${id}/`)),
 
-  createLeaveRequest: (data) =>
-    unwrap(apiClient.post(`${BASE}/leave-requests/`, data)),
+  // SOFT-CODED: Support both JSON and multipart/form-data for file uploads
+  createLeaveRequest: (data, isMultipart = false) => {
+    const config = isMultipart ? {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    } : {}
+    return unwrap(apiClient.post(`${BASE}/leave-requests/`, data, config))
+  },
 
   approveLeaveRequest: (id, note = '') =>
     unwrap(apiClient.post(`${BASE}/leave-requests/${id}/approve/`, { note })),
 
   rejectLeaveRequest: (id, note = '') =>
     unwrap(apiClient.post(`${BASE}/leave-requests/${id}/reject/`, { note })),
-
-  // Stage-1 Reporting Manager actions
-  rmApproveLeaveRequest: (id, note = '') =>
-    unwrap(apiClient.post(`${BASE}/leave-requests/${id}/rm-approve/`, { note })),
-
-  rmRejectLeaveRequest: (id, note = '') =>
-    unwrap(apiClient.post(`${BASE}/leave-requests/${id}/rm-reject/`, { note })),
 
   cancelLeaveRequest: (id) =>
     unwrap(apiClient.post(`${BASE}/leave-requests/${id}/cancel/`)),
@@ -153,24 +158,8 @@ const payrollService = {
   sendSalarySlipEmail: (id) =>
     unwrap(apiClient.post(`${FINANCE}/salary-slips/${id}/send-email/`)),
 
-  // Edit a salary slip (partial update — any writable field)
-  updateSalarySlip: (id, data) =>
-    unwrap(apiClient.patch(`${FINANCE}/salary-slips/${id}/`, data)),
-
-  // Permanently delete a salary slip
-  deleteSalarySlip: (id) =>
-    unwrap(apiClient.delete(`${FINANCE}/salary-slips/${id}/`)),
-
   createPayrollRun: (data) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/`, data)),
-
-  // Edit a payroll run (partial update — only for draft runs)
-  updatePayrollRun: (runId, data) =>
-    unwrap(apiClient.patch(`${FINANCE}/payroll-runs/${runId}/`, data)),
-
-  // Permanently delete a payroll run (draft only)
-  deletePayrollRun: (runId) =>
-    unwrap(apiClient.delete(`${FINANCE}/payroll-runs/${runId}/`)),
 
   processPayrollRun: (id) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/${id}/process/`)),
@@ -182,46 +171,6 @@ const payrollService = {
   // Queue email delivery for all approved slips in a run
   bulkSendApprovedRun: (runId) =>
     unwrap(apiClient.post(`${FINANCE}/payroll-runs/${runId}/bulk-send-approved/`)),
-
-  // ── Auto-generate schedule (PayrollSchedule singleton) ──────────────────────
-  getPayrollSchedule: () =>
-    unwrap(apiClient.get(`${FINANCE}/payroll-schedule/`)),
-  updatePayrollSchedule: (data) =>
-    unwrap(apiClient.patch(`${FINANCE}/payroll-schedule/1/`, data)),
-  triggerAutoRun: () =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-schedule/trigger-now/`)),
-
-  // ── Payroll Workflow (Multi-stage approval: Michelle → Sanglin → Aneef → Aleksi) ──
-  getPayrollWorkflows: (params = {}) =>
-    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/`, { params })),
-  
-  getPayrollWorkflow: (id) =>
-    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/${id}/`)),
-  
-  getMyPendingWorkflows: () =>
-    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/my_pending/`)),
-  
-  getWorkflowStakeholders: () =>
-    unwrap(apiClient.get(`${FINANCE}/payroll-workflows/stakeholders/`)),
-  
-  submitPayrollForReview: (workflowId, data = {}) =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/submit/`, data)),
-  
-  approveHR: (workflowId, data = {}) =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_hr/`, data)),
-  
-  approveAccounting: (workflowId, data = {}) =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_accounting/`, data)),
-  
-  approveFinance: (workflowId, data = {}) =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/approve_finance/`, data)),
-  
-  rejectPayrollWorkflow: (workflowId, data = {}) =>
-    unwrap(apiClient.post(`${FINANCE}/payroll-workflows/${workflowId}/reject/`, data)),
-
-  // ── PDF presigned download ────────────────────────────────────────────────
-  downloadSlipPdf: (slipId) =>
-    unwrap(apiClient.get(`${FINANCE}/salary-slips/${slipId}/download-pdf/`)),
 
   // ── Master Payroll Generator (Sympa + ValueFrame + RADAI merge) ────────────
   // formData must contain: sympa_file?, valueframe_file?, year, month
@@ -236,68 +185,6 @@ const payrollService = {
       headers:      { 'Content-Type': 'multipart/form-data' },
       responseType: 'blob',
     }).then(r => r.data),
-
-  // Export (possibly edited) master payroll rows as Excel binary — no file re-upload needed
-  exportRowsToExcel: (year, month, rows) =>
-    apiClient.post(`${BASE}/export-rows-to-excel/`, { year, month, rows }, {
-      responseType: 'blob',
-    }).then(r => r.data).catch(async err => {
-      // When responseType:'blob', axios wraps even error responses as Blobs.
-      // Parse the blob back to JSON so callers see a meaningful error message.
-      if (err?.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text()
-          const json = JSON.parse(text)
-          err.response.data = json
-        } catch (_) { /* leave as blob if unparseable */ }
-      }
-      throw err
-    }),
-
-  // Restore preview: fetch stored employee rows for a past master payroll import
-  getMasterPayrollRows: (importId) =>
-    unwrap(apiClient.get(`${BASE}/master-payroll-history/${importId}/rows/`)),
-
-  // Update a single employee row (draft stage only) — computed fields cascade automatically
-  updateMasterPayrollRow: (importId, rowId, data) =>
-    unwrap(apiClient.patch(`${BASE}/master-payroll-history/${importId}/rows/${rowId}/`, data)),
-
-  // Delete a master payroll import session and all its employee rows
-  deleteMasterPayroll: (importId) =>
-    unwrap(apiClient.delete(`${BASE}/master-payroll-history/${importId}/delete/`)),
-
-  // GPT-4o HR intelligence analysis for a specific payroll run
-  generateAIAnalytics: (runId) =>
-    unwrap(apiClient.post(`${BASE}/ai-analytics/generate/`, { run_id: runId })),
-
-  // ── Master Payroll Workflow ──────────────────────────────────────────────
-  // Retrieve current workflow status + audit log for an import session
-  getMasterPayrollWorkflow: (importId) =>
-    unwrap(apiClient.get(`${BASE}/master-payroll-history/${importId}/workflow/`)),
-
-  // HR Manager: freeze the file (one-time lock)
-  freezeMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/freeze/`, { note })),
-
-  // Superadmin: revert to draft
-  unfreezeMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/unfreeze/`, { note })),
-
-  // HR Manager: approve frozen file and send to Finance
-  hrApproveMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/hr-approve/`, { note })),
-
-  // Finance: open for review/modification
-  financeReviewMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/finance-review/`, { note })),
-
-  // Finance: confirm and send to Accounts
-  financeApproveMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/finance-approve/`, { note })),
-
-  // Accounts: mark salary as released
-  releaseMasterPayroll: (importId, note = '') =>
-    unwrap(apiClient.post(`${BASE}/master-payroll-history/${importId}/release/`, { note })),
 
   // List past master payroll import sessions (paginated)
   getMasterPayrollHistory: (params = {}) =>
@@ -315,10 +202,6 @@ const payrollService = {
       }
       return r.data   // Blob (on-the-fly Excel)
     }),
-
-  // Super-admin approval tracker — all master payroll files with SLA status.
-  getApprovalTracker: (params = {}) =>
-    unwrap(apiClient.get(`${BASE}/approval-tracker/`, { params })),
 
   // ── Salary Components ──────────────────────────────────────────────────────
   getSalaryComponents: (params = {}) =>
@@ -380,27 +263,6 @@ const payrollService = {
     unwrap(apiClient.post(`${BASE}/sync-leave-data/`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })),
-
-  // ── Initialize Current Month Leave ─────────────────────────────────────────
-  // POST to initialize current month leave balance for all employees.
-  // Sets earned value to standard monthly accrual (1.83 days).
-  // Params: { year?, month?, branch?, dry_run?: boolean }
-  initializeCurrentMonthLeave: (params = {}) =>
-    unwrap(apiClient.post(`${BASE}/initialize-current-month-leave/`, params)),
-
-  // ── Leave Encashment ────────────────────────────────────────────────────────
-  // GET  status of encashment run for a given period
-  getLeaveEncashmentStatus: ({ year, month } = {}) =>
-    unwrap(apiClient.get(`${BASE}/leave-encashment/status/`, { params: { year, month } })),
-  // GET  dry-run preview (no DB writes) — per-employee days + pay estimate
-  previewLeaveEncashment: ({ year, month } = {}) =>
-    unwrap(apiClient.get(`${BASE}/leave-encashment/preview/`, { params: { year, month } })),
-  // POST trigger encashment for a given period (HR-only)
-  runLeaveEncashment: ({ year, month } = {}) =>
-    unwrap(apiClient.post(`${BASE}/leave-encashment/run/`, { year, month })),
-  // GET  list of all encashment runs
-  getLeaveEncashmentList: () =>
-    unwrap(apiClient.get(`${BASE}/leave-encashment/`)),
 
   // ── Daily Work Log (Daily Tracker) ─────────────────────────────────────────
   getDailyLogs:          (params = {}) =>

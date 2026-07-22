@@ -34,6 +34,7 @@ import {
   HR_DASHBOARD_QUICK_LINKS,
   HR_DASHBOARD_PENDING_TYPES,
   HR_DASHBOARD_KPI_REPORTS,
+  HR_DASHBOARD_LEAVE_REPORT,
   buildTotalPending,
   buildDepartmentBreakdown,
   buildDisciplineBreakdown,
@@ -44,6 +45,7 @@ import {
   buildStatusDistribution,
   formatPunchTime,
   getGreeting,
+  formatLeaveRecord,
 } from '../../config/hrDashboard.config'
 
 import {
@@ -785,6 +787,18 @@ export default function HRDashboard() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [loadingPayroll, setLoadingPayroll] = useState(false)
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SOFT-CODED: Consolidated Leave Records State (for HR Manager dashboard)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [allLeaveRecords, setAllLeaveRecords] = useState([])
+  const [filteredLeaveRecords, setFilteredLeaveRecords] = useState([])
+  const [loadingLeaveRecords, setLoadingLeaveRecords] = useState(false)
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('ALL')
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState('ALL')
+  const [leaveSearchQuery, setLeaveSearchQuery] = useState('')
+  const [leaveCurrentPage, setLeaveCurrentPage] = useState(1)
+  const [leavePageSize, setLeavePageSize] = useState(25)
+
   const [loadingWorkforce, setLoadingWorkforce] = useState(true)
   const [loadingLive, setLoadingLive] = useState(true)
   const [workforceError, setWorkforceError] = useState(null)
@@ -901,12 +915,63 @@ export default function HRDashboard() {
     }
   }, [])
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SOFT-CODED: Load consolidated leave records for HR Manager dashboard
+  // ═══════════════════════════════════════════════════════════════════════════
+  const loadAllLeaveRecords = useCallback(async () => {
+    if (!HR_DASHBOARD_SECTIONS.leaveRecordsConsolidated) return
+    setLoadingLeaveRecords(true)
+    try {
+      // Fetch ALL leave records (not just pending) with large page size
+      const response = await payrollService.getLeaveRequests({ page_size: 500 })
+      const records = Array.isArray(response?.results) ? response.results : Array.isArray(response) ? response : []
+      setAllLeaveRecords(records)
+    } catch (err) {
+      console.warn('[HRDashboard] leave records load failed', err)
+      setAllLeaveRecords([])
+    } finally {
+      setLoadingLeaveRecords(false)
+    }
+  }, [])
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SOFT-CODED: Filter leave records based on status, type, and search query
+  // ═══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let filtered = [...allLeaveRecords]
+    
+    // Filter by status
+    if (leaveStatusFilter !== 'ALL') {
+      filtered = filtered.filter(record => record.status === leaveStatusFilter)
+    }
+    
+    // Filter by leave type
+    if (leaveTypeFilter !== 'ALL') {
+      filtered = filtered.filter(record => 
+        (record.leave_type_detail?.code || record.leave_type || '').toLowerCase() === leaveTypeFilter.toLowerCase()
+      )
+    }
+    
+    // Filter by search query (employee name, reason)
+    if (leaveSearchQuery.trim()) {
+      const query = leaveSearchQuery.toLowerCase()
+      filtered = filtered.filter(record => 
+        (record.employee_name || '').toLowerCase().includes(query) ||
+        (record.reason || '').toLowerCase().includes(query)
+      )
+    }
+    
+    setFilteredLeaveRecords(filtered)
+    setLeaveCurrentPage(1) // Reset to first page when filters change
+  }, [allLeaveRecords, leaveStatusFilter, leaveTypeFilter, leaveSearchQuery])
+
   // ── Initial mount
   useEffect(() => {
     loadWorkforce()
     loadTimesheets()
     loadPayrollData()
-  }, [loadWorkforce, loadTimesheets, loadPayrollData])
+    loadAllLeaveRecords() // Load consolidated leave records
+  }, [loadWorkforce, loadTimesheets, loadPayrollData, loadAllLeaveRecords])
 
   // ── Auto-refresh timer
   useEffect(() => {
@@ -1154,6 +1219,184 @@ export default function HRDashboard() {
                 <PendingActionCard key={type.id} type={type} pending={pending} navigate={navigate} />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SOFT-CODED: Consolidated Leave Records Report (HR Manager Dashboard) */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {HR_DASHBOARD_SECTIONS.leaveRecordsConsolidated && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            {/* Header */}
+            <div className={`bg-gradient-to-r ${HR_DASHBOARD_LEAVE_REPORT.accentGradient} rounded-xl p-5 mb-6 text-white`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Icon name={HR_DASHBOARD_LEAVE_REPORT.icon} className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">{HR_DASHBOARD_LEAVE_REPORT.title}</h2>
+                  <p className="text-sm text-white/80">{HR_DASHBOARD_LEAVE_REPORT.subtitle}</p>
+                </div>
+              </div>
+              
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {HR_DASHBOARD_LEAVE_REPORT.quickStats.map(stat => {
+                  const count = stat.key === 'total' ? filteredLeaveRecords.length :
+                                stat.key === 'pending' ? filteredLeaveRecords.filter(r => r.status === 'PENDING').length :
+                                stat.key === 'approved' ? filteredLeaveRecords.filter(r => r.status === 'APPROVED').length :
+                                stat.key === 'rejected' ? filteredLeaveRecords.filter(r => ['REJECTED', 'RM_REJECTED'].includes(r.status)).length : 0
+                  return (
+                    <div key={stat.key} className="bg-white/10 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Icon name={stat.icon} className="w-4 h-4" />
+                        <span className="text-xs text-white/70">{stat.label}</span>
+                      </div>
+                      <div className="text-2xl font-bold">{count}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Icon name="MagnifyingGlassIcon" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by employee or reason..."
+                  value={leaveSearchQuery}
+                  onChange={(e) => setLeaveSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              
+              {/* Status Filter */}
+              <select
+                value={leaveStatusFilter}
+                onChange={(e) => setLeaveStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                {HR_DASHBOARD_LEAVE_REPORT.statusFilters.map(f => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+              
+              {/* Type Filter */}
+              <select
+                value={leaveTypeFilter}
+                onChange={(e) => setLeaveTypeFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                {HR_DASHBOARD_LEAVE_REPORT.leaveTypeFilters.map(f => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+              
+              {/* Page Size */}
+              <select
+                value={leavePageSize}
+                onChange={(e) => setLeavePageSize(Number(e.target.value))}
+                className="px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                {HR_DASHBOARD_LEAVE_REPORT.pageSizeOptions.map(size => (
+                  <option key={size} value={size}>{size} per page</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Table */}
+            {loadingLeaveRecords ? (
+              <div className="text-center py-12 text-slate-500">Loading leave records...</div>
+            ) : filteredLeaveRecords.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">
+                <Icon name="InboxIcon" className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                <p>No leave records found matching your filters</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        {HR_DASHBOARD_LEAVE_REPORT.columns.map(col => (
+                          <th key={col.key} className={`${col.width} px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider`}>
+                            {col.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredLeaveRecords.slice((leaveCurrentPage - 1) * leavePageSize, leaveCurrentPage * leavePageSize).map((record, idx) => (
+                        <tr key={record.id || idx} className="hover:bg-slate-50">
+                          {HR_DASHBOARD_LEAVE_REPORT.columns.map(col => {
+                            const value = record[col.key]
+                            if (col.type === 'status-badge') {
+                              const colors = HR_DASHBOARD_LEAVE_REPORT.statusColors[value] || HR_DASHBOARD_LEAVE_REPORT.statusColors.PENDING
+                              return (
+                                <td key={col.key} className="px-3 py-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${colors.bg} ${colors.text} ${colors.border}`}>
+                                    {value || 'Unknown'}
+                                  </span>
+                                </td>
+                              )
+                            } else if (col.type === 'badge') {
+                              const leaveTypeKey = (record.leave_type_detail?.code || value || 'other').toLowerCase()
+                              const colors = HR_DASHBOARD_LEAVE_REPORT.leaveTypeColors[leaveTypeKey] || HR_DASHBOARD_LEAVE_REPORT.leaveTypeColors.other
+                              return (
+                                <td key={col.key} className="px-3 py-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${colors.bg} ${colors.text}`}>
+                                    {record.leave_type_detail?.name || value || 'Unknown'}
+                                  </span>
+                                </td>
+                              )
+                            } else if (col.type === 'date') {
+                              return <td key={col.key} className="px-3 py-3 text-slate-600">{value ? formatDate(value) : '—'}</td>
+                            } else if (col.type === 'datetime') {
+                              return <td key={col.key} className="px-3 py-3 text-slate-600 text-xs">{value ? new Date(value).toLocaleString() : '—'}</td>
+                            } else if (col.type === 'number') {
+                              return <td key={col.key} className="px-3 py-3 text-slate-900 font-semibold">{value ?? '—'}</td>
+                            } else {
+                              return <td key={col.key} className="px-3 py-3 text-slate-600">{value || '—'}</td>
+                            }
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination */}
+                {filteredLeaveRecords.length > leavePageSize && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
+                    <div className="text-sm text-slate-500">
+                      Showing {((leaveCurrentPage - 1) * leavePageSize) + 1} to {Math.min(leaveCurrentPage * leavePageSize, filteredLeaveRecords.length)} of {filteredLeaveRecords.length} records
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setLeaveCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={leaveCurrentPage === 1}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-slate-600">
+                        Page {leaveCurrentPage} of {Math.ceil(filteredLeaveRecords.length / leavePageSize)}
+                      </span>
+                      <button
+                        onClick={() => setLeaveCurrentPage(p => Math.min(Math.ceil(filteredLeaveRecords.length / leavePageSize), p + 1))}
+                        disabled={leaveCurrentPage >= Math.ceil(filteredLeaveRecords.length / leavePageSize)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

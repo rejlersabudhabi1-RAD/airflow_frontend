@@ -74,6 +74,24 @@ class RBACService {
     return apiService.post(`${RBAC_BASE_URL}/users/${userId}/deactivate/`, { reason });
   }
 
+  async bulkDeactivateByRoles(roleCodes = [], roleIds = [], options = {}) {
+    /**
+     * Bulk deactivate users by their roles
+     * @param {Array<string>} roleCodes - Array of role codes (e.g., ['engineer', 'contractor'])
+     * @param {Array<number>} roleIds - Array of role IDs (alternative to roleCodes)
+     * @param {Object} options - Additional options
+     * @param {boolean} options.excludeSuperAdmins - Exclude super admins from deactivation (default: true)
+     * @param {boolean} options.dryRun - Preview mode, doesn't actually deactivate (default: false)
+     * @returns {Promise<Object>} Response with deactivated count and details
+     */
+    return apiService.post(`${RBAC_BASE_URL}/users/bulk-deactivate-by-roles/`, {
+      role_codes: roleCodes,
+      role_ids: roleIds,
+      exclude_super_admins: options.excludeSuperAdmins ?? true,
+      dry_run: options.dryRun ?? false
+    });
+  }
+
   async activateUser(userId) {
     return apiService.post(`${RBAC_BASE_URL}/users/${userId}/activate/`);
   }

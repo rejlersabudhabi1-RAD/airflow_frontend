@@ -250,6 +250,37 @@ export const ESS_FEATURES = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 11.5 LEAVE REQUEST FORM FIELDS — soft-coded configuration for "Apply for Leave"
+//      Controls which fields appear in the leave request form and their properties.
+//      Enables easy addition/removal of fields without touching component logic.
+// ─────────────────────────────────────────────────────────────────────────────
+export const ESS_LEAVE_FORM_FIELDS = {
+  // Core fields (always visible)
+  leave_type:          { enabled: true,  required: true,  label: 'Leave Type',               type: 'select',   grid: 'col-span-1' },
+  half_day:            { enabled: true,  required: false, label: 'Half Day',                 type: 'toggle',   grid: 'col-span-1' },
+  start_date:          { enabled: true,  required: true,  label: 'Start Date',               type: 'date',     grid: 'col-span-1' },
+  end_date:            { enabled: true,  required: true,  label: 'End Date',                 type: 'date',     grid: 'col-span-1' },
+  reason:              { enabled: true,  required: false, label: 'Reason',                   type: 'textarea', grid: 'col-span-2', rows: 3 },
+  
+  // Enhanced fields (soft-coded, can be enabled/disabled)
+  contact_number:      { enabled: true,  required: false, label: 'Contact Number when Travelling', type: 'tel',      grid: 'col-span-1', placeholder: '+971 XX XXX XXXX' },
+  substitute_name:     { enabled: true,  required: false, label: 'Substitute during Leave',        type: 'text',     grid: 'col-span-1', placeholder: 'Employee name or N/A' },
+  attachment:          { enabled: true,  required: false, label: 'Supporting Documents',           type: 'file',     grid: 'col-span-2', accept: '.pdf,.jpg,.jpeg,.png,.doc,.docx', maxSize: 5242880 }, // 5MB
+  
+  // Field order (determines rendering sequence)
+  order: [
+    'leave_type',
+    'half_day',
+    'start_date',
+    'end_date',
+    'contact_number',
+    'substitute_name',
+    'reason',
+    'attachment'
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 12. DAILY TRACKER CONFIG — soft-coded labels, icons and thresholds
 //     for the Daily Work Log feature in Employee Self-Service.
 // ─────────────────────────────────────────────────────────────────────────────

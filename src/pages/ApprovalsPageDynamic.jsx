@@ -40,6 +40,9 @@ import {
   ChatBubbleLeftIcon,
   ArrowDownTrayIcon,
   DocumentTextIcon,
+  XMarkIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 
 // Import reusable components
@@ -434,103 +437,115 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState(selectedType || approvalTypes[0]?.key)
 
+  // Professional action modal state (replaces window.alert/confirm/prompt)
+  const [modalState, setModalState] = useState({ isOpen: false, mode: null, item: null, actionId: null })
+  const [submitting, setSubmitting] = useState(false)
+  const [toast, setToast] = useState(null) // { type: 'success' | 'error', message }
+
   const activeConfig = approvalTypes.find(t => t.key === activeTab)
 
+  // Auto-dismiss toast notifications
   useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 5000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const fetchApprovals = useCallback(async () => {
     if (!activeConfig || !token) return
+    setLoading(true)
+    const filters = getApprovalFilters(activeConfig.filterLogic, user, rbacData)
+    const queryParams = new URLSearchParams({
+      ...filters,
+      [activeConfig.statusField + '__in']: activeConfig.pendingStatuses.join(','),
+      limit: 50
+    })
 
-    const fetchApprovals = async () => {
-      setLoading(true)
-      const filters = getApprovalFilters(activeConfig.filterLogic, user, rbacData)
-      const queryParams = new URLSearchParams({
-        ...filters,
-        [activeConfig.statusField + '__in']: activeConfig.pendingStatuses.join(','),
-        limit: 50
-      })
-
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}${activeConfig.apiEndpoint}?${queryParams}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}${activeConfig.apiEndpoint}?${queryParams}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
-        )
-
-        if (!response.ok) {
-          console.error(`Failed to fetch ${activeConfig.label}:`, response.status)
-          setApprovals([])
-          return
         }
+      )
 
-        const data = await response.json()
-        setApprovals(data.results || data || [])
-      } catch (error) {
-        console.error(`Error fetching ${activeConfig.label}:`, error)
+      if (!response.ok) {
+        console.error(`Failed to fetch ${activeConfig.label}:`, response.status)
         setApprovals([])
-      } finally {
-        setLoading(false)
+        return
       }
-    }
 
-    fetchApprovals()
+      const data = await response.json()
+      
+      // SOFT-CODED: Apply field mapping transformations if configured
+      let items = data.results || data || []
+      if (activeConfig.fieldMapping) {
+        items = items.map(item => {
+          const transformed = { ...item }
+          Object.entries(activeConfig.fieldMapping).forEach(([targetField, mapperFn]) => {
+            if (typeof mapperFn === 'function') {
+              transformed[targetField] = mapperFn(item)
+            }
+          })
+          return transformed
+        })
+      }
+      
+      setApprovals(items)
+    } catch (error) {
+      console.error(`Error fetching ${activeConfig.label}:`, error)
+      setApprovals([])
+    } finally {
+      setLoading(false)
+    }
   }, [activeConfig, user, rbacData, token])
 
-  const handleAction = async (actionId, item) => {
+  useEffect(() => {
+    fetchApprovals()
+  }, [fetchApprovals])
+
+  // Soft-coded: open the professional modal instead of window.alert/confirm/prompt
+  const handleAction = (actionId, item) => {
     const action = APPROVAL_ACTIONS[actionId]
     if (!action) {
       console.error(`Unknown action: ${actionId}`)
-      alert(`❌ Unknown action: ${actionId}`)
+      setToast({ type: 'error', message: `Unknown action: ${actionId}` })
       return
     }
 
-    // Handle 'view' action - show detailed modal/alert
-    if (actionId === 'view') {
-      const details = activeConfig.displayFields
-        .map(field => `${field.label}: ${item[field.key] || 'N/A'}`)
-        .join('\n')
-      
-      alert(`📋 Request Details\n\n${details}\n\nStatus: ${item[activeConfig.statusField] || 'Unknown'}`)
-      return
-    }
-
-    // Handle 'download' action
     if (actionId === 'download') {
-      alert('⬇️ Download feature coming soon!')
+      setToast({ type: 'info', message: 'Download feature coming soon!' })
       return
     }
 
-    // Handle 'comment' action
-    if (actionId === 'comment') {
-      const comment = window.prompt('Enter your comment:')
-      if (comment) {
-        alert(`💬 Comment added: ${comment}`)
-      }
-      return
-    }
+    // 'view', 'approve', 'reject', 'comment' all open the same detailed modal,
+    // just in a different mode driven by the soft-coded APPROVAL_ACTIONS config.
+    setModalState({
+      isOpen: true,
+      mode: actionId === 'view' ? 'view' : 'action',
+      item,
+      actionId
+    })
+  }
 
-    // Confirm action (for approve/reject)
-    if (action.confirmMessage) {
-      const confirmed = window.confirm(action.confirmMessage)
-      if (!confirmed) return
-    }
+  const closeModal = () => {
+    if (submitting) return
+    setModalState({ isOpen: false, mode: null, item: null, actionId: null })
+  }
 
-    // Get comment if required (mainly for rejection)
-    let comment = ''
-    if (action.requiresComment) {
-      comment = window.prompt('Please provide a reason:')
-      if (!comment || comment.trim() === '') {
-        alert('⚠️ Comment is required for this action')
-        return
-      }
-    }
+  // Executes the actual approve/reject/comment API call (triggered from the modal)
+  const executeAction = async (comment) => {
+    const { item, actionId } = modalState
+    if (!item || !actionId) return
 
+    setSubmitting(true)
     try {
       // Determine the correct endpoint based on approval type and status
       let endpoint = ''
-      
+
       if (activeConfig.id === 'leave') {
         // Leave requests use different endpoints based on current status
         if (item.status === 'PENDING') {
@@ -544,9 +559,13 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
             ? `/payroll/leave-requests/${item.id}/approve/`
             : `/payroll/leave-requests/${item.id}/reject/`
         } else {
-          alert(`⚠️ Invalid status for ${actionId}: ${item.status}`)
+          setToast({ type: 'error', message: `Invalid status for ${actionId}: ${item.status}` })
+          setSubmitting(false)
           return
         }
+      } else if (actionId === 'comment') {
+        // Generic comment endpoint (soft-coded pattern, same base as approve/reject)
+        endpoint = `${activeConfig.apiEndpoint}${item.id}/comment/`
       } else {
         // For other approval types, use the standard pattern
         const actionMap = {
@@ -579,49 +598,54 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
       }
 
       const resultData = await response.json().catch(() => ({}))
-
-      // Success!
-      alert(`✅ ${actionId.charAt(0).toUpperCase() + actionId.slice(1)} successful!`)
       console.log(`✅ ${actionId} completed:`, resultData)
-      
-      // Refresh parent dashboard
+
+      setToast({
+        type: 'success',
+        message: `${APPROVAL_ACTIONS[actionId]?.label || actionId} completed successfully.`
+      })
+      setModalState({ isOpen: false, mode: null, item: null, actionId: null })
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // SOFT-CODED: Optimistic UI update - Remove acted item immediately
+      // ═══════════════════════════════════════════════════════════════════════════
+      setApprovals(prevApprovals => prevApprovals.filter(a => a.id !== item.id))
+
+      // Refresh parent dashboard + background refresh (item already removed from UI)
       onRefresh()
-      
-      // Refresh the approvals list
-      const fetchApprovals = async () => {
-        const filters = getApprovalFilters(activeConfig.filterLogic, user, rbacData)
-        const queryParams = new URLSearchParams({
-          ...filters,
-          [activeConfig.statusField + '__in']: activeConfig.pendingStatuses.join(','),
-          limit: 50
-        })
-
-        const response = await fetch(
-          `${API_BASE_URL}${activeConfig.apiEndpoint}?${queryParams}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        )
-
-        if (response.ok) {
-          const data = await response.json()
-          setApprovals(data.results || data || [])
-        }
-      }
-      
-      await fetchApprovals()
-      
+      // Fetch updated list in background (in case of concurrent actions by other users)
+      setTimeout(() => fetchApprovals(), 1000)
     } catch (error) {
       console.error(`❌ Error ${actionId}:`, error)
-      alert(`❌ Failed to ${actionId}: ${error.message}`)
+      setToast({ type: 'error', message: `Failed to ${actionId}: ${error.message}` })
+    } finally {
+      setSubmitting(false)
     }
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 relative">
+      {/* Toast notification (replaces window.alert) */}
+      {toast && (
+        <div
+          className={`absolute top-4 right-4 z-40 max-w-sm rounded-xl shadow-lg border px-4 py-3 flex items-start gap-2 text-sm font-medium ${
+            toast.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : toast.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}
+        >
+          {toast.type === 'success' && <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />}
+          {toast.type === 'error' && <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
+          {toast.type === 'info' && <InformationCircleIcon className="w-5 h-5 flex-shrink-0" />}
+          <span className="flex-1">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="text-current opacity-60 hover:opacity-100">
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
         <CheckCircleIcon className="w-6 h-6 text-orange-600" />
         Approval Center
@@ -662,6 +686,205 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
             />
           ))
         )}
+      </div>
+
+      {/* Professional Approval Action / Detail Modal (soft-coded per approval type) */}
+      <ApprovalActionModal
+        isOpen={modalState.isOpen}
+        mode={modalState.mode}
+        item={modalState.item}
+        actionId={modalState.actionId}
+        config={activeConfig}
+        submitting={submitting}
+        onClose={closeModal}
+        onConfirm={executeAction}
+      />
+    </div>
+  )
+}
+
+/**
+ * Approval Action Modal — professional, detailed "window" for View / Approve /
+ * Reject / Comment actions. Fully soft-coded: renders whatever fields the
+ * active approval type's config.displayFields defines (Leave Requests,
+ * Payroll Approval, Procurement Requests, Invoice Approval, etc.) with
+ * type-aware formatting (currency, date, badge, progress, number, text).
+ */
+const ApprovalActionModal = ({ isOpen, mode, item, actionId, config, submitting, onClose, onConfirm }) => {
+  const [comment, setComment] = useState('')
+  const [commentError, setCommentError] = useState('')
+
+  useEffect(() => {
+    if (isOpen) {
+      setComment('')
+      setCommentError('')
+    }
+  }, [isOpen, item, actionId])
+
+  if (!isOpen || !item || !config) return null
+
+  const action = actionId ? APPROVAL_ACTIONS[actionId] : null
+  const isViewMode = mode === 'view'
+  const requiresComment = !!action?.requiresComment
+
+  // Soft-coded per-field-type renderer — reused for every approval category
+  const renderFieldValue = (field) => {
+    const raw = item[field.key]
+    if (raw === null || raw === undefined || raw === '') {
+      return <span className="text-slate-400 italic">N/A</span>
+    }
+
+    switch (field.type) {
+      case 'currency': {
+        const num = Number(raw)
+        return (
+          <span className="font-semibold text-slate-900">
+            {Number.isFinite(num) ? num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(raw)}
+          </span>
+        )
+      }
+      case 'date': {
+        const d = new Date(raw)
+        return (
+          <span className="text-slate-900">
+            {Number.isNaN(d.getTime()) ? String(raw) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+          </span>
+        )
+      }
+      case 'badge':
+        return (
+          <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 capitalize">
+            {String(raw).replace(/_/g, ' ')}
+          </span>
+        )
+      case 'progress': {
+        const pct = Math.max(0, Math.min(100, Number(raw) || 0))
+        return (
+          <div className="flex items-center gap-2 w-full">
+            <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs font-semibold text-slate-600">{pct}%</span>
+          </div>
+        )
+      }
+      case 'number':
+        return <span className="font-medium text-slate-900">{Number.isFinite(Number(raw)) ? Number(raw).toLocaleString() : String(raw)}</span>
+      default:
+        return <span className="text-slate-900">{String(raw)}</span>
+    }
+  }
+
+  const headerStyle = config.gradientFrom && config.gradientTo
+    ? { backgroundImage: `linear-gradient(135deg, ${config.gradientFrom}, ${config.gradientTo})` }
+    : { backgroundColor: '#4338ca' }
+
+  const handleConfirmClick = () => {
+    if (requiresComment && !comment.trim()) {
+      setCommentError(
+        actionId === 'reject' ? 'Please provide a reason for rejection.' : 'Please provide a comment.'
+      )
+      return
+    }
+    onConfirm(comment.trim())
+  }
+
+  const confirmButtonClasses = actionId === 'reject'
+    ? 'bg-red-600 hover:bg-red-700'
+    : actionId === 'comment'
+    ? 'bg-slate-600 hover:bg-slate-700'
+    : 'bg-green-600 hover:bg-green-700'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-[fadeIn_0.15s_ease-out]">
+        {/* Header */}
+        <div className="px-6 py-5 text-white flex-shrink-0" style={headerStyle}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/80">{config.label}</p>
+              <h3 className="text-xl font-bold mt-0.5">
+                {isViewMode ? 'Request Details' : `${action?.label || 'Action'} Request`}
+              </h3>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50"
+            >
+              <XMarkIcon className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+            {config.displayFields.map(field => (
+              <div key={field.key} className={field.type === 'progress' ? 'sm:col-span-2' : ''}>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{field.label}</p>
+                {renderFieldValue(field)}
+              </div>
+            ))}
+          </div>
+
+          {item[config.statusField] && (
+            <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Current Status</span>
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
+                {String(item[config.statusField]).replace(/_/g, ' ')}
+              </span>
+            </div>
+          )}
+
+          {!isViewMode && (
+            <div className="pt-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                {actionId === 'reject' ? 'Reason for Rejection' : actionId === 'comment' ? 'Your Comment' : 'Comment (optional)'}
+                {requiresComment && <span className="text-red-500"> *</span>}
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => { setComment(e.target.value); setCommentError('') }}
+                rows={3}
+                disabled={submitting}
+                placeholder={actionId === 'reject' ? 'Explain why this request is being rejected...' : 'Add a note (optional)...'}
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors disabled:opacity-50 disabled:bg-slate-50 ${
+                  commentError ? 'border-red-400 focus:ring-red-200' : 'border-slate-300 focus:ring-indigo-200 focus:border-indigo-400'
+                }`}
+              />
+              {commentError && (
+                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                  <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                  {commentError}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 flex-shrink-0">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isViewMode ? 'Close' : 'Cancel'}
+          </button>
+          {!isViewMode && (
+            <button
+              onClick={handleConfirmClick}
+              disabled={submitting}
+              className={`px-5 py-2 text-sm font-semibold text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${confirmButtonClasses}`}
+            >
+              {submitting && <ArrowPathIcon className="w-4 h-4 animate-spin" />}
+              {submitting ? 'Processing...' : `Confirm ${action?.label || ''}`}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

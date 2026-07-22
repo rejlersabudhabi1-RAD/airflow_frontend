@@ -33,7 +33,7 @@ import rbacService   from '../../services/rbac.service'
 import payrollService from '../../services/payroll.service'
 import timesheetSvc   from '../../services/timesheet.service'
 import { fmtCurrency } from '../../config/hrPayroll.config'
-import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_FEATURES, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY, ESS_TIMESHEET_TABS, ESS_TIMESHEET_DEFAULT_TAB, ESS_TIMESHEET_POLL_MS, ESS_TIMESHEET_COPY, ESS_TIMESHEET_STATUS } from '../../config/hrLeave.config'
+import { ESS_LEAVE_TYPE_CONFIG, ESS_FEATURES, ESS_LEAVE_FORM_FIELDS, LEAVE_YEAR, DAILY_TRACKER_PRIORITIES, DAILY_TRACKER_STATUSES, DAILY_TRACKER_PROJECT_CATEGORIES, DAILY_TRACKER_COPY, DAILY_TRACKER_APPROVAL_STATUSES, DAILY_TRACKER_WIZARD_STEPS, DAILY_TRACKER_SUBMIT_TO_OPTIONS, ESS_ATT_MONTHS_BACK, ESS_ATT_STANDARD_DAY_HRS, ESS_ATT_MAX_DAILY_HRS, ESS_ATT_STANDARD_WORKING_DAYS, ESS_ATT_RATE_GOOD, ESS_ATT_RATE_WARN, ESS_ATT_PARTIAL_DAY_HRS, ESS_ATT_OVERTIME_HRS, ESS_ATT_FEATURES, ESS_ATT_DAY_STATUS, ESS_ATT_DOW, ESS_ATT_COPY, ESS_TIMESHEET_TABS, ESS_TIMESHEET_DEFAULT_TAB, ESS_TIMESHEET_POLL_MS, ESS_TIMESHEET_COPY, ESS_TIMESHEET_STATUS } from '../../config/hrLeave.config'
 
 // -----------------------------------------------------------------------------
 // Soft-coded configuration
@@ -805,9 +805,14 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
     end_date: '',
     half_day: false,
     reason: '',
+    // SOFT-CODED: Additional fields from ESS_LEAVE_FORM_FIELDS config
+    contact_number: '',
+    substitute_name: '',
+    attachment: null,
   })
   const [calcDays, setCalcDays] = useState(null)
   const [conflict, setConflict] = useState(false)
+  const fileInputRef = useRef(null)
 
   const balance = Number(leaveRecord?.leave_balance) || 0
 
@@ -938,6 +943,84 @@ const LeaveRequestForm = ({ leaveTypes, leaveRecord, requests, onSubmit, submitt
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
           />
         </div>
+        
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* SOFT-CODED: Additional fields from ESS_LEAVE_FORM_FIELDS config     */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        
+        {/* Contact Number */}
+        {ESS_LEAVE_FORM_FIELDS.contact_number?.enabled && (
+          <div className={ESS_LEAVE_FORM_FIELDS.contact_number.grid}>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              {ESS_LEAVE_FORM_FIELDS.contact_number.label}
+              {ESS_LEAVE_FORM_FIELDS.contact_number.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="tel"
+              value={form.contact_number}
+              onChange={(e) => set('contact_number', e.target.value)}
+              required={ESS_LEAVE_FORM_FIELDS.contact_number.required}
+              placeholder={ESS_LEAVE_FORM_FIELDS.contact_number.placeholder}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+        )}
+        
+        {/* Substitute Employee */}
+        {ESS_LEAVE_FORM_FIELDS.substitute_name?.enabled && (
+          <div className={ESS_LEAVE_FORM_FIELDS.substitute_name.grid}>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              {ESS_LEAVE_FORM_FIELDS.substitute_name.label}
+              {ESS_LEAVE_FORM_FIELDS.substitute_name.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <input
+              type="text"
+              value={form.substitute_name}
+              onChange={(e) => set('substitute_name', e.target.value)}
+              required={ESS_LEAVE_FORM_FIELDS.substitute_name.required}
+              placeholder={ESS_LEAVE_FORM_FIELDS.substitute_name.placeholder}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+        )}
+        
+        {/* Supporting Documents */}
+        {ESS_LEAVE_FORM_FIELDS.attachment?.enabled && (
+          <div className={ESS_LEAVE_FORM_FIELDS.attachment.grid}>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              {ESS_LEAVE_FORM_FIELDS.attachment.label}
+              {ESS_LEAVE_FORM_FIELDS.attachment.required && <span className="text-red-500 ml-1">*</span>}
+            </label>
+            <div className="relative">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ESS_LEAVE_FORM_FIELDS.attachment.accept}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file && file.size > ESS_LEAVE_FORM_FIELDS.attachment.maxSize) {
+                    alert(`File size must be less than ${ESS_LEAVE_FORM_FIELDS.attachment.maxSize / 1048576}MB`)
+                    e.target.value = ''
+                    return
+                  }
+                  set('attachment', file)
+                }}
+                required={ESS_LEAVE_FORM_FIELDS.attachment.required}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+              {form.attachment && (
+                <div className="mt-1 text-xs text-slate-600 flex items-center gap-2">
+                  <Icon name="DocumentIcon" className="w-3 h-3" />
+                  <span className="truncate">{form.attachment.name}</span>
+                  <span className="text-slate-400">({(form.attachment.size / 1024).toFixed(1)} KB)</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Accepted formats: PDF, JPG, PNG, DOC, DOCX (max {ESS_LEAVE_FORM_FIELDS.attachment.maxSize / 1048576}MB)
+            </p>
+          </div>
+        )}
 
         {/* Impact preview */}
         {calcDays !== null && (
@@ -3356,14 +3439,36 @@ export default function EmployeeSelfService() {
       const empName = profile
         ? [profile.user?.first_name, profile.user?.last_name].filter(Boolean).join(' ') || profile.user?.username
         : null
-      const payload = {
-        ...form,
-        // Backend perform_create also sets these — we send them for non-staff HR fallback
-        ...(userId   ? { employee: userId }             : {}),
-        ...(empCode  ? { employee_code: empCode }       : {}),
-        ...(empName  ? { employee_name: empName }       : {}),
+      
+      // SOFT-CODED: Handle file upload with FormData if attachment is present
+      let response
+      if (form.attachment) {
+        const formData = new FormData()
+        formData.append('leave_type', form.leave_type)
+        formData.append('start_date', form.start_date)
+        formData.append('end_date', form.end_date)
+        formData.append('half_day', form.half_day ? 'true' : 'false')
+        formData.append('reason', form.reason || '')
+        formData.append('contact_number', form.contact_number || '')
+        formData.append('substitute_name', form.substitute_name || '')
+        formData.append('attachment', form.attachment)
+        if (userId) formData.append('employee', userId)
+        if (empCode) formData.append('employee_code', empCode)
+        if (empName) formData.append('employee_name', empName)
+        
+        response = await payrollService.createLeaveRequest(formData, true) // true = multipart
+      } else {
+        // Regular JSON submission without attachment
+        const payload = {
+          ...form,
+          // Backend perform_create also sets these — we send them for non-staff HR fallback
+          ...(userId   ? { employee: userId }             : {}),
+          ...(empCode  ? { employee_code: empCode }       : {}),
+          ...(empName  ? { employee_name: empName }       : {}),
+        }
+        response = await payrollService.createLeaveRequest(payload)
       }
-      await payrollService.createLeaveRequest(payload)
+      
       setSubmitResult({ success: true, message: 'Leave request submitted successfully! Awaiting manager approval.' })
       // Reload requests — backend now scopes to current user
       const reqRes = await payrollService.getLeaveRequests({ page_size: 50 }).catch(() => ({ results: [] }))

@@ -40,6 +40,13 @@ export const APPROVAL_TYPES = {
       { stage: 1, role: 'reporting_manager', statusValue: 'PENDING', nextStatus: 'RM_APPROVED' },
       { stage: 2, role: 'hr_manager', statusValue: 'RM_APPROVED', nextStatus: 'APPROVED' }
     ],
+    // SOFT-CODED: Field mapping to transform API response fields to display fields
+    // Maps API field names to expected display field names, with fallback logic
+    fieldMapping: {
+      days: (item) => item.days_requested || item.days || null,
+      leave_type: (item) => item.leave_type_detail?.name || item.leave_type || null,
+      reason: (item) => item.reason || item.remarks || null,
+    },
     // Fields to display in approval cards
     displayFields: [
       { key: 'employee_name', label: 'Employee', type: 'text' },

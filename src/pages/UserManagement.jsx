@@ -99,6 +99,14 @@ const UserManagement = ({ pageControls }) => {
   const [multiRoleTargetUser, setMultiRoleTargetUser] = useState(null);
   const [multiRoleSaving, setMultiRoleSaving] = useState(false);
   
+  // Local state — Bulk Deactivation by Roles
+  const [showBulkDeactivateModal, setShowBulkDeactivateModal] = useState(false);
+  const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [selectedRolesForDeactivation, setSelectedRolesForDeactivation] = useState([]);
+  const [bulkDeactivatePreview, setBulkDeactivatePreview] = useState(null);
+  const [bulkDeactivateLoading, setBulkDeactivateLoading] = useState(false);
+  const [showBulkDeactivateConfirmation, setShowBulkDeactivateConfirmation] = useState(false);
+  
   // Local state - Data
   const [organizations, setOrganizations] = useState([]);
   const [departmentSuggestions, setDepartmentSuggestions] = useState([]);
@@ -1424,6 +1432,103 @@ const UserManagement = ({ pageControls }) => {
       setIsExporting(false);
     }
   };
+
+  // ========== BULK DEACTIVATION HANDLERS ==========
+  
+  const handleBulkDeactivateClick = () => {
+    console.log('[BulkDeactivate] Opening role selector');
+    setSelectedRolesForDeactivation([]);
+    setBulkDeactivatePreview(null);
+    setShowRoleSelector(true);
+  };
+
+  const handleRoleToggle = (roleCode) => {
+    console.log('[BulkDeactivate] Toggling role:', roleCode);
+    setSelectedRolesForDeactivation(prev => {
+      if (prev.includes(roleCode)) {
+        return prev.filter(code => code !== roleCode);
+      } else {
+        return [...prev, roleCode];
+      }
+    });
+  };
+
+  const handlePreviewDeactivation = async () => {
+    if (selectedRolesForDeactivation.length === 0) {
+      setNotification({
+        show: true,
+        type: 'error',
+        message: 'Please select at least one role to preview deactivation'
+      });
+      return;
+    }
+
+    setBulkDeactivateLoading(true);
+    try {
+      console.log('[BulkDeactivate] Fetching preview for roles:', selectedRolesForDeactivation);
+      const response = await rbacService.bulkDeactivateByRoles(
+        selectedRolesForDeactivation,
+        [],
+        { dryRun: true, excludeSuperAdmins: true }
+      );
+      console.log('[BulkDeactivate] Preview response:', response);
+      setBulkDeactivatePreview(response.data);
+      setShowRoleSelector(false);
+      setShowBulkDeactivateConfirmation(true);
+    } catch (error) {
+      console.error('[BulkDeactivate] Preview error:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.error || 'Failed to load preview. Please try again.'
+      });
+    } finally {
+      setBulkDeactivateLoading(false);
+    }
+  };
+
+  const handleConfirmBulkDeactivation = async () => {
+    setBulkDeactivateLoading(true);
+    try {
+      console.log('[BulkDeactivate] Executing deactivation for roles:', selectedRolesForDeactivation);
+      const response = await rbacService.bulkDeactivateByRoles(
+        selectedRolesForDeactivation,
+        [],
+        { dryRun: false, excludeSuperAdmins: true }
+      );
+      console.log('[BulkDeactivate] Deactivation response:', response);
+      
+      // Refresh users list
+      await dispatch(fetchUsers()).unwrap();
+      
+      setNotification({
+        show: true,
+        type: 'success',
+        message: response.data.message || `Successfully deactivated ${response.data.deactivated_count} users`
+      });
+      
+      // Close modals and reset state
+      setShowBulkDeactivateConfirmation(false);
+      setSelectedRolesForDeactivation([]);
+      setBulkDeactivatePreview(null);
+    } catch (error) {
+      console.error('[BulkDeactivate] Deactivation error:', error);
+      setNotification({
+        show: true,
+        type: 'error',
+        message: error.response?.data?.error || 'Failed to deactivate users. Please try again.'
+      });
+    } finally {
+      setBulkDeactivateLoading(false);
+    }
+  };
+
+  const handleCancelBulkDeactivation = () => {
+    setShowRoleSelector(false);
+    setShowBulkDeactivateConfirmation(false);
+    setSelectedRolesForDeactivation([]);
+    setBulkDeactivatePreview(null);
+  };
   
   // ========== RENDER: LOADING STATE ==========
   if (!isAuthenticated || !isDataLoaded) {
@@ -1666,6 +1771,18 @@ const UserManagement = ({ pageControls }) => {
                 </div>
               )}
             </div>
+
+            <button
+              onClick={handleBulkDeactivateClick}
+              disabled={!isSuperAdmin}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isSuperAdmin ? 'Bulk deactivate users by roles' : 'Super Admin only'}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              Bulk Deactivate
+            </button>
 
             <button
               onClick={() => setShowCreateModal(true)}
@@ -2836,6 +2953,279 @@ const UserManagement = ({ pageControls }) => {
           onSave={handleSaveMultiRoles}
           loading={multiRoleSaving}
         />
+      )}
+
+      {/* ── Bulk Deactivation: Role Selector Modal ────────────────────────
+          Step 1: Select roles for bulk deactivation
+      ─────────────────────────────────────────────────────────────────── */}
+      {showRoleSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4">
+              <div className="flex items-center justify-between text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Bulk Deactivate Users by Roles</h3>
+                  <p className="text-sm text-red-100 mt-1">Select roles to deactivate all users with those roles</p>
+                </div>
+                <button
+                  onClick={handleCancelBulkDeactivation}
+                  className="text-white hover:text-red-200 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <svg className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-800">Important Safety Notice</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Super administrators will be automatically excluded from bulk deactivation for safety. 
+                      This action will deactivate ALL active users with the selected roles.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                  Select Roles to Deactivate ({selectedRolesForDeactivation.length} selected)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {assignableRoles.map((role) => {
+                    const isSelected = selectedRolesForDeactivation.includes(role.code);
+                    const levelColor = ROLE_LEVEL_COLORS[role.level] || DEFAULT_LEVEL_COLOR;
+                    
+                    return (
+                      <label
+                        key={role.id}
+                        className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${
+                          isSelected
+                            ? `border-red-500 bg-red-50 shadow-md`
+                            : 'border-gray-200 bg-white hover:border-red-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleRoleToggle(role.code)}
+                          className="mt-1 h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                        />
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded ${levelColor.light} ${levelColor.text}`}>
+                              L{role.level}
+                            </span>
+                            <span className="font-semibold text-gray-900">{role.name}</span>
+                          </div>
+                          {role.description && (
+                            <p className="text-xs text-gray-500 mt-1">{role.description}</p>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                {selectedRolesForDeactivation.length === 0 ? (
+                  'Select at least one role to continue'
+                ) : (
+                  <span className="font-semibold text-red-600">
+                    {selectedRolesForDeactivation.length} role{selectedRolesForDeactivation.length !== 1 ? 's' : ''} selected
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelBulkDeactivation}
+                  className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePreviewDeactivation}
+                  disabled={selectedRolesForDeactivation.length === 0 || bulkDeactivateLoading}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                >
+                  {bulkDeactivateLoading ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Preview Deactivation
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk Deactivation: Confirmation Modal ─────────────────────────
+          Step 2: Review and confirm deactivation
+      ─────────────────────────────────────────────────────────────────── */}
+      {showBulkDeactivateConfirmation && bulkDeactivatePreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 px-6 py-4">
+              <div className="flex items-center justify-between text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Confirm Bulk Deactivation</h3>
+                  <p className="text-sm text-red-100 mt-1">
+                    Review users before deactivating (showing {bulkDeactivatePreview.would_deactivate_count} users)
+                  </p>
+                </div>
+                <button
+                  onClick={handleCancelBulkDeactivation}
+                  className="text-white hover:text-red-200 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {/* Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <p className="text-sm text-red-600 font-semibold">Users to Deactivate</p>
+                  <p className="text-3xl font-bold text-red-700 mt-2">{bulkDeactivatePreview.would_deactivate_count}</p>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <p className="text-sm text-green-600 font-semibold">Super Admins Excluded</p>
+                  <p className="text-3xl font-bold text-green-700 mt-2">{bulkDeactivatePreview.excluded_super_admin_count}</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-sm text-blue-600 font-semibold">Selected Roles</p>
+                  <p className="text-3xl font-bold text-blue-700 mt-2">{selectedRolesForDeactivation.length}</p>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <svg className="w-8 h-8 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-base font-bold text-red-800">⚠️ This action will deactivate {bulkDeactivatePreview.would_deactivate_count} users</p>
+                    <p className="text-sm text-red-700 mt-2">
+                      Deactivated users will lose access to the system immediately. They can be reactivated later by a super administrator.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* User List */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Affected Users:</h4>
+                <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-xl">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">User</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Department</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Roles</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {bulkDeactivatePreview.affected_users?.map((user, index) => (
+                        <tr key={user.id || index} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                              <p className="text-xs text-gray-500">{user.email}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm text-gray-700">{user.department || '—'}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {user.roles?.map((role, idx) => (
+                                <span key={idx} className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                                  {role}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                <p className="font-semibold">
+                  This will deactivate <span className="text-red-600">{bulkDeactivatePreview.would_deactivate_count}</span> users
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelBulkDeactivation}
+                  disabled={bulkDeactivateLoading}
+                  className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmBulkDeactivation}
+                  disabled={bulkDeactivateLoading}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
+                >
+                  {bulkDeactivateLoading ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                      Deactivating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Confirm Deactivation
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

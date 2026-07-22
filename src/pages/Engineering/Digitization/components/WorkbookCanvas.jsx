@@ -61,6 +61,17 @@ const CANVAS_CONFIG = {
     error:    'bg-rose-50 ring-1 ring-rose-300',
   },
   emptySheetMessage: 'No rows for this sheet yet — adjust extraction or add overrides.',
+  // ── CAT "unrouted components" banner ──────────────────────────────────
+  // Components extracted for a Piping Class but with no matching sheet in
+  // the standard CAT template (e.g. a valve sub-type with no dedicated
+  // sheet) are excluded from the CAT workbook rather than silently dropped
+  // with zero visibility — this banner surfaces that gap in the canvas.
+  unroutedBanner: {
+    enabled: true,
+    maxGroupsShown: 6,
+    title: 'Some components have no matching CAT sheet',
+    helpText: 'These components remain in the Piping Class data and only affect the CAT catalog view — they are not written to any CAT sheet because the standard template has no dedicated category for them.',
+  },
   // ── Row operations ────────────────────────────────────────────────────
   rowOperations: {
     enableEdit: true,
@@ -961,6 +972,36 @@ const WorkbookCanvas = ({ job }) => {
         <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-sm px-3 py-2 flex items-center gap-2">
           <ExclamationTriangleIcon className="w-4 h-4" />
           {loadError}
+        </div>
+      )}
+
+      {CANVAS_CONFIG.unroutedBanner.enabled && workbook === 'cat' && data?.unrouted_components?.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 text-sm px-3 py-2.5">
+          <div className="flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-200">
+            <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
+            {CANVAS_CONFIG.unroutedBanner.title}
+            {' '}
+            <span className="font-normal text-amber-700 dark:text-amber-300">
+              ({data.unrouted_components.reduce((sum, g) => sum + g.count, 0)} components)
+            </span>
+          </div>
+          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+            {CANVAS_CONFIG.unroutedBanner.helpText}
+          </p>
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-amber-800 dark:text-amber-200">
+            {data.unrouted_components.slice(0, CANVAS_CONFIG.unroutedBanner.maxGroupsShown).map((g) => (
+              <li key={`${g.component_type}::${g.sub_type}`}>
+                <span className="font-medium">{g.sub_type || g.component_type}</span>
+                {' × '}
+                {g.count}
+              </li>
+            ))}
+            {data.unrouted_components.length > CANVAS_CONFIG.unroutedBanner.maxGroupsShown && (
+              <li className="italic opacity-75">
+                +{data.unrouted_components.length - CANVAS_CONFIG.unroutedBanner.maxGroupsShown} more…
+              </li>
+            )}
+          </ul>
         </div>
       )}
 

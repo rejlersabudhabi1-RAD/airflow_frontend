@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import apiClient from '../../services/api.service'
+import DatePicker from '../../components/DatePicker'
 
 // ── Soft-coded API endpoints ──────────────────────────────────────────────
 // Note: apiClient baseURL already includes /api/v1, so paths are relative to that
@@ -65,6 +66,706 @@ const EXIT_REASON_CONFIG = {
 const BRANCH_CONFIG = {
   RAD: { label: 'Rejlers Abu Dhabi', color: 'text-blue-600' },
   RIN: { label: 'Rejlers India', color: 'text-emerald-600' },
+}
+
+// ── Soft-coded success message configuration ──────────────────────────────
+const SUCCESS_CONFIG = {
+  autoReloadDelay: 2000, // milliseconds - delay before page reload after successful employee creation
+  defaultRole: 'Default', // Default RBAC role assigned to new employees
+  visibilityLocations: [
+    'Overview tab (this page)',
+    'HR/Employees list',
+    'Admin/Users dashboard',
+    'Profile (when user logs in)'
+  ]
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SMART BUTTON CONFIGURATION FOR OVERVIEW TAB ────────────────────────────
+// All buttons in the Overview section are configured here for easy maintenance
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Navigation Action Types
+ * Defines how the button should behave when clicked
+ */
+const NAV_ACTIONS = {
+  HASH: 'hash',           // Navigate using window.location.hash
+  TAB: 'tab',             // Switch to a different tab
+  ROUTE: 'route',         // Navigate to a different route
+  CALLBACK: 'callback',   // Execute a custom callback function
+  EXTERNAL: 'external',   // Open external URL
+}
+
+/**
+ * Button Size Presets
+ * Consistent sizing across all buttons
+ */
+const BUTTON_SIZES = {
+  sm: 'px-3 py-1.5 text-xs',
+  md: 'px-4 py-2 text-sm',
+  lg: 'px-6 py-3 text-base',
+}
+
+/**
+ * Button Style Variants
+ * Pre-defined color schemes for different button types
+ */
+const BUTTON_VARIANTS = {
+  primary: {
+    base: 'bg-blue-600 hover:bg-blue-700 text-white',
+    outline: 'text-blue-600 hover:bg-blue-50 border border-blue-200',
+    ghost: 'text-blue-600 hover:bg-blue-50',
+  },
+  secondary: {
+    base: 'bg-slate-600 hover:bg-slate-700 text-white',
+    outline: 'text-slate-600 hover:bg-slate-50 border border-slate-200',
+    ghost: 'text-slate-600 hover:bg-slate-50',
+  },
+  success: {
+    base: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    outline: 'text-emerald-600 hover:bg-emerald-50 border border-emerald-200',
+    ghost: 'text-emerald-600 hover:bg-emerald-50',
+  },
+  warning: {
+    base: 'bg-amber-600 hover:bg-amber-700 text-white',
+    outline: 'text-amber-600 hover:bg-amber-50 border border-amber-200',
+    ghost: 'text-amber-600 hover:bg-amber-50',
+  },
+  danger: {
+    base: 'bg-rose-600 hover:bg-rose-700 text-white',
+    outline: 'text-rose-600 hover:bg-rose-50 border border-rose-200',
+    ghost: 'text-rose-600 hover:bg-rose-50',
+  },
+}
+
+/**
+ * Smart Button Configuration for Overview Tab
+ * Each button can be configured with:
+ * - id: unique identifier
+ * - label: button text
+ * - section: which section this button belongs to ('onboarding' | 'offboarding' | 'global')
+ * - actionType: type of navigation (hash, tab, route, callback, external)
+ * - actionValue: value for the action (hash name, tab id, route path, callback function, external URL)
+ * - variant: color scheme (primary, secondary, success, warning, danger)
+ * - style: display style (base, outline, ghost)
+ * - size: button size (sm, md, lg)
+ * - icon: HeroIcon component to display
+ * - iconPosition: where to place the icon ('left' | 'right' | 'both')
+ * - showBadge: whether to show a badge with count
+ * - badgeSource: function to get badge value from stats
+ * - visible: function to determine if button should be shown
+ * - disabled: function to determine if button should be disabled
+ * - tooltip: tooltip text on hover
+ * - analytics: analytics event name to track
+ * - confirmBefore: show confirmation dialog before action
+ * - confirmMessage: message to show in confirmation dialog
+ */
+const OVERVIEW_BUTTONS = [
+  // ── Onboarding Section Buttons ──
+  {
+    id: 'view-all-onboarding',
+    label: 'View All',
+    section: 'onboarding',
+    actionType: NAV_ACTIONS.HASH,
+    actionValue: '#onboarding',
+    variant: 'primary',
+    style: 'ghost',
+    size: 'md',
+    icon: HeroIcons.ArrowRightIcon,
+    iconPosition: 'right',
+    showBadge: false,
+    visible: (stats) => true,
+    disabled: (stats) => false,
+    tooltip: 'View complete onboarding list',
+    analytics: 'onboarding_view_all_click',
+  },
+  {
+    id: 'add-new-employee',
+    label: 'Add New',
+    section: 'onboarding',
+    actionType: NAV_ACTIONS.HASH,
+    actionValue: '#create',
+    variant: 'success',
+    style: 'outline',
+    size: 'md',
+    icon: HeroIcons.PlusCircleIcon,
+    iconPosition: 'left',
+    showBadge: false,
+    visible: (stats) => true,
+    disabled: (stats) => false,
+    tooltip: 'Create new employee onboarding',
+    analytics: 'onboarding_add_new_click',
+  },
+  {
+    id: 'view-overdue-onboarding',
+    label: 'Overdue Items',
+    section: 'onboarding',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats) => {
+      console.log('Filtering onboarding by overdue status')
+      window.location.hash = '#onboarding?filter=overdue'
+    },
+    variant: 'danger',
+    style: 'outline',
+    size: 'sm',
+    icon: HeroIcons.ExclamationTriangleIcon,
+    iconPosition: 'left',
+    showBadge: true,
+    badgeSource: (stats) => stats?.overdue ?? 0,
+    visible: (stats) => (stats?.overdue ?? 0) > 0, // Only show if there are overdue items
+    disabled: (stats) => false,
+    tooltip: 'View overdue onboarding items',
+    analytics: 'onboarding_overdue_click',
+  },
+  {
+    id: 'view-upcoming-joiners',
+    label: 'Upcoming Joiners',
+    section: 'onboarding',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats) => {
+      window.location.hash = '#onboarding?filter=upcoming'
+    },
+    variant: 'primary',
+    style: 'outline',
+    size: 'sm',
+    icon: HeroIcons.CalendarDaysIcon,
+    iconPosition: 'left',
+    showBadge: true,
+    badgeSource: (stats) => stats?.upcoming_joiners ?? 0,
+    visible: (stats) => (stats?.upcoming_joiners ?? 0) > 0,
+    disabled: (stats) => false,
+    tooltip: 'View employees joining in next 30 days',
+    analytics: 'onboarding_upcoming_click',
+  },
+
+  // ── Offboarding Section Buttons ──
+  {
+    id: 'view-all-offboarding',
+    label: 'View All',
+    section: 'offboarding',
+    actionType: NAV_ACTIONS.HASH,
+    actionValue: '#offboarding',
+    variant: 'danger',
+    style: 'ghost',
+    size: 'md',
+    icon: HeroIcons.ArrowRightIcon,
+    iconPosition: 'right',
+    showBadge: false,
+    visible: (stats) => true,
+    disabled: (stats) => false,
+    tooltip: 'View complete offboarding list',
+    analytics: 'offboarding_view_all_click',
+  },
+  {
+    id: 'initiate-offboarding',
+    label: 'Initiate Exit',
+    section: 'offboarding',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats) => {
+      // Could open a modal or navigate to offboarding form
+      alert('Initiate offboarding feature - to be implemented')
+    },
+    variant: 'warning',
+    style: 'outline',
+    size: 'md',
+    icon: HeroIcons.UserMinusIcon,
+    iconPosition: 'left',
+    showBadge: false,
+    visible: (stats) => true,
+    disabled: (stats) => false,
+    tooltip: 'Start offboarding process for an employee',
+    analytics: 'offboarding_initiate_click',
+  },
+  {
+    id: 'view-overdue-offboarding',
+    label: 'Overdue Items',
+    section: 'offboarding',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats) => {
+      window.location.hash = '#offboarding?filter=overdue'
+    },
+    variant: 'danger',
+    style: 'outline',
+    size: 'sm',
+    icon: HeroIcons.ExclamationTriangleIcon,
+    iconPosition: 'left',
+    showBadge: true,
+    badgeSource: (stats) => stats?.overdue ?? 0,
+    visible: (stats) => (stats?.overdue ?? 0) > 0,
+    disabled: (stats) => false,
+    tooltip: 'View overdue offboarding items',
+    analytics: 'offboarding_overdue_click',
+  },
+  {
+    id: 'view-upcoming-exits',
+    label: 'Upcoming Exits',
+    section: 'offboarding',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats) => {
+      window.location.hash = '#offboarding?filter=upcoming'
+    },
+    variant: 'warning',
+    style: 'outline',
+    size: 'sm',
+    icon: HeroIcons.CalendarDaysIcon,
+    iconPosition: 'left',
+    showBadge: true,
+    badgeSource: (stats) => stats?.upcoming_exits ?? 0,
+    visible: (stats) => (stats?.upcoming_exits ?? 0) > 0,
+    disabled: (stats) => false,
+    tooltip: 'View employees leaving in next 30 days',
+    analytics: 'offboarding_upcoming_click',
+  },
+
+  // ── Global Actions (appear in both sections or top-level) ──
+  {
+    id: 'refresh-statistics',
+    label: 'Refresh',
+    section: 'global',
+    actionType: NAV_ACTIONS.CALLBACK,
+    actionValue: (stats, loadFunction) => {
+      if (loadFunction) loadFunction()
+    },
+    variant: 'secondary',
+    style: 'ghost',
+    size: 'sm',
+    icon: HeroIcons.ArrowPathIcon,
+    iconPosition: 'left',
+    showBadge: false,
+    visible: (stats) => true,
+    disabled: (stats) => false,
+    tooltip: 'Refresh statistics',
+    analytics: 'overview_refresh_click',
+  },
+]
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SMART KPI CARD CONFIGURATION FOR OVERVIEW TAB ──────────────────────────
+// All KPI metric cards in the Overview section are configured here
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * KPI Color Schemes
+ * Pre-defined color combinations for different metrics
+ */
+const KPI_COLOR_SCHEMES = {
+  blue: {
+    bgColor: 'bg-blue-50',
+    textColor: 'text-blue-700',
+    iconBg: 'bg-blue-100',
+  },
+  violet: {
+    bgColor: 'bg-violet-50',
+    textColor: 'text-violet-700',
+    iconBg: 'bg-violet-100',
+  },
+  rose: {
+    bgColor: 'bg-rose-50',
+    textColor: 'text-rose-700',
+    iconBg: 'bg-rose-100',
+  },
+  emerald: {
+    bgColor: 'bg-emerald-50',
+    textColor: 'text-emerald-700',
+    iconBg: 'bg-emerald-100',
+  },
+  amber: {
+    bgColor: 'bg-amber-50',
+    textColor: 'text-amber-700',
+    iconBg: 'bg-amber-100',
+  },
+  slate: {
+    bgColor: 'bg-slate-50',
+    textColor: 'text-slate-700',
+    iconBg: 'bg-slate-100',
+  },
+  indigo: {
+    bgColor: 'bg-indigo-50',
+    textColor: 'text-indigo-700',
+    iconBg: 'bg-indigo-100',
+  },
+}
+
+/**
+ * Smart KPI Card Configuration
+ * Each KPI card can be configured with:
+ * - id: unique identifier
+ * - label: card title
+ * - section: which section this card belongs to ('onboarding' | 'offboarding')
+ * - valueSource: function to extract value from stats
+ * - icon: HeroIcon component to display
+ * - colorScheme: pre-defined color scheme (blue, violet, rose, emerald, amber, slate, indigo)
+ * - subtitle: optional subtitle text or function
+ * - urgent: function to determine if card should show urgent state
+ * - visible: function to determine if card should be shown
+ * - order: display order (lower numbers appear first)
+ * - onClick: optional click handler function
+ * - tooltip: tooltip text on hover
+ * - animation: enable/disable animations
+ */
+const KPI_CARDS_CONFIG = {
+  onboarding: [
+    {
+      id: 'onboarding-total-active',
+      label: 'Total Active',
+      section: 'onboarding',
+      valueSource: (stats) => stats?.total ?? 0,
+      icon: HeroIcons.UsersIcon,
+      colorScheme: 'blue',
+      subtitle: null,
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 1,
+      onClick: (stats) => {
+        window.location.hash = '#onboarding'
+      },
+      tooltip: 'Total active onboarding processes',
+      animation: true,
+    },
+    {
+      id: 'onboarding-joining-soon',
+      label: 'Joining Soon',
+      section: 'onboarding',
+      valueSource: (stats) => stats?.upcoming_joiners ?? 0,
+      icon: HeroIcons.CalendarDaysIcon,
+      colorScheme: 'violet',
+      subtitle: 'Next 30 days',
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 2,
+      onClick: (stats) => {
+        window.location.hash = '#onboarding?filter=upcoming'
+      },
+      tooltip: 'Employees joining in the next 30 days',
+      animation: true,
+    },
+    {
+      id: 'onboarding-overdue',
+      label: 'Overdue',
+      section: 'onboarding',
+      valueSource: (stats) => stats?.overdue ?? 0,
+      icon: HeroIcons.ExclamationCircleIcon,
+      colorScheme: 'rose',
+      subtitle: null,
+      urgent: (stats) => (stats?.overdue ?? 0) > 0,
+      visible: (stats) => true,
+      order: 3,
+      onClick: (stats) => {
+        window.location.hash = '#onboarding?filter=overdue'
+      },
+      tooltip: 'Overdue onboarding items requiring attention',
+      animation: true,
+    },
+    {
+      id: 'onboarding-completed',
+      label: 'Completed',
+      section: 'onboarding',
+      valueSource: (stats) => stats?.completed_this_month ?? 0,
+      icon: HeroIcons.CheckCircleIcon,
+      colorScheme: 'emerald',
+      subtitle: 'This month',
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 4,
+      onClick: (stats) => {
+        window.location.hash = '#onboarding?status=completed'
+      },
+      tooltip: 'Completed onboarding processes this month',
+      animation: true,
+    },
+  ],
+  offboarding: [
+    {
+      id: 'offboarding-total-active',
+      label: 'Total Active',
+      section: 'offboarding',
+      valueSource: (stats) => stats?.total ?? 0,
+      icon: HeroIcons.UsersIcon,
+      colorScheme: 'slate',
+      subtitle: null,
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 1,
+      onClick: (stats) => {
+        window.location.hash = '#offboarding'
+      },
+      tooltip: 'Total active offboarding processes',
+      animation: true,
+    },
+    {
+      id: 'offboarding-leaving-soon',
+      label: 'Leaving Soon',
+      section: 'offboarding',
+      valueSource: (stats) => stats?.upcoming_exits ?? 0,
+      icon: HeroIcons.CalendarDaysIcon,
+      colorScheme: 'amber',
+      subtitle: 'Next 30 days',
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 2,
+      onClick: (stats) => {
+        window.location.hash = '#offboarding?filter=upcoming'
+      },
+      tooltip: 'Employees leaving in the next 30 days',
+      animation: true,
+    },
+    {
+      id: 'offboarding-overdue',
+      label: 'Overdue',
+      section: 'offboarding',
+      valueSource: (stats) => stats?.overdue ?? 0,
+      icon: HeroIcons.ExclamationCircleIcon,
+      colorScheme: 'rose',
+      subtitle: null,
+      urgent: (stats) => (stats?.overdue ?? 0) > 0,
+      visible: (stats) => true,
+      order: 3,
+      onClick: (stats) => {
+        window.location.hash = '#offboarding?filter=overdue'
+      },
+      tooltip: 'Overdue offboarding items requiring attention',
+      animation: true,
+    },
+    {
+      id: 'offboarding-completed',
+      label: 'Completed',
+      section: 'offboarding',
+      valueSource: (stats) => stats?.completed_this_month ?? 0,
+      icon: HeroIcons.CheckCircleIcon,
+      colorScheme: 'emerald',
+      subtitle: 'This month',
+      urgent: (stats) => false,
+      visible: (stats) => true,
+      order: 4,
+      onClick: (stats) => {
+        window.location.hash = '#offboarding?status=completed'
+      },
+      tooltip: 'Completed offboarding processes this month',
+      animation: true,
+    },
+  ],
+}
+
+/**
+ * Smart KPI Card Renderer Component
+ * Renders a KPI card based on configuration with all smart features
+ */
+const SmartKPICard = ({ config, stats }) => {
+  // Check visibility
+  const isVisible = typeof config.visible === 'function' ? config.visible(stats) : true
+  if (!isVisible) return null
+
+  // Get value
+  const value = typeof config.valueSource === 'function' ? config.valueSource(stats) : 0
+
+  // Check urgent state
+  const isUrgent = typeof config.urgent === 'function' ? config.urgent(stats) : false
+
+  // Get icon component
+  const Icon = config.icon
+
+  // Get color scheme
+  const colors = KPI_COLOR_SCHEMES[config.colorScheme] || KPI_COLOR_SCHEMES.blue
+
+  // Get subtitle (can be string or function)
+  const subtitle = typeof config.subtitle === 'function' ? config.subtitle(stats) : config.subtitle
+
+  // Handle click
+  const handleClick = () => {
+    if (typeof config.onClick === 'function') {
+      config.onClick(stats)
+    }
+  }
+
+  return (
+    <div 
+      className={`rounded-xl border border-slate-200 p-4 ${colors.bgColor} hover:shadow-lg transition-all duration-300 cursor-pointer group`}
+      onClick={handleClick}
+      title={config.tooltip}
+      data-kpi-id={config.id}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1">
+          <div className={`text-xs font-semibold ${colors.textColor} opacity-80 uppercase tracking-wide`}>
+            {config.label}
+          </div>
+          {subtitle && (
+            <div className="text-[10px] text-slate-500 mt-0.5">{subtitle}</div>
+          )}
+        </div>
+        <div 
+          className={`w-10 h-10 rounded-lg ${colors.iconBg} flex items-center justify-center ${
+            isUrgent ? 'animate-pulse' : ''
+          } ${config.animation ? 'group-hover:scale-110 transition-transform duration-300' : ''}`}
+        >
+          <Icon className={`w-5 h-5 ${colors.textColor}`} />
+        </div>
+      </div>
+      <div className={`text-3xl font-bold ${colors.textColor} ${isUrgent ? 'text-4xl' : ''}`}>
+        {value}
+      </div>
+      {isUrgent && value > 0 && (
+        <div className="mt-2 text-[10px] font-medium text-rose-600 flex items-center gap-1">
+          <HeroIcons.ExclamationTriangleIcon className="w-3 h-3" />
+          Requires attention
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Smart KPI Card Grid Component
+ * Renders a grid of KPI cards for a specific section with smart layout
+ */
+const SmartKPICardGrid = ({ section, stats }) => {
+  const cards = KPI_CARDS_CONFIG[section] || []
+  
+  // Sort by order
+  const sortedCards = [...cards].sort((a, b) => a.order - b.order)
+  
+  if (sortedCards.length === 0) return null
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {sortedCards.map((cardConfig) => (
+        <SmartKPICard key={cardConfig.id} config={cardConfig} stats={stats} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Smart Button Renderer Component
+ * Renders a button based on configuration with all smart features
+ */
+const SmartButton = ({ config, stats, customCallback, className = '' }) => {
+  // Check visibility
+  const isVisible = typeof config.visible === 'function' ? config.visible(stats) : true
+  if (!isVisible) return null
+
+  // Check disabled state
+  const isDisabled = typeof config.disabled === 'function' ? config.disabled(stats) : false
+
+  // Get badge value if applicable
+  const badgeValue = config.showBadge && typeof config.badgeSource === 'function' 
+    ? config.badgeSource(stats) 
+    : null
+
+  // Get icon component
+  const Icon = config.icon
+
+  // Build CSS classes
+  const variantStyle = BUTTON_VARIANTS[config.variant || 'primary'][config.style || 'ghost']
+  const sizeClass = BUTTON_SIZES[config.size || 'md']
+  const baseClasses = 'font-medium rounded-lg transition-all flex items-center gap-2 relative'
+  const disabledClasses = isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+  const allClasses = `${baseClasses} ${variantStyle} ${sizeClass} ${disabledClasses} ${className}`
+
+  // Handle click
+  const handleClick = (e) => {
+    if (isDisabled) return
+
+    // Track analytics
+    if (config.analytics) {
+      console.log(`[Analytics] ${config.analytics}`, { stats })
+    }
+
+    // Show confirmation if required
+    if (config.confirmBefore) {
+      const confirmed = window.confirm(config.confirmMessage || 'Are you sure?')
+      if (!confirmed) return
+    }
+
+    // Execute action based on type
+    switch (config.actionType) {
+      case NAV_ACTIONS.HASH:
+        window.location.hash = config.actionValue
+        break
+      case NAV_ACTIONS.TAB:
+        if (customCallback) customCallback(config.actionValue)
+        break
+      case NAV_ACTIONS.ROUTE:
+        window.location.href = config.actionValue
+        break
+      case NAV_ACTIONS.CALLBACK:
+        if (typeof config.actionValue === 'function') {
+          config.actionValue(stats, customCallback)
+        }
+        break
+      case NAV_ACTIONS.EXTERNAL:
+        window.open(config.actionValue, '_blank', 'noopener,noreferrer')
+        break
+      default:
+        console.warn('Unknown action type:', config.actionType)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={isDisabled}
+      className={allClasses}
+      title={config.tooltip}
+      data-button-id={config.id}
+      data-section={config.section}
+    >
+      {/* Left Icon */}
+      {Icon && (config.iconPosition === 'left' || config.iconPosition === 'both') && (
+        <Icon className="w-4 h-4 flex-shrink-0" />
+      )}
+
+      {/* Label */}
+      <span>{config.label}</span>
+
+      {/* Badge */}
+      {config.showBadge && badgeValue !== null && badgeValue > 0 && (
+        <span className="ml-1 px-2 py-0.5 bg-white bg-opacity-20 text-xs font-bold rounded-full min-w-[1.5rem] text-center">
+          {badgeValue}
+        </span>
+      )}
+
+      {/* Right Icon */}
+      {Icon && (config.iconPosition === 'right') && (
+        <Icon className="w-4 h-4 flex-shrink-0" />
+      )}
+    </button>
+  )
+}
+
+/**
+ * Button Group Component
+ * Renders a group of buttons for a specific section with smart layout
+ */
+const SmartButtonGroup = ({ section, stats, buttons = OVERVIEW_BUTTONS, onTabChange, className = '' }) => {
+  const sectionButtons = buttons.filter(btn => btn.section === section)
+  
+  if (sectionButtons.length === 0) return null
+
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+      {sectionButtons.map(config => (
+        <SmartButton 
+          key={config.id} 
+          config={config} 
+          stats={stats}
+          customCallback={onTabChange}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ── Soft-coded probation period configuration ─────────────────────────────
+const PROBATION_PERIOD_MONTHS = 6
+
+// ── Utility function to calculate probation end date ──────────────────────
+const calculateProbationEndDate = (joiningDate) => {
+  if (!joiningDate) return null
+  const date = new Date(joiningDate)
+  date.setMonth(date.getMonth() + PROBATION_PERIOD_MONTHS)
+  return date.toISOString().split('T')[0]
 }
 
 // ── Spinner Component ──────────────────────────────────────────────────────
@@ -177,6 +878,23 @@ function OverviewTab() {
 
   return (
     <div className="space-y-6">
+      {/* Global Actions Bar */}
+      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <HeroIcons.ChartBarIcon className="w-5 h-5 text-slate-400" />
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Overview Dashboard</h3>
+            <p className="text-xs text-slate-500">Real-time employee lifecycle metrics</p>
+          </div>
+        </div>
+        {/* Global Action Buttons */}
+        <SmartButtonGroup 
+          section="global" 
+          stats={{ onboarding: onboardingStats, offboarding: offboardingStats }}
+          customCallback={loadStatistics}
+        />
+      </div>
+
       {/* Hero Stats */}
       <div className="bg-gradient-to-br from-blue-500 to-violet-600 rounded-2xl p-6 text-white shadow-lg">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -209,63 +927,24 @@ function OverviewTab() {
 
       {/* Onboarding Section */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
               <HeroIcons.UserPlusIcon className="w-6 h-6 text-white" />
             </div>
             Onboarding Pipeline
           </h2>
-          <button
-            onClick={() => window.location.hash = '#onboarding'}
-            className="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-          >
-            View All
-            <HeroIcons.ArrowRightIcon className="w-4 h-4" />
-          </button>
+          {/* Smart Button Group for Onboarding Actions */}
+          <SmartButtonGroup 
+            section="onboarding" 
+            stats={onboardingStats}
+            className="flex-shrink-0"
+          />
         </div>
 
-        {/* Main KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <EnhancedKPICard
-            label="Total Active"
-            value={onboardingStats?.total ?? 0}
-            icon={HeroIcons.UsersIcon}
-            color="blue"
-            bgColor="bg-blue-50"
-            textColor="text-blue-700"
-            iconBg="bg-blue-100"
-          />
-          <EnhancedKPICard
-            label="Joining Soon"
-            value={onboardingStats?.upcoming_joiners ?? 0}
-            icon={HeroIcons.CalendarDaysIcon}
-            color="violet"
-            bgColor="bg-violet-50"
-            textColor="text-violet-700"
-            iconBg="bg-violet-100"
-            subtitle="Next 30 days"
-          />
-          <EnhancedKPICard
-            label="Overdue"
-            value={onboardingStats?.overdue ?? 0}
-            icon={HeroIcons.ExclamationCircleIcon}
-            color="rose"
-            bgColor="bg-rose-50"
-            textColor="text-rose-700"
-            iconBg="bg-rose-100"
-            urgent={onboardingStats?.overdue > 0}
-          />
-          <EnhancedKPICard
-            label="Completed"
-            value={onboardingStats?.completed_this_month ?? 0}
-            icon={HeroIcons.CheckCircleIcon}
-            color="emerald"
-            bgColor="bg-emerald-50"
-            textColor="text-emerald-700"
-            iconBg="bg-emerald-100"
-            subtitle="This month"
-          />
+        {/* Main KPIs - Smart Card Grid */}
+        <div className="mb-6">
+          <SmartKPICardGrid section="onboarding" stats={onboardingStats} />
         </div>
 
         {/* Status Pipeline */}
@@ -310,63 +989,24 @@ function OverviewTab() {
 
       {/* Offboarding Section */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center shadow-md">
               <HeroIcons.UserMinusIcon className="w-6 h-6 text-white" />
             </div>
             Offboarding Pipeline
           </h2>
-          <button
-            onClick={() => window.location.hash = '#offboarding'}
-            className="px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2"
-          >
-            View All
-            <HeroIcons.ArrowRightIcon className="w-4 h-4" />
-          </button>
+          {/* Smart Button Group for Offboarding Actions */}
+          <SmartButtonGroup 
+            section="offboarding" 
+            stats={offboardingStats}
+            className="flex-shrink-0"
+          />
         </div>
 
-        {/* Main KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <EnhancedKPICard
-            label="Total Active"
-            value={offboardingStats?.total ?? 0}
-            icon={HeroIcons.UsersIcon}
-            color="slate"
-            bgColor="bg-slate-50"
-            textColor="text-slate-700"
-            iconBg="bg-slate-100"
-          />
-          <EnhancedKPICard
-            label="Leaving Soon"
-            value={offboardingStats?.upcoming_exits ?? 0}
-            icon={HeroIcons.CalendarDaysIcon}
-            color="amber"
-            bgColor="bg-amber-50"
-            textColor="text-amber-700"
-            iconBg="bg-amber-100"
-            subtitle="Next 30 days"
-          />
-          <EnhancedKPICard
-            label="Overdue"
-            value={offboardingStats?.overdue ?? 0}
-            icon={HeroIcons.ExclamationCircleIcon}
-            color="rose"
-            bgColor="bg-rose-50"
-            textColor="text-rose-700"
-            iconBg="bg-rose-100"
-            urgent={offboardingStats?.overdue > 0}
-          />
-          <EnhancedKPICard
-            label="Completed"
-            value={offboardingStats?.completed_this_month ?? 0}
-            icon={HeroIcons.CheckCircleIcon}
-            color="emerald"
-            bgColor="bg-emerald-50"
-            textColor="text-emerald-700"
-            iconBg="bg-emerald-100"
-            subtitle="This month"
-          />
+        {/* Main KPIs - Smart Card Grid */}
+        <div className="mb-6">
+          <SmartKPICardGrid section="offboarding" stats={offboardingStats} />
         </div>
 
         {/* Status Pipeline */}
@@ -1049,6 +1689,413 @@ function OnboardingListTab() {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SMART OFFBOARDING LIST CONFIGURATION ───────────────────────────────────
+// All table columns, filters, and actions are configured here
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Offboarding Table Column Configuration
+ * Each column can be configured with:
+ * - id: unique identifier
+ * - label: column header text
+ * - field: data field key
+ * - type: data type (text, date, number, badge, progress)
+ * - width: column width (sm, md, lg, xl, auto)
+ * - sortable: enable sorting
+ * - filterable: enable filtering
+ * - visible: default visibility
+ * - order: display order
+ * - render: custom render function
+ */
+const OFFBOARDING_TABLE_COLUMNS = [
+  {
+    id: 'employee',
+    label: 'Employee',
+    field: 'employee_name',
+    type: 'text',
+    width: 'lg',
+    sortable: true,
+    filterable: true,
+    visible: true,
+    order: 1,
+    render: (record) => (
+      <div>
+        <p className="text-sm font-semibold text-slate-700">{record.employee_name || 'N/A'}</p>
+        <p className="text-xs text-slate-500">{record.employee_email || ''}</p>
+      </div>
+    ),
+  },
+  {
+    id: 'position',
+    label: 'Position',
+    field: 'position',
+    type: 'text',
+    width: 'md',
+    sortable: true,
+    filterable: false,
+    visible: true,
+    order: 2,
+    render: (record) => (
+      <span className="text-sm text-slate-600">{record.position || '—'}</span>
+    ),
+  },
+  {
+    id: 'branch',
+    label: 'Branch',
+    field: 'branch',
+    type: 'badge',
+    width: 'sm',
+    sortable: true,
+    filterable: true,
+    visible: true,
+    order: 3,
+    render: (record) => {
+      const branchCfg = BRANCH_CONFIG[record.branch] || BRANCH_CONFIG.RAD
+      return <span className={`text-xs font-medium ${branchCfg.color}`}>{branchCfg.label}</span>
+    },
+  },
+  {
+    id: 'last_working_day',
+    label: 'Last Working Day',
+    field: 'last_working_day',
+    type: 'date',
+    width: 'md',
+    sortable: true,
+    filterable: false,
+    visible: true,
+    order: 4,
+    render: (record) => {
+      const daysUntil = record.days_until_exit
+      const isUrgent = daysUntil <= 7 && daysUntil >= 0
+      return (
+        <div>
+          <p className="text-sm text-slate-700">{record.last_working_day ? new Date(record.last_working_day).toLocaleDateString() : '—'}</p>
+          {daysUntil !== undefined && (
+            <p className={`text-xs ${isUrgent ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
+              {daysUntil > 0 ? `in ${daysUntil} days` : daysUntil === 0 ? 'Today' : `${Math.abs(daysUntil)} days ago`}
+            </p>
+          )}
+        </div>
+      )
+    },
+  },
+  {
+    id: 'exit_reason',
+    label: 'Exit Reason',
+    field: 'exit_reason',
+    type: 'text',
+    width: 'md',
+    sortable: false,
+    filterable: true,
+    visible: true,
+    order: 5,
+    render: (record) => {
+      const exitCfg = EXIT_REASON_CONFIG[record.exit_reason] || EXIT_REASON_CONFIG.other
+      return <span className="text-xs text-slate-700">{exitCfg.label}</span>
+    },
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    field: 'status',
+    type: 'badge',
+    width: 'md',
+    sortable: true,
+    filterable: true,
+    visible: true,
+    order: 6,
+    render: (record) => {
+      const statusCfg = OFFBOARDING_STATUS_CONFIG[record.status] || OFFBOARDING_STATUS_CONFIG.initiated
+      return (
+        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${statusCfg.color}`}>
+          {statusCfg.label}
+        </span>
+      )
+    },
+  },
+  {
+    id: 'progress',
+    label: 'Progress',
+    field: 'progress_percentage',
+    type: 'progress',
+    width: 'md',
+    sortable: true,
+    filterable: false,
+    visible: true,
+    order: 7,
+    render: (record) => (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-rose-500 h-full transition-all"
+            style={{ width: `${record.progress_percentage || 0}%` }}
+          />
+        </div>
+        <span className="text-xs font-medium text-slate-600">{record.progress_percentage || 0}%</span>
+      </div>
+    ),
+  },
+]
+
+/**
+ * Offboarding List Action Buttons Configuration
+ */
+const OFFBOARDING_LIST_ACTIONS = [
+  {
+    id: 'add-offboarding',
+    label: 'Initiate Exit',
+    icon: HeroIcons.UserMinusIcon,
+    variant: 'warning',
+    style: 'base',
+    size: 'md',
+    onClick: (records, loadRecords, setShowInitiateModal) => {
+      if (setShowInitiateModal) setShowInitiateModal(true)
+    },
+    visible: true,
+    tooltip: 'Start new offboarding process',
+  },
+  {
+    id: 'export-list',
+    label: 'Export',
+    icon: HeroIcons.ArrowDownTrayIcon,
+    variant: 'secondary',
+    style: 'outline',
+    size: 'md',
+    onClick: (records) => {
+      console.log('Export records:', records)
+      alert('Export feature - to be implemented')
+    },
+    visible: true,
+    tooltip: 'Export offboarding list to Excel',
+  },
+  {
+    id: 'refresh',
+    label: 'Refresh',
+    icon: HeroIcons.ArrowPathIcon,
+    variant: 'secondary',
+    style: 'ghost',
+    size: 'md',
+    onClick: (records, loadRecords) => {
+      if (loadRecords) loadRecords()
+    },
+    visible: true,
+    tooltip: 'Reload offboarding records',
+  },
+]
+
+/**
+ * Initiate Exit Form Field Configuration
+ * All form fields are soft-coded here for easy maintenance
+ */
+const INITIATE_EXIT_FORM_FIELDS = [
+  {
+    id: 'employee',
+    label: 'Select Employee',
+    field: 'employee_id',
+    type: 'select-search',
+    required: true,
+    section: 'employee',
+    placeholder: 'Search by name or email...',
+    tooltip: 'Select the employee who is leaving',
+    validation: (value) => value ? null : 'Employee is required',
+  },
+  {
+    id: 'position',
+    label: 'Position',
+    field: 'position',
+    type: 'text',
+    required: true,
+    section: 'employee',
+    placeholder: 'e.g., Senior Engineer',
+    tooltip: 'Current position/job title',
+    validation: (value) => value?.trim() ? null : 'Position is required',
+  },
+  {
+    id: 'department',
+    label: 'Department',
+    field: 'department',
+    type: 'text',
+    required: true,
+    section: 'employee',
+    placeholder: 'e.g., Engineering',
+    tooltip: 'Current department',
+    validation: (value) => value?.trim() ? null : 'Department is required',
+  },
+  {
+    id: 'reporting_manager',
+    label: 'Reporting Manager',
+    field: 'reporting_manager',
+    type: 'text',
+    required: false,
+    section: 'employee',
+    placeholder: 'Manager name',
+    tooltip: 'Direct supervisor/manager',
+  },
+  {
+    id: 'branch',
+    label: 'Branch',
+    field: 'branch',
+    type: 'select',
+    required: true,
+    section: 'employee',
+    options: Object.entries(BRANCH_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    })),
+    defaultValue: 'RAD',
+    tooltip: 'Office branch location',
+  },
+  {
+    id: 'exit_reason',
+    label: 'Exit Reason',
+    field: 'exit_reason',
+    type: 'select',
+    required: true,
+    section: 'exit',
+    options: Object.entries(EXIT_REASON_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    })),
+    tooltip: 'Primary reason for leaving',
+    validation: (value) => value ? null : 'Exit reason is required',
+  },
+  {
+    id: 'exit_reason_detail',
+    label: 'Exit Reason Details',
+    field: 'exit_reason_detail',
+    type: 'textarea',
+    required: false,
+    section: 'exit',
+    placeholder: 'Provide additional details about the exit reason...',
+    tooltip: 'Optional detailed explanation',
+    rows: 3,
+  },
+  {
+    id: 'last_working_day',
+    label: 'Last Working Day',
+    field: 'last_working_day',
+    type: 'date',
+    required: true,
+    section: 'exit',
+    tooltip: 'Expected last day at work',
+    validation: (value) => {
+      if (!value) return 'Last working day is required'
+      const date = new Date(value)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (date < today) return 'Last working day cannot be in the past'
+      return null
+    },
+  },
+  {
+    id: 'notice_period_days',
+    label: 'Notice Period (Days)',
+    field: 'notice_period_days',
+    type: 'number',
+    required: false,
+    section: 'exit',
+    defaultValue: 30,
+    min: 0,
+    max: 180,
+    placeholder: '30',
+    tooltip: 'Standard notice period in days',
+  },
+  {
+    id: 'assigned_to',
+    label: 'Assign To HR',
+    field: 'assigned_to',
+    type: 'select',
+    required: false,
+    section: 'tracking',
+    placeholder: 'Select HR manager (optional)',
+    tooltip: 'HR personnel responsible for this offboarding',
+    options: [], // Will be populated from API
+  },
+  {
+    id: 'notes',
+    label: 'Additional Notes',
+    field: 'notes',
+    type: 'textarea',
+    required: false,
+    section: 'tracking',
+    placeholder: 'Any additional information or special considerations...',
+    tooltip: 'Internal notes about this offboarding process',
+    rows: 3,
+  },
+]
+
+/**
+ * Form Sections Configuration
+ */
+const INITIATE_EXIT_FORM_SECTIONS = [
+  {
+    id: 'employee',
+    label: 'Employee Information',
+    icon: HeroIcons.UserIcon,
+    description: 'Basic employee and position details',
+  },
+  {
+    id: 'exit',
+    label: 'Exit Details',
+    icon: HeroIcons.ArrowRightOnRectangleIcon,
+    description: 'Reason and timeline for departure',
+  },
+  {
+    id: 'tracking',
+    label: 'Process Tracking',
+    icon: HeroIcons.ClipboardDocumentCheckIcon,
+    description: 'Assignment and notes',
+  },
+]
+
+/**
+ * Offboarding Filter Configuration
+ */
+const OFFBOARDING_FILTERS = [
+  {
+    id: 'search',
+    type: 'text',
+    placeholder: 'Search by name, email, position...',
+    field: 'search',
+    icon: HeroIcons.MagnifyingGlassIcon,
+    width: 'full',
+  },
+  {
+    id: 'status',
+    type: 'select',
+    placeholder: 'All Statuses',
+    field: 'status',
+    options: Object.entries(OFFBOARDING_STATUS_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    })),
+    width: 'md',
+  },
+  {
+    id: 'branch',
+    type: 'select',
+    placeholder: 'All Branches',
+    field: 'branch',
+    options: Object.entries(BRANCH_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    })),
+    width: 'md',
+  },
+  {
+    id: 'exit_reason',
+    type: 'select',
+    placeholder: 'All Exit Reasons',
+    field: 'exit_reason',
+    options: Object.entries(EXIT_REASON_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    })),
+    width: 'md',
+  },
+]
+
 // ── Offboarding List Tab ───────────────────────────────────────────────────
 function OffboardingListTab() {
   const [records, setRecords] = useState([])
@@ -1059,6 +2106,9 @@ function OffboardingListTab() {
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [alert, setAlert] = useState(null)
+  const [viewMode, setViewMode] = useState('table') // 'table' or 'cards'
+  const [stats, setStats] = useState({ total: 0, urgent: 0, overdue: 0, completed: 0 })
+  const [showInitiateModal, setShowInitiateModal] = useState(false)
 
   useEffect(() => {
     loadRecords()
@@ -1078,6 +2128,13 @@ function OffboardingListTab() {
         // Handle both paginated response (res.data.results) and direct array (res.data)
         const data = Array.isArray(res.data) ? res.data : (res.data.results || [])
         setRecords(data)
+        
+        // Calculate stats from records
+        const total = data.length
+        const urgent = data.filter(r => r.days_until_exit <= 7 && r.days_until_exit >= 0).length
+        const overdue = data.filter(r => r.days_until_exit < 0).length
+        const completed = data.filter(r => r.status === 'completed').length
+        setStats({ total, urgent, overdue, completed })
       })
       .catch((err) => console.error('Failed to load offboarding records:', err))
       .finally(() => setLoading(false))
@@ -1252,61 +2309,333 @@ function OffboardingListTab() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <input
-            type="text"
-            placeholder="Search by name, email, ID..."
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Statuses</option>
-            {Object.entries(OFFBOARDING_STATUS_CONFIG).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
-            ))}
-          </select>
-          <select
-            value={filters.branch}
-            onChange={(e) => setFilters({ ...filters, branch: e.target.value })}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Branches</option>
-            {Object.entries(BRANCH_CONFIG).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
-            ))}
-          </select>
-          <select
-            value={filters.exit_reason}
-            onChange={(e) => setFilters({ ...filters, exit_reason: e.target.value })}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Exit Reasons</option>
-            {Object.entries(EXIT_REASON_CONFIG).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
-            ))}
-          </select>
+      {/* Quick Stats Banner */}
+      <div className="bg-gradient-to-r from-rose-500 to-pink-600 rounded-2xl p-4 text-white shadow-lg">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <HeroIcons.UserMinusIcon className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold opacity-90">Offboarding Pipeline</h3>
+              <p className="text-xs opacity-75">Active exit processes</p>
+            </div>
+          </div>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {OFFBOARDING_LIST_ACTIONS.filter(action => action.visible).map(action => {
+              const Icon = action.icon
+              const variantStyle = BUTTON_VARIANTS[action.variant][action.style]
+              const sizeClass = BUTTON_SIZES[action.size]
+              return (
+                <button
+                  key={action.id}
+                  onClick={() => action.onClick(records, loadRecords, setShowInitiateModal)}
+                  className={`${variantStyle} ${sizeClass} rounded-lg font-medium transition-all flex items-center gap-2`}
+                  title={action.tooltip}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{action.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-xs opacity-80 mt-1">Total Active</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+            <div className="text-2xl font-bold flex items-center gap-1">
+              {stats.urgent}
+              {stats.urgent > 0 && <HeroIcons.ExclamationTriangleIcon className="w-4 h-4 animate-pulse" />}
+            </div>
+            <div className="text-xs opacity-80 mt-1">Leaving Soon (≤7 days)</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+            <div className="text-2xl font-bold">{stats.overdue}</div>
+            <div className="text-xs opacity-80 mt-1">Past Last Day</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
+            <div className="text-2xl font-bold">{stats.completed}</div>
+            <div className="text-xs opacity-80 mt-1">Completed</div>
+          </div>
         </div>
       </div>
 
-      {/* Records Table */}
+      {/* Filters & View Toggle */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">Filters</span>
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Table View"
+              >
+                <HeroIcons.ListBulletIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  viewMode === 'cards'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Card View"
+              >
+                <HeroIcons.Squares2X2Icon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {OFFBOARDING_FILTERS.map(filter => {
+              if (filter.type === 'text') {
+                const Icon = filter.icon
+                return (
+                  <div key={filter.id} className="relative">
+                    {Icon && (
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                        <Icon className="w-4 h-4 text-slate-400" />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder={filter.placeholder}
+                      value={filters[filter.field]}
+                      onChange={(e) => setFilters({ ...filters, [filter.field]: e.target.value })}
+                      className={`w-full ${Icon ? 'pl-10' : 'pl-3'} pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500`}
+                    />
+                  </div>
+                )
+              } else if (filter.type === 'select') {
+                return (
+                  <select
+                    key={filter.id}
+                    value={filters[filter.field]}
+                    onChange={(e) => setFilters({ ...filters, [filter.field]: e.target.value })}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="">{filter.placeholder}</option>
+                    {filter.options.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )
+              }
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Loading State */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-slate-200">
           <Spinner />
-          <span className="ml-2 text-slate-500">Loading offboarding records...</span>
+          <span className="ml-2 text-slate-500 mt-2">Loading offboarding records...</span>
         </div>
       ) : records.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-          <HeroIcons.InboxIcon className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-          <p className="text-slate-500">No offboarding records found</p>
+        /* Enhanced Empty State */
+        <div className="bg-gradient-to-br from-slate-50 via-white to-rose-50/30 rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
+          <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-rose-100 to-pink-100 rounded-full flex items-center justify-center">
+            <HeroIcons.UserMinusIcon className="w-10 h-10 text-rose-500" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">No Offboarding Records Found</h3>
+          <p className="text-sm text-slate-600 mb-6 max-w-md mx-auto">
+            {filters.search || filters.status || filters.branch || filters.exit_reason ? (
+              "No records match your current filters. Try adjusting your search criteria."
+            ) : (
+              "There are currently no active offboarding processes. Initiate an exit process to get started."
+            )}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setShowInitiateModal(true)}
+              className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+            >
+              <HeroIcons.UserMinusIcon className="w-5 h-5" />
+              Initiate Exit Process
+            </button>
+            {(filters.search || filters.status || filters.branch || filters.exit_reason) && (
+              <button
+                onClick={() => setFilters({ status: '', branch: '', exit_reason: '', search: '' })}
+                className="px-6 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-all flex items-center gap-2"
+              >
+                <HeroIcons.XMarkIcon className="w-5 h-5" />
+                Clear Filters
+              </button>
+            )}
+          </div>
+        </div>
+      ) : viewMode === 'cards' ? (
+        /* Card View */
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {records.map((record) => {
+            const statusCfg = OFFBOARDING_STATUS_CONFIG[record.status] || OFFBOARDING_STATUS_CONFIG.initiated
+            const branchCfg = BRANCH_CONFIG[record.branch] || BRANCH_CONFIG.RAD
+            const exitCfg = EXIT_REASON_CONFIG[record.exit_reason] || EXIT_REASON_CONFIG.other
+            const daysUntil = record.days_until_exit
+            const isUrgent = daysUntil <= 7 && daysUntil >= 0
+
+            return (
+              <div
+                key={record.id}
+                className="bg-white rounded-xl border border-slate-200 hover:border-rose-300 hover:shadow-xl transition-all duration-200 overflow-hidden group"
+              >
+                {/* Card Header */}
+                <div className={`bg-gradient-to-r ${isUrgent ? 'from-rose-600 to-pink-600' : 'from-rose-500 to-pink-500'} p-4 text-white`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-base">{record.employee_name || 'N/A'}</h3>
+                      <p className="text-xs text-rose-100 mt-0.5">{record.employee_email || ''}</p>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/20 text-xs font-medium backdrop-blur-sm">
+                          <HeroIcons.BriefcaseIcon className="w-3 h-3 mr-1" />
+                          {record.position || 'N/A'}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${statusCfg.color} bg-white`}>
+                          {statusCfg.label}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30">
+                      <HeroIcons.UserMinusIcon className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Body */}
+                <div className="p-4 space-y-3">
+                  {/* Last Working Day */}
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HeroIcons.CalendarDaysIcon className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-medium text-slate-600">Last Working Day</span>
+                      </div>
+                      {isUrgent && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold">
+                          <HeroIcons.ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+                          URGENT
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {record.last_working_day ? new Date(record.last_working_day).toLocaleDateString('en-US', { 
+                          weekday: 'short', 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        }) : '—'}
+                      </p>
+                      {daysUntil !== undefined && (
+                        <p className={`text-xs mt-0.5 ${isUrgent ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
+                          {daysUntil > 0 ? `${daysUntil} days remaining` : daysUntil === 0 ? 'Today' : `${Math.abs(daysUntil)} days past`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-600">Exit Process Progress</span>
+                      <span className="text-xs font-bold text-slate-700">{record.progress_percentage || 0}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-rose-500 to-pink-600 h-full transition-all duration-500"
+                        style={{ width: `${record.progress_percentage || 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                    <div>
+                      <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Branch</div>
+                      <div className={`text-xs font-semibold mt-1 ${branchCfg.color}`}>{branchCfg.label}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Exit Reason</div>
+                      <div className="text-xs text-slate-700 mt-1">{exitCfg.label}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Equipment</div>
+                      <div className="text-xs text-slate-700 mt-1">{record.equipment_count || 0} items</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Checklist</div>
+                      <div className="text-xs text-slate-700 mt-1">
+                        {record.checklist_completed_count || 0} / {record.checklist_count || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <button
+                    onClick={() => setExpandedRow(expandedRow === record.id ? null : record.id)}
+                    className="w-full mt-3 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2"
+                  >
+                    {expandedRow === record.id ? (
+                      <>
+                        <HeroIcons.ChevronUpIcon className="w-4 h-4" />
+                        Hide Full Details
+                      </>
+                    ) : (
+                      <>
+                        <HeroIcons.EyeIcon className="w-4 h-4" />
+                        View Full Details
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Expanded Details (shown below card when expanded) */}
+                {expandedRow === record.id && (
+                  <div className="border-t border-slate-200 bg-slate-50/50 p-4">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Employee ID</span>
+                          <div className="mt-1 text-xs text-slate-700">{record.employee_id || '—'}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Department</span>
+                          <div className="mt-1 text-xs text-slate-700">{record.department || '—'}</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Notice Period</span>
+                          <div className="mt-1 text-xs text-slate-700">{record.notice_period_days || '—'} days</div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Manager</span>
+                          <div className="mt-1 text-xs text-slate-700">{record.reporting_manager || '—'}</div>
+                        </div>
+                      </div>
+                      {record.notes && (
+                        <div>
+                          <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Notes</span>
+                          <div className="mt-1 text-xs text-slate-700 bg-white rounded p-2">{record.notes}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       ) : (
+        /* Table View (existing table code) */
         <div className="bg-white rounded-xl border border-slate-200">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -1494,6 +2823,474 @@ function OffboardingListTab() {
           </div>
         </div>
       )}
+      
+      {/* Initiate Exit Modal */}
+      {showInitiateModal && (
+        <InitiateExitModal
+          onClose={() => setShowInitiateModal(false)}
+          onSuccess={() => {
+            setShowInitiateModal(false)
+            loadRecords() // Reload records to show new entry
+            setAlert({ type: 'success', message: 'Offboarding process initiated successfully!' })
+            setTimeout(() => setAlert(null), 5000)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── INITIATE EXIT MODAL COMPONENT ──────────────────────────────────────────
+// Smart form-based modal for creating new offboarding records
+// ═══════════════════════════════════════════════════════════════════════════
+
+function InitiateExitModal({ onClose, onSuccess }) {
+  // Form state
+  const [formData, setFormData] = useState({})
+  const [errors, setErrors] = useState({})
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Data state
+  const [employees, setEmployees] = useState([])
+  const [hrManagers, setHrManagers] = useState([])
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  
+  // Initialize form with default values
+  useEffect(() => {
+    const defaults = {}
+    INITIATE_EXIT_FORM_FIELDS.forEach(field => {
+      if (field.defaultValue !== undefined) {
+        defaults[field.field] = field.defaultValue
+      }
+    })
+    setFormData(defaults)
+  }, [])
+  
+  // Load employees and HR managers
+  // ✅ ENHANCED: Smart API calls with role filtering and minimal mode
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      // All active employees (minimal response for performance)
+      apiClient.get('/users/employees/active_employees/', {
+        params: { minimal: 'true' }
+      }),
+      // HR managers only (filtered by role)
+      apiClient.get('/users/employees/active_employees/', {
+        params: { role_filter: 'hr_manager', minimal: 'true' }
+      }),
+    ])
+      .then(([empRes, hrRes]) => {
+        setEmployees(empRes.data.results || [])
+        setHrManagers(hrRes.data.results || [])
+        console.log('✅ Loaded employees:', empRes.data.count, 'HR managers:', hrRes.data.count)
+      })
+      .catch((err) => {
+        console.error('Failed to load employees:', err)
+        alert('Failed to load employee data. Please refresh the page.')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+  
+  // Calculate target completion date (30 days after last working day)
+  useEffect(() => {
+    if (formData.last_working_day) {
+      const lastDay = new Date(formData.last_working_day)
+      const targetDate = new Date(lastDay)
+      targetDate.setDate(lastDay.getDate() + 30)
+      setFormData(prev => ({
+        ...prev,
+        target_completion_date: targetDate.toISOString().split('T')[0]
+      }))
+    }
+  }, [formData.last_working_day])
+  
+  // Handle employee selection
+  // ✅ ENHANCED: Smart field mapping from EmployeeMaster to offboarding fields
+  const handleEmployeeSelect = (employeeId) => {
+    const employee = employees.find(emp => emp.user_id === parseInt(employeeId))
+    if (employee) {
+      setSelectedEmployee(employee)
+      
+      // Build employee name from available fields
+      const fullName = [employee.first_name, employee.last_name]
+        .filter(Boolean)
+        .join(' ') || employee.email.split('@')[0]
+      
+      setFormData(prev => ({
+        ...prev,
+        employee_id: employeeId,
+        employee_name: fullName,
+        employee_email: employee.email,
+        user: employee.user_id,
+        // Smart field mapping from EmployeeMaster → Offboarding fields
+        position: employee.position || prev.position || '',
+        department: employee.department || prev.department || '',
+        reporting_manager: employee.reporting_manager || prev.reporting_manager || '',
+        branch: employee.branch || prev.branch || 'RAD',
+      }))
+      setErrors(prev => ({ ...prev, employee_id: null }))
+      setEmployeeSearch('')  // Clear search after selection
+      
+      console.log('✅ Selected employee:', fullName, '|', employee.position, '|', employee.department)
+    }
+  }
+  
+  // Handle field change
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error for this field
+    setErrors(prev => ({ ...prev, [field]: null }))
+  }
+  
+  // Validate form
+  const validateForm = () => {
+    const newErrors = {}
+    
+    INITIATE_EXIT_FORM_FIELDS.forEach(field => {
+      if (field.required) {
+        const value = formData[field.field]
+        if (!value || (typeof value === 'string' && !value.trim())) {
+          newErrors[field.field] = `${field.label} is required`
+        }
+      }
+      
+      // Run custom validation if provided
+      if (field.validation && formData[field.field]) {
+        const error = field.validation(formData[field.field])
+        if (error) {
+          newErrors[field.field] = error
+        }
+      }
+    })
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+  
+  // Handle submit
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+    
+    setSubmitting(true)
+    
+    try {
+      // Prepare payload
+      const payload = {
+        employee_name: formData.employee_name,
+        employee_email: formData.employee_email,
+        employee_id: formData.employee_id,
+        user: formData.user,
+        position: formData.position,
+        department: formData.department,
+        reporting_manager: formData.reporting_manager || '',
+        branch: formData.branch || 'RAD',
+        exit_reason: formData.exit_reason,
+        exit_reason_detail: formData.exit_reason_detail || '',
+        last_working_day: formData.last_working_day,
+        notice_period_days: formData.notice_period_days || 30,
+        target_completion_date: formData.target_completion_date || formData.last_working_day,
+        assigned_to: formData.assigned_to || null,
+        notes: formData.notes || '',
+        status: 'initiated',
+        progress_percentage: 0,
+      }
+      
+      await apiClient.post(`${API_BASE}/offboarding/`, payload)
+      
+      if (onSuccess) onSuccess()
+    } catch (err) {
+      console.error('Failed to create offboarding record:', err)
+      const errorMsg = err.response?.data?.detail || err.response?.data?.error || 'Failed to initiate offboarding process'
+      setErrors({ submit: errorMsg })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+  
+  // Filter employees based on search
+  const filteredEmployees = employees.filter(emp => {
+    if (!employeeSearch) return true
+    const searchLower = employeeSearch.toLowerCase()
+    const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase()
+    const email = (emp.email || '').toLowerCase()
+    return fullName.includes(searchLower) || email.includes(searchLower)
+  })
+  
+  // Render form field based on type
+  const renderField = (field) => {
+    const value = formData[field.field] || ''
+    const error = errors[field.field]
+    
+    const commonClasses = `w-full px-3 py-2 border ${error ? 'border-rose-500' : 'border-slate-300'} rounded-lg text-sm focus:outline-none focus:ring-2 ${error ? 'focus:ring-rose-500' : 'focus:ring-rose-500'}`
+    
+    switch (field.type) {
+      case 'select-search':
+        return (
+          <div>
+            <input
+              type="text"
+              placeholder={field.placeholder}
+              value={employeeSearch}
+              onChange={(e) => setEmployeeSearch(e.target.value)}
+              className={commonClasses}
+            />
+            {employeeSearch && filteredEmployees.length > 0 && (
+              <div className="mt-1 max-h-48 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-lg">
+                {filteredEmployees.map(emp => (
+                  <button
+                    key={emp.user_id}
+                    type="button"
+                    onClick={() => {
+                      handleEmployeeSelect(emp.user_id.toString())
+                      setEmployeeSearch('')
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-b-0"
+                  >
+                    <div className="text-sm font-medium text-slate-800">
+                      {emp.first_name} {emp.last_name}
+                    </div>
+                    <div className="text-xs text-slate-500">{emp.email}</div>
+                    {emp.position && (
+                      <div className="text-xs text-slate-400">{emp.position}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedEmployee && (
+              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-blue-900">
+                      {selectedEmployee.first_name} {selectedEmployee.last_name}
+                    </div>
+                    <div className="text-xs text-blue-700">{selectedEmployee.email}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEmployee(null)
+                      setFormData(prev => {
+                        const newData = { ...prev }
+                        delete newData.employee_id
+                        delete newData.employee_name
+                        delete newData.employee_email
+                        delete newData.user
+                        return newData
+                      })
+                    }}
+                    className="p-1 hover:bg-blue-100 rounded transition-colors"
+                    title="Clear selection"
+                  >
+                    <HeroIcons.XMarkIcon className="w-4 h-4 text-blue-600" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      
+      case 'select':
+        return (
+          <select
+            value={value}
+            onChange={(e) => handleChange(field.field, e.target.value)}
+            className={commonClasses}
+            required={field.required}
+          >
+            <option value="">{field.placeholder || `Select ${field.label}`}</option>
+            {field.options?.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )
+      
+      case 'textarea':
+        return (
+          <textarea
+            value={value}
+            onChange={(e) => handleChange(field.field, e.target.value)}
+            placeholder={field.placeholder}
+            rows={field.rows || 3}
+            className={commonClasses}
+            required={field.required}
+          />
+        )
+      
+      case 'date':
+        return (
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => handleChange(field.field, e.target.value)}
+            className={commonClasses}
+            required={field.required}
+            min={new Date().toISOString().split('T')[0]}
+          />
+        )
+      
+      case 'number':
+        return (
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => handleChange(field.field, e.target.value)}
+            placeholder={field.placeholder}
+            min={field.min}
+            max={field.max}
+            className={commonClasses}
+            required={field.required}
+          />
+        )
+      
+      default: // text
+        return (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => handleChange(field.field, e.target.value)}
+            placeholder={field.placeholder}
+            className={commonClasses}
+            required={field.required}
+          />
+        )
+    }
+  }
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-rose-500 to-pink-600 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <HeroIcons.UserMinusIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Initiate Exit Process</h2>
+              <p className="text-xs text-rose-100">Start offboarding for a departing employee</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            title="Close"
+          >
+            <HeroIcons.XMarkIcon className="w-6 h-6 text-white" />
+          </button>
+        </div>
+        
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner />
+              <span className="ml-2 text-slate-500">Loading...</span>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Submit Error */}
+              {errors.submit && (
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 flex items-start gap-3">
+                  <HeroIcons.ExclamationCircleIcon className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-rose-800">Error</p>
+                    <p className="text-sm text-rose-700 mt-1">{errors.submit}</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Form Sections */}
+              {INITIATE_EXIT_FORM_SECTIONS.map(section => {
+                const fields = INITIATE_EXIT_FORM_FIELDS.filter(f => f.section === section.id)
+                if (fields.length === 0) return null
+                
+                const SectionIcon = section.icon
+                
+                return (
+                  <div key={section.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center">
+                        <SectionIcon className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800">{section.label}</h3>
+                        <p className="text-xs text-slate-500">{section.description}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {fields.map(field => (
+                        <div
+                          key={field.id}
+                          className={field.type === 'textarea' || field.type === 'select-search' ? 'md:col-span-2' : ''}
+                        >
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            {field.label}
+                            {field.required && <span className="text-rose-500 ml-1">*</span>}
+                            {field.tooltip && (
+                              <span className="ml-1 text-xs text-slate-400" title={field.tooltip}>
+                                <HeroIcons.InformationCircleIcon className="w-4 h-4 inline" />
+                              </span>
+                            )}
+                          </label>
+                          {renderField(field)}
+                          {errors[field.field] && (
+                            <p className="mt-1 text-xs text-rose-600">{errors[field.field]}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </form>
+          )}
+        </div>
+        
+        {/* Modal Footer */}
+        <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            <span className="text-rose-500">*</span> Required fields
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubmit}
+              disabled={submitting || loading}
+              className="px-6 py-2 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <Spinner className="w-4 h-4" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <HeroIcons.CheckIcon className="w-4 h-4" />
+                  <span>Initiate Offboarding</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1703,7 +3500,7 @@ function CreateEmployeeTab() {
       setPhoto(null)
       setPhotoPreview(null)
       
-      // Show success message with auto-generated employee numbers and manager info
+      // Show enhanced success message with role assignment and navigation info
       const successDetails = [
         `✅ Employee Created Successfully!`,
         ``,
@@ -1713,10 +3510,22 @@ function CreateEmployeeTab() {
         `🏢 Branch: ${response.data.branch}`,
         response.data.reporting_manager ? `👤 Reports to: ${response.data.reporting_manager}` : '',
         `📋 Onboarding ID: ${response.data.onboarding_id}`,
-        documents.length > 0 ? `📎 ${documents.length} document(s) uploaded` : ''
+        ``,
+        `🎯 RBAC: ${SUCCESS_CONFIG.defaultRole} role automatically assigned`,
+        `📍 Employee now visible in:`,
+        ...SUCCESS_CONFIG.visibilityLocations.map(loc => `   • ${loc}`),
+        ``,
+        documents.length > 0 ? `📎 ${documents.length} document(s) uploaded` : '',
+        ``,
+        `💡 The employee will receive login credentials via email.`
       ].filter(Boolean).join('\n')
       
       alert(successDetails)
+      
+      // Reload the page to refresh the Overview tab
+      setTimeout(() => {
+        window.location.reload()
+      }, SUCCESS_CONFIG.autoReloadDelay)
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create employee')
       setSuccess(false)
@@ -2187,12 +3996,12 @@ function CreateEmployeeTab() {
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Joining Date
             </label>
-            <input
-              type="date"
+            <DatePicker
               name="joining_date"
               value={formData.joining_date}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Select joining date"
+              minDate={new Date('2020-01-01').toISOString().split('T')[0]}
             />
           </div>
           
@@ -2226,43 +4035,58 @@ function CreateEmployeeTab() {
         </div>
       </div>
       
-      {/* Flags */}
+      {/* Probation Period */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">Flags & Testing</h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="protected_identity"
-              checked={formData.protected_identity}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-sm text-slate-700">Protected Identity</span>
-          </label>
-          
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="is_test_person"
-              checked={formData.is_test_person}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-sm text-slate-700">Test Person</span>
-          </label>
-          
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="not_signed"
-              checked={formData.not_signed}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-sm text-slate-700">Not Signed</span>
-          </label>
-        </div>
+        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+          <HeroIcons.ClockIcon className="w-5 h-5 text-indigo-600" />
+          Probation Period
+        </h3>
+        
+        {formData.joining_date ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-xs font-medium text-blue-600 mb-1">Joining Date</div>
+                <div className="text-lg font-semibold text-slate-800">
+                  {new Date(formData.joining_date).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                  })}
+                </div>
+              </div>
+              
+              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                <div className="text-xs font-medium text-indigo-600 mb-1">Probation End Date</div>
+                <div className="text-lg font-semibold text-slate-800">
+                  {calculateProbationEndDate(formData.joining_date) &&
+                    new Date(calculateProbationEndDate(formData.joining_date)).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                </div>
+                <div className="text-xs text-indigo-600 mt-1">
+                  ({PROBATION_PERIOD_MONTHS} months from joining)
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <HeroIcons.InformationCircleIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <strong>Note:</strong> Employee is under probation for {PROBATION_PERIOD_MONTHS} months from the date of joining. 
+                Performance will be reviewed before confirmation.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-lg">
+            <HeroIcons.ClockIcon className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm text-slate-500">Please set a joining date to view probation period</p>
+            <p className="text-xs text-slate-400 mt-1">Probation period is automatically calculated as {PROBATION_PERIOD_MONTHS} months from joining date</p>
+          </div>
+        )}
       </div>
       
       {/* Document Upload Section */}
