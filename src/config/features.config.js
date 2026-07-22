@@ -96,10 +96,11 @@ export const FEATURE_FLAGS = {
   // Internal Sales analytics dashboard — re-uses /sales route with new InternalSalesDashboard
   enableSalesModule: import.meta.env.VITE_ENABLE_SALES_MODULE !== 'false',
   
-  // ⚠️ Human Resource Module — DISABLED FOR ALL USERS
+  // ✅ Human Resource Module — ENABLED (MODULE-BASED ACCESS CONTROL)
   // Controls ALL HR features: /hr, /hr/employees, /hr/payroll, /hr/leave, /hr/onboarding
-  // Set to false to completely disable the HR section from sidebar and routes
-  enableHRModule: import.meta.env.VITE_ENABLE_HR_MODULE === 'true' ? true : false,  // ⚠️ DISABLED by default
+  // Users with 'hr_management', 'payroll', or 'timesheet' modules will see this section
+  // Set VITE_ENABLE_HR_MODULE=false in .env to disable globally (for maintenance)
+  enableHRModule: import.meta.env.VITE_ENABLE_HR_MODULE === 'false' ? false : true,  // ✅ ENABLED by default, uses RBAC for access control
   
   // ───────────────────────────────────────────────────────────────────────────
 
