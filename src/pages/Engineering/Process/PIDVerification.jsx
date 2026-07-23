@@ -73,7 +73,7 @@ const KEYFRAMES = `
 // ── Soft-coded: INNOVATIVE 3-PANEL DASHBOARD LAYOUT Configuration ────────────
 const ENABLE_INNOVATIVE_LAYOUT   = false; // DISABLED: Use original single-column layout
 // WORKFLOW_WIDTH_PERCENT moved to "INNOVATIVE WORKFLOW LAYOUT Configuration" section below
-const DOCUMENTATION_ENABLED      = true;  // Smart AI documentation panel
+const DOCUMENTATION_ENABLED      = false; // DISABLED: Hide Workflow Documentation panel to maximize canvas space
 const PROJECTS_PANEL_ENABLED     = true;  // NEW: Project navigator for managing multiple P&IDs
 const LAYOUT_GAP_PX              = 12;    // Tighter gap for dashboard density
 const LAYOUT_RESPONSIVE_BREAKPT  = 'xl';  // stacks on mobile, 3-column on xl+ screens
