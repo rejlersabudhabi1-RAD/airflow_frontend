@@ -487,6 +487,63 @@ export const ADJUSTMENT_KPIS = [
   { id: 'deduction_total','label': 'Deductions',      icon: 'ArrowTrendingDownIcon',      color: 'text-rose-600',    bg: 'bg-rose-50',    format: 'currency' },
 ]
 
+// ────────────────────────────────────────────────────────────────────────────
+// LINE ITEM CHANGE LOG CONFIGURATION (Soft-Coded)
+// ────────────────────────────────────────────────────────────────────────────
+// Action types for line item changes
+export const CHANGE_LOG_ACTION = {
+  CREATED: 'created',
+  UPDATED: 'updated',
+  DELETED: 'deleted',
+}
+
+// Action meta (labels, icons, badges)
+export const CHANGE_LOG_ACTION_META = {
+  [CHANGE_LOG_ACTION.CREATED]: {
+    label: 'Created',
+    icon: 'PlusCircleIcon',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+    color: 'text-emerald-600',
+  },
+  [CHANGE_LOG_ACTION.UPDATED]: {
+    label: 'Updated',
+    icon: 'PencilSquareIcon',
+    badge: 'bg-blue-50 text-blue-700 border-blue-300',
+    color: 'text-blue-600',
+  },
+  [CHANGE_LOG_ACTION.DELETED]: {
+    label: 'Deleted',
+    icon: 'TrashIcon',
+    badge: 'bg-rose-50 text-rose-700 border-rose-300',
+    color: 'text-rose-600',
+  },
+}
+
+// Field labels for change comparison display
+export const CHANGE_LOG_FIELD_LABELS = {
+  kind: 'Type',
+  component_code: 'Component',
+  label: 'Label',
+  description: 'Description',
+  amount: 'Amount',
+  source: 'Source',
+}
+
+// Maximum number of changes to show per page in change history modal
+export const CHANGE_LOG_PAGE_SIZE = 20
+
+// Inline change history display configuration
+export const INLINE_CHANGE_HISTORY = {
+  DEFAULT_LIMIT: 5,                    // Show first N changes by default
+  EXPAND_INCREMENT: 5,                 // Load N more when "Load More" is clicked
+  EMPTY_MESSAGE: 'No changes recorded yet',
+  SHOW_ACTOR: true,                    // Show who made the change
+  SHOW_TIMESTAMP: true,                // Show when change was made
+  COMPACT_MODE: true,                  // Use compact display (single line per change)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
  * Field schema for the create/edit modal. Each entry maps to a model field
  * on PayrollAdjustment. Same renderer as EmployeeEditModal so adding a new

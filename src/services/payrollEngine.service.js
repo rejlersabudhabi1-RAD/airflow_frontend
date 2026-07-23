@@ -152,6 +152,9 @@ const payrollEngineService = {
     apiClient.get(`${BASE}/payslips/${id}/download-xlsx/`, { responseType: 'blob' })
       .then((r) => r.data),
 
+  getPayslipChangeHistory: (id, params = {}) =>
+    unwrap(apiClient.get(`${BASE}/payslips/${id}/change-history/`, { params })),
+
   // ── Line items ─────────────────────────────────────────────────────────
   listLineItems: (params = {}) =>
     unwrap(apiClient.get(`${BASE}/line-items/`, { params })),

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import * as HeroIcons from '@heroicons/react/24/outline'
 import payrollEngineService, { downloadBlob } from '../../../../services/payrollEngine.service'
 import { formatCurrency, FIXED_EARNING_FIELDS, ATTENDANCE_LEAVE_FIELDS, PAYSLIP_EMPLOYEE_INFO_FIELDS } from '../../../../config/payrollEngine.config'
+import InlineChangeHistory from './InlineChangeHistory'
 
 export default function PayslipDetailModal({ slip: initialSlip, runEditable, onClose, onChanged }) {
   // Local mirror of the payslip so basic/housing/transport/home_leave/totals
@@ -14,6 +15,8 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
   const [savingField, setSavingField] = useState(null)
   // Catalog for department/designation dropdowns
   const [catalog, setCatalog] = useState(null)
+  // Refresh key to trigger change history reload
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     payrollEngineService.getCatalog()
@@ -31,6 +34,7 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
       const fresh = await payrollEngineService.getPayslip(slip.id)
       setSlip(fresh)
       setItems(fresh.line_items || [])
+      setRefreshKey(prev => prev + 1)  // Trigger change history reload
       onChanged?.()
     } catch (e) { setError(e?.response?.data?.error || e.message) }
   }
@@ -194,6 +198,8 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
             title="Other Earnings"
             items={earnings}
             kind="earning"
+            payslipId={slip.id}
+            refreshKey={refreshKey}
             editable={runEditable}
             onEdit={setEditing}
             onDelete={handleDelete}
@@ -205,6 +211,8 @@ export default function PayslipDetailModal({ slip: initialSlip, runEditable, onC
             title="Deductions"
             items={deductions}
             kind="deduction"
+            payslipId={slip.id}
+            refreshKey={refreshKey}
             editable={runEditable}
             onEdit={setEditing}
             onDelete={handleDelete}
@@ -404,7 +412,7 @@ function InfoTile({ fieldKey, label, fieldType, suggestions = [], value, editabl
   )
 }
 
-function Section({ title, items, editable, onEdit, onDelete, onAdd }) {
+function Section({ title, items, kind, payslipId, refreshKey, editable, onEdit, onDelete, onAdd }) {
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-1.5">
@@ -443,6 +451,11 @@ function Section({ title, items, editable, onEdit, onDelete, onAdd }) {
             ))}
           </tbody>
         </table>
+      )}
+      
+      {/* Inline Change History */}
+      {payslipId && (
+        <InlineChangeHistory key={refreshKey} payslipId={payslipId} kind={kind} />
       )}
     </div>
   )
