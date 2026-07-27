@@ -131,6 +131,26 @@ export const PRESENTATION_SLIDE_OUTLINE = [
 export const PLANNING_MAX_FILE_MB = 100
 
 // ─────────────────────────────────────────────────────────────────────────
+// Discipline metadata — mirrors backend/apps/planning_intelligence/config.py
+// (DISCIPLINES, DISCIPLINE_RESPONSIBLE_ROLE, DISCIPLINE_DEFAULT_DELIVERABLES).
+// Only the "engineering" disciplines that Document Intelligence actually
+// scans for (see ENGINEERING_DISCIPLINE_ORDER) are listed here — used to turn
+// the flat "3 deliverables · 1 mentioned" discipline card into a detailed,
+// expandable one (icon, responsible role, full deliverable checklist).
+// Add a discipline by appending a row here — no JSX changes required.
+// ─────────────────────────────────────────────────────────────────────────
+export const PLANNING_DISCIPLINE_META = {
+  process:         { label: 'Process Engineering',         icon: '🧪', accent: 'from-sky-500 to-blue-600',       responsibleRole: 'Lead Process Engineer' },
+  piping:          { label: 'Piping Engineering',           icon: '🛢️', accent: 'from-amber-500 to-orange-600',   responsibleRole: 'Lead Piping Engineer' },
+  mechanical:      { label: 'Mechanical Engineering',       icon: '⚙️', accent: 'from-slate-500 to-slate-700',    responsibleRole: 'Mechanical Engineer' },
+  civil:           { label: 'Civil / Structural Engineering', icon: '🏗️', accent: 'from-stone-500 to-stone-700', responsibleRole: 'Civil Engineer' },
+  electrical:      { label: 'Electrical Engineering',       icon: '⚡', accent: 'from-yellow-500 to-amber-600',   responsibleRole: 'Electrical Engineer' },
+  instrumentation: { label: 'Instrumentation & Control',    icon: '🎛️', accent: 'from-emerald-500 to-teal-600',   responsibleRole: 'Instrumentation Engineer' },
+  telecom:         { label: 'Telecom',                      icon: '📡', accent: 'from-indigo-500 to-violet-600',  responsibleRole: 'Instrumentation Engineer' },
+}
+export const DEFAULT_DISCIPLINE_META = { label: '', icon: '📄', accent: 'from-slate-400 to-slate-600', responsibleRole: 'Engineer' }
+
+// ─────────────────────────────────────────────────────────────────────────
 // BYOK (Bring Your Own Key) — Claude/Anthropic augmentation, per project.
 // Mirrors backend/apps/planning_intelligence/config.py. Model list is
 // soft-coded here as a fallback; the backend's `model_choices` (returned by

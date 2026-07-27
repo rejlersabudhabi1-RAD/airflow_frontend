@@ -19,6 +19,8 @@ import {
   CLAUDE_MODEL_OPTIONS,
   DEFAULT_CLAUDE_MODEL,
   CLAUDE_API_KEY_PATTERN,
+  PLANNING_DISCIPLINE_META,
+  DEFAULT_DISCIPLINE_META,
 } from '../config/planningIntelligence.config';
 
 /**
@@ -59,6 +61,9 @@ const PlanningPackagePage = () => {
 
   const [intelligencePreview, setIntelligencePreview] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  // Which discipline card ("Process", "Piping", ...) is expanded to show its
+  // full deliverable checklist — accordion-style, one at a time.
+  const [expandedDiscipline, setExpandedDiscipline] = useState(null);
 
   const [generation, setGeneration] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -867,14 +872,52 @@ const PlanningPackagePage = () => {
           <div>
             <h3 className="text-sm font-semibold text-slate-600 mb-2">Disciplines & Deliverables</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-              {Object.entries(intelligencePreview.disciplines || {}).map(([disc, info]) => (
-                <div key={disc} className="border border-slate-200 rounded-xl p-3 text-sm hover:border-violet-200 hover:shadow-sm transition-all">
-                  <div className="font-semibold capitalize text-slate-700">{disc.replace('_', ' ')}</div>
-                  <div className="text-sm text-slate-500 mt-0.5">
-                    {info.deliverables.length} default deliverable(s) · {info.mentioned_in_source.length} mentioned in source
+              {Object.entries(intelligencePreview.disciplines || {}).map(([disc, info]) => {
+                const meta = PLANNING_DISCIPLINE_META[disc] || { ...DEFAULT_DISCIPLINE_META, label: disc.replace('_', ' ') };
+                const total = info.deliverables.length;
+                const mentioned = info.mentioned_in_source.length;
+                const pct = total ? Math.round((mentioned / total) * 100) : 0;
+                const isOpen = expandedDiscipline === disc;
+                return (
+                  <div key={disc}
+                    className={`border rounded-xl overflow-hidden transition-all ${isOpen ? 'border-violet-300 shadow-sm sm:col-span-2 xl:col-span-3' : 'border-slate-200 hover:border-violet-200 hover:shadow-sm'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDiscipline(isOpen ? null : disc)}
+                      className="w-full flex items-center gap-3 p-3 text-left"
+                    >
+                      <span className={`shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br ${meta.accent} flex items-center justify-center text-base shadow-sm`}>{meta.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold capitalize text-slate-700 truncate">{meta.label}</div>
+                        <div className="text-sm text-slate-500 mt-0.5">
+                          {mentioned}/{total} deliverable(s) mentioned in source · {meta.responsibleRole}
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div className={`h-full rounded-full bg-gradient-to-r ${meta.accent}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                      <span className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-slate-100 bg-slate-50/60 p-3.5">
+                        <p className="text-sm text-slate-500 mb-2">Full deliverable checklist for {meta.label} — items flagged as source-mentioned were detected in your uploaded documents; the rest fall back to the standard catalogue.</p>
+                        <ul className="space-y-1.5">
+                          {info.deliverables.map((d) => {
+                            const wasMentioned = info.mentioned_in_source.includes(d);
+                            return (
+                              <li key={d} className="flex items-center gap-2 text-sm">
+                                <span className={wasMentioned ? 'text-emerald-600' : 'text-slate-300'}>{wasMentioned ? '✅' : '⬜'}</span>
+                                <span className={wasMentioned ? 'text-slate-700 font-medium' : 'text-slate-500'}>{d}</span>
+                                {wasMentioned && <span className="ml-auto text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">In source</span>}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
