@@ -1548,6 +1548,13 @@ const PIDVerificationV2 = () => {
   const [runningCompare,  setRunningCompare]  = useState(false);
   const [comparison,      setComparison]      = useState(null);
   const [showUncertainHighlights, setShowUncertainHighlights] = useState(false);
+  // ── Soft-coded: "Critical Only" overlay visualisation toggle ─────────────
+  // Purely a display-layer filter — when enabled, every drawing overlay across
+  // all 4 comparison tabs (Legends, Line List, Equipment, Instrument) renders
+  // ONLY markers whose top/aggregated severity is 'critical'. No matching,
+  // rule-engine, or data logic is touched — this only narrows what gets drawn.
+  const [overlayCriticalOnly, setOverlayCriticalOnly] = useState(false);
+  const OVERLAY_CRITICAL_SEVERITY = 'critical'; // soft-coded severity key filtered to
   const [focusedFindingId, setFocusedFindingId] = useState(null);
   // Correction mode — when true, clicking the drawing canvas records the clicked
   // % position as the corrected location for the currently focused finding.
@@ -3262,7 +3269,11 @@ const PIDVerificationV2 = () => {
       !HIDDEN_SEVERITIES.has((f.severity || '').toLowerCase())
     )
   );
-  const visibleOverlayNodes = overlayNodes.filter(n => showUncertainHighlights || n.band !== 'low');
+  const visibleOverlayNodes = overlayNodes
+    .filter(n => showUncertainHighlights || n.band !== 'low')
+    // Display-only: when "Critical Only" is enabled, narrow the rendered marker
+    // set to critical-severity findings. Does not touch buildOverlayNodes()/matching.
+    .filter(n => !overlayCriticalOnly || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY);
 
   // ── Anchored-findings filter ──────────────────────────────────────────────
   // Inline evidence-key normalizer — mirrors normKey defined inside buildOverlayNodes.
@@ -7079,6 +7090,20 @@ const PIDVerificationV2 = () => {
                     <button onClick={() => { resetUpload(); setResults(null); }}
                       className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
                       <RefreshCw className="w-3.5 h-3.5" />New
+                    </button>
+                    {/* Critical-only overlay visualisation toggle — soft-coded, display-layer
+                        only. Applies across every Drawing Overlay (Legends, Line List,
+                        Equipment, Instrument) without altering any matching/rule logic. */}
+                    <button
+                      onClick={() => setOverlayCriticalOnly(v => !v)}
+                      title="Show only Critical severity markers on every drawing overlay (Legends, Line List, Equipment, Instrument)"
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
+                      style={overlayCriticalOnly
+                        ? { background:'linear-gradient(135deg,#dc2626,#ef4444)', color:'#fff', border:'1.5px solid #dc2626', boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }
+                        : { background:'#fff', color:'#dc2626', border:'1.5px solid #fecaca' }}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {overlayCriticalOnly ? 'Critical Only: ON' : 'Critical Only'}
                     </button>
                     <button
                       onClick={toggleFullscreen}
@@ -11030,8 +11055,14 @@ const PIDVerificationV2 = () => {
                       const MARKER_COLOR_CLEAN   = '#22c55e';
                       const MARKER_COLOR_GLOW_CLEAN = 'rgba(34,197,94,0.45)';
 
-                      const tagsWithCoords = sortedFiltered.filter(t => t.pos?.x_pct != null && t.pos?.y_pct != null);
-                      const tagsNoCoords   = sortedFiltered.length - tagsWithCoords.length;
+                      const tagsWithCoordsAll = sortedFiltered.filter(t => t.pos?.x_pct != null && t.pos?.y_pct != null);
+                      const tagsNoCoords   = sortedFiltered.length - tagsWithCoordsAll.length;
+                      // Display-only: narrow markers drawn on the image to Critical severity
+                      // when the global "Critical Only" toggle is on. Underlying inventory/
+                      // matching (tagInventory, valveFindingsByTag, topSev) is unchanged.
+                      const tagsWithCoords = overlayCriticalOnly
+                        ? tagsWithCoordsAll.filter(t => topSev(t.findings) === OVERLAY_CRITICAL_SEVERITY)
+                        : tagsWithCoordsAll;
 
                       return (
                         <div className="flex overflow-hidden" style={{ minHeight:0 }}>
@@ -12488,8 +12519,13 @@ const PIDVerificationV2 = () => {
                                           style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
                                                    transition:'opacity 0.25s ease' }} />
                                       )}
-                                      {/* Render only the selected marker when chip is active */}
-                                      {instrMarkerList.filter(m => !instrSelectedTag || m.tag === instrSelectedTag).map((m) => {
+                                      {/* Render only the selected marker when chip is active; when
+                                          "Critical Only" is on, further narrow to critical severity
+                                          (display-only — instrMarkerList/topSev logic untouched). */}
+                                      {instrMarkerList
+                                        .filter(m => !instrSelectedTag || m.tag === instrSelectedTag)
+                                        .filter(m => !overlayCriticalOnly || m.topSev === OVERLAY_CRITICAL_SEVERITY)
+                                        .map((m) => {
                                         const isSel   = instrSelectedTag === m.tag;
                                         const isaCat  = _getIsaCat(m.prefix);
                                         // ISA P&ID balloon convention:
@@ -13917,8 +13953,13 @@ const PIDVerificationV2 = () => {
                                         style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
                                                  transition:'opacity 0.25s ease' }} />
                                     )}
-                                    {/* Only render the selected marker when a chip is active */}
-                                    {lineMarkers.filter(m => !pipSelectedLine || m.text === pipSelectedLine).map((m) => {
+                                    {/* Only render the selected marker when a chip is active; when
+                                        "Critical Only" is on, further narrow to critical severity
+                                        (display-only — lineMarkers/topSev logic untouched). */}
+                                    {lineMarkers
+                                      .filter(m => !pipSelectedLine || m.text === pipSelectedLine)
+                                      .filter(m => !overlayCriticalOnly || m.topSev === OVERLAY_CRITICAL_SEVERITY)
+                                      .map((m) => {
                                       const isSel  = pipSelectedLine === m.text;
                                       const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || PIP_SEV_COLOR.info) : null;
                                       const mBg    = sc ? sc.bg    : m.fc.bg;
@@ -14778,8 +14819,11 @@ const PIDVerificationV2 = () => {
                                     )}
 
                                     {/* ── Layer A: Equipment tag circles (from tag_positions) ── */}
+                                    {/* Display-only: when "Critical Only" is on, hide non-critical tag
+                                        circles — allCmpMarkers/topSev matching logic is unchanged. */}
                                     {allCmpMarkers
                                       .filter(m => !cmpSelectedTag || m.tag === cmpSelectedTag)
+                                      .filter(m => !overlayCriticalOnly || (m.topSev||'').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
                                       .map(m => {
                                         const isSel = cmpSelectedTag === m.tag;
                                         const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
@@ -14849,6 +14893,7 @@ const PIDVerificationV2 = () => {
                                     {/* These use the same P1-P5 coordinate resolution as the main
                                         drawing panel — exact OCR-located positions. */}
                                     {cmpNodes
+                                      .filter(n => !overlayCriticalOnly || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
                                       .filter(n => {
                                         if (!cmpSelectedTag) return true;
                                         // When a tag is selected, only show findings mentioning it
