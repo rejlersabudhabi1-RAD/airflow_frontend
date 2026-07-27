@@ -115,16 +115,21 @@ export const EXPORT_FORMATS = [
 
 // Slide outline shown to the user before they download the PowerPoint deck —
 // purely descriptive; the backend (export_utils.generation_to_pptx_bytes)
-// is the single source of truth for actual slide content/order.
+// is the single source of truth for actual slide content/order. Deck is
+// built on Rejlers' own corporate template (cover/agenda/content/table/
+// closing layouts), so exports are on-brand in both local and production.
 export const PRESENTATION_SLIDE_OUTLINE = [
-  { icon: '🧭', title: 'Title & Project Snapshot' },
+  { icon: '🧭', title: 'Cover — Project Snapshot' },
+  { icon: '📑', title: 'Agenda' },
   { icon: '🧭', title: 'Project Overview' },
   { icon: '🗂️', title: 'Work Breakdown Structure' },
-  { icon: '📅', title: 'Schedule Summary & Milestones' },
+  { icon: '📅', title: 'Schedule Summary' },
+  { icon: '📌', title: 'Key Milestones (if defined)' },
   { icon: '📋', title: 'Engineering Document Deliverable Register' },
   { icon: '⏱️', title: 'Manhour Estimate' },
   { icon: '✅', title: 'Validation & Quality Checks' },
   { icon: '📝', title: 'Executive Summary' },
+  { icon: '🙏', title: 'Closing — Thank You' },
 ]
 
 // Max file size shown in the uploader hint — mirrors backend MAX_FILE_BYTES default.
