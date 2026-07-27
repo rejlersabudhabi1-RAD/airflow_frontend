@@ -405,7 +405,7 @@ export const FEATURES_CATALOG = {
         description: 'Work package planning and tracking',
         longDescription: 'Break down projects into manageable work packages with budgets, timelines, deliverables, and progress tracking for enhanced project control.',
         path: '/planning-packages',
-        moduleCode: 'project_control',
+        moduleCode: 'planning_package',
         status: FEATURE_STATUS.ACTIVE,
         badges: [FEATURE_BADGES.NEW],
         capabilities: [

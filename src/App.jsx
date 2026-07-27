@@ -1239,7 +1239,7 @@ function App() {
         <Route
           path="planning-packages"
           element={
-            <ModuleProtectedRoute moduleCode="project_control">
+            <ModuleProtectedRoute moduleCode="planning_package">
               <PlanningPackagePage />
             </ModuleProtectedRoute>
           }
