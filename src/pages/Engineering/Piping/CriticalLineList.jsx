@@ -27,7 +27,11 @@ import {
 
   ArrowPathIcon,
 
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+
+  ViewColumnsIcon,
+
+  ArrowRightIcon
 
 } from '@heroicons/react/24/outline';
 
@@ -518,6 +522,36 @@ const saveWorkbookToPreviousOutputs = async (wb, { filename, meta }) => {
   return data;
 };
 
+// ─── Column Selection + "Version 2" multi-file consolidation — soft-coded ──
+// Lets a user pick a subset of columns from a Previous Output, download just
+// those, and optionally consolidate rows (restricted to those columns) from
+// OTHER previous outputs and/or a freshly extracted document into a new
+// linked "Version 2" output. None of this touches the core AI/OCR extraction
+// logic — it only reads already-produced rows (via `output_data`) and, for
+// new documents, calls the SAME `upload_pid` / `upload_pid_status` endpoints
+// the main upload flow already uses.
+const CLL_V2_POLL_INTERVAL_MS = 5000;   // 5s between status checks
+const CLL_V2_POLL_MAX_ATTEMPTS = 240;   // 20 minutes total
+const CLL_V2_PID_REVISION_SUFFIX = 'V2';
+
+// Projects a row captured under `sourceHeaders` onto `targetHeaders` by
+// matching header NAME (not position) — lets sources with slightly
+// different column layouts still be combined safely.
+const projectRowByHeaders = (sourceHeaders, sourceRow, targetHeaders) => (
+  targetHeaders.map((h) => {
+    const idx = sourceHeaders.indexOf(h);
+    return idx >= 0 ? (sourceRow[idx] ?? '') : '';
+  })
+);
+
+// Builds a workbook from an arbitrary (possibly column-filtered) header/row set.
+const buildProjectedWorkbook = (headers, rows, sheetName = 'Line List') => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  return wb;
+};
+
 
 const CriticalLineList = () => {
 
@@ -604,6 +638,32 @@ const CriticalLineList = () => {
   const [loadingDataEdit, setLoadingDataEdit] = useState(false);
 
   const [savingDataEdit, setSavingDataEdit] = useState(false);
+
+  // Column Selection + "Version 2" consolidation modal
+
+  const [columnSelectOutput, setColumnSelectOutput] = useState(null); // source output row
+
+  const [columnSelectHeaders, setColumnSelectHeaders] = useState([]);
+
+  const [columnSelectRows, setColumnSelectRows] = useState([]);
+
+  const [loadingColumnSelect, setLoadingColumnSelect] = useState(false);
+
+  const [selectedColumns, setSelectedColumns] = useState([]); // header names
+
+  const [columnSelectStage, setColumnSelectStage] = useState(1); // 1 = pick columns, 2 = version-2 sources
+
+  const [v2SelectedOutputIds, setV2SelectedOutputIds] = useState([]);
+
+  const [v2UploadFile, setV2UploadFile] = useState(null);
+
+  const [v2EnrichmentFiles, setV2EnrichmentFiles] = useState({ hmb: null, pms: null, nace: null, stress: null });
+
+  const [v2Processing, setV2Processing] = useState(false);
+
+  const [v2ProcessingStep, setV2ProcessingStep] = useState('');
+
+  const [savingV2, setSavingV2] = useState(false);
 
   
 
@@ -1649,6 +1709,430 @@ const CriticalLineList = () => {
     } finally {
 
       setSavingDataEdit(false);
+
+    }
+
+  };
+
+
+
+  // ─── Column Selection + "Version 2" consolidation ──────────────────────
+
+  const openColumnSelectModal = async (output) => {
+
+    setColumnSelectOutput(output);
+
+    setColumnSelectStage(1);
+
+    setLoadingColumnSelect(true);
+
+    setColumnSelectHeaders([]);
+
+    setColumnSelectRows([]);
+
+    setSelectedColumns([]);
+
+    setV2SelectedOutputIds([]);
+
+    setV2UploadFile(null);
+
+    setV2EnrichmentFiles({ hmb: null, pms: null, nace: null, stress: null });
+
+    try {
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      const res = await fetch(
+
+        `${API_BASE_URL}/designiq/lists/output_data/${output.id}/`,
+
+        { headers: { 'Authorization': `Bearer ${token}` } }
+
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+
+        throw new Error(data?.error || `Failed to load data (HTTP ${res.status})`);
+
+      }
+
+      setColumnSelectHeaders(data.headers || []);
+
+      setColumnSelectRows((data.rows || []).map((r) => [...r]));
+
+      setSelectedColumns(data.headers || []); // default: all columns selected
+
+    } catch (err) {
+
+      console.error('Error loading output for column selection:', err);
+
+      alert(`Failed to load data: ${err.message || err}`);
+
+      setColumnSelectOutput(null);
+
+    } finally {
+
+      setLoadingColumnSelect(false);
+
+    }
+
+  };
+
+
+
+  const closeColumnSelectModal = () => {
+
+    setColumnSelectOutput(null);
+
+    setColumnSelectHeaders([]);
+
+    setColumnSelectRows([]);
+
+    setSelectedColumns([]);
+
+    setColumnSelectStage(1);
+
+    setV2SelectedOutputIds([]);
+
+    setV2UploadFile(null);
+
+    setV2EnrichmentFiles({ hmb: null, pms: null, nace: null, stress: null });
+
+    setV2Processing(false);
+
+    setV2ProcessingStep('');
+
+  };
+
+
+
+  const toggleSelectedColumn = (header) => {
+
+    setSelectedColumns((prev) => (
+
+      prev.includes(header) ? prev.filter((h) => h !== header) : [...prev, header]
+
+    ));
+
+  };
+
+
+
+  const selectAllColumns = () => setSelectedColumns([...columnSelectHeaders]);
+
+  const deselectAllColumns = () => setSelectedColumns([]);
+
+
+
+  // Quick client-side download of just the selected columns — no backend
+
+  // call, no save; original stored output is completely untouched.
+
+  const handleDownloadSelectedColumns = () => {
+
+    if (selectedColumns.length === 0) {
+
+      alert('Select at least one column to download.');
+
+      return;
+
+    }
+
+    const orderedSelected = columnSelectHeaders.filter((h) => selectedColumns.includes(h));
+
+    const projectedRows = columnSelectRows.map((row) => projectRowByHeaders(columnSelectHeaders, row, orderedSelected));
+
+    const wb = buildProjectedWorkbook(orderedSelected, projectedRows);
+
+    const baseName = (columnSelectOutput?.excel_filename || 'output').replace(/\.xlsx$/i, '');
+
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    XLSX.writeFile(wb, `${baseName}_columns_${timestamp}.xlsx`);
+
+  };
+
+
+
+  const toggleV2OutputSelected = (id) => {
+
+    setV2SelectedOutputIds((prev) => (
+
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+
+    ));
+
+  };
+
+
+
+  const handleV2FileChange = (e) => setV2UploadFile(e.target.files?.[0] || null);
+
+  const handleV2EnrichmentFileChange = (key) => (e) => {
+
+    setV2EnrichmentFiles((prev) => ({ ...prev, [key]: e.target.files?.[0] || null }));
+
+  };
+
+
+
+  // Uploads + polls a NEW document through the EXISTING extraction pipeline
+
+  // (same /upload_pid/ + /upload_pid_status/ endpoints & Celery task the
+
+  // main page uses) — core AI/OCR logic is untouched, only invoked here too.
+
+  const extractRowsFromNewUpload = async () => {
+
+    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    const formData = new FormData();
+
+    formData.append('pid_file', v2UploadFile);
+
+    formData.append('list_type', 'line_list');
+
+    if (v2EnrichmentFiles.hmb) formData.append('hmb_file', v2EnrichmentFiles.hmb);
+
+    if (v2EnrichmentFiles.pms) formData.append('pms_file', v2EnrichmentFiles.pms);
+
+    if (v2EnrichmentFiles.nace) formData.append('nace_file', v2EnrichmentFiles.nace);
+
+    if (v2EnrichmentFiles.stress) formData.append('stress_criticality_file', v2EnrichmentFiles.stress);
+
+
+
+    setV2ProcessingStep('Uploading document…');
+
+    const res = await fetch(`${API_BASE_URL}/designiq/lists/upload_pid/`, {
+
+      method: 'POST',
+
+      headers: { 'Authorization': `Bearer ${token}` },
+
+      body: formData,
+
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) throw new Error(data?.error || `Upload failed (HTTP ${res.status})`);
+
+
+
+    const pickRows = (result) => (
+
+      result?.enriched_data?.length ? result.enriched_data
+
+        : result?.extracted_lines?.length ? result.extracted_lines : []
+
+    );
+
+
+
+    if (data.task_id && !data.enriched_data && !data.extracted_lines) {
+
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      for (let attempt = 1; attempt <= CLL_V2_POLL_MAX_ATTEMPTS; attempt++) {
+
+        const statusRes = await fetch(`${API_BASE_URL}/designiq/lists/upload_pid_status/${data.task_id}/`, {
+
+          headers: { 'Authorization': `Bearer ${token}` },
+
+        });
+
+        const statusData = await statusRes.json().catch(() => ({}));
+
+        setV2ProcessingStep(statusData.status || `Processing… (attempt ${attempt})`);
+
+        if (statusData.state === 'SUCCESS' && statusData.result) {
+
+          return pickRows(statusData.result);
+
+        }
+
+        if (statusData.state === 'FAILURE') {
+
+          throw new Error(statusData.error || 'Extraction task failed');
+
+        }
+
+        await sleep(CLL_V2_POLL_INTERVAL_MS);
+
+      }
+
+      throw new Error('Extraction timed out — please try again.');
+
+    }
+
+    return pickRows(data);
+
+  };
+
+
+
+  // Consolidates: (1) the primary source's selected columns, (2) selected
+
+  // existing Previous Outputs projected onto the same columns, and (3) rows
+
+  // from a freshly uploaded/extracted document — then saves the result as a
+
+  // NEW linked "Version 2" output. The primary source output, and every
+
+  // other output used, are read-only inputs here and are never modified.
+
+  const handleProcessVersion2 = async () => {
+
+    if (selectedColumns.length === 0) {
+
+      alert('Select at least one column first.');
+
+      return;
+
+    }
+
+    if (v2SelectedOutputIds.length === 0 && !v2UploadFile) {
+
+      alert('Select at least one other output or upload a new document to continue.');
+
+      return;
+
+    }
+
+    setSavingV2(true);
+
+    setV2Processing(true);
+
+    setV2ProcessingStep('Preparing…');
+
+    try {
+
+      const orderedSelected = columnSelectHeaders.filter((h) => selectedColumns.includes(h));
+
+      const combinedRows = columnSelectRows.map((row) => projectRowByHeaders(columnSelectHeaders, row, orderedSelected));
+
+
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      for (const outputId of v2SelectedOutputIds) {
+
+        setV2ProcessingStep('Loading data from another output…');
+
+        const res = await fetch(`${API_BASE_URL}/designiq/lists/output_data/${outputId}/`, {
+
+          headers: { 'Authorization': `Bearer ${token}` },
+
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data?.success !== false) {
+
+          const srcHeaders = data.headers || [];
+
+          (data.rows || []).forEach((row) => {
+
+            combinedRows.push(projectRowByHeaders(srcHeaders, row, orderedSelected));
+
+          });
+
+        }
+
+      }
+
+
+
+      if (v2UploadFile) {
+
+        const newRows = await extractRowsFromNewUpload();
+
+        newRows.forEach((row) => {
+
+          const fullRow = buildLineListRowArray(row);
+
+          combinedRows.push(projectRowByHeaders(CLL_EXPORT_HEADERS, fullRow, orderedSelected));
+
+        });
+
+      }
+
+
+
+      setV2ProcessingStep('Saving Version 2…');
+
+      const wb = buildProjectedWorkbook(orderedSelected, combinedRows);
+
+      const baseName = (columnSelectOutput?.excel_filename || 'output').replace(/\.xlsx$/i, '');
+
+      const timestamp = Date.now();
+
+      const filename = `${baseName}_v2_${timestamp}.xlsx`;
+
+
+
+      const saved = await saveWorkbookToPreviousOutputs(wb, {
+
+        filename,
+
+        meta: {
+
+          pid_number: columnSelectOutput?.pid_number || 'Manual Export',
+
+          pid_revision: [columnSelectOutput?.pid_revision, CLL_V2_PID_REVISION_SUFFIX].filter(Boolean).join(' '),
+
+          list_type: 'line_list',
+
+          format_type: columnSelectOutput?.format_type || 'general',
+
+          total_lines: combinedRows.length,
+
+          total_columns: orderedSelected.length,
+
+          enrichment_enabled: !!columnSelectOutput?.enrichment_enabled,
+
+          edited_from: columnSelectOutput?.id,
+
+        },
+
+      });
+
+
+
+      // Also hand the user an immediate local copy of the consolidated sheet.
+
+      XLSX.writeFile(wb, filename);
+
+
+
+      if (saved?.output) {
+
+        setPreviousOutputs((prev) => [saved.output, ...prev]);
+
+      } else {
+
+        fetchPreviousOutputs();
+
+      }
+
+      closeColumnSelectModal();
+
+    } catch (err) {
+
+      console.error('Error processing Version 2:', err);
+
+      alert(`Failed to process Version 2: ${err.message || err}`);
+
+    } finally {
+
+      setSavingV2(false);
+
+      setV2Processing(false);
+
+      setV2ProcessingStep('');
 
     }
 
@@ -7447,6 +7931,22 @@ const CriticalLineList = () => {
 
                           <button
 
+                            onClick={() => openColumnSelectModal(output)}
+
+                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
+
+                            title="Select columns to download, or consolidate into a Version 2"
+
+                          >
+
+                            <ViewColumnsIcon className="w-4 h-4 mr-1" />
+
+                            Columns
+
+                          </button>
+
+                          <button
+
                             onClick={() => handleDeleteOutput(output)}
 
                             disabled={rowActionId === output.id}
@@ -8386,6 +8886,350 @@ const CriticalLineList = () => {
                 {savingDataEdit ? 'Saving…' : 'Save as New Version'}
 
               </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {columnSelectOutput && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center gap-2">
+
+              <ViewColumnsIcon className="w-5 h-5" />
+
+              <h3 className="font-bold text-lg">
+
+                {columnSelectStage === 1 ? 'Select Columns' : 'Version 2 — Consolidate Sources'}
+
+              </h3>
+
+              <span className="text-xs text-white/80 ml-2">{columnSelectOutput.excel_filename}</span>
+
+              <button
+
+                onClick={closeColumnSelectModal}
+
+                className="ml-auto text-white/80 hover:text-white text-2xl leading-none"
+
+                title="Close"
+
+              >
+
+                ×
+
+              </button>
+
+            </div>
+
+            <div className="px-6 py-4 flex-1 overflow-auto">
+
+              {loadingColumnSelect ? (
+
+                <div className="flex items-center justify-center py-16">
+
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+
+                  <span className="ml-3 text-gray-600">Loading columns…</span>
+
+                </div>
+
+              ) : columnSelectStage === 1 ? (
+
+                <>
+
+                  <div className="flex items-center justify-between mb-3">
+
+                    <p className="text-xs text-slate-500">
+
+                      Choose which columns to keep. Download just these columns, or continue to consolidate more files into a Version 2.
+
+                    </p>
+
+                    <div className="flex gap-2">
+
+                      <button onClick={selectAllColumns} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700">Select All</button>
+
+                      <button onClick={deselectAllColumns} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700">Deselect All</button>
+
+                    </div>
+
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+
+                    {columnSelectHeaders.map((h, i) => (
+
+                      <label
+
+                        key={i}
+
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition-colors ${selectedColumns.includes(h) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'}`}
+
+                      >
+
+                        <input
+
+                          type="checkbox"
+
+                          checked={selectedColumns.includes(h)}
+
+                          onChange={() => toggleSelectedColumn(h)}
+
+                          className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-400"
+
+                        />
+
+                        <span className="truncate">{h}</span>
+
+                      </label>
+
+                    ))}
+
+                  </div>
+
+                  <div className="mt-4 text-xs text-slate-500 bg-indigo-50 border border-indigo-200 rounded-lg p-2">
+
+                    {selectedColumns.length} of {columnSelectHeaders.length} columns selected · {columnSelectRows.length} rows
+
+                  </div>
+
+                </>
+
+              ) : (
+
+                <>
+
+                  <div className="mb-4 text-xs text-slate-500 bg-indigo-50 border border-indigo-200 rounded-lg p-2">
+
+                    Selected columns: <span className="font-semibold text-indigo-700">{selectedColumns.join(', ')}</span>
+
+                  </div>
+
+
+
+                  <div className="mb-5">
+
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Merge from existing Previous Outputs</h4>
+
+                    {previousOutputs.filter((o) => o.id !== columnSelectOutput.id).length === 0 ? (
+
+                      <p className="text-xs text-slate-400">No other saved outputs available.</p>
+
+                    ) : (
+
+                      <div className="space-y-1 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2">
+
+                        {previousOutputs.filter((o) => o.id !== columnSelectOutput.id).map((o) => (
+
+                          <label key={o.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-xs">
+
+                            <input
+
+                              type="checkbox"
+
+                              checked={v2SelectedOutputIds.includes(o.id)}
+
+                              onChange={() => toggleV2OutputSelected(o.id)}
+
+                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-400"
+
+                            />
+
+                            <span className="font-medium text-slate-700">{o.excel_filename}</span>
+
+                            <span className="text-slate-400">· {o.pid_number} {o.pid_revision} · {o.total_lines} lines</span>
+
+                          </label>
+
+                        ))}
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+
+
+                  <div className="mb-3">
+
+                    <h4 className="text-sm font-bold text-slate-800 mb-2">Or upload a new document for extraction</h4>
+
+                    <input
+
+                      type="file"
+
+                      accept=".pdf"
+
+                      onChange={handleV2FileChange}
+
+                      className="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white file:text-xs file:font-semibold hover:file:bg-indigo-700"
+
+                    />
+
+                    {v2UploadFile && <p className="text-xs text-slate-500 mt-1">Selected: {v2UploadFile.name}</p>}
+
+                    <details className="mt-2">
+
+                      <summary className="text-xs font-semibold text-indigo-600 cursor-pointer">Advanced: attach enrichment documents (optional)</summary>
+
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+
+                        <div>
+
+                          <label className="text-xs text-slate-500">HMB</label>
+
+                          <input type="file" onChange={handleV2EnrichmentFileChange('hmb')} className="block w-full text-xs" />
+
+                        </div>
+
+                        <div>
+
+                          <label className="text-xs text-slate-500">PMS</label>
+
+                          <input type="file" onChange={handleV2EnrichmentFileChange('pms')} className="block w-full text-xs" />
+
+                        </div>
+
+                        <div>
+
+                          <label className="text-xs text-slate-500">NACE</label>
+
+                          <input type="file" onChange={handleV2EnrichmentFileChange('nace')} className="block w-full text-xs" />
+
+                        </div>
+
+                        <div>
+
+                          <label className="text-xs text-slate-500">Stress Criticality</label>
+
+                          <input type="file" onChange={handleV2EnrichmentFileChange('stress')} className="block w-full text-xs" />
+
+                        </div>
+
+                      </div>
+
+                    </details>
+
+                  </div>
+
+
+
+                  {v2Processing && (
+
+                    <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg p-2 mt-3">
+
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+
+                      {v2ProcessingStep}
+
+                    </div>
+
+                  )}
+
+                </>
+
+              )}
+
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between gap-2">
+
+              {columnSelectStage === 2 ? (
+
+                <button
+
+                  onClick={() => setColumnSelectStage(1)}
+
+                  disabled={savingV2}
+
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-50"
+
+                >
+
+                  ← Back
+
+                </button>
+
+              ) : <span />}
+
+              <div className="flex gap-2">
+
+                <button
+
+                  onClick={closeColumnSelectModal}
+
+                  disabled={savingV2}
+
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-50"
+
+                >
+
+                  Cancel
+
+                </button>
+
+                {columnSelectStage === 1 ? (
+
+                  <>
+
+                    <button
+
+                      onClick={handleDownloadSelectedColumns}
+
+                      disabled={loadingColumnSelect || selectedColumns.length === 0}
+
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-semibold flex items-center gap-1"
+
+                    >
+
+                      <ArrowDownTrayIcon className="w-4 h-4" /> Download Selected Columns
+
+                    </button>
+
+                    <button
+
+                      onClick={() => setColumnSelectStage(2)}
+
+                      disabled={loadingColumnSelect || selectedColumns.length === 0}
+
+                      className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:shadow-lg disabled:opacity-50 text-sm font-semibold flex items-center gap-1"
+
+                    >
+
+                      Continue to Version 2 <ArrowRightIcon className="w-4 h-4" />
+
+                    </button>
+
+                  </>
+
+                ) : (
+
+                  <button
+
+                    onClick={handleProcessVersion2}
+
+                    disabled={savingV2}
+
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:shadow-lg disabled:opacity-50 text-sm font-semibold"
+
+                  >
+
+                    {savingV2 ? 'Processing…' : 'Process & Save Version 2'}
+
+                  </button>
+
+                )}
+
+              </div>
 
             </div>
 
