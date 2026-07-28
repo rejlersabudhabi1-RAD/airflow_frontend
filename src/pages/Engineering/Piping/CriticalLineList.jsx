@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
@@ -43,7 +44,7 @@ import {
   Upload as UploadIcon, FileText, AlertTriangle, Activity, Brain,
   Eye, Download, Settings, Sparkles, CheckCircle, Rocket, Target,
   TrendingUp, Zap, Shield, Award, Package, Cpu, Database,
-  FolderPlus, Folder, Edit2, Trash2, ChevronRight, Loader, X, Save
+  FolderPlus, Folder, Edit2, Trash2, ChevronRight, Loader, X, Save, MoreVertical
 } from 'lucide-react';
 
 import { usePageControls } from '../../../hooks/usePageControls';
@@ -659,10 +660,44 @@ const CriticalLineList = () => {
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [rowActionId, setRowActionId] = useState(null); // id of row currently in delete/recheck
-
   const [rowActionType, setRowActionType] = useState(null); // 'delete' | 'recheck'
-
   const [recheckResults, setRecheckResults] = useState({}); // { [outputId]: { health, issues, drift, stats } }
+  // Previous Outputs row "more actions" dropdown — keeps the row compact as
+  // the number of available actions keeps growing (Recheck/Modify/Edit Data/
+  // Columns/Drawing/Delete), instead of an ever-widening row of buttons.
+  // Rendered through a portal at document.body (see actionMenuAnchor) so it
+  // floats above every other row/table instead of being clipped or covered.
+  const [openActionMenuId, setOpenActionMenuId] = useState(null);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null); // { top, left } viewport coords
+
+  const closeActionMenu = useCallback(() => {
+    setOpenActionMenuId(null);
+    setActionMenuAnchor(null);
+  }, []);
+
+  const toggleActionMenu = useCallback((e, outputId) => {
+    // Capture the real DOM node synchronously — `e` is a React synthetic
+    // event whose fields get nulled out after the handler returns, so it
+    // must not be read from inside the setState updater below (which React
+    // may invoke later/asynchronously).
+    const buttonEl = e.currentTarget;
+    setOpenActionMenuId((prevId) => {
+      if (prevId === outputId) {
+        setActionMenuAnchor(null);
+        return null;
+      }
+      if (!buttonEl) return prevId;
+      const rect = buttonEl.getBoundingClientRect();
+      const MENU_WIDTH = 192;
+      const MENU_HEIGHT_ESTIMATE = 264;
+      const openUpward = rect.bottom + MENU_HEIGHT_ESTIMATE > window.innerHeight && rect.top > MENU_HEIGHT_ESTIMATE;
+      setActionMenuAnchor({
+        left: Math.min(Math.max(8, rect.right - MENU_WIDTH), window.innerWidth - MENU_WIDTH - 8),
+        top: openUpward ? Math.max(8, rect.top - MENU_HEIGHT_ESTIMATE - 6) : rect.bottom + 6,
+      });
+      return outputId;
+    });
+  }, []);
 
   // Data-edit modal — edit the actual line-list cells of a previous output
 
@@ -1237,6 +1272,32 @@ const CriticalLineList = () => {
     fetchPreviousOutputs();
 
   }, [fetchData, fetchPreviousOutputs]);
+
+  // Close the Previous Outputs row "more actions" dropdown on any click
+  // outside it (and on Escape), same convention as other dropdowns in app.
+  // Also closes on scroll/resize since the menu is portal-rendered with a
+  // fixed position snapshotted at open-time (it doesn't track the trigger).
+  useEffect(() => {
+    if (!openActionMenuId) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-cll-action-menu], [data-cll-action-menu-portal]')) {
+        closeActionMenu();
+      }
+    };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') closeActionMenu();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    window.addEventListener('scroll', closeActionMenu, true);
+    window.addEventListener('resize', closeActionMenu);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('scroll', closeActionMenu, true);
+      window.removeEventListener('resize', closeActionMenu);
+    };
+  }, [openActionMenuId, closeActionMenu]);
 
 
   // Processing modal — rotate tips + track elapsed time while visible
@@ -8470,7 +8531,7 @@ const CriticalLineList = () => {
 
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5" data-cll-action-menu>
 
                           <button
 
@@ -8487,91 +8548,6 @@ const CriticalLineList = () => {
                             <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
 
                             Download
-
-                          </button>
-
-                          <button
-
-                            onClick={() => handleRecheckOutput(output)}
-
-                            disabled={rowActionId === output.id}
-
-                            className="flex items-center px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors text-xs font-semibold"
-
-                            title="Re-validate this Excel file (line/column count, structural checks)"
-
-                          >
-
-                            <ArrowPathIcon className={`w-4 h-4 mr-1 ${rowActionId === output.id && rowActionType === 'recheck' ? 'animate-spin' : ''}`} />
-
-                            {rowActionId === output.id && rowActionType === 'recheck' ? 'Checking…' : 'Recheck'}
-
-                          </button>
-
-                          <button
-
-                            onClick={() => openEditModal(output)}
-
-                            className="flex items-center px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-xs font-semibold"
-
-                            title="Modify metadata"
-
-                          >
-
-                            <PencilSquareIcon className="w-4 h-4 mr-1" />
-
-                            Modify
-
-                          </button>
-
-                          <button
-
-                            onClick={() => openDataEditModal(output)}
-
-                            disabled={output.has_file === false}
-
-                            className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600 transition-colors text-xs font-semibold"
-
-                            title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Edit the line-list data and save as a new version'}
-
-                          >
-
-                            <Edit2 className="w-4 h-4 mr-1" />
-
-                            Edit Data
-
-                          </button>
-
-                          <button
-
-                            onClick={() => openColumnSelectModal(output)}
-
-                            disabled={output.has_file === false}
-
-                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 transition-colors text-xs font-semibold"
-
-                            title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Select columns to download, or consolidate into a Version 2'}
-
-                          >
-
-                            <ViewColumnsIcon className="w-4 h-4 mr-1" />
-
-                            Columns
-
-                          </button>
-
-                          <button
-
-                            onClick={() => openDrawingModal(output)}
-
-                            className="flex items-center px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-xs font-semibold"
-
-                            title="View P&ID drawing and mark From/To line paths"
-                          >
-
-                            <MapIcon className="w-4 h-4 mr-1" />
-
-                            Drawing
 
                           </button>
 
@@ -8593,21 +8569,159 @@ const CriticalLineList = () => {
 
                           <button
 
-                            onClick={() => handleDeleteOutput(output)}
+                            onClick={(e) => toggleActionMenu(e, output.id)}
 
-                            disabled={rowActionId === output.id}
+                            className={`p-1.5 rounded-lg border transition-colors ${openActionMenuId === output.id ? 'bg-slate-100 border-slate-300 text-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
 
-                            className="flex items-center px-3 py-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors text-xs font-semibold"
+                            title="More actions"
 
-                            title="Delete this output"
+                            aria-haspopup="menu"
+
+                            aria-expanded={openActionMenuId === output.id}
 
                           >
 
-                            <TrashIcon className="w-4 h-4 mr-1" />
-
-                            {rowActionId === output.id && rowActionType === 'delete' ? 'Deleting…' : 'Delete'}
+                            <MoreVertical className="w-4 h-4" />
 
                           </button>
+
+                          {openActionMenuId === output.id && actionMenuAnchor && createPortal(
+
+                            <div
+
+                              role="menu"
+
+                              data-cll-action-menu-portal
+
+                              className="fixed w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-[9999]"
+
+                              style={{ top: actionMenuAnchor.top, left: actionMenuAnchor.left }}
+
+                            >
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); handleRecheckOutput(output); }}
+
+                                disabled={rowActionId === output.id}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+
+                                title="Re-validate this Excel file (line/column count, structural checks)"
+
+                              >
+
+                                <ArrowPathIcon className={`w-4 h-4 mr-2 text-emerald-600 ${rowActionId === output.id && rowActionType === 'recheck' ? 'animate-spin' : ''}`} />
+
+                                {rowActionId === output.id && rowActionType === 'recheck' ? 'Checking…' : 'Recheck'}
+
+                              </button>
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); openEditModal(output); }}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+
+                                title="Modify metadata"
+
+                              >
+
+                                <PencilSquareIcon className="w-4 h-4 mr-2 text-amber-500" />
+
+                                Modify
+
+                              </button>
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); openDataEditModal(output); }}
+
+                                disabled={output.has_file === false}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+
+                                title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Edit the line-list data and save as a new version'}
+
+                              >
+
+                                <Edit2 className="w-4 h-4 mr-2 text-blue-600" />
+
+                                Edit Data
+
+                              </button>
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); openColumnSelectModal(output); }}
+
+                                disabled={output.has_file === false}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+
+                                title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Select columns to download, or consolidate into a Version 2'}
+
+                              >
+
+                                <ViewColumnsIcon className="w-4 h-4 mr-2 text-indigo-600" />
+
+                                Columns
+
+                              </button>
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); openDrawingModal(output); }}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+
+                                title="View P&ID drawing and mark From/To line paths"
+
+                              >
+
+                                <MapIcon className="w-4 h-4 mr-2 text-teal-600" />
+
+                                Drawing
+
+                              </button>
+
+                              <div className="my-1 border-t border-slate-100" />
+
+                              <button
+
+                                role="menuitem"
+
+                                onClick={() => { closeActionMenu(); handleDeleteOutput(output); }}
+
+                                disabled={rowActionId === output.id}
+
+                                className="w-full flex items-center px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+
+                                title="Delete this output"
+
+                              >
+
+                                <TrashIcon className="w-4 h-4 mr-2" />
+
+                                {rowActionId === output.id && rowActionType === 'delete' ? 'Deleting…' : 'Delete'}
+
+                              </button>
+
+                            </div>,
+
+                            document.body
+
+                          )}
 
                         </div>
 
