@@ -19,6 +19,9 @@ export const PLANNING_ENDPOINTS = {
 
   generations: '/planning-intelligence/generations/',
   generation: (id) => `/planning-intelligence/generations/${id}/`,
+  // In-place hand-edit of a generation's wbs/activities/eddr/manhours/
+  // milestones/narrative (Project Scheduler correction — same version).
+  editGeneration: (id) => `/planning-intelligence/generations/${id}/edit/`,
   // NOTE: query param is `export_format` (not `format`) because DRF's own
   // content-negotiation intercepts a query param literally named `format`
   // (URL_FORMAT_OVERRIDE) to select a *renderer* — since no renderer is
@@ -105,13 +108,21 @@ export const VALIDATION_SEVERITY_STYLES = {
   critical: { label: 'Critical', className: 'bg-rose-50 text-rose-700 border-rose-200' },
 }
 
+// Export step cards — soft-coded metadata so the Export screen can grow new
+// formats/descriptions without touching JSX. `category` groups cards into
+// sections; `badge` is an optional small pill (e.g. "New"); `accent` drives
+// the card's icon-chip + hover gradient.
 export const EXPORT_FORMATS = [
-  { format: 'csv',           label: 'Activities (CSV)' },
-  { format: 'eddr_csv',      label: 'EDDR (CSV)' },
-  { format: 'primavera_csv', label: 'Primavera-ready (CSV)' },
-  { format: 'excel',         label: 'Activities (Excel)' },
-  { format: 'json',          label: 'Full Generation (JSON)' },
+  { format: 'xer',           label: 'Primavera Schedule (.xer)', icon: '🗓️', description: 'Native P6 project file — WBS, activities, logic ties & calendar in one import.', category: 'Schedule Data', accent: 'from-orange-500 to-amber-600', badge: 'New' },
+  { format: 'primavera_csv', label: 'Primavera-ready (CSV)',     icon: '🛠️', description: "Column layout mapped for P6's CSV import wizard.",                          category: 'Schedule Data', accent: 'from-amber-500 to-yellow-600' },
+  { format: 'csv',           label: 'Activities (CSV)',          icon: '📄', description: 'Flat activity list — quick to open in any spreadsheet tool.',               category: 'Schedule Data', accent: 'from-slate-500 to-slate-700' },
+  { format: 'excel',         label: 'Activities (Excel)',        icon: '📊', description: 'Formatted workbook, ready to filter, sort & share.',                        category: 'Spreadsheet',  accent: 'from-emerald-500 to-green-600' },
+  { format: 'eddr_csv',      label: 'EDDR (CSV)',                icon: '📋', description: 'Deliverable review-cycle register for document control.',                  category: 'Documents',    accent: 'from-teal-500 to-emerald-600' },
+  { format: 'json',          label: 'Full Generation (JSON)',    icon: '🧬', description: 'Complete raw payload — WBS, schedule, EDDR, manhours & validation.',        category: 'Raw Data',     accent: 'from-indigo-500 to-violet-600' },
 ]
+
+// Section order + accent used for the Export step's category headers.
+export const EXPORT_CATEGORY_ORDER = ['Schedule Data', 'Spreadsheet', 'Documents', 'Raw Data']
 
 // Slide outline shown to the user before they download the PowerPoint deck —
 // purely descriptive; the backend (export_utils.generation_to_pptx_bytes)
