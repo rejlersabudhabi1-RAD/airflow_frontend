@@ -1234,6 +1234,18 @@ const CriticalLineList = () => {
 
         window.URL.revokeObjectURL(url);
 
+      } else {
+
+        const data = await response.json().catch(() => ({}));
+
+        const message = data?.code === 'file_missing'
+
+          ? "This output's Excel file is missing from server storage. Use Recheck to confirm, then Delete this entry and regenerate the list."
+
+          : (data?.error || `Download failed (HTTP ${response.status})`);
+
+        alert(message);
+
       }
 
     } catch (error) {
@@ -7867,9 +7879,11 @@ const CriticalLineList = () => {
 
                             onClick={() => handleDownloadOutput(output.id, output.excel_filename)}
 
-                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
+                            disabled={output.has_file === false}
 
-                            title="Download Excel"
+                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 transition-colors text-xs font-semibold"
+
+                            title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Download Excel'}
 
                           >
 
@@ -7917,9 +7931,11 @@ const CriticalLineList = () => {
 
                             onClick={() => openDataEditModal(output)}
 
-                            className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
+                            disabled={output.has_file === false}
 
-                            title="Edit the line-list data and save as a new version"
+                            className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600 transition-colors text-xs font-semibold"
+
+                            title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Edit the line-list data and save as a new version'}
 
                           >
 
@@ -7933,9 +7949,11 @@ const CriticalLineList = () => {
 
                             onClick={() => openColumnSelectModal(output)}
 
-                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
+                            disabled={output.has_file === false}
 
-                            title="Select columns to download, or consolidate into a Version 2"
+                            className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 transition-colors text-xs font-semibold"
+
+                            title={output.has_file === false ? 'File unavailable on server — use Recheck to confirm, then Delete and regenerate this list' : 'Select columns to download, or consolidate into a Version 2'}
 
                           >
 
@@ -7944,6 +7962,22 @@ const CriticalLineList = () => {
                             Columns
 
                           </button>
+
+                          {output.has_file === false && (
+
+                            <span
+
+                              className="px-2 py-1 bg-slate-100 text-slate-600 border border-slate-300 rounded-full text-[10px] font-semibold whitespace-nowrap"
+
+                              title="This output's Excel file is missing from server storage. Download / Edit Data / Columns are disabled. Delete this entry and regenerate the list."
+
+                            >
+
+                              ⚠ File Missing
+
+                            </span>
+
+                          )}
 
                           <button
 
