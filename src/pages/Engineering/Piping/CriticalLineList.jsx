@@ -414,7 +414,109 @@ const CLL_PROJECT_CONFIG = {
   SELECTOR_WORKFLOW_MARGIN_TOP: '32px', // Space between project grid and workflow
 };
 
+// ─── 35-Column Excel Export — shared builder (SOFT-CODED) ─────────────────
+// Single source of truth for the header/row/column-width layout so the
+// main "Export Excel" button and the "Edit Data → Save" flow both produce
+// byte-identical workbooks. Kept 1:1 with the original inline export code
+// — do NOT change column order without checking both call sites.
+const CLL_EXPORT_HEADERS = [
+  'Line Number', 'Size', 'Fluid Code', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To',
+  'Flow Medium', 'Two Phase', 'Surge Flow', 'Flow Max', 'Density',
+  'Normal Pressure', 'Normal Temp', 'Design Pressure', 'Min Design Temp (°C)', 'Max Design Temp (°C)',
+  'Design Code', 'Category-M Fluid', 'Schedule / Wall THK', 'Stress Relief', 'PWHT',
+  'RT', 'MT/PT', 'Hardness', 'Visual', 'NACE-MR-0175', 'Piping Rated Pressure',
+  'Test Pressure', 'Test Medium', 'P&ID No.', 'P&ID Rev', 'Date', 'Criticality Code', 'Criticality Stress'
+];
 
+const CLL_EXPORT_COLUMN_WIDTHS = [
+  { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
+  { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 18 },
+  { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 },
+  { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 },
+  { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 18 }
+];
+
+// Maps a raw extracted-line object to a plain array matching CLL_EXPORT_HEADERS.
+const buildLineListRowArray = (row) => ([
+  row.original_detection || row.line_number || '',
+  row.size || '',
+  row.fluid_code || '',
+  row.area || '',
+  row.sequence_no || '',
+  row.pipr_class || '',
+  row.insulation || '',
+  row.from_line || row.from || '',
+  row.to_line || row.to || '',
+  row.flow_medium || '',
+  row.two_phase || '',
+  row.surge_flow || '',
+  row.flow_max || '',
+  row.density || '',
+  row.normal_pressure || '',
+  row.normal_temp || '',
+  row.design_pressure || '',
+  row.min_design_temp || '',
+  row.max_design_temp || '',
+  row.design_code || '',
+  row.category_m_fluid || '',
+  row.schedule_wall_thk || '',
+  row.stress_relief || '',
+  row.pwht || '',
+  row.rt || '',
+  row.mt_pt || '',
+  row.hardness || '',
+  row.visual || '',
+  row.nace_mr_0175 || '',
+  row.piping_rated_pressure || '',
+  row.test_pressure || '',
+  row.test_medium || '',
+  row.pid_no || '',
+  row.pid_rev || '',
+  row.date || '',
+  row.criticality_code || '',
+  row.criticality_stress || '',
+]);
+
+// Builds a SheetJS workbook from either raw extracted-line objects
+// (`asObjects=true`, default) or already-flattened row arrays (from the
+// Edit Data grid). Used by both the Export Excel button and the Save
+// Edited Data flow so both stay byte-identical in layout.
+const buildLineListWorkbook = (rows, { asObjects = true } = {}) => {
+  const dataRows = asObjects ? rows.map(buildLineListRowArray) : rows;
+  const wsData = [CLL_EXPORT_HEADERS, ...dataRows];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = CLL_EXPORT_COLUMN_WIDTHS;
+  XLSX.utils.book_append_sheet(wb, ws, 'Critical Line List');
+  return wb;
+};
+
+// POSTs a built workbook to the backend so it's persisted in the database
+// / S3 bucket as a Previous Output — best-effort only, never blocks or
+// fails the user's local download/edit flow.
+const saveWorkbookToPreviousOutputs = async (wb, { filename, meta }) => {
+  const wbArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbArray], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const form = new FormData();
+  form.append('excel_file', blob, filename);
+  Object.entries(meta).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) form.append(key, String(value));
+  });
+  const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+  const res = await fetch(`${API_BASE_URL}/designiq/lists/save_output/`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || `Save failed (HTTP ${res.status})`);
+  }
+  return data;
+};
 
 
 const CriticalLineList = () => {
@@ -488,6 +590,20 @@ const CriticalLineList = () => {
   const [rowActionType, setRowActionType] = useState(null); // 'delete' | 'recheck'
 
   const [recheckResults, setRecheckResults] = useState({}); // { [outputId]: { health, issues, drift, stats } }
+
+  // Data-edit modal — edit the actual line-list cells of a previous output
+
+  // and re-save as a NEW version (DB + S3), original left untouched.
+
+  const [editingOutputData, setEditingOutputData] = useState(null); // output row being data-edited
+
+  const [dataEditHeaders, setDataEditHeaders] = useState([]);
+
+  const [dataEditRows, setDataEditRows] = useState([]); // array of arrays
+
+  const [loadingDataEdit, setLoadingDataEdit] = useState(false);
+
+  const [savingDataEdit, setSavingDataEdit] = useState(false);
 
   
 
@@ -1359,6 +1475,180 @@ const CriticalLineList = () => {
       setRowActionId(null);
 
       setRowActionType(null);
+
+    }
+
+  };
+
+
+
+  // ─── Edit Data (Previous Outputs) ──────────────────────────────────────
+
+  // Loads a previous output's stored Excel rows into an editable grid.
+
+  const openDataEditModal = async (output) => {
+
+    setEditingOutputData(output);
+
+    setLoadingDataEdit(true);
+
+    setDataEditHeaders([]);
+
+    setDataEditRows([]);
+
+    try {
+
+      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+      const res = await fetch(
+
+        `${API_BASE_URL}/designiq/lists/output_data/${output.id}/`,
+
+        { headers: { 'Authorization': `Bearer ${token}` } }
+
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+
+        throw new Error(data?.error || `Failed to load data (HTTP ${res.status})`);
+
+      }
+
+      setDataEditHeaders(data.headers || []);
+
+      setDataEditRows((data.rows || []).map((r) => [...r]));
+
+    } catch (err) {
+
+      console.error('Error loading output data:', err);
+
+      alert(`Failed to load data for editing: ${err.message || err}`);
+
+      setEditingOutputData(null);
+
+    } finally {
+
+      setLoadingDataEdit(false);
+
+    }
+
+  };
+
+
+
+  const closeDataEditModal = () => {
+
+    setEditingOutputData(null);
+
+    setDataEditHeaders([]);
+
+    setDataEditRows([]);
+
+  };
+
+
+
+  const updateDataEditCell = (rowIdx, colIdx, value) => {
+
+    setDataEditRows((prev) => {
+
+      const next = prev.map((r) => [...r]);
+
+      next[rowIdx][colIdx] = value;
+
+      return next;
+
+    });
+
+  };
+
+
+
+  const addDataEditRow = () => {
+
+    setDataEditRows((prev) => [...prev, dataEditHeaders.map(() => '')]);
+
+  };
+
+
+
+  const deleteDataEditRow = (rowIdx) => {
+
+    setDataEditRows((prev) => prev.filter((_, i) => i !== rowIdx));
+
+  };
+
+
+
+  // Rebuilds a workbook from the edited grid and saves it as a NEW
+
+  // ProcessedPIDOutput version (edited_from = the source output) —
+
+  // the original record/file is never modified.
+
+  const handleSaveDataEdit = async () => {
+
+    if (!editingOutputData) return;
+
+    setSavingDataEdit(true);
+
+    try {
+
+      const wb = buildLineListWorkbook(dataEditRows, { asObjects: false });
+
+      const baseName = (editingOutputData.excel_filename || 'output').replace(/\.xlsx$/i, '');
+
+      const filename = `${baseName}_edited_${Date.now()}.xlsx`;
+
+      const saved = await saveWorkbookToPreviousOutputs(wb, {
+
+        filename,
+
+        meta: {
+
+          pid_number: editingOutputData.pid_number || 'Manual Export',
+
+          pid_revision: editingOutputData.pid_revision || '',
+
+          list_type: 'line_list',
+
+          format_type: editingOutputData.format_type || 'general',
+
+          total_lines: dataEditRows.length,
+
+          total_columns: dataEditHeaders.length,
+
+          enrichment_enabled: !!editingOutputData.enrichment_enabled,
+
+          edited_from: editingOutputData.id,
+
+        },
+
+      });
+
+      if (saved?.output) {
+
+        setPreviousOutputs((prev) => [saved.output, ...prev]);
+
+      } else {
+
+        fetchPreviousOutputs();
+
+      }
+
+      closeDataEditModal();
+
+    } catch (err) {
+
+      console.error('Error saving edited data:', err);
+
+      alert(`Failed to save edited data: ${err.message || err}`);
+
+    } finally {
+
+      setSavingDataEdit(false);
 
     }
 
@@ -6563,154 +6853,61 @@ const CriticalLineList = () => {
 
                 <button
 
-                  onClick={() => {
+                  onClick={async () => {
 
                     const data = extractedData.lines;
 
-                    
-
-                    // ALL 35 COLUMNS Excel Export (From and To separate)
-
-                    const headers = [
-
-                      'Line Number', 'Size', 'Fluid Code', 'Area', 'Sequence No', 'PIPR Class', 'Insulation', 'From', 'To',
-
-                      'Flow Medium', 'Two Phase', 'Surge Flow', 'Flow Max', 'Density', 
-
-                      'Normal Pressure', 'Normal Temp', 'Design Pressure', 'Min Design Temp (Â°C)', 'Max Design Temp (Â°C)',
-
-                      'Design Code', 'Category-M Fluid', 'Schedule / Wall THK', 'Stress Relief', 'PWHT',
-
-                      'RT', 'MT/PT', 'Hardness', 'Visual', 'NACE-MR-0175', 'Piping Rated Pressure',
-
-                      'Test Pressure', 'Test Medium', 'P&ID No.', 'P&ID Rev', 'Date', 'Criticality Code', 'Criticality Stress'
-
-                    ];
-
-                    
-
-                    const wsData = [headers];
-
-                    
-
-                    // Add all 37 columns for each row
-
-                    data.forEach(row => {
-
-                      wsData.push([
-
-                        row.original_detection || row.line_number || '',
-
-                        row.size || '',
-
-                        row.fluid_code || '',
-
-                        row.area || '',
-
-                        row.sequence_no || '',
-
-                        row.pipr_class || '',
-
-                        row.insulation || '',
-
-                        row.from_line || row.from || '',
-
-                        row.to_line || row.to || '',
-
-                        row.flow_medium || '',
-
-                        row.two_phase || '',
-
-                        row.surge_flow || '',
-
-                        row.flow_max || '',
-
-                        row.density || '',
-
-                        row.normal_pressure || '',
-
-                        row.normal_temp || '',
-
-                        row.design_pressure || '',
-
-                        row.min_design_temp || '',
-                        row.max_design_temp || '',
-
-                        row.design_code || '',
-
-                        row.category_m_fluid || '',
-
-                        row.schedule_wall_thk || '',
-
-                        row.stress_relief || '',
-
-                        row.pwht || '',
-
-                        row.rt || '',
-
-                        row.mt_pt || '',
-
-                        row.hardness || '',
-
-                        row.visual || '',
-
-                        row.nace_mr_0175 || '',
-
-                        row.piping_rated_pressure || '',
-
-                        row.test_pressure || '',
-
-                        row.test_medium || '',
-
-                        row.pid_no || '',
-
-                        row.pid_rev || '',
-
-                        row.date || '',
-
-                        row.criticality_code || '',
-
-                        row.criticality_stress || ''
-
-                      ]);
-
-                    });
-
-                    
-
-                    const wb = XLSX.utils.book_new();
-
-                    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-                    
-
-                    // Set column widths for all 37 columns
-
-                    ws['!cols'] = [
-
-                      { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
-
-                      { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-
-                      { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 18 },
-
-                      { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 },
-
-                      { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 },
-
-                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 18 }
-
-                    ];
-
-                    
-
-                    XLSX.utils.book_append_sheet(wb, ws, 'Critical Line List');
-
-                    
+                    const wb = buildLineListWorkbook(data);
 
                     const timestamp = new Date().toISOString().split('T')[0];
 
-                    XLSX.writeFile(wb, `PID_35Columns_${data.length}lines_${timestamp}.xlsx`);
+                    const filename = `PID_35Columns_${data.length}lines_${timestamp}.xlsx`;
+
+                    // Unchanged core behaviour — immediate client-side download.
+
+                    XLSX.writeFile(wb, filename);
+
+                    // NEW: also persist a copy to Previous Outputs (DB / S3),
+
+                    // best-effort so it never blocks or fails the download above.
+
+                    try {
+
+                      const saved = await saveWorkbookToPreviousOutputs(wb, {
+
+                        filename,
+
+                        meta: {
+
+                          pid_number: data[0]?.pid_no || 'Manual Export',
+
+                          pid_revision: data[0]?.pid_rev || '',
+
+                          list_type: 'line_list',
+
+                          format_type: 'general',
+
+                          total_lines: data.length,
+
+                          total_columns: CLL_EXPORT_HEADERS.length,
+
+                          enrichment_enabled: true,
+
+                        },
+
+                      });
+
+                      if (saved?.output) {
+
+                        setPreviousOutputs((prev) => [saved.output, ...prev]);
+
+                      }
+
+                    } catch (saveErr) {
+
+                      console.error('Could not auto-save export to Previous Outputs:', saveErr);
+
+                    }
 
                   }}
 
@@ -7229,6 +7426,22 @@ const CriticalLineList = () => {
                             <PencilSquareIcon className="w-4 h-4 mr-1" />
 
                             Modify
+
+                          </button>
+
+                          <button
+
+                            onClick={() => openDataEditModal(output)}
+
+                            className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
+
+                            title="Edit the line-list data and save as a new version"
+
+                          >
+
+                            <Edit2 className="w-4 h-4 mr-1" />
+
+                            Edit Data
 
                           </button>
 
@@ -7979,6 +8192,198 @@ const CriticalLineList = () => {
               >
 
                 {savingEdit ? 'Saving…' : 'Save Changes'}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {editingOutputData && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center gap-2">
+
+              <Edit2 className="w-5 h-5" />
+
+              <h3 className="font-bold text-lg">Edit Line-List Data</h3>
+
+              <span className="text-xs text-white/80 ml-2">{editingOutputData.excel_filename}</span>
+
+              <button
+
+                onClick={closeDataEditModal}
+
+                className="ml-auto text-white/80 hover:text-white text-2xl leading-none"
+
+                title="Close"
+
+              >
+
+                ×
+
+              </button>
+
+            </div>
+
+            <div className="px-6 py-4 flex-1 overflow-auto">
+
+              {loadingDataEdit ? (
+
+                <div className="flex items-center justify-center py-16">
+
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+
+                  <span className="ml-3 text-gray-600">Loading data…</span>
+
+                </div>
+
+              ) : (
+
+                <>
+
+                  <div className="flex items-center justify-between mb-3">
+
+                    <p className="text-xs text-slate-500">
+
+                      Edit any cell, then <span className="font-semibold">Save as New Version</span> — the original output is kept unchanged.
+
+                    </p>
+
+                    <button
+
+                      onClick={addDataEditRow}
+
+                      className="flex items-center px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs font-semibold"
+
+                    >
+
+                      <PlusIcon className="w-4 h-4 mr-1" />
+
+                      Add Row
+
+                    </button>
+
+                  </div>
+
+                  <table className="min-w-full text-xs border-collapse">
+
+                    <thead className="sticky top-0 bg-slate-100">
+
+                      <tr>
+
+                        <th className="px-2 py-1.5 border border-slate-200 text-slate-500">#</th>
+
+                        {dataEditHeaders.map((h, i) => (
+
+                          <th key={i} className="px-2 py-1.5 border border-slate-200 text-left font-semibold text-slate-700 whitespace-nowrap">
+
+                            {h}
+
+                          </th>
+
+                        ))}
+
+                        <th className="px-2 py-1.5 border border-slate-200"></th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {dataEditRows.map((row, rowIdx) => (
+
+                        <tr key={rowIdx} className="hover:bg-slate-50">
+
+                          <td className="px-2 py-1 border border-slate-200 text-slate-400 text-center">{rowIdx + 1}</td>
+
+                          {row.map((cell, colIdx) => (
+
+                            <td key={colIdx} className="border border-slate-200 p-0">
+
+                              <input
+
+                                type="text"
+
+                                value={cell ?? ''}
+
+                                onChange={(e) => updateDataEditCell(rowIdx, colIdx, e.target.value)}
+
+                                className="w-full px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-blue-50"
+
+                              />
+
+                            </td>
+
+                          ))}
+
+                          <td className="px-2 py-1 border border-slate-200 text-center">
+
+                            <button
+
+                              onClick={() => deleteDataEditRow(rowIdx)}
+
+                              title="Delete row"
+
+                              className="text-rose-500 hover:text-rose-700"
+
+                            >
+
+                              <TrashIcon className="w-4 h-4" />
+
+                            </button>
+
+                          </td>
+
+                        </tr>
+
+                      ))}
+
+                    </tbody>
+
+                  </table>
+
+                </>
+
+              )}
+
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+
+              <button
+
+                onClick={closeDataEditModal}
+
+                disabled={savingDataEdit}
+
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-50"
+
+              >
+
+                Cancel
+
+              </button>
+
+              <button
+
+                onClick={handleSaveDataEdit}
+
+                disabled={savingDataEdit || loadingDataEdit}
+
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg disabled:opacity-50 text-sm font-semibold"
+
+              >
+
+                {savingDataEdit ? 'Saving…' : 'Save as New Version'}
 
               </button>
 
