@@ -208,7 +208,7 @@ const CARD_BORDER_RADIUS         = '20px';      // Card corner radius (more roun
 const CARD_PADDING               = '28px';      // Internal card padding (more spacious)
 const CARD_GAP                   = '24px';      // Gap between cards in grid (wider gaps)
 const CARD_SHADOW_DEFAULT        = '0 2px 8px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06)';
-const CARD_SHADOW_HOVER          = '0 12px 40px rgba(99,102,241,0.2), 0 8px 16px rgba(59,130,246,0.12)';
+const CARD_SHADOW_HOVER          = '0 12px 40px rgba(13,148,136,0.2), 0 8px 16px rgba(6,95,70,0.12)';
 const CARD_BORDER_COLOR          = '#e2e8f0';  // Default border
 const CARD_BORDER_HOVER_COLOR    = '#6366f1';  // Hover border color (indigo)
 const CARD_HOVER_LIFT            = '-8px';     // Vertical lift on hover (more dramatic)
@@ -229,6 +229,19 @@ const BUTTON_FONT_WEIGHT         = 700;        // Font weight (bolder)
 const BUTTON_SHADOW              = '0 6px 20px rgba(99,102,241,0.35), 0 2px 8px rgba(139,92,246,0.2)';
 const BUTTON_HOVER_LIFT          = '-3px';     // Vertical lift on hover (more dramatic)
 const BUTTON_ICON_SIZE           = 20;         // px - icon size in buttons (larger)
+
+// PROJECT WORKSPACE ACCENT (soft-coded)
+// Dedicated color scheme for the "New Project" / "Create First Project"
+// buttons and the Project Card hover states — kept independent from the
+// global COLOR_PRIMARY / GRADIENT_PRIMARY (indigo/purple) used elsewhere on
+// this page so re-theming this section never touches unrelated UI. Change
+// these values to adjust the look.
+const PROJECT_ACCENT_GRADIENT       = 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)';   // Teal
+const PROJECT_ACCENT_HOVER_GRADIENT = 'linear-gradient(135deg, #0f766e 0%, #065f46 100%)';   // Darker teal (hover)
+const PROJECT_ACCENT_COLOR          = '#0d9488';                                              // Solid teal (icons/text)
+const PROJECT_ACCENT_SHADOW         = '0 8px 24px rgba(13,148,136,0.25), 0 4px 12px rgba(6,95,70,0.15)';
+const PROJECT_ACCENT_SHADOW_HOVER   = '0 12px 40px rgba(13,148,136,0.2), 0 8px 16px rgba(6,95,70,0.12)';
+const PROJECT_ACCENT_ICON_BG        = 'linear-gradient(135deg, #99f6e4 0%, #a7f3d0 100%)';    // Light teal icon bg
 
 // EMPTY STATE
 const EMPTY_STATE_ICON_SIZE      = 96;         // px - large icon when no projects (larger)
@@ -5711,22 +5724,22 @@ const PIDVerificationV2 = () => {
                 fontSize: '0.875rem',
                 fontWeight: BUTTON_FONT_WEIGHT,
                 color: 'white',
-                background: BUTTON_PRIMARY_BG,
+                background: PROJECT_ACCENT_GRADIENT,
                 border: 'none',
                 borderRadius: BUTTON_BORDER_RADIUS,
                 cursor: 'pointer',
-                boxShadow: BUTTON_SHADOW,
+                boxShadow: PROJECT_ACCENT_SHADOW,
                 transition: `all ${ANIMATION_HOVER_DURATION} cubic-bezier(0.4, 0, 0.2, 1)`,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = BUTTON_PRIMARY_HOVER_BG;
+                e.currentTarget.style.background = PROJECT_ACCENT_HOVER_GRADIENT;
                 e.currentTarget.style.transform = `translateY(${BUTTON_HOVER_LIFT})`;
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(59,130,246,0.35)';
+                e.currentTarget.style.boxShadow = PROJECT_ACCENT_SHADOW_HOVER;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = BUTTON_PRIMARY_BG;
+                e.currentTarget.style.background = PROJECT_ACCENT_GRADIENT;
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = BUTTON_SHADOW;
+                e.currentTarget.style.boxShadow = PROJECT_ACCENT_SHADOW;
               }}
             >
               <FolderPlus style={{ width: `${BUTTON_ICON_SIZE}px`, height: `${BUTTON_ICON_SIZE}px` }} />
@@ -5803,22 +5816,22 @@ const PIDVerificationV2 = () => {
                   fontSize: '0.95rem',
                   fontWeight: BUTTON_FONT_WEIGHT,
                   color: 'white',
-                  background: BUTTON_PRIMARY_BG,
+                  background: PROJECT_ACCENT_GRADIENT,
                   border: 'none',
                   borderRadius: BUTTON_BORDER_RADIUS,
                   cursor: 'pointer',
-                  boxShadow: BUTTON_SHADOW,
+                  boxShadow: PROJECT_ACCENT_SHADOW,
                   transition: `all ${ANIMATION_HOVER_DURATION} cubic-bezier(0.4, 0, 0.2, 1)`,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = BUTTON_PRIMARY_HOVER_BG;
+                  e.currentTarget.style.background = PROJECT_ACCENT_HOVER_GRADIENT;
                   e.currentTarget.style.transform = `translateY(${BUTTON_HOVER_LIFT})`;
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(59,130,246,0.35)';
+                  e.currentTarget.style.boxShadow = PROJECT_ACCENT_SHADOW_HOVER;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = BUTTON_PRIMARY_BG;
+                  e.currentTarget.style.background = PROJECT_ACCENT_GRADIENT;
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = BUTTON_SHADOW;
+                  e.currentTarget.style.boxShadow = PROJECT_ACCENT_SHADOW;
                 }}
               >
                 <FolderPlus style={{ width: '20px', height: '20px' }} />
@@ -5908,11 +5921,11 @@ const PIDVerificationV2 = () => {
                       transition: `all ${CARD_TRANSITION_SPEED} cubic-bezier(0.4, 0, 0.2, 1)`,
                       overflow: 'hidden',
                       animation: `scaleIn ${ANIMATION_ENTRANCE_DURATION} ease-out ${0.2 + (idx * ANIMATION_ENTRANCE_DELAY)}s both`,
-                      backgroundImage: `linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(139,92,246,0.02) 100%)`
+                      backgroundImage: `linear-gradient(135deg, rgba(13,148,136,0.03) 0%, rgba(6,95,70,0.02) 100%)`
                     }}
                     onMouseEnter={(e) => {
                       const card = e.currentTarget;
-                      card.style.borderImage = 'linear-gradient(135deg, #6366f1, #8b5cf6) 1';
+                      card.style.borderImage = 'linear-gradient(135deg, #14b8a6, #0d9488) 1';
                       card.style.boxShadow = CARD_SHADOW_HOVER;
                       card.style.transform = `translateY(${CARD_HOVER_LIFT}) scale(${CARD_HOVER_SCALE}) rotateX(2deg)`;
                       const icon = card.querySelector('.project-icon');
@@ -5942,7 +5955,7 @@ const PIDVerificationV2 = () => {
                       style={{
                         position: 'absolute',
                         inset: '-2px',
-                        background: GRADIENT_PRIMARY,
+                        background: PROJECT_ACCENT_GRADIENT,
                         borderRadius: CARD_BORDER_RADIUS,
                         opacity: 0,
                         zIndex: -1,
@@ -5955,7 +5968,7 @@ const PIDVerificationV2 = () => {
                     {/* Top Gradient Accent Bar */}
                     <div style={{
                       height: '6px',
-                      background: GRADIENT_PRIMARY,
+                      background: PROJECT_ACCENT_GRADIENT,
                       borderRadius: `${CARD_BORDER_RADIUS} ${CARD_BORDER_RADIUS} 0 0`,
                       position: 'relative',
                       overflow: 'hidden'
@@ -5987,12 +6000,12 @@ const PIDVerificationV2 = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            background: ICON_BG_PRIMARY,
-                            border: `2px solid rgba(99,102,241,0.2)`,
+                            background: PROJECT_ACCENT_ICON_BG,
+                            border: `2px solid rgba(13,148,136,0.2)`,
                             transition: `all ${CARD_TRANSITION_SPEED} cubic-bezier(0.34, 1.56, 0.64, 1)`,
                             position: 'relative',
                             overflow: 'hidden',
-                            boxShadow: SHADOW_COLORED_PRIMARY
+                            boxShadow: PROJECT_ACCENT_SHADOW
                           }}>
                           {/* Icon Shine Effect */}
                           <div style={{
@@ -6004,7 +6017,7 @@ const PIDVerificationV2 = () => {
                           <Layers style={{ 
                             width: `${CARD_ICON_SIZE * 0.5}px`, 
                             height: `${CARD_ICON_SIZE * 0.5}px`,
-                            color: COLOR_PRIMARY,
+                            color: PROJECT_ACCENT_COLOR,
                             position: 'relative',
                             zIndex: 1
                           }} />
@@ -6020,14 +6033,14 @@ const PIDVerificationV2 = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            background: 'rgba(99,102,241,0.08)',
+                            background: 'rgba(13,148,136,0.08)',
                             transition: `all ${CARD_TRANSITION_SPEED} ease`
                           }}
                         >
                           <ChevronRight style={{
                             width: '18px',
                             height: '18px',
-                            color: COLOR_PRIMARY
+                            color: PROJECT_ACCENT_COLOR
                           }} />
                         </div>
                       </div>
@@ -6160,9 +6173,9 @@ const PIDVerificationV2 = () => {
                             padding: '12px 16px',
                             fontSize: '0.85rem',
                             fontWeight: 600,
-                            color: COLOR_PRIMARY,
-                            background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.06) 100%)',
-                            border: `2px solid rgba(99,102,241,0.2)`,
+                            color: PROJECT_ACCENT_COLOR,
+                            background: 'linear-gradient(135deg, rgba(13,148,136,0.08) 0%, rgba(6,95,70,0.06) 100%)',
+                            border: `2px solid rgba(13,148,136,0.2)`,
                             borderRadius: '12px',
                             cursor: 'pointer',
                             transition: `all ${ANIMATION_MICRO_INTERACTION} ${ANIMATION_PAGE_TRANSITION}`,
@@ -6170,14 +6183,14 @@ const PIDVerificationV2 = () => {
                             overflow: 'hidden'
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.12) 100%)';
-                            e.currentTarget.style.borderColor = COLOR_PRIMARY;
+                            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(6,95,70,0.12) 100%)';
+                            e.currentTarget.style.borderColor = PROJECT_ACCENT_COLOR;
                             e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = SHADOW_COLORED_PRIMARY;
+                            e.currentTarget.style.boxShadow = PROJECT_ACCENT_SHADOW;
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.06) 100%)';
-                            e.currentTarget.style.borderColor = 'rgba(99,102,241,0.2)';
+                            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(13,148,136,0.08) 0%, rgba(6,95,70,0.06) 100%)';
+                            e.currentTarget.style.borderColor = 'rgba(13,148,136,0.2)';
                             e.currentTarget.style.transform = 'translateY(0)';
                             e.currentTarget.style.boxShadow = 'none';
                           }}
@@ -7548,9 +7561,10 @@ const PIDVerificationV2 = () => {
                     </button>
                     {/* ── Export group — visually grouped + status-aware (soft-coded via
                         EXPORT_READY / pendingCount). Each button shows a live badge with
-                        the current total-finding count, and is disabled with an explanatory
-                        tooltip while review overrides are unsaved (the exported files/report
-                        would not yet reflect those pending edits). */}
+                        the current Critical-severity finding count (criticalCount) — the
+                        exports only contain Critical findings — and is disabled with an
+                        explanatory tooltip while review overrides are unsaved (the
+                        exported files/report would not yet reflect those pending edits). */}
                     <div className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-2xl border border-slate-200 bg-slate-50/70">
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex-shrink-0">Export</span>
                       <button onClick={() => navigate(`/engineering/process/pid-verification-v2/report/${documentId}`)}
@@ -7562,8 +7576,8 @@ const PIDVerificationV2 = () => {
                         style={{ background:'linear-gradient(135deg,#4f46e5,#6366f1)', boxShadow:'0 3px 10px rgba(79,70,229,0.25)' }}>
                         <BarChart2 className="w-3.5 h-3.5" />
                         Full Report
-                        {totalIssues > 0 && (
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-indigo-600 border border-indigo-200 shadow-sm">{totalIssues}</span>
+                        {criticalCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-indigo-600 border border-indigo-200 shadow-sm">{criticalCount}</span>
                         )}
                       </button>
                       <button onClick={downloadExcel} disabled={downloadingXlsx || !EXPORT_READY}
@@ -7574,8 +7588,8 @@ const PIDVerificationV2 = () => {
                         style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
                         {downloadingXlsx ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         Excel
-                        {totalIssues > 0 && (
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-emerald-600 border border-emerald-200 shadow-sm">{totalIssues}</span>
+                        {criticalCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-emerald-600 border border-emerald-200 shadow-sm">{criticalCount}</span>
                         )}
                       </button>
                       <button onClick={downloadPDF} disabled={downloadingPdf || !EXPORT_READY}
@@ -7586,8 +7600,8 @@ const PIDVerificationV2 = () => {
                         style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 3px 10px rgba(239,68,68,0.25)' }}>
                         {downloadingPdf ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         PDF
-                        {totalIssues > 0 && (
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-red-600 border border-red-200 shadow-sm">{totalIssues}</span>
+                        {criticalCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-red-600 border border-red-200 shadow-sm">{criticalCount}</span>
                         )}
                       </button>
                     </div>
