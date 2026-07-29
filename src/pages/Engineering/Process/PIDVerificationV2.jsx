@@ -9167,28 +9167,68 @@ const PIDVerificationV2 = () => {
               // ══════════════════════════════════════════════════════════════════════
               if (lineListViewMode === 'simple') {
                 const allDrawingsForLines = results?.drawings ?? [];
-                const criticalReport = allDrawingsForLines.flatMap(d =>
-                  (d.issues ?? [])
-                    .filter(f => isLineFindingShared(f) && (f.severity || '').toLowerCase() === 'critical')
-                    .map(f => ({ ...f, drawing_id: d.drawing_id }))
+
+                // Soft-coded: severity rank used to pick the worst finding per line
+                // and to sort the comparison table (worst-first).
+                const SIMPLE_SEV_RANK = { critical: 3, major: 2, minor: 1, info: 0 };
+
+                // ── Build one comparison row per P&ID line designation ──────────────
+                // This is the actual "P&ID vs Line List" comparison surface: every
+                // pipeline designation read off the drawing (the P&ID side) next to
+                // its QC status (the Line List quality-check side) — laid out as a
+                // single scannable table instead of scattered tabs/cards.
+                const comparisonRows = allDrawingsForLines.flatMap(d => {
+                  const dTags     = d.metadata?.line_tags || [];
+                  const dFindings = (d.issues ?? []).filter(isLineFindingShared);
+                  return dTags.map((lt, idx) => {
+                    const matches = dFindings.filter(f =>
+                      (f.evidence || '').includes(lt.text) || (f.issue_observed || f.issue || '').includes(lt.text)
+                    );
+                    const worst = matches.sort((a, b) =>
+                      (SIMPLE_SEV_RANK[(b.severity||'').toLowerCase()] ?? -1) - (SIMPLE_SEV_RANK[(a.severity||'').toLowerCase()] ?? -1)
+                    )[0];
+                    return {
+                      key: `${d.drawing_id}-${lt.text}-${idx}`,
+                      drawing_id: d.drawing_id,
+                      tag: lt.text || '—',
+                      size: lt.size || '—',
+                      fluid: lt.fluid_code || '—',
+                      severity: (worst?.severity || '').toLowerCase() || null,
+                      issue: worst ? (worst.issue_observed || worst.issue) : null,
+                    };
+                  });
+                });
+
+                // Worst-first sort so critical/major discrepancies surface immediately.
+                const sortedRows = [...comparisonRows].sort((a, b) =>
+                  (SIMPLE_SEV_RANK[b.severity] ?? -1) - (SIMPLE_SEV_RANK[a.severity] ?? -1)
                 );
-                const affectedDrawings = new Set(criticalReport.map(r => r.drawing_id)).size;
-                const totalLineTags = allDrawingsForLines.reduce(
-                  (s, d) => s + (d.metadata?.line_tags?.length ?? 0), 0);
+
+                const criticalCountAll  = comparisonRows.filter(r => r.severity === 'critical').length;
+                const affectedDrawings  = new Set(comparisonRows.filter(r => r.severity === 'critical').map(r => r.drawing_id)).size;
+                const cleanCountAll     = comparisonRows.filter(r => !r.severity).length;
+
+                // Soft-coded row-status styling — single source of truth for colours.
+                const ROW_STATUS_STYLE = {
+                  critical: { bg: '#fef2f2', text: '#991b1b', dot: '#dc2626', label: 'Critical' },
+                  major:    { bg: '#fff7ed', text: '#9a3412', dot: '#f97316', label: 'Major' },
+                  minor:    { bg: '#fefce8', text: '#854d0e', dot: '#eab308', label: 'Minor' },
+                  clean:    { bg: '#f0fdf4', text: '#166534', dot: '#22c55e', label: 'Match' },
+                };
 
                 return (
                   <div>
                     {/* ── Header ── */}
                     <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
-                      style={{ background: 'linear-gradient(to right, rgba(220,38,38,0.05), transparent)' }}>
+                      style={{ background: 'linear-gradient(to right, rgba(13,148,136,0.05), transparent)' }}>
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 4px 12px rgba(220,38,38,0.3)' }}>
+                        style={{ background: 'linear-gradient(135deg,#0d9488,#0891b2)', boxShadow:'0 4px 12px rgba(13,148,136,0.3)' }}>
                         <Ruler className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h2 className="text-sm font-bold text-slate-900">P&amp;ID vs Line List — Critical Findings</h2>
+                        <h2 className="text-sm font-bold text-slate-900">P&amp;ID vs Line List — Comparison</h2>
                         <p className="text-xs text-slate-500">
-                          Consolidated report across {allDrawingsForLines.length} drawing{allDrawingsForLines.length !== 1 ? 's' : ''} · {totalLineTags} line designations compared
+                          {comparisonRows.length} line designation{comparisonRows.length !== 1 ? 's' : ''} compared across {allDrawingsForLines.length} drawing{allDrawingsForLines.length !== 1 ? 's' : ''}
                         </p>
                       </div>
                       <button onClick={() => setLineListViewMode('advanced')}
@@ -9202,9 +9242,9 @@ const PIDVerificationV2 = () => {
                     {/* ── Consolidated stat bar ── */}
                     <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                       {[
-                        { v: criticalReport.length, label: 'Critical Findings', color:'#dc2626', bg:'rgba(220,38,38,0.07)', border:'rgba(220,38,38,0.2)' },
-                        { v: affectedDrawings,       label: 'Drawings Affected', color:'#0d9488', bg:'rgba(13,148,136,0.08)', border:'rgba(13,148,136,0.2)' },
-                        { v: totalLineTags,          label: 'Total Lines Checked', color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)' },
+                        { v: criticalCountAll, label: 'Critical Findings', color:'#dc2626', bg:'rgba(220,38,38,0.07)', border:'rgba(220,38,38,0.2)' },
+                        { v: cleanCountAll,     label: 'Matched / Clean',   color:'#16a34a', bg:'rgba(22,163,74,0.08)',  border:'rgba(22,163,74,0.2)'  },
+                        { v: affectedDrawings,  label: 'Drawings Affected', color:'#0d9488', bg:'rgba(13,148,136,0.08)', border:'rgba(13,148,136,0.2)' },
                       ].map(c => (
                         <div key={c.label} className="rounded-xl p-2.5 text-center"
                           style={{ background: c.bg, border: `1px solid ${c.border}` }}>
@@ -9214,42 +9254,61 @@ const PIDVerificationV2 = () => {
                       ))}
                     </div>
 
-                    {/* ── Consolidated critical findings list ── */}
+                    {/* ── Side-by-side comparison table (P&ID reading ↔ QC status) ── */}
                     <div className="p-5">
-                      {criticalReport.length === 0 ? (
+                      {sortedRows.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 py-14 text-center">
                           <CheckCircle className="w-10 h-10 text-emerald-400" />
-                          <p className="text-sm font-bold text-slate-700">No critical Line List findings</p>
+                          <p className="text-sm font-bold text-slate-700">No line designations to compare</p>
                           <p className="text-xs text-slate-400 max-w-sm">
-                            Every pipeline designation across all {allDrawingsForLines.length} drawing{allDrawingsForLines.length !== 1 ? 's' : ''} matched the Line List with no critical discrepancies.
+                            No pipeline designations were extracted from the P&amp;ID for this document yet.
                           </p>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-2.5">
-                          {criticalReport.map((f, i) => (
-                            <div key={i} className="rounded-xl border p-3.5 flex items-start gap-3"
-                              style={{ background:'#fef2f2', borderColor:'#fca5a5' }}>
-                              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-600 text-white">CRITICAL</span>
-                                  <span className="text-[10px] font-mono text-slate-500">{f.rule_id}</span>
-                                  <span className="text-[10px] font-mono text-slate-400">· {getDrawingLabel(f.drawing_id)}</span>
-                                </div>
-                                <p className="text-sm text-slate-800 font-medium">{f.issue_observed || f.issue}</p>
-                                {f.action_required && (
-                                  <p className="text-xs text-slate-500 mt-1"><strong>Action:</strong> {f.action_required}</p>
-                                )}
-                              </div>
-                              {f.drawing_id !== activeDrawing && (
-                                <button onClick={() => setActiveDrawing(f.drawing_id)}
-                                  title="Open this drawing"
-                                  className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors">
-                                  View
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-500 text-left">
+                                <th className="px-3 py-2 font-bold">Drawing</th>
+                                <th className="px-3 py-2 font-bold">Line Designation (P&amp;ID)</th>
+                                <th className="px-3 py-2 font-bold">Size</th>
+                                <th className="px-3 py-2 font-bold">Fluid</th>
+                                <th className="px-3 py-2 font-bold">Status</th>
+                                <th className="px-3 py-2 font-bold">Issue</th>
+                                <th className="px-3 py-2 font-bold text-right">&nbsp;</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {sortedRows.map(r => {
+                                const st = ROW_STATUS_STYLE[r.severity || 'clean'];
+                                return (
+                                  <tr key={r.key} style={{ background: r.severity === 'critical' ? st.bg : undefined }}>
+                                    <td className="px-3 py-2 text-slate-500 font-mono whitespace-nowrap">{getDrawingLabel(r.drawing_id)}</td>
+                                    <td className="px-3 py-2 font-mono font-semibold text-slate-800 whitespace-nowrap">{r.tag}</td>
+                                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.size}</td>
+                                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.fluid}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold"
+                                        style={{ background: st.bg, color: st.text }}>
+                                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
+                                        {st.label}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-600 max-w-xs truncate" title={r.issue || ''}>{r.issue || '—'}</td>
+                                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                                      {r.drawing_id !== activeDrawing && (
+                                        <button onClick={() => setActiveDrawing(r.drawing_id)}
+                                          title="Open this drawing"
+                                          className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors">
+                                          View
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
