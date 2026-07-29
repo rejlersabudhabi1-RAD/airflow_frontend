@@ -441,6 +441,11 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
   const [modalState, setModalState] = useState({ isOpen: false, mode: null, item: null, actionId: null })
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState(null) // { type: 'success' | 'error', message }
+  // SOFT-CODED FIX: errors used to only show as a corner toast, which renders
+  // *behind* the full-screen modal overlay (toast z-40 vs modal z-50) — so a
+  // failed approve/reject looked like the button "did nothing". Surface the
+  // error inline inside the still-open modal as well.
+  const [modalError, setModalError] = useState('')
 
   const activeConfig = approvalTypes.find(t => t.key === activeTab)
 
@@ -523,6 +528,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
 
     // 'view', 'approve', 'reject', 'comment' all open the same detailed modal,
     // just in a different mode driven by the soft-coded APPROVAL_ACTIONS config.
+    setModalError('')
     setModalState({
       isOpen: true,
       mode: actionId === 'view' ? 'view' : 'action',
@@ -533,6 +539,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
 
   const closeModal = () => {
     if (submitting) return
+    setModalError('')
     setModalState({ isOpen: false, mode: null, item: null, actionId: null })
   }
 
@@ -542,6 +549,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
     if (!item || !actionId) return
 
     setSubmitting(true)
+    setModalError('')
     try {
       // Determine the correct endpoint based on approval type and status
       let endpoint = ''
@@ -617,6 +625,9 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
       setTimeout(() => fetchApprovals(), 1000)
     } catch (error) {
       console.error(`❌ Error ${actionId}:`, error)
+      // Keep the modal open and show the error where the user is already
+      // looking (the toast alone is hidden behind the modal's overlay).
+      setModalError(error.message || `Failed to ${actionId}.`)
       setToast({ type: 'error', message: `Failed to ${actionId}: ${error.message}` })
     } finally {
       setSubmitting(false)
@@ -628,7 +639,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
       {/* Toast notification (replaces window.alert) */}
       {toast && (
         <div
-          className={`absolute top-4 right-4 z-40 max-w-sm rounded-xl shadow-lg border px-4 py-3 flex items-start gap-2 text-sm font-medium ${
+          className={`absolute top-4 right-4 z-[60] max-w-sm rounded-xl shadow-lg border px-4 py-3 flex items-start gap-2 text-sm font-medium ${
             toast.type === 'success'
               ? 'bg-green-50 border-green-200 text-green-800'
               : toast.type === 'error'
@@ -696,6 +707,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
         actionId={modalState.actionId}
         config={activeConfig}
         submitting={submitting}
+        error={modalError}
         onClose={closeModal}
         onConfirm={executeAction}
       />
@@ -710,7 +722,7 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
  * Payroll Approval, Procurement Requests, Invoice Approval, etc.) with
  * type-aware formatting (currency, date, badge, progress, number, text).
  */
-const ApprovalActionModal = ({ isOpen, mode, item, actionId, config, submitting, onClose, onConfirm }) => {
+const ApprovalActionModal = ({ isOpen, mode, item, actionId, config, submitting, error, onClose, onConfirm }) => {
   const [comment, setComment] = useState('')
   const [commentError, setCommentError] = useState('')
 
@@ -836,6 +848,15 @@ const ApprovalActionModal = ({ isOpen, mode, item, actionId, config, submitting,
               <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
                 {String(item[config.statusField]).replace(/_/g, ' ')}
               </span>
+            </div>
+          )}
+
+          {/* Inline error banner — stays visible while the modal is open, unlike
+              the corner toast which renders behind this modal's overlay. */}
+          {!!error && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+              <ExclamationTriangleIcon className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-red-800">{error}</p>
             </div>
           )}
 
