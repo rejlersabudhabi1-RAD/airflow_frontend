@@ -3055,6 +3055,10 @@ const PIDVerificationV2 = () => {
   const totalIssues   = results?.total_issues ?? allIssues.length;
   const criticalCount = allIssues.filter(f => getVal(f, 'severity') === 'critical').length;
   const majorCount    = allIssues.filter(f => getVal(f, 'severity') === 'major').length;
+  // Soft-coded: exports (Full Report / Excel / PDF) are only "ready" once any
+  // review overrides have been saved — otherwise the generated file/report
+  // would silently miss the reviewer's latest, unsaved decisions.
+  const EXPORT_READY = pendingCount === 0;
 
   // Soft-coded overlay helpers (frontend only): infer confidence and pseudo-position from evidence.
   const bandRank = { low: 1, medium: 2, high: 3 };
@@ -7542,25 +7546,51 @@ const PIDVerificationV2 = () => {
                         : <><RefreshCw className="w-3.5 h-3.5" /> Re-check</>
                       }
                     </button>
-                    <button onClick={() => navigate(`/engineering/process/pid-verification-v2/report/${documentId}`)}
-                      title="Open the 5-tab comparison report (General / Legend / Line List / Equipment / Instrument)"
-                      className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px"
-                      style={{ background:'linear-gradient(135deg,#4f46e5,#6366f1)', boxShadow:'0 3px 10px rgba(79,70,229,0.25)' }}>
-                      <BarChart2 className="w-3.5 h-3.5" />
-                      Full Report
-                    </button>
-                    <button onClick={downloadExcel} disabled={downloadingXlsx}
-                      className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
-                      style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
-                      {downloadingXlsx ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      Excel
-                    </button>
-                    <button onClick={downloadPDF} disabled={downloadingPdf}
-                      className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-60"
-                      style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 3px 10px rgba(239,68,68,0.25)' }}>
-                      {downloadingPdf ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      PDF
-                    </button>
+                    {/* ── Export group — visually grouped + status-aware (soft-coded via
+                        EXPORT_READY / pendingCount). Each button shows a live badge with
+                        the current total-finding count, and is disabled with an explanatory
+                        tooltip while review overrides are unsaved (the exported files/report
+                        would not yet reflect those pending edits). */}
+                    <div className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-2xl border border-slate-200 bg-slate-50/70">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex-shrink-0">Export</span>
+                      <button onClick={() => navigate(`/engineering/process/pid-verification-v2/report/${documentId}`)}
+                        disabled={!EXPORT_READY}
+                        title={!EXPORT_READY
+                          ? `Save your ${pendingCount} pending review change${pendingCount !== 1 ? 's' : ''} first so the report reflects your latest decisions`
+                          : 'Open the 5-tab comparison report (General / Legend / Line List / Equipment / Instrument)'}
+                        className="relative flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+                        style={{ background:'linear-gradient(135deg,#4f46e5,#6366f1)', boxShadow:'0 3px 10px rgba(79,70,229,0.25)' }}>
+                        <BarChart2 className="w-3.5 h-3.5" />
+                        Full Report
+                        {totalIssues > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-indigo-600 border border-indigo-200 shadow-sm">{totalIssues}</span>
+                        )}
+                      </button>
+                      <button onClick={downloadExcel} disabled={downloadingXlsx || !EXPORT_READY}
+                        title={!EXPORT_READY
+                          ? `Save your ${pendingCount} pending review change${pendingCount !== 1 ? 's' : ''} first so the export reflects your latest decisions`
+                          : 'Download findings as an Excel workbook'}
+                        className="relative flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+                        style={{ background:'linear-gradient(135deg,#059669,#10b981)', boxShadow:'0 3px 10px rgba(16,185,129,0.25)' }}>
+                        {downloadingXlsx ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        Excel
+                        {totalIssues > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-emerald-600 border border-emerald-200 shadow-sm">{totalIssues}</span>
+                        )}
+                      </button>
+                      <button onClick={downloadPDF} disabled={downloadingPdf || !EXPORT_READY}
+                        title={!EXPORT_READY
+                          ? `Save your ${pendingCount} pending review change${pendingCount !== 1 ? 's' : ''} first so the export reflects your latest decisions`
+                          : 'Download the annotated PDF report'}
+                        className="relative flex items-center gap-1.5 text-xs font-bold text-white px-3 py-2 rounded-xl transition-all hover:-translate-y-px disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+                        style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 3px 10px rgba(239,68,68,0.25)' }}>
+                        {downloadingPdf ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        PDF
+                        {totalIssues > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-black rounded-full bg-white text-red-600 border border-red-200 shadow-sm">{totalIssues}</span>
+                        )}
+                      </button>
+                    </div>
                     <button onClick={() => { resetUpload(); setResults(null); }}
                       className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
                       <RefreshCw className="w-3.5 h-3.5" />New
