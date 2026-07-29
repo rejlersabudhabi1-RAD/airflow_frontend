@@ -7464,11 +7464,10 @@ const PIDVerificationV2 = () => {
                     <Activity className="w-4 h-4 text-green-700" />
                     <h4 className="text-xs font-bold text-green-900 uppercase tracking-wider">Quick Stats</h4>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {[
                       { label: 'Total', value: totalIssues, color: '#10b981' },
                       { label: 'Critical', value: criticalCount, color: '#ef4444' },
-                      { label: 'Major', value: majorCount, color: '#f59e0b' },
                       { label: 'Minor', value: totalIssues - criticalCount - majorCount, color: '#3b82f6' },
                     ].map(stat => (
                       <div key={stat.label} className="text-center p-2 rounded-lg"
@@ -7514,9 +7513,7 @@ const PIDVerificationV2 = () => {
                   {/* Stat chips */}
                   {[
                     { v: results.drawings?.length ?? 0, label:'Drawings', color:'text-blue-600', bg:'rgba(59,130,246,0.08)', border:'rgba(59,130,246,0.18)' },
-                    { v: totalIssues, label:'Issues', color: totalIssues > 0 ? 'text-red-600' : 'text-green-600', bg: totalIssues > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)', border: totalIssues > 0 ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)' },
                     { v: criticalCount, label:'Critical', color:'text-red-700', bg:'rgba(239,68,68,0.08)', border:'rgba(239,68,68,0.15)' },
-                    { v: majorCount, label:'Major', color:'text-orange-600', bg:'rgba(234,88,12,0.08)', border:'rgba(234,88,12,0.15)' },
                     { v: (results.drawings ?? []).reduce((s,d) => s + (d.overrides_applied ?? 0), 0), label:'Overridden', color:'text-slate-600', bg:'rgba(100,116,139,0.08)', border:'rgba(100,116,139,0.15)' },
                   ].map(chip => (
                     <div key={chip.label} className="rounded-xl px-3 py-2 text-center flex-shrink-0"
@@ -7787,7 +7784,7 @@ const PIDVerificationV2 = () => {
                     {/* Drawing id */}
                     <span className="text-xs font-bold text-white/80 truncate flex-1 min-w-0" title={activeDrawing}>{getDrawingLabel(activeDrawing)}</span>
                     {/* Severity micro-chips */}
-                    {[{v:criticalCount,c:'#ef4444',l:'C'},{v:majorCount,c:'#f97316',l:'M'},{v:_minor,c:'#fbbf24',l:'m'}]
+                    {[{v:criticalCount,c:'#ef4444',l:'C'},{v:_minor,c:'#fbbf24',l:'m'}]
                       .filter(x => x.v > 0)
                       .map(x => (
                         <span key={x.l} className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0"
@@ -7890,7 +7887,6 @@ const PIDVerificationV2 = () => {
                         {totalIssues > 0 ? (
                           <div className="mt-2.5 flex gap-0.5 rounded-full overflow-hidden h-2" style={{ background:'rgba(255,255,255,0.08)' }}>
                             {criticalCount>0&&<div title={`${criticalCount} Critical`} style={{ flex:criticalCount, background:'#ef4444', borderRadius:'99px 0 0 99px' }}/>}
-                            {majorCount>0  &&<div title={`${majorCount} Major`}    style={{ flex:majorCount,    background:'#f97316' }}/>}
                             {_minor>0      &&<div title={`${_minor} Minor`}        style={{ flex:_minor,        background:'#fbbf24' }}/>}
                             {_overCnt>0    &&<div title={`${_overCnt} Overridden`} style={{ flex:_overCnt,      background:'rgba(148,163,184,0.6)', borderRadius:'0 99px 99px 0' }}/>}
                           </div>
@@ -7900,7 +7896,6 @@ const PIDVerificationV2 = () => {
                         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
                           {[
                             { v:criticalCount, label:'Critical', color:'#ef4444' },
-                            { v:majorCount,    label:'Major',    color:'#f97316' },
                             { v:_minor,        label:'Minor',    color:'#fbbf24' },
                             { v:_overCnt,      label:'Overridden',color:'rgba(148,163,184,0.7)' },
                           ].map(c=>(
@@ -9358,12 +9353,11 @@ const PIDVerificationV2 = () => {
                   </div>
 
                   {/* ══ QC summary stat bar ══ */}
-                  <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                     {[
                       { v: lineTags.length,  label: 'Total Lines',  color:'#0d9488', bg:'rgba(13,148,136,0.08)',  border:'rgba(13,148,136,0.2)' },
                       { v: cleanCount,        label: 'Clean',        color:'#16a34a', bg:'rgba(22,163,74,0.08)',   border:'rgba(22,163,74,0.2)'  },
                       { v: criticalLF,        label: 'Critical',     color:'#dc2626', bg:'rgba(220,38,38,0.07)',   border:'rgba(220,38,38,0.2)'  },
-                      { v: majorLF,           label: 'Major',        color:'#ea580c', bg:'rgba(234,88,12,0.07)',   border:'rgba(234,88,12,0.2)'  },
                       { v: dupCount,          label: 'Duplicates',   color:'#0284c7', bg:'rgba(2,132,199,0.07)',   border:'rgba(2,132,199,0.2)'  },
                     ].map(c => (
                       <div key={c.label} className="rounded-xl p-2.5 text-center relative overflow-hidden"
@@ -9806,7 +9800,7 @@ const PIDVerificationV2 = () => {
                             {majorLF   > 0 && ` ${majorLF} major finding${majorLF!==1?'s':''} need review before issue.`}
                           </p>
                           <div className="flex gap-3 mt-2">
-                            {[['Clean', cleanCount, '#22c55e'],['Critical',criticalLF,'#dc2626'],['Major',majorLF,'#ea580c'],['Minor',minorLF,'#f59e0b']].map(([l,v,c])=>(
+                            {[['Clean', cleanCount, '#22c55e'],['Critical',criticalLF,'#dc2626'],['Minor',minorLF,'#f59e0b']].map(([l,v,c])=>(
                               <div key={l} className="text-center">
                                 <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
                                 <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
@@ -10446,11 +10440,10 @@ const PIDVerificationV2 = () => {
                   ) : (
                     <div>
                       {/* ── Stats bar ── */}
-                      <div className="grid grid-cols-5 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                      <div className="grid grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                         {[
                           { v: namingResults.total,         label:'Total',       color:'text-violet-600',  bg:'rgba(124,58,237,0.07)', border:'rgba(124,58,237,0.18)' },
                           { v: critN,                       label:'Critical',     color:'text-red-600',     bg:'rgba(239,68,68,0.07)',  border:'rgba(239,68,68,0.18)'  },
-                          { v: majN,                        label:'Major',        color:'text-orange-600',  bg:'rgba(234,88,12,0.07)',  border:'rgba(234,88,12,0.18)'  },
                           { v: minN,                        label:'Minor',        color:'text-yellow-700',  bg:'rgba(202,138,4,0.07)',  border:'rgba(202,138,4,0.18)'  },
                           { v: aiN,                         label:'AI-flagged',   color:'text-purple-600',  bg:'rgba(147,51,234,0.07)', border:'rgba(147,51,234,0.18)' },
                         ].map(c => (
@@ -11523,7 +11516,7 @@ const PIDVerificationV2 = () => {
                               {majIssues  > 0 && ` ${majIssues} major item${majIssues!==1?'s':''} need review.`}
                             </p>
                             <div className="flex gap-3 mt-2">
-                              {[['Clean',cleanCount,'#22c55e'],['Critical',critIssues,'#dc2626'],['Major',majIssues,'#ea580c'],['Issues',issueCount,'#f97316']].map(([l,v,c])=>(
+                              {[['Clean',cleanCount,'#22c55e'],['Critical',critIssues,'#dc2626']].map(([l,v,c])=>(
                                 <div key={l} className="text-center">
                                   <p className="text-sm font-black leading-none" style={{color:c}}>{v}</p>
                                   <p className="text-[9px] text-slate-400 mt-0.5">{l}</p>
@@ -12501,7 +12494,7 @@ const PIDVerificationV2 = () => {
                         <p className="text-xs font-bold text-slate-600 mb-3 flex items-center gap-1.5">
                           <span className="text-base">🔍</span> Failed / Review by Severity
                         </p>
-                        {['critical','major','minor','info'].map(sev => {
+                        {['critical','minor','info'].map(sev => {
                           const sevChecks = INSTR_CHECKS.filter(c => c.severity === sev);
                           const sevIssues = sevChecks.filter(c => ['fail','warn'].includes(effectiveStatus(c))).length;
                           if (sevIssues === 0 && sevChecks.length === 0) return null;
@@ -12971,7 +12964,7 @@ const PIDVerificationV2 = () => {
                                   style={{ background:'rgba(59,130,246,0.12)', border:'2px solid #1d4ed8', color:'#3b82f6' }}>FT</span>
                                 ISA bubble (OK)
                               </span>
-                              {[['critical','#dc2626'],['major','#f97316'],['minor','#d97706']].map(([sev,c]) => (
+                              {[['critical','#dc2626'],['minor','#d97706']].map(([sev,c]) => (
                                 <span key={sev} className="flex items-center gap-1 capitalize">
                                   <span className="inline-flex w-4 h-4 rounded-full items-center justify-center flex-shrink-0"
                                     style={{ background:`${c}15`, border:`2px solid ${c}` }}>
@@ -16344,7 +16337,6 @@ const PIDVerificationV2 = () => {
                         {/* Legend */}
                         <div className="flex items-center gap-x-4 flex-wrap px-5 pb-2 text-[9px] text-slate-500">
                           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-red-600" />Critical</span>
-                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-orange-500" />Major</span>
                           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 bg-yellow-400" />Minor</span>
                           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0 border-2 border-slate-300" style={{ background:'transparent' }} />Estimated</span>
                           <span className="ml-auto font-medium" style={{ color:'#6366f1' }}>Solid = OCR-located · Dashed = estimated position · Click to inspect</span>
