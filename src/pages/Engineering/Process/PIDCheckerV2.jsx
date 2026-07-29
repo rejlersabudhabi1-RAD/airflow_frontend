@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
-import { Upload, FileText, Loader2, Download, RefreshCw, AlertCircle, CheckCircle2, Sparkles, Key, Eye, EyeOff, History, Trash2, Save, BookOpen } from 'lucide-react'
+import { RefreshCw, BookOpen } from 'lucide-react'
 
 import {
   extractLineTags, listExtractions, getExtraction, deleteExtraction,
-  listLegends,
+  listLegends, listLineLists, listEquipmentLists, listInstrumentIndexes,
   MODE_OCR, MODE_VISION, VISION_PROVIDERS,
 } from '../../../services/pidCheckerV2API'
 import LegendSheetsModal from './components/LegendSheetsModal'
-import LegendValidationPanel from './components/LegendValidationPanel'
+import InputsPanel from './components/InputsPanel'
+import ResultsTabs from './components/ResultsTabs'
 
 // ═════════════════════════════════════════════════════════════════════
 // P&ID Checker V2 — Line-List Extractor
@@ -26,6 +27,13 @@ const THEME_MUTED = '#64748b'
 const THEME_BORDER = '#e2e8f0'
 const THEME_BG_SOFT = '#f8fafc'
 const THEME_GRADIENT = `linear-gradient(135deg, ${THEME_PRIMARY} 0%, ${THEME_ACCENT} 100%)`
+
+// Two-column workspace geometry (soft-coded)
+const PAGE_MAX_WIDTH = 1440
+const LEFT_COL_WIDTH = 460
+const LAYOUT_BREAKPOINT_PX = 960
+// Offset for the app's fixed top navigation so the page header doesn't overlap it
+const TOP_NAV_OFFSET_PX = 64
 
 const CSV_HEADER = ['tag', 'size', 'service', 'spec', 'serial', 'service_group']
 
@@ -79,7 +87,6 @@ export default function PIDCheckerV2() {
   // ── History (auto-saved extractions) ──────────────────────────────
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(true)
 
   // ── Legend Sheets ─────────────────────────────────────────────────
   const LEGEND_SECTION = 'line_list'
@@ -87,6 +94,42 @@ export default function PIDCheckerV2() {
   const [activeLegend, setActiveLegend] = useState(null)
   const [effectiveLegend, setEffectiveLegend] = useState(null) // active OR most-recent
 
+  // ── Master Line List (Excel) ──────────────────────────────────────
+  const [activeLineList, setActiveLineList] = useState(null)
+
+  const refreshLineList = useCallback(async () => {
+    try {
+      const rows = await listLineLists()
+      const list = Array.isArray(rows) ? rows : (rows?.results || [])
+      setActiveLineList(list.find(r => r.is_active) || null)
+    } catch (err) {
+      console.warn('[PIDCheckerV2] line list fetch failed', err)
+    }
+  }, [])
+  // ── Master Equipment List (Excel) ─────────────────────────
+  const [activeEquipmentList, setActiveEquipmentList] = useState(null)
+
+  const refreshEquipmentList = useCallback(async () => {
+    try {
+      const rows = await listEquipmentLists()
+      const list = Array.isArray(rows) ? rows : (rows?.results || [])
+      setActiveEquipmentList(list.find(r => r.is_active) || null)
+    } catch (err) {
+      console.warn('[PIDCheckerV2] equipment list fetch failed', err)
+    }
+  }, [])
+  // ── Master Instrument Index (Excel) ─────────────────
+  const [activeInstrumentIndex, setActiveInstrumentIndex] = useState(null)
+
+  const refreshInstrumentIndex = useCallback(async () => {
+    try {
+      const rows = await listInstrumentIndexes()
+      const list = Array.isArray(rows) ? rows : (rows?.results || [])
+      setActiveInstrumentIndex(list.find(r => r.is_active) || null)
+    } catch (err) {
+      console.warn('[PIDCheckerV2] instrument index fetch failed', err)
+    }
+  }, [])
   const refreshActiveLegend = useCallback(async () => {
     try {
       const rows = await listLegends(LEGEND_SECTION)
@@ -105,6 +148,9 @@ export default function PIDCheckerV2() {
   }, [])
 
   useEffect(() => { refreshActiveLegend() }, [refreshActiveLegend])
+  useEffect(() => { refreshLineList() }, [refreshLineList])
+  useEffect(() => { refreshEquipmentList() }, [refreshEquipmentList])
+  useEffect(() => { refreshInstrumentIndex() }, [refreshInstrumentIndex])
 
   const refreshHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -246,493 +292,171 @@ export default function PIDCheckerV2() {
   }, [result])
 
   return (
-    <div style={{ minHeight: '100vh', background: THEME_BG_SOFT, padding: 32 }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* ── Header ────────────────────────────────────────────────── */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: THEME_TEXT }}>
-                {PAGE_TITLE}
-              </h1>
-              <p style={{ margin: '4px 0 0', color: THEME_MUTED, fontSize: 14 }}>
-                {PAGE_SUBTITLE}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setLegendModalOpen(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 16px', borderRadius: 10, border: 'none',
-                background: THEME_GRADIENT, color: '#fff', fontWeight: 600, fontSize: 13,
-                cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.30)',
-              }}
-            >
-              <BookOpen size={16} /> Legend Sheets
-            </button>
+    <div style={{
+      height: `calc(100vh - ${TOP_NAV_OFFSET_PX}px)`,
+      marginTop: TOP_NAV_OFFSET_PX,
+      overflow: 'hidden',
+      background: THEME_BG_SOFT,
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* ── Compact header (fixed) ──────────────────────────────── */}
+      <div style={{
+        flex: '0 0 auto',
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '10px 20px',
+        background: '#fff', borderBottom: `1px solid ${THEME_BORDER}`,
+      }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 8,
+          background: THEME_GRADIENT, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 10px rgba(124,58,237,0.25)',
+        }}>
+          <BookOpen size={16} color="#fff" />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: THEME_TEXT, lineHeight: 1.15 }}>
+            {PAGE_TITLE}
           </div>
+          <div style={{ fontSize: 11, color: THEME_MUTED, lineHeight: 1.2 }}>
+            {PAGE_SUBTITLE}
+          </div>
+        </div>
 
-          {/* Active-legend banner */}
-          <div style={{
-            marginTop: 12, display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 12px', borderRadius: 8,
+        {/* Legend status pill */}
+        <button
+          type="button" onClick={() => setLegendModalOpen(true)}
+          title="Manage Legend Sheets"
+          style={{
+            marginLeft: 'auto',
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 10px', borderRadius: 999,
             border: `1px solid ${activeLegend ? '#a7f3d0' : (effectiveLegend ? '#fcd34d' : THEME_BORDER)}`,
             background: activeLegend ? '#ecfdf5' : (effectiveLegend ? '#fffbeb' : '#fff'),
-            fontSize: 12,
+            fontSize: 11, color: THEME_TEXT, cursor: 'pointer',
+          }}
+        >
+          <BookOpen size={12} color={activeLegend ? '#047857' : (effectiveLegend ? '#b45309' : THEME_MUTED)} />
+          <span style={{ color: THEME_MUTED }}>Legend:</span>
+          <b style={{
+            color: activeLegend ? '#047857' : (effectiveLegend ? '#b45309' : THEME_MUTED),
+            maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            <BookOpen size={13} color={activeLegend ? '#047857' : (effectiveLegend ? '#b45309' : THEME_MUTED)} />
-            {activeLegend ? (
-              <>
-                <span style={{ color: '#047857', fontWeight: 600 }}>Active legend:</span>
-                <span style={{ color: THEME_TEXT }}>{activeLegend.name}</span>
-              </>
-            ) : effectiveLegend ? (
-              <>
-                <span style={{ color: '#b45309', fontWeight: 600 }}>Using (not activated):</span>
-                <span style={{ color: THEME_TEXT }}>{effectiveLegend.name}</span>
-                <span style={{ color: THEME_MUTED }}>— open Legend Sheets to activate it.</span>
-              </>
-            ) : (
-              <>
-                <span style={{ color: THEME_MUTED }}>
-                  No legend defined — the built-in default pattern will be used.
-                </span>
-              </>
-            )}
-            <button
-              onClick={() => setLegendModalOpen(true)}
-              style={{
-                marginLeft: 'auto', padding: '4px 10px', borderRadius: 6,
-                border: `1px solid ${THEME_BORDER}`, background: '#fff',
-                color: THEME_TEXT, fontSize: 11, cursor: 'pointer',
-              }}
-            >
-              Manage
-            </button>
-          </div>
+            {activeLegend?.name || effectiveLegend?.name || 'built-in default'}
+          </b>
+        </button>
 
-          <div style={{ height: 3, marginTop: 12, borderRadius: 3, background: THEME_GRADIENT }} />
-        </div>
+        <button
+          type="button"
+          onClick={() => setLegendModalOpen(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', borderRadius: 8, border: 'none',
+            background: THEME_GRADIENT, color: '#fff', fontWeight: 600, fontSize: 12,
+            cursor: 'pointer', boxShadow: '0 4px 10px rgba(124,58,237,0.25)',
+          }}
+        >
+          <BookOpen size={14} /> Legend Sheets
+        </button>
+      </div>
 
-        {/* ── Upload card ───────────────────────────────────────────── */}
-        <div style={{
-          background: '#fff', border: `1px solid ${THEME_BORDER}`, borderRadius: 12,
-          padding: 20, marginBottom: 20,
+      {/* ── Two-column workspace (fills remaining viewport) ─────── */}
+      <div className="pidcv2-workspace" style={{
+        flex: '1 1 auto', minHeight: 0,
+        display: 'grid',
+        gridTemplateColumns: `${LEFT_COL_WIDTH}px 1fr`,
+        gap: 16, padding: 16,
+        overflow: 'hidden',
+      }}>
+        {/* ── Left column: inputs (scrolls internally if needed) ── */}
+        <div className="pidcv2-left" style={{
+          minHeight: 0, overflow: 'auto', paddingRight: 4,
         }}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 16px', borderRadius: 8, border: `1px solid ${THEME_BORDER}`,
-                background: '#fff', cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: 14, fontWeight: 500, color: THEME_TEXT,
-              }}
-            >
-              <Upload size={16} /> {file ? 'Change file' : 'Choose PDF'}
-            </button>
-            <input
-              ref={fileInputRef} type="file" accept={ACCEPTED_EXTENSIONS}
-              onChange={onPickFile} style={{ display: 'none' }}
-            />
-
-            {file && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: THEME_TEXT, fontSize: 14 }}>
-                <FileText size={16} color={THEME_PRIMARY} />
-                <span style={{ fontWeight: 500 }}>{file.name}</span>
-                <span style={{ color: THEME_MUTED }}>
-                  ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* ── Mode selector ─────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            {[
-              { id: MODE_OCR,    label: 'OCR (offline)',        icon: <FileText size={14} /> },
-              { id: MODE_VISION, label: 'AI Vision (BYOK)',     icon: <Sparkles size={14} /> },
-            ].map((m) => {
-              const active = mode === m.id
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMode(m.id)}
-                  disabled={loading}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 14px', borderRadius: 8,
-                    border: `1px solid ${active ? THEME_PRIMARY : THEME_BORDER}`,
-                    background: active ? THEME_PRIMARY : '#fff',
-                    color: active ? '#fff' : THEME_TEXT,
-                    fontSize: 13, fontWeight: 500,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {m.icon} {m.label}
-                </button>
-              )
-            })}
-            {mode === MODE_OCR && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: THEME_MUTED, marginLeft: 'auto' }}>
-                <input
-                  type="checkbox" checked={forceOcr}
-                  onChange={(e) => setForceOcr(e.target.checked)}
-                  disabled={loading}
-                />
-                Force OCR (skip embedded-text fast path)
-              </label>
-            )}
-          </div>
-
-          {/* ── BYOK Vision panel ────────────────────────────────── */}
-          {mode === MODE_VISION && (
-            <div style={{
-              marginTop: 16, padding: 16, borderRadius: 10,
-              border: `1px dashed ${THEME_PRIMARY}`, background: '#faf5ff',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <Sparkles size={16} color={THEME_PRIMARY} />
-                <span style={{ fontWeight: 600, color: THEME_TEXT, fontSize: 14 }}>
-                  Bring Your Own Key — AI Vision Extraction
-                </span>
-                <span style={{
-                  marginLeft: 'auto', fontSize: 11, color: THEME_MUTED,
-                  padding: '2px 8px', borderRadius: 999, background: '#fff',
-                  border: `1px solid ${THEME_BORDER}`,
-                }}>
-                  Key is used per-request only — never stored server-side
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr auto', gap: 10, alignItems: 'center' }}>
-                <select
-                  value={visionProvider}
-                  onChange={(e) => setVisionProvider(e.target.value)}
-                  disabled={loading}
-                  style={{
-                    padding: '9px 10px', borderRadius: 8, fontSize: 13,
-                    border: `1px solid ${THEME_BORDER}`, background: '#fff', color: THEME_TEXT,
-                  }}
-                >
-                  {VISION_PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-
-                <div style={{ position: 'relative' }}>
-                  <Key size={14} style={{
-                    position: 'absolute', top: '50%', left: 10, transform: 'translateY(-50%)',
-                    color: THEME_MUTED,
-                  }} />
-                  <input
-                    type={showKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`${VISION_PROVIDERS.find(p => p.id === visionProvider)?.keyPrefix || ''}...`}
-                    disabled={loading}
-                    autoComplete="off"
-                    style={{
-                      width: '100%', padding: '9px 40px 9px 32px',
-                      borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
-                      border: `1px solid ${THEME_BORDER}`, color: THEME_TEXT,
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                    }}
-                  />
-                  <button
-                    type="button" onClick={() => setShowKey(v => !v)}
-                    style={{
-                      position: 'absolute', top: '50%', right: 8, transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer', color: THEME_MUTED,
-                      display: 'flex', alignItems: 'center', padding: 4,
-                    }}
-                    aria-label={showKey ? 'Hide key' : 'Show key'}
-                  >
-                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: THEME_MUTED, whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox" checked={rememberKey}
-                    onChange={(e) => setRememberKey(e.target.checked)}
-                    disabled={loading}
-                  />
-                  Remember for this session
-                </label>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-            <button
-              type="button" onClick={onExtract} disabled={!file || loading}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 20px', borderRadius: 8, border: 'none',
-                background: (!file || loading) ? '#cbd5e1' : THEME_GRADIENT,
-                color: '#fff', fontWeight: 600, fontSize: 14,
-                cursor: (!file || loading) ? 'not-allowed' : 'pointer',
-                boxShadow: (!file || loading) ? 'none' : `0 4px 12px rgba(124,58,237,0.35)`,
-              }}
-            >
-              {loading
-                ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Extracting…</>
-                : <>Extract Line Tags</>}
-            </button>
-            {(file || result) && !loading && (
-              <button
-                type="button" onClick={onReset}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '10px 16px', borderRadius: 8, border: `1px solid ${THEME_BORDER}`,
-                  background: '#fff', color: THEME_TEXT, cursor: 'pointer', fontSize: 14,
-                }}
-              >
-                <RefreshCw size={14} /> Reset
-              </button>
-            )}
-          </div>
-
-          {loading && uploadPct > 0 && uploadPct < 100 && (
-            <div style={{ marginTop: 12, height: 6, background: THEME_BORDER, borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${uploadPct}%`, background: THEME_GRADIENT }} />
-            </div>
-          )}
+          <InputsPanel
+            fileInputRef={fileInputRef}
+            file={file}
+            onPickFile={onPickFile}
+            activeLineList={activeLineList}
+            onLineListUploaded={refreshLineList}
+            activeEquipmentList={activeEquipmentList}
+            onEquipmentListUploaded={refreshEquipmentList}
+            activeInstrumentIndex={activeInstrumentIndex}
+            onInstrumentIndexUploaded={refreshInstrumentIndex}
+            mode={mode}
+            setMode={setMode}
+            forceOcr={forceOcr}
+            setForceOcr={setForceOcr}
+            visionProvider={visionProvider}
+            setVisionProvider={setVisionProvider}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            showKey={showKey}
+            setShowKey={setShowKey}
+            rememberKey={rememberKey}
+            setRememberKey={setRememberKey}
+            onSubmit={onExtract}
+            loading={loading}
+            uploadPct={uploadPct}
+            activeLegend={activeLegend}
+            effectiveLegend={effectiveLegend}
+          />
           {loading && uploadPct >= 100 && (
-            <p style={{ marginTop: 12, color: THEME_MUTED, fontSize: 13 }}>
-              Upload complete — server is running {mode === MODE_VISION ? 'AI Vision extraction (overview + 4 zoomed tiles per page for maximum recall)' : 'OCR'}.
-              This can take {mode === MODE_VISION ? '1–2 minutes' : 'a few minutes'} for a large P&ID.
+            <p style={{ marginTop: 10, color: THEME_MUTED, fontSize: 12 }}>
+              Upload complete — server is running {mode === MODE_VISION ? 'AI Vision extraction' : 'OCR'}.
+              This can take {mode === MODE_VISION ? '1–2 minutes' : 'a few minutes'}.
             </p>
           )}
+          {(file || result) && !loading && (
+            <button
+              type="button" onClick={onReset}
+              style={{
+                marginTop: 10, width: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 8, border: `1px solid ${THEME_BORDER}`,
+                background: '#fff', color: THEME_TEXT, cursor: 'pointer', fontSize: 12,
+              }}
+            >
+              <RefreshCw size={12} /> Reset inputs
+            </button>
+          )}
         </div>
 
-        {/* ── Error ─────────────────────────────────────────────────── */}
-        {error && (
-          <div style={{
-            display: 'flex', gap: 10, alignItems: 'flex-start',
-            padding: 14, borderRadius: 10, border: '1px solid #fecaca',
-            background: '#fef2f2', color: '#b91c1c', marginBottom: 20, fontSize: 14,
-          }}>
-            <AlertCircle size={18} />
-            <div>{error}</div>
-          </div>
-        )}
-
-        {/* ── Results ───────────────────────────────────────────────── */}
-        {result && (
-          <div style={{
-            background: '#fff', border: `1px solid ${THEME_BORDER}`, borderRadius: 12,
-            padding: 20,
-          }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-              <CheckCircle2 size={20} color="#16a34a" />
-              <div style={{ fontSize: 16, fontWeight: 600, color: THEME_TEXT }}>
-                {result.summary?.total ?? 0} unique line tags
-              </div>
-              <div style={{ color: THEME_MUTED, fontSize: 13 }}>
-                from <span style={{ fontWeight: 500 }}>{result.filename}</span>
-              </div>
-              {result.mode === MODE_VISION && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '2px 8px', borderRadius: 999, fontSize: 11,
-                  background: '#faf5ff', color: THEME_PRIMARY,
-                  border: `1px solid ${THEME_PRIMARY}`,
-                }}>
-                  <Sparkles size={11} /> {result.model || 'AI Vision'}
-                </span>
-              )}
-              {result.extraction_id && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '2px 8px', borderRadius: 999, fontSize: 11,
-                  background: '#ecfdf5', color: '#047857',
-                  border: '1px solid #a7f3d0',
-                }}>
-                  <Save size={11} /> Saved
-                </span>
-              )}
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                <button
-                  type="button" onClick={onExportCsv} disabled={!result.tags?.length}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 14px', borderRadius: 8, border: `1px solid ${THEME_BORDER}`,
-                    background: '#fff', color: THEME_TEXT, fontSize: 13, cursor: 'pointer',
-                  }}
-                ><Download size={14} /> CSV</button>
-                <button
-                  type="button" onClick={onExportJson}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 14px', borderRadius: 8, border: `1px solid ${THEME_BORDER}`,
-                    background: '#fff', color: THEME_TEXT, fontSize: 13, cursor: 'pointer',
-                  }}
-                ><Download size={14} /> JSON</button>
-              </div>
-            </div>
-
-            {grouped.length === 0 && (
-              <div style={{ padding: 20, textAlign: 'center', color: THEME_MUTED }}>
-                No line tags matched. Try enabling <em>Force OCR</em>.
-              </div>
-            )}
-
-            {grouped.map(([group, tags]) => (
-              <div key={group} style={{ marginBottom: 20 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                  paddingBottom: 6, borderBottom: `2px solid ${THEME_PRIMARY}`,
-                }}>
-                  <span style={{ fontWeight: 600, color: THEME_TEXT }}>{group}</span>
-                  <span style={{
-                    padding: '2px 8px', borderRadius: 999, fontSize: 12,
-                    background: THEME_BG_SOFT, color: THEME_MUTED,
-                  }}>{tags.length}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-                  {tags.map((t) => (
-                    <div key={t.tag} style={{
-                      padding: '8px 12px', borderRadius: 8,
-                      border: `1px solid ${THEME_BORDER}`, background: THEME_BG_SOFT,
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                      fontSize: 13, color: THEME_TEXT,
-                    }}>
-                      {t.tag}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Legend Compliance Check ──────────────────────────────── */}
-        {result?.tags?.length > 0 && (
-          <LegendValidationPanel
-            tags={result.tags}
-            activeLegend={activeLegend || effectiveLegend}
-            provider={visionProvider}
+        {/* ── Right column: tabbed results ───────────────────────── */}
+        <div className="pidcv2-right" style={{ minHeight: 0, minWidth: 0 }}>
+          <ResultsTabs
+            result={result}
+            error={error}
+            loading={loading}
+            grouped={grouped}
+            LEGEND_SECTION={LEGEND_SECTION}
+            onExportCsv={onExportCsv}
+            onExportJson={onExportJson}
+            pdfFile={file}
+            activeLegend={activeLegend}
+            effectiveLegend={effectiveLegend}
+            activeLineList={activeLineList}
+            refreshLineList={refreshLineList}
+            activeEquipmentList={activeEquipmentList}
+            refreshEquipmentList={refreshEquipmentList}
+            activeInstrumentIndex={activeInstrumentIndex}
+            refreshInstrumentIndex={refreshInstrumentIndex}
+            visionProvider={visionProvider}
             apiKey={apiKey}
-            section={LEGEND_SECTION}
+            history={history}
+            historyLoading={historyLoading}
+            refreshHistory={refreshHistory}
+            onLoadHistory={onLoadHistory}
+            onDeleteHistory={onDeleteHistory}
           />
-        )}
-
-        {/* ── History ──────────────────────────────────────────────── */}
-        <div style={{
-          background: '#fff', border: `1px solid ${THEME_BORDER}`, borderRadius: 12,
-          padding: 20, marginTop: 20,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: historyOpen ? 14 : 0 }}>
-            <History size={18} color={THEME_PRIMARY} />
-            <div style={{ fontSize: 15, fontWeight: 600, color: THEME_TEXT }}>
-              Saved extractions
-            </div>
-            <span style={{
-              padding: '2px 8px', borderRadius: 999, fontSize: 12,
-              background: THEME_BG_SOFT, color: THEME_MUTED,
-            }}>
-              {history.length}
-            </span>
-            <button
-              type="button" onClick={refreshHistory} disabled={historyLoading}
-              title="Refresh"
-              style={{
-                marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 10px', borderRadius: 8,
-                border: `1px solid ${THEME_BORDER}`, background: '#fff', color: THEME_TEXT,
-                fontSize: 12, cursor: historyLoading ? 'wait' : 'pointer',
-              }}
-            >
-              {historyLoading
-                ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                : <RefreshCw size={12} />}
-              Refresh
-            </button>
-            <button
-              type="button" onClick={() => setHistoryOpen(v => !v)}
-              style={{
-                padding: '6px 10px', borderRadius: 8,
-                border: `1px solid ${THEME_BORDER}`, background: '#fff', color: THEME_TEXT,
-                fontSize: 12, cursor: 'pointer',
-              }}
-            >
-              {historyOpen ? 'Collapse' : 'Expand'}
-            </button>
-          </div>
-
-          {historyOpen && (
-            history.length === 0
-              ? (
-                <div style={{ padding: 12, textAlign: 'center', color: THEME_MUTED, fontSize: 13 }}>
-                  No saved extractions yet — run one and it will appear here automatically.
-                </div>
-              )
-              : (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {history.map((h) => {
-                    const active = result?.extraction_id === h.extraction_id
-                    const when = h.created_at ? new Date(h.created_at).toLocaleString() : ''
-                    return (
-                      <div key={h.extraction_id} style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '10px 12px', borderRadius: 10,
-                        border: `1px solid ${active ? THEME_PRIMARY : THEME_BORDER}`,
-                        background: active ? '#faf5ff' : '#fff',
-                      }}>
-                        {h.mode === MODE_VISION
-                          ? <Sparkles size={14} color={THEME_PRIMARY} />
-                          : <FileText size={14} color={THEME_MUTED} />}
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{
-                            fontSize: 13, fontWeight: 500, color: THEME_TEXT,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {h.filename}
-                          </div>
-                          <div style={{ fontSize: 11, color: THEME_MUTED, marginTop: 2 }}>
-                            {when} · {h.tag_count} tags · {h.mode === MODE_VISION ? (h.model || 'AI Vision') : 'OCR'}
-                          </div>
-                        </div>
-                        <button
-                          type="button" onClick={() => onLoadHistory(h.extraction_id)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            padding: '6px 10px', borderRadius: 8,
-                            border: `1px solid ${THEME_BORDER}`, background: '#fff', color: THEME_TEXT,
-                            fontSize: 12, cursor: 'pointer',
-                          }}
-                        >
-                          <Save size={12} /> Load
-                        </button>
-                        <button
-                          type="button" onClick={() => onDeleteHistory(h.extraction_id)}
-                          title="Delete"
-                          style={{
-                            display: 'flex', alignItems: 'center',
-                            padding: 6, borderRadius: 8,
-                            border: `1px solid ${THEME_BORDER}`, background: '#fff', color: '#b91c1c',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-          )}
         </div>
       </div>
 
-      {/* keyframes for loader spin */}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      {/* keyframes for loader spin + responsive workspace */}
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @media (max-width: ${LAYOUT_BREAKPOINT_PX}px) {
+          .pidcv2-workspace { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr !important; }
+        }
+      `}</style>
 
       {/* Legend Sheets modal */}
       <LegendSheetsModal

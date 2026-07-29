@@ -1450,6 +1450,10 @@ const PIDVerificationV2 = () => {
   //              Analytics / Drawing Layout) for engineers who need full detail.
   // No sub-tab logic below is removed — 'advanced' still renders it unchanged.
   const [lineListViewMode, setLineListViewMode] = useState('simple');
+  // Equipment panel view mode — same Simple (consolidated P&ID vs Equipment
+  // Register report, default) / Advanced (full ISA tag-inventory workspace)
+  // toggle pattern as the Lines panel above.
+  const [equipListViewMode, setEquipListViewMode] = useState('simple');
   // QC Checks sub-tab filters
   const [qcSearch,     setQcSearch]     = useState('');
   const [qcSevFilter,  setQcSevFilter]  = useState('all');
@@ -11000,6 +11004,21 @@ const PIDVerificationV2 = () => {
                 F:   { label:'Filter/Strainer',         type:'equipment',  icon:'⚙️',  color:'#0d9488' },
               };
 
+              // Shared classifier (used by both Simple and Advanced views below).
+              const classifyTag = (tagId) => {
+                const upper = tagId.toUpperCase();
+                const sortedPfx = Object.keys(EQUIP_FAMILIES).sort((a, b) => b.length - a.length);
+                for (const pfx of sortedPfx) {
+                  if (upper.startsWith(pfx)) return EQUIP_FAMILIES[pfx];
+                }
+                return { label:'Unknown', type:'instrument', icon:'❔', color:'#94a3b8' };
+              };
+
+              // Soft-coded: which finding categories count as "equipment" (Equipment
+              // Register) quality issues — shared by Simple report + Advanced workspace.
+              const isEquipFindingShared = (f) =>
+                f.category === 'equipment' || (f.rule_id || '').startsWith('EQP');
+
               // Soft-coded: severity rank for QC badge ordering
               const SEV_RANK  = { critical: 4, major: 3, minor: 2, info: 1 };
               const SEV_COLOR = { critical:'#dc2626', major:'#f97316', minor:'#d97706', info:'#3b82f6' };
@@ -11012,6 +11031,156 @@ const PIDVerificationV2 = () => {
                 { id:'valve',      label:'Valves'      },
                 { id:'equipment',  label:'Equipment'   },
               ];
+
+              // ══════════════════════════════════════════════════════════════════════
+              // SIMPLE VIEW (default) — one consolidated Critical-findings report,
+              // P&ID vs Equipment Register, across every drawing in the document.
+              // Mirrors the Lines panel's Simple View pattern. The Advanced workspace
+              // (ISA tag inventory below) is fully preserved and reachable via toggle.
+              // ══════════════════════════════════════════════════════════════════════
+              if (equipListViewMode === 'simple') {
+                const allDrawingsForEquip = results?.drawings ?? [];
+
+                const SIMPLE_EQ_SEV_RANK = { critical: 3, major: 2, minor: 1, info: 0 };
+
+                // One row per equipment tag (V/T/K/C/F/E/P prefixes) per drawing —
+                // the actual "P&ID vs Equipment Register" comparison surface.
+                const comparisonRows = allDrawingsForEquip.flatMap(d => {
+                  const dTagPos = d.metadata?.tag_positions || {};
+                  const dFindings = (d.issues ?? []).filter(isEquipFindingShared);
+                  const equipTagIds = Object.keys(dTagPos).filter(id => classifyTag(id).type === 'equipment');
+                  return equipTagIds.map((tagId, idx) => {
+                    const upperTag = tagId.toUpperCase();
+                    const matches = dFindings.filter(f =>
+                      (f.evidence || '').toUpperCase().includes(upperTag) ||
+                      (f.issue_observed || f.issue || '').toUpperCase().includes(upperTag)
+                    );
+                    const worst = matches.sort((a, b) =>
+                      (SIMPLE_EQ_SEV_RANK[(b.severity||'').toLowerCase()] ?? -1) - (SIMPLE_EQ_SEV_RANK[(a.severity||'').toLowerCase()] ?? -1)
+                    )[0];
+                    return {
+                      key: `${d.drawing_id}-${tagId}-${idx}`,
+                      drawing_id: d.drawing_id,
+                      tag: tagId,
+                      type: classifyTag(tagId).label,
+                      severity: (worst?.severity || '').toLowerCase() || null,
+                      issue: worst ? (worst.issue_observed || worst.issue) : null,
+                    };
+                  });
+                });
+
+                const sortedRows = [...comparisonRows].sort((a, b) =>
+                  (SIMPLE_EQ_SEV_RANK[b.severity] ?? -1) - (SIMPLE_EQ_SEV_RANK[a.severity] ?? -1)
+                );
+
+                const criticalCountAll = comparisonRows.filter(r => r.severity === 'critical').length;
+                const affectedDrawings = new Set(comparisonRows.filter(r => r.severity === 'critical').map(r => r.drawing_id)).size;
+                const cleanCountAll    = comparisonRows.filter(r => !r.severity).length;
+
+                const ROW_STATUS_STYLE = {
+                  critical: { bg: '#fef2f2', text: '#991b1b', dot: '#dc2626', label: 'Critical' },
+                  major:    { bg: '#fff7ed', text: '#9a3412', dot: '#f97316', label: 'Major' },
+                  minor:    { bg: '#fefce8', text: '#854d0e', dot: '#eab308', label: 'Minor' },
+                  clean:    { bg: '#f0fdf4', text: '#166534', dot: '#22c55e', label: 'Match' },
+                };
+
+                return (
+                  <div>
+                    {/* ── Header ── */}
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                      style={{ background: 'linear-gradient(to right, rgba(124,58,237,0.05), transparent)' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#7c3aed,#6366f1)', boxShadow:'0 4px 12px rgba(124,58,237,0.3)' }}>
+                        <Cpu className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-sm font-bold text-slate-900">P&amp;ID vs Equipment Register — Comparison</h2>
+                        <p className="text-xs text-slate-500">
+                          {comparisonRows.length} equipment tag{comparisonRows.length !== 1 ? 's' : ''} compared across {allDrawingsForEquip.length} drawing{allDrawingsForEquip.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <button onClick={() => setEquipListViewMode('advanced')}
+                        title="Show the full ISA tag-inventory workspace (Instruments / Valves / Equipment)"
+                        className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
+                        style={{ background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#475569' }}>
+                        <Sliders className="w-3.5 h-3.5" /> Advanced View
+                      </button>
+                    </div>
+
+                    {/* ── Consolidated stat bar ── */}
+                    <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                      {[
+                        { v: criticalCountAll, label: 'Critical Findings', color:'#dc2626', bg:'rgba(220,38,38,0.07)', border:'rgba(220,38,38,0.2)' },
+                        { v: cleanCountAll,     label: 'Matched / Clean',   color:'#16a34a', bg:'rgba(22,163,74,0.08)',  border:'rgba(22,163,74,0.2)'  },
+                        { v: affectedDrawings,  label: 'Drawings Affected', color:'#7c3aed', bg:'rgba(124,58,237,0.08)', border:'rgba(124,58,237,0.2)' },
+                      ].map(c => (
+                        <div key={c.label} className="rounded-xl p-2.5 text-center"
+                          style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+                          <p className="font-black text-xl leading-none" style={{ color: c.color }}>{c.v}</p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Side-by-side comparison table (P&ID reading ↔ Register status) ── */}
+                    <div className="p-5">
+                      {sortedRows.length === 0 ? (
+                        <div className="flex flex-col items-center gap-2 py-14 text-center">
+                          <CheckCircle className="w-10 h-10 text-emerald-400" />
+                          <p className="text-sm font-bold text-slate-700">No equipment tags to compare</p>
+                          <p className="text-xs text-slate-400 max-w-sm">
+                            No equipment tags were extracted from the P&amp;ID for this document yet.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-500 text-left">
+                                <th className="px-3 py-2 font-bold">Drawing</th>
+                                <th className="px-3 py-2 font-bold">Equipment Tag (P&amp;ID)</th>
+                                <th className="px-3 py-2 font-bold">Type</th>
+                                <th className="px-3 py-2 font-bold">Status</th>
+                                <th className="px-3 py-2 font-bold">Issue</th>
+                                <th className="px-3 py-2 font-bold text-right">&nbsp;</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {sortedRows.map(r => {
+                                const st = ROW_STATUS_STYLE[r.severity || 'clean'];
+                                return (
+                                  <tr key={r.key} style={{ background: r.severity === 'critical' ? st.bg : undefined }}>
+                                    <td className="px-3 py-2 text-slate-500 font-mono whitespace-nowrap">{getDrawingLabel(r.drawing_id)}</td>
+                                    <td className="px-3 py-2 font-mono font-semibold text-slate-800 whitespace-nowrap">{r.tag}</td>
+                                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.type}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold"
+                                        style={{ background: st.bg, color: st.text }}>
+                                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
+                                        {st.label}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-600 max-w-xs truncate" title={r.issue || ''}>{r.issue || '—'}</td>
+                                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                                      {r.drawing_id !== activeDrawing && (
+                                        <button onClick={() => setActiveDrawing(r.drawing_id)}
+                                          title="Open this drawing"
+                                          className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors">
+                                          View
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
 
               // ── Build inventory ─────────────────────────────────────────────────────
               const tagPos    = activeDrawingData?.metadata?.tag_positions || {};
@@ -11029,15 +11198,6 @@ const PIDVerificationV2 = () => {
                   valveFindingsByTag[tid].push(f);
                 }
               }
-
-              const classifyTag = (tagId) => {
-                const upper = tagId.toUpperCase();
-                const sortedPfx = Object.keys(EQUIP_FAMILIES).sort((a, b) => b.length - a.length);
-                for (const pfx of sortedPfx) {
-                  if (upper.startsWith(pfx)) return EQUIP_FAMILIES[pfx];
-                }
-                return { label:'Unknown', type:'instrument', icon:'❔', color:'#94a3b8' };
-              };
 
               const tagInventory = allTagIds.map(id => ({
                 id,
@@ -11244,6 +11404,12 @@ const PIDVerificationV2 = () => {
                         {issueCount > 0 && <span className="text-orange-500 font-semibold"> · {issueCount} with QC issues</span>}
                       </p>
                     </div>
+                    <button onClick={() => setEquipListViewMode('simple')}
+                      title="Back to the consolidated P&ID vs Equipment Register comparison report"
+                      className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
+                      style={{ background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#475569' }}>
+                      <Sliders className="w-3.5 h-3.5" /> Simple View
+                    </button>
                     {/* QC score ring */}
                     <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
                       <div className="relative w-12 h-12">
