@@ -567,7 +567,15 @@ const DynamicApprovalCenter = ({ approvalTypes, user, rbacData, token, isAdmin, 
             ? `/payroll/leave-requests/${item.id}/approve/`
             : `/payroll/leave-requests/${item.id}/reject/`
         } else {
-          setToast({ type: 'error', message: `Invalid status for ${actionId}: ${item.status}` })
+          // This item is stale (already actioned by someone else, e.g. in
+          // another tab/by another approver) — the backend's `status__in`
+          // filter should normally exclude it, but guard here too. Drop it
+          // from the visible list and refresh instead of just failing.
+          const friendlyMsg = `This request is already ${String(item.status).replace(/_/g, ' ').toLowerCase()} and no longer needs action. Refreshing the list…`
+          setModalError(friendlyMsg)
+          setToast({ type: 'error', message: friendlyMsg })
+          setApprovals(prevApprovals => prevApprovals.filter(a => a.id !== item.id))
+          fetchApprovals()
           setSubmitting(false)
           return
         }
