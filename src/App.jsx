@@ -120,6 +120,7 @@ import EquipmentList from './pages/Engineering/Process/EquipmentList'
 import PIDVerification from './pages/Engineering/Process/PIDVerification'
 import PIDVerificationV2 from './pages/Engineering/Process/PIDVerificationV2'
 import PIDVerificationV2Report from './pages/Engineering/Process/PIDVerificationV2Report'
+import PIDCheckerV2 from './pages/Engineering/Process/PIDCheckerV2'
 import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
@@ -921,6 +922,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDVerificationV2Report />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* P&ID Checker V2 — new minimal scaffold */}
+        <Route
+          path="engineering/process/pid-checker-v2"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <PIDCheckerV2 />
             </ModuleProtectedRoute>
           }
         />
