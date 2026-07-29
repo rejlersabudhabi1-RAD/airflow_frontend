@@ -176,6 +176,7 @@ const WORKFLOW_BORDER_COLOR      = '#e2e8f0';        // Border color
 const WORKFLOW_BORDER_RADIUS     = '16px';           // Corner radius
 const WORKFLOW_SHADOW            = '0 1px 3px rgba(0,0,0,0.08)'; // Box shadow
 const WORKFLOW_COLLAPSED_HEIGHT  = '60px';           // Height when collapsed (title bar only)
+const WORKFLOW_SPLIT_PANEL_HEIGHT = '600px';         // Shared fixed height for both split-screen columns (diagram + docs) so they stay aligned regardless of image size or window width
 
 // ANIMATION
 const WORKFLOW_COLLAPSE_DURATION = '400ms';          // Collapse/expand animation speed
@@ -3578,7 +3579,9 @@ const PIDVerificationV2 = () => {
               boxShadow: WORKFLOW_SHADOW,
               overflow: 'hidden',
               transition: `all ${WORKFLOW_COLLAPSE_DURATION} ${WORKFLOW_TRANSITION_EASING}`,
-              height: workflowCollapsed ? WORKFLOW_COLLAPSED_HEIGHT : 'auto'
+              display: 'flex',
+              flexDirection: 'column',
+              height: workflowCollapsed ? WORKFLOW_COLLAPSED_HEIGHT : (WORKFLOW_SPLIT_SCREEN ? WORKFLOW_SPLIT_PANEL_HEIGHT : 'auto')
             }}>
               
               {/* Workflow Header (Always Visible) */}
@@ -3690,7 +3693,9 @@ const PIDVerificationV2 = () => {
               {!workflowCollapsed && (
                 <div style={{
                   padding: workflowCompact ? '16px' : '24px',
-                  background: 'linear-gradient(135deg, rgba(15,23,42,0.02) 0%, rgba(30,41,59,0.04) 100%)'
+                  background: 'linear-gradient(135deg, rgba(15,23,42,0.02) 0%, rgba(30,41,59,0.04) 100%)',
+                  flex: 1,
+                  overflowY: 'auto'
                 }}>
                   
                   {/* Zoom Controls Bar */}
@@ -3935,29 +3940,6 @@ const PIDVerificationV2 = () => {
                       />
                     </div>
 
-                    {/* Workflow Caption */}
-                    <div style={{
-                      marginTop: '16px',
-                      textAlign: 'center',
-                      maxWidth: '900px',
-                      padding: '12px 20px',
-                      background: 'rgba(59,130,246,0.05)',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(59,130,246,0.1)'
-                    }}>
-                      <p style={{
-                        fontSize: '13px',
-                        color: COLOR_TEXT_SECONDARY,
-                        margin: 0,
-                        lineHeight: 1.6
-                      }}>
-                        <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>✓ 3-Stage AI Process:</span> <span style={{ fontWeight: 500 }}>Stage 1</span> Upload P&ID drawings & legends (PDF/DWG/PNG) → <span style={{ fontWeight: 500 }}>Stage 2</span> AI Analysis with 20+ verification rules (OCR, Vision, ML) → <span style={{ fontWeight: 500 }}>Stage 3</span> Interactive quality report with export capabilities
-                      </p>
-                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#6366f1', fontStyle: 'italic' }}>
-                        💡 Tip: Click image to zoom in • Use controls above for zoom/fullscreen
-                      </div>
-                    </div>
-
                   </div>
 
                   {/* Workflow Features Bar - Key Capabilities */}
@@ -4027,7 +4009,7 @@ const PIDVerificationV2 = () => {
                 overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
-                maxHeight: '600px'
+                maxHeight: WORKFLOW_SPLIT_PANEL_HEIGHT
               }}>
                 {/* Header */}
                 <div style={{
