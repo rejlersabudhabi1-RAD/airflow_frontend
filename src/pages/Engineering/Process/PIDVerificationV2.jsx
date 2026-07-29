@@ -1443,6 +1443,13 @@ const PIDVerificationV2 = () => {
   const [qcPanelOpen, setQcPanelOpen] = useState(DRAWING_QC_PANEL_OPEN_DEFAULT);
   // Sub-tab within the Lines panel: 'qc' | 'designations'
   const [lineQcSubTab, setLineQcSubTab] = useState('qc');
+  // Lines panel top-level view mode — soft-coded default keeps the panel simple:
+  // 'simple'   = one consolidated Critical-findings report, P&ID vs Line List,
+  //              across every drawing in the document (default — easiest to read).
+  // 'advanced' = original 5-tab workspace (AI Insights / QC Checks / Designations /
+  //              Analytics / Drawing Layout) for engineers who need full detail.
+  // No sub-tab logic below is removed — 'advanced' still renders it unchanged.
+  const [lineListViewMode, setLineListViewMode] = useState('simple');
   // QC Checks sub-tab filters
   const [qcSearch,     setQcSearch]     = useState('');
   const [qcSevFilter,  setQcSevFilter]  = useState('all');
@@ -9145,6 +9152,111 @@ const PIDVerificationV2 = () => {
               const lineTags = activeDrawingData?.metadata?.line_tags || [];
               const allIssuesHere = activeDrawingData?.issues || [];
 
+              // ── Soft-coded: which finding categories count as "line" quality issues.
+              // Shared by both the Simple consolidated report below and the Advanced
+              // workspace further down — single source of truth.
+              const isLineFindingShared = (f) =>
+                f.category === 'line_size' || (f.rule_id || '').startsWith('LSZ');
+
+              // ══════════════════════════════════════════════════════════════════════
+              // SIMPLE VIEW (default) — one consolidated Critical-findings report,
+              // P&ID vs Line List, across every drawing in the document. Replaces the
+              // 5-tab Advanced workspace with a single easy-to-read report per the
+              // "critical information only" simplification request. The Advanced
+              // workspace below is fully preserved and reachable via the toggle.
+              // ══════════════════════════════════════════════════════════════════════
+              if (lineListViewMode === 'simple') {
+                const allDrawingsForLines = results?.drawings ?? [];
+                const criticalReport = allDrawingsForLines.flatMap(d =>
+                  (d.issues ?? [])
+                    .filter(f => isLineFindingShared(f) && (f.severity || '').toLowerCase() === 'critical')
+                    .map(f => ({ ...f, drawing_id: d.drawing_id }))
+                );
+                const affectedDrawings = new Set(criticalReport.map(r => r.drawing_id)).size;
+                const totalLineTags = allDrawingsForLines.reduce(
+                  (s, d) => s + (d.metadata?.line_tags?.length ?? 0), 0);
+
+                return (
+                  <div>
+                    {/* ── Header ── */}
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100"
+                      style={{ background: 'linear-gradient(to right, rgba(220,38,38,0.05), transparent)' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#dc2626,#ef4444)', boxShadow:'0 4px 12px rgba(220,38,38,0.3)' }}>
+                        <Ruler className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-sm font-bold text-slate-900">P&amp;ID vs Line List — Critical Findings</h2>
+                        <p className="text-xs text-slate-500">
+                          Consolidated report across {allDrawingsForLines.length} drawing{allDrawingsForLines.length !== 1 ? 's' : ''} · {totalLineTags} line designations compared
+                        </p>
+                      </div>
+                      <button onClick={() => setLineListViewMode('advanced')}
+                        title="Show the full 5-tab workspace (AI Insights, QC Checks, Designations, Analytics, Drawing Layout)"
+                        className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
+                        style={{ background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#475569' }}>
+                        <Sliders className="w-3.5 h-3.5" /> Advanced View
+                      </button>
+                    </div>
+
+                    {/* ── Consolidated stat bar ── */}
+                    <div className="grid grid-cols-3 gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                      {[
+                        { v: criticalReport.length, label: 'Critical Findings', color:'#dc2626', bg:'rgba(220,38,38,0.07)', border:'rgba(220,38,38,0.2)' },
+                        { v: affectedDrawings,       label: 'Drawings Affected', color:'#0d9488', bg:'rgba(13,148,136,0.08)', border:'rgba(13,148,136,0.2)' },
+                        { v: totalLineTags,          label: 'Total Lines Checked', color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)' },
+                      ].map(c => (
+                        <div key={c.label} className="rounded-xl p-2.5 text-center"
+                          style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+                          <p className="font-black text-xl leading-none" style={{ color: c.color }}>{c.v}</p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">{c.label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Consolidated critical findings list ── */}
+                    <div className="p-5">
+                      {criticalReport.length === 0 ? (
+                        <div className="flex flex-col items-center gap-2 py-14 text-center">
+                          <CheckCircle className="w-10 h-10 text-emerald-400" />
+                          <p className="text-sm font-bold text-slate-700">No critical Line List findings</p>
+                          <p className="text-xs text-slate-400 max-w-sm">
+                            Every pipeline designation across all {allDrawingsForLines.length} drawing{allDrawingsForLines.length !== 1 ? 's' : ''} matched the Line List with no critical discrepancies.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5">
+                          {criticalReport.map((f, i) => (
+                            <div key={i} className="rounded-xl border p-3.5 flex items-start gap-3"
+                              style={{ background:'#fef2f2', borderColor:'#fca5a5' }}>
+                              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-600 text-white">CRITICAL</span>
+                                  <span className="text-[10px] font-mono text-slate-500">{f.rule_id}</span>
+                                  <span className="text-[10px] font-mono text-slate-400">· {getDrawingLabel(f.drawing_id)}</span>
+                                </div>
+                                <p className="text-sm text-slate-800 font-medium">{f.issue_observed || f.issue}</p>
+                                {f.action_required && (
+                                  <p className="text-xs text-slate-500 mt-1"><strong>Action:</strong> {f.action_required}</p>
+                                )}
+                              </div>
+                              {f.drawing_id !== activeDrawing && (
+                                <button onClick={() => setActiveDrawing(f.drawing_id)}
+                                  title="Open this drawing"
+                                  className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors">
+                                  View
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
               // ── Soft-coded: LSZ rule catalogue ─────────────────────────────────────
               const LINE_QC_RULES = {
                 'LSZ-001': { short: 'Missing size annotation',      desc: 'Pipeline detected without an NPS size label — size is mandatory on line designations.',                                    checkName: 'Size Completeness',  icon: '📏', fix: 'Add the NPS size label to the affected line designation on the P&ID.' },
@@ -9394,6 +9506,13 @@ const PIDVerificationV2 = () => {
                       {minorLF   > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">{minorLF} MIN</span>}
                       {lineFindings.length === 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> All Pass</span>}
                     </div>
+                    {/* Back to Simple consolidated report */}
+                    <button onClick={() => setLineListViewMode('simple')}
+                      title="Back to the simplified consolidated Critical Findings report"
+                      className="flex-shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
+                      style={{ background:'#f8fafc', border:'1.5px solid #e2e8f0', color:'#475569' }}>
+                      <Ruler className="w-3.5 h-3.5" /> Simple View
+                    </button>
                   </div>
 
                   {/* ══ QC summary stat bar ══ */}
