@@ -6,7 +6,7 @@ import CrossRecommendationPanel from '../../../components/recommendations/CrossR
 import {
   Upload as UploadIcon, FileText, CheckCircle, AlertTriangle,
   Loader, X, Download, Activity, Shield, GitBranch, Cpu, Clock,
-  RefreshCw, FolderPlus, Package, Layers, ChevronRight, Edit,
+  RefreshCw, FolderPlus, Package, Layers, ChevronRight, ChevronLeft, Edit,
   Trash2, ArrowLeft, BarChart2, Save, Zap, Tag, Link, Sliders,
   Ruler, ScanLine, Brain, CircleDot, Type, ChevronDown, ChevronUp,
   Lightbulb, Eye, EyeOff, Hash, ClipboardList, Boxes, MapPin, Wrench, Network, Database, GripVertical,
@@ -639,6 +639,63 @@ const HIDDEN_CATEGORIES = new Set(['notes', 'connectivity']);
 // noise to the report and are hidden by default.  Add other severity labels here
 // to suppress them globally without touching any rule logic.
 const HIDDEN_SEVERITIES = new Set(['info']);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded: multi-drawing navigator display mode.
+// Below this many pages, drawings render as a compact horizontally-scrollable
+// pill strip; at/above it, the UI switches to a searchable dropdown + Prev/Next
+// stepper so multi-sheet documents (20-30+ pages) stay usable instead of
+// wrapping into a multi-row wall of raw drawing_id pills.
+const DRAWING_NAV_INLINE_LIMIT = 8;
+
+// Extracts a clean, human-readable label from a raw drawing_id such as
+// "8a07cc8c-7f2b-404e-878c-731162c19152-DRAWING-3" -> "Drawing 3". Falls back
+// to a short id fragment if the expected "-DRAWING-N" / "-PAGE-N" / "-SHEET-N"
+// suffix pattern isn't present, so unexpected id formats never crash the UI.
+function getDrawingLabel(drawingId) {
+  if (!drawingId) return '';
+  const id = String(drawingId);
+  const m = id.match(/-(DRAWING|PAGE|SHEET)[-_]?(\d+)\s*$/i);
+  if (m) {
+    const kind = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+    return `${kind} ${m[2]}`;
+  }
+  return id.length > 14 ? `${id.slice(0, 10)}\u2026` : id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Soft-coded: shared marker-coordinate sanity check, used by every Drawing
+// Overlay tab (Legends, Line List, Equipment, Instrument, Compressor) to keep
+// markers accurately placed inside the diagram instead of drifting past its
+// edges. Single source of truth so all tabs behave consistently.
+// - MARKER_AREA_*: the trustworthy drawing content-area band (% of page).
+// - MARKER_OUTLIER_MARGIN_PCT: how far outside that band a raw coordinate may
+//   still fall before it's judged corrupt/garbage OCR data and dropped
+//   entirely (rather than clamped to the edge, which would just pile stray
+//   dots against the border).
+const MARKER_AREA_X_MIN = 1;
+const MARKER_AREA_X_MAX = 97;
+const MARKER_AREA_Y_MIN = 1;
+const MARKER_AREA_Y_MAX = 96;
+const MARKER_OUTLIER_MARGIN_PCT = 15;
+
+// Sanitizes a raw (xp, yp) marker coordinate pair (percent of page):
+//  - returns null for non-finite / missing values, or values too far outside
+//    the drawing's content area (treated as unnecessary/garbage dots — the
+//    caller should drop the marker or fall back to another resolution tier)
+//  - otherwise clamps genuine near-edge values into the visible content-area
+//    band so the marker always renders on-canvas, never past the image edge
+function sanitizeMarkerPct(xp, yp) {
+  if (typeof xp !== 'number' || typeof yp !== 'number' || !Number.isFinite(xp) || !Number.isFinite(yp)) return null;
+  const outOfRange =
+    xp < MARKER_AREA_X_MIN - MARKER_OUTLIER_MARGIN_PCT || xp > MARKER_AREA_X_MAX + MARKER_OUTLIER_MARGIN_PCT ||
+    yp < MARKER_AREA_Y_MIN - MARKER_OUTLIER_MARGIN_PCT || yp > MARKER_AREA_Y_MAX + MARKER_OUTLIER_MARGIN_PCT;
+  if (outOfRange) return null;
+  return {
+    xp: Math.min(MARKER_AREA_X_MAX, Math.max(MARKER_AREA_X_MIN, xp)),
+    yp: Math.min(MARKER_AREA_Y_MAX, Math.max(MARKER_AREA_Y_MIN, yp)),
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Soft-coded ACCURACY FILTERS (frontend safety-net mirroring backend filters).
@@ -1349,6 +1406,11 @@ const PIDVerificationV2 = () => {
   const [results,      setResults]      = useState(null);
   const [error,        setError]        = useState('');
   const [activeDrawing,setActiveDrawing]= useState(null);
+  // ── Drawing navigator (multi-sheet documents) ────────────────────────────
+  // Soft-coded UI state for the searchable dropdown + Prev/Next stepper used
+  // when a document has more than DRAWING_NAV_INLINE_LIMIT pages.
+  const [drawingNavOpen,  setDrawingNavOpen]  = useState(false);
+  const [drawingNavQuery, setDrawingNavQuery] = useState('');
   const pollRef    = useRef(null);
   // ── Elapsed-time timer for the processing loader ──────────────────────────
   const [elapsedSec,   setElapsedSec]   = useState(0);
@@ -1575,12 +1637,14 @@ const PIDVerificationV2 = () => {
   const [runningCompare,  setRunningCompare]  = useState(false);
   const [comparison,      setComparison]      = useState(null);
   const [showUncertainHighlights, setShowUncertainHighlights] = useState(false);
-  // ── Soft-coded: "Critical Only" overlay visualisation toggle ─────────────
-  // Purely a display-layer filter — when enabled, every drawing overlay across
-  // all 4 comparison tabs (Legends, Line List, Equipment, Instrument) renders
-  // ONLY markers whose top/aggregated severity is 'critical'. No matching,
+  // ── Soft-coded: "Critical Only" overlay visualisation ─────────────────────
+  // Purely a display-layer filter — applied across every drawing overlay in
+  // all 4 comparison tabs (Legends, Line List, Equipment, Instrument) so
+  // ONLY markers whose top/aggregated severity is 'critical' are ever drawn;
+  // Major/Minor/Info markers are suppressed by design. No matching,
   // rule-engine, or data logic is touched — this only narrows what gets drawn.
-  const [overlayCriticalOnly, setOverlayCriticalOnly] = useState(false);
+  // Set OVERLAY_ONLY_CRITICAL to false to restore all-severity overlays.
+  const OVERLAY_ONLY_CRITICAL = true;
   const OVERLAY_CRITICAL_SEVERITY = 'critical'; // soft-coded severity key filtered to
   const [focusedFindingId, setFocusedFindingId] = useState(null);
   // Correction mode — when true, clicking the drawing canvas records the clicked
@@ -3099,8 +3163,11 @@ const PIDVerificationV2 = () => {
     const pickBestOcc = (pos) => {
       if (!pos) return null;
       if (!pos.all || pos.all.length === 0) {
-        // Direct tag position (no 'all' array) — use as-is
-        return (pos.x_pct != null && pos.y_pct != null) ? pos : null;
+        // Direct tag position (no 'all' array) — sanitize before trusting it;
+        // drops corrupt/off-page coordinates instead of rendering a stray dot.
+        if (pos.x_pct == null || pos.y_pct == null) return null;
+        const s = sanitizeMarkerPct(pos.x_pct, pos.y_pct);
+        return s ? { x_pct: s.xp, y_pct: s.yp } : null;
       }
       // Filter to drawing content area (excludes title block corners)
       const inArea = pos.all.filter(o =>
@@ -3117,7 +3184,8 @@ const PIDVerificationV2 = () => {
         const d  = dx * dx + dy * dy;
         if (d < bestDist) { bestDist = d; best = o; }
       }
-      return { x_pct: best.x_pct, y_pct: best.y_pct };
+      const s = sanitizeMarkerPct(best.x_pct, best.y_pct);
+      return s ? { x_pct: s.xp, y_pct: s.yp } : null;
     };
 
     // Prefer H-direction occurrence for line_tags (horizontal labels are the
@@ -3127,7 +3195,8 @@ const PIDVerificationV2 = () => {
       if (occs.length === 0) return null;
       const hOcc = occs.find(o => o.direction === 'H');
       const candidate = hOcc ?? occs[0];
-      return { x_pct: candidate.x_pct, y_pct: candidate.y_pct };
+      const s = sanitizeMarkerPct(candidate.x_pct, candidate.y_pct);
+      return s ? { x_pct: s.xp, y_pct: s.yp } : null;
     };
 
     // Apply soft-coded calibration offset and clamp to visible canvas.
@@ -3232,7 +3301,8 @@ const PIDVerificationV2 = () => {
           if (!raNk) continue;
           if (evNk.includes(raNk) || raNk.includes(evNk)) {
             if (ra.x_pct != null && ra.y_pct != null) {
-              return { x_pct: ra.x_pct, y_pct: ra.y_pct, tier: 'P5' };
+              const s = sanitizeMarkerPct(ra.x_pct, ra.y_pct);
+              if (s) return { x_pct: s.xp, y_pct: s.yp, tier: 'P5' };
             }
           }
         }
@@ -3300,7 +3370,7 @@ const PIDVerificationV2 = () => {
     .filter(n => showUncertainHighlights || n.band !== 'low')
     // Display-only: when "Critical Only" is enabled, narrow the rendered marker
     // set to critical-severity findings. Does not touch buildOverlayNodes()/matching.
-    .filter(n => !overlayCriticalOnly || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY);
+    .filter(n => !OVERLAY_ONLY_CRITICAL || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY);
 
   // ── Anchored-findings filter ──────────────────────────────────────────────
   // Inline evidence-key normalizer — mirrors normKey defined inside buildOverlayNodes.
@@ -7360,8 +7430,8 @@ const PIDVerificationV2 = () => {
                               <FileText className="w-4 h-4 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-900 truncate">
-                                {drawing.drawing_id}
+                              <p className="text-xs font-bold text-slate-900 truncate" title={drawing.drawing_id}>
+                                {getDrawingLabel(drawing.drawing_id)}
                               </p>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-xs font-medium ${
@@ -7498,20 +7568,18 @@ const PIDVerificationV2 = () => {
                       className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl transition-all">
                       <RefreshCw className="w-3.5 h-3.5" />New
                     </button>
-                    {/* Critical-only overlay visualisation toggle — soft-coded, display-layer
-                        only. Applies across every Drawing Overlay (Legends, Line List,
-                        Equipment, Instrument) without altering any matching/rule logic. */}
-                    <button
-                      onClick={() => setOverlayCriticalOnly(v => !v)}
-                      title="Show only Critical severity markers on every drawing overlay (Legends, Line List, Equipment, Instrument)"
-                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border transition-all hover:-translate-y-px"
-                      style={overlayCriticalOnly
-                        ? { background:'linear-gradient(135deg,#dc2626,#ef4444)', color:'#fff', border:'1.5px solid #dc2626', boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }
-                        : { background:'#fff', color:'#dc2626', border:'1.5px solid #fecaca' }}
+                    {/* Critical-only overlay visualisation — soft-coded (OVERLAY_ONLY_CRITICAL),
+                        display-layer only. Major/Minor/Info markers are permanently suppressed
+                        across every Drawing Overlay (Legends, Line List, Equipment, Instrument)
+                        without altering any matching/rule logic. */}
+                    <span
+                      title="This overlay only ever renders Critical severity markers (Major/Minor/Info are suppressed)"
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border"
+                      style={{ background:'linear-gradient(135deg,#dc2626,#ef4444)', color:'#fff', border:'1.5px solid #dc2626', boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }}
                     >
                       <AlertTriangle className="w-3.5 h-3.5" />
-                      {overlayCriticalOnly ? 'Critical Only: ON' : 'Critical Only'}
-                    </button>
+                      Critical Only
+                    </span>
                     <button
                       onClick={toggleFullscreen}
                       title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
@@ -7524,20 +7592,116 @@ const PIDVerificationV2 = () => {
                 </div>
               </div>
 
-              {/* ── Drawing tabs (always visible when multiple drawings) ── */}
-              {results.drawings?.length > 1 && (
-                <div className="flex gap-2 flex-wrap" style={{ animation:'fadeUp 0.5s ease-out 0.12s both' }}>
-                  {results.drawings.map(d => (
-                    <button key={d.drawing_id} onClick={() => setActiveDrawing(d.drawing_id)}
-                      className={`text-sm px-4 py-1.5 rounded-full border font-medium transition-all ${
-                        activeDrawing === d.drawing_id ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
-                      }`}
-                      style={activeDrawing === d.drawing_id ? { background:'linear-gradient(135deg,#3b82f6,#6366f1)' } : undefined}>
-                      {d.drawing_id}<span className={`ml-1.5 text-xs font-semibold ${activeDrawing === d.drawing_id ? 'text-blue-200' : 'text-slate-400'}`}>({d.issue_count})</span>
+              {/* ── Drawing navigator (multi-sheet documents) ──────────────
+                  Soft-coded (DRAWING_NAV_INLINE_LIMIT): <= limit pages render
+                  as a clean horizontally-scrollable pill strip; above it, a
+                  Prev/Next stepper + searchable dropdown replaces the pill
+                  wall so 20-30+ page documents stay usable and professional
+                  (no more raw "uuid-DRAWING-N(count)" text spilling across
+                  multiple rows). */}
+              {results.drawings?.length > 1 && (() => {
+                const drawings   = results.drawings;
+                const curIdx     = Math.max(0, drawings.findIndex(d => d.drawing_id === activeDrawing));
+                const useDropdown = drawings.length > DRAWING_NAV_INLINE_LIMIT;
+                const goTo = (idx) => {
+                  if (idx < 0 || idx >= drawings.length) return;
+                  setActiveDrawing(drawings[idx].drawing_id);
+                };
+
+                if (!useDropdown) {
+                  return (
+                    <div className="flex gap-2 flex-wrap" style={{ animation:'fadeUp 0.5s ease-out 0.12s both' }}>
+                      {drawings.map(d => (
+                        <button key={d.drawing_id} onClick={() => setActiveDrawing(d.drawing_id)}
+                          title={d.drawing_id}
+                          className={`text-sm px-4 py-1.5 rounded-full border font-medium transition-all ${
+                            activeDrawing === d.drawing_id ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-400'
+                          }`}
+                          style={activeDrawing === d.drawing_id ? { background:'linear-gradient(135deg,#3b82f6,#6366f1)' } : undefined}>
+                          {getDrawingLabel(d.drawing_id)}<span className={`ml-1.5 text-xs font-semibold ${activeDrawing === d.drawing_id ? 'text-blue-200' : 'text-slate-400'}`}>({d.issue_count})</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                }
+
+                const q = drawingNavQuery.trim().toLowerCase();
+                const filtered = q
+                  ? drawings.filter(d => getDrawingLabel(d.drawing_id).toLowerCase().includes(q) || d.drawing_id.toLowerCase().includes(q))
+                  : drawings;
+                const activeMeta = drawings[curIdx];
+
+                return (
+                  <div className="relative flex items-center gap-2" style={{ animation:'fadeUp 0.5s ease-out 0.12s both' }}>
+                    <button onClick={() => goTo(curIdx - 1)} disabled={curIdx <= 0}
+                      title="Previous drawing"
+                      className="flex items-center justify-center w-8 h-8 rounded-lg border bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all">
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
-                  ))}
-                </div>
-              )}
+
+                    <button onClick={() => setDrawingNavOpen(v => !v)}
+                      title={activeMeta?.drawing_id}
+                      className="flex items-center gap-2 text-sm font-bold px-3 py-1.5 rounded-lg border transition-all"
+                      style={{ background:'linear-gradient(135deg,#3b82f6,#6366f1)', color:'#fff', borderColor:'transparent' }}>
+                      <Layers className="w-3.5 h-3.5" />
+                      {getDrawingLabel(activeMeta?.drawing_id)}
+                      <span className="text-blue-200 text-xs font-semibold">
+                        {curIdx + 1} of {drawings.length} · {activeMeta?.issue_count ?? 0} issue{(activeMeta?.issue_count ?? 0) === 1 ? '' : 's'}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${drawingNavOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <button onClick={() => goTo(curIdx + 1)} disabled={curIdx >= drawings.length - 1}
+                      title="Next drawing"
+                      className="flex items-center justify-center w-8 h-8 rounded-lg border bg-white text-slate-600 border-slate-200 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-all">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    {drawingNavOpen && (
+                      <>
+                        {/* Backdrop to close on outside click */}
+                        <div className="fixed inset-0 z-30" onClick={() => setDrawingNavOpen(false)} />
+                        <div className="absolute left-0 top-full mt-2 z-40 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+                          style={{ width: '320px' }}>
+                          <div className="p-2 border-b border-slate-100">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                autoFocus
+                                value={drawingNavQuery}
+                                onChange={e => setDrawingNavQuery(e.target.value)}
+                                placeholder={`Search ${drawings.length} drawings…`}
+                                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-72 overflow-y-auto py-1">
+                            {filtered.length === 0 ? (
+                              <p className="text-xs text-slate-400 text-center py-4">No drawings match “{drawingNavQuery}”</p>
+                            ) : filtered.map(d => {
+                              const idx = drawings.indexOf(d);
+                              const isActive = d.drawing_id === activeDrawing;
+                              return (
+                                <button key={d.drawing_id}
+                                  onClick={() => { goTo(idx); setDrawingNavOpen(false); setDrawingNavQuery(''); }}
+                                  title={d.drawing_id}
+                                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
+                                    isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                                  }`}>
+                                  <span className="truncate">{getDrawingLabel(d.drawing_id)}</span>
+                                  <span className={`flex-shrink-0 font-semibold ${d.issue_count > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                    {d.issue_count}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ── No drawings warning ─────────────────────────────────── */}
               {results.drawings?.length === 0 && (
@@ -7621,7 +7785,7 @@ const PIDVerificationV2 = () => {
                       {qGrade.letter} · {qScore}%
                     </span>
                     {/* Drawing id */}
-                    <span className="text-xs font-bold text-white/80 truncate flex-1 min-w-0">{activeDrawing}</span>
+                    <span className="text-xs font-bold text-white/80 truncate flex-1 min-w-0" title={activeDrawing}>{getDrawingLabel(activeDrawing)}</span>
                     {/* Severity micro-chips */}
                     {[{v:criticalCount,c:'#ef4444',l:'C'},{v:majorCount,c:'#f97316',l:'M'},{v:_minor,c:'#fbbf24',l:'m'}]
                       .filter(x => x.v > 0)
@@ -7713,7 +7877,7 @@ const PIDVerificationV2 = () => {
                       {/* Drawing name + severity bar */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h2 className="text-base font-black text-white truncate">{activeDrawing}</h2>
+                          <h2 className="text-base font-black text-white truncate" title={activeDrawing}>{getDrawingLabel(activeDrawing)}</h2>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
                             style={{ background:`${qGrade.color}25`, color:qGrade.color, border:`1px solid ${qGrade.color}40` }}>
                             {qGrade.label}
@@ -8010,12 +8174,10 @@ const PIDVerificationV2 = () => {
 
                     {/* ── Overlay legend ── */}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-[10px] text-slate-500">
-                      {/* Severity colours */}
+                      {/* Severity colours — soft-coded: only Critical is ever rendered on the
+                          overlay (OVERLAY_ONLY_CRITICAL), so Major/Minor/Info are omitted here. */}
                       {[
                         { bg:'#dc2626', label:'Critical' },
-                        { bg:'#f97316', label:'Major' },
-                        { bg:'#fbbf24', label:'Minor' },
-                        { bg:'#3b82f6', label:'Info' },
                       ].map(s => (
                         <span key={s.label} className="flex items-center gap-1">
                           <span className="inline-block w-3 h-3 rounded-full border border-white/50 flex-shrink-0" style={{ background:s.bg, boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
@@ -8443,9 +8605,6 @@ const PIDVerificationV2 = () => {
                             <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-600" style={{ pointerEvents: 'none' }}>
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />Critical</span>
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />Major</span>
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />Minor</span>
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />Info</span>
                                 <span className="text-slate-400">·</span>
                                 <span className="inline-flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-[2px] bg-sky-500" style={{transform:'rotate(45deg)'}} />Dup Line</span>
                                 <span className="inline-flex items-center gap-1"><span className="inline-block w-5 h-2.5 rounded-sm border border-sky-400" style={{background:'rgba(14,165,233,0.18)'}} />Dup Zone</span>
@@ -8613,7 +8772,7 @@ const PIDVerificationV2 = () => {
                       <GitBranch className="w-4 h-4 text-red-600" />
                     </div>
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900">{activeDrawing} — Findings</h2>
+                      <h2 className="text-sm font-bold text-slate-900" title={activeDrawing}>{getDrawingLabel(activeDrawing)} — Findings</h2>
                       <p className="text-xs text-slate-500">{activeDrawingData.issues?.length ?? 0} total findings</p>
                     </div>
                   </div>
@@ -11462,12 +11621,18 @@ const PIDVerificationV2 = () => {
                       const MARKER_COLOR_CLEAN   = '#22c55e';
                       const MARKER_COLOR_GLOW_CLEAN = 'rgba(34,197,94,0.45)';
 
-                      const tagsWithCoordsAll = sortedFiltered.filter(t => t.pos?.x_pct != null && t.pos?.y_pct != null);
+                      // Soft-coded: only keep tags with a plausible on-drawing coordinate
+                      // (sanitizeMarkerPct drops garbage/off-page positions entirely).
+                      const tagsWithCoordsAll = sortedFiltered.filter(t =>
+                        t.pos?.x_pct != null && t.pos?.y_pct != null &&
+                        !!sanitizeMarkerPct(t.pos.x_pct, t.pos.y_pct)
+                      );
                       const tagsNoCoords   = sortedFiltered.length - tagsWithCoordsAll.length;
                       // Display-only: narrow markers drawn on the image to Critical severity
-                      // when the global "Critical Only" toggle is on. Underlying inventory/
-                      // matching (tagInventory, valveFindingsByTag, topSev) is unchanged.
-                      const tagsWithCoords = overlayCriticalOnly
+                      // since the overlay only ever renders Critical severity markers.
+                      // Underlying inventory/matching (tagInventory, valveFindingsByTag,
+                      // topSev) is unchanged.
+                      const tagsWithCoords = OVERLAY_ONLY_CRITICAL
                         ? tagsWithCoordsAll.filter(t => topSev(t.findings) === OVERLAY_CRITICAL_SEVERITY)
                         : tagsWithCoordsAll;
 
@@ -11565,8 +11730,9 @@ const PIDVerificationV2 = () => {
                                       const dotColor = hasIssue ? (SEV_COLOR[maxS] || '#f97316') : MARKER_COLOR_CLEAN;
                                       const dotGlow  = hasIssue ? `${SEV_COLOR[maxS]}55` : MARKER_COLOR_GLOW_CLEAN;
 
-                                      const left = Math.min(97, Math.max(1, t.pos.x_pct));
-                                      const top  = Math.min(94, Math.max(1, t.pos.y_pct));
+                                      const _sanePos = sanitizeMarkerPct(t.pos.x_pct, t.pos.y_pct);
+                                      const left = _sanePos ? _sanePos.xp : Math.min(97, Math.max(1, t.pos.x_pct));
+                                      const top  = _sanePos ? _sanePos.yp : Math.min(94, Math.max(1, t.pos.y_pct));
                                       const size = isSelected ? MARKER_SIZE_SELECTED : MARKER_SIZE_NORMAL;
 
                                       return (
@@ -12477,11 +12643,15 @@ const PIDVerificationV2 = () => {
                           const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
                           if (d < bestD) { bestD = d; best = o; }
                         }
-                        return [best.x_pct, best.y_pct, false];
+                        // Soft-coded sanity check: drops corrupt/off-page coordinates
+                        // instead of rendering a stray dot outside the diagram.
+                        const s = sanitizeMarkerPct(best.x_pct, best.y_pct);
+                        return s ? [s.xp, s.yp, false] : [null, null, false];
                       }
                       // Step 2: all occurrences are in title block — flag as reference-only
                       const fallback = primary || candidates[0];
-                      return [fallback.x_pct, fallback.y_pct, true];
+                      const s2 = sanitizeMarkerPct(fallback.x_pct, fallback.y_pct);
+                      return s2 ? [s2.xp, s2.yp, true] : [null, null, true];
                     };
 
                     // ── Soft-coded: severity colour scheme ───────────────────────────────────
@@ -12926,12 +13096,12 @@ const PIDVerificationV2 = () => {
                                           style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
                                                    transition:'opacity 0.25s ease' }} />
                                       )}
-                                      {/* Render only the selected marker when chip is active; when
-                                          "Critical Only" is on, further narrow to critical severity
+                                      {/* Render only the selected marker when chip is active; the
+                                          overlay only ever renders critical severity markers
                                           (display-only — instrMarkerList/topSev logic untouched). */}
                                       {instrMarkerList
                                         .filter(m => !instrSelectedTag || m.tag === instrSelectedTag)
-                                        .filter(m => !overlayCriticalOnly || m.topSev === OVERLAY_CRITICAL_SEVERITY)
+                                        .filter(m => !OVERLAY_ONLY_CRITICAL || m.topSev === OVERLAY_CRITICAL_SEVERITY)
                                         .map((m) => {
                                         const isSel   = instrSelectedTag === m.tag;
                                         const isaCat  = _getIsaCat(m.prefix);
@@ -14120,14 +14290,20 @@ const PIDVerificationV2 = () => {
                       const occs = (lt.occurrences || []).filter(o => o.x_pct != null && o.y_pct != null);
                       if (occs.length === 0) return [null, null];
                       const hOcc = occs.find(o => o.direction === 'H');
-                      if (hOcc) return [hOcc.x_pct, hOcc.y_pct];
+                      // Soft-coded sanity check: drops corrupt/off-page coordinates
+                      // instead of rendering a stray dot outside the diagram.
+                      if (hOcc) {
+                        const s = sanitizeMarkerPct(hOcc.x_pct, hOcc.y_pct);
+                        if (s) return [s.xp, s.yp];
+                      }
                       // Nearest to drawing centroid (50%, 50%)
                       let best = occs[0]; let bestD = Infinity;
                       for (const o of occs) {
                         const d = (o.x_pct - 50) ** 2 + (o.y_pct - 50) ** 2;
                         if (d < bestD) { bestD = d; best = o; }
                       }
-                      return [best.x_pct, best.y_pct];
+                      const s2 = sanitizeMarkerPct(best.x_pct, best.y_pct);
+                      return s2 ? [s2.xp, s2.yp] : [null, null];
                     };
 
                     // ── Build findings map: lineText (normalised) → findings array ──────────
@@ -14360,12 +14536,12 @@ const PIDVerificationV2 = () => {
                                         style={{ background:'rgba(15,23,42,0.55)', zIndex:5, pointerEvents:'none',
                                                  transition:'opacity 0.25s ease' }} />
                                     )}
-                                    {/* Only render the selected marker when a chip is active; when
-                                        "Critical Only" is on, further narrow to critical severity
+                                    {/* Only render the selected marker when a chip is active; the
+                                        overlay only ever renders critical severity markers
                                         (display-only — lineMarkers/topSev logic untouched). */}
                                     {lineMarkers
                                       .filter(m => !pipSelectedLine || m.text === pipSelectedLine)
-                                      .filter(m => !overlayCriticalOnly || m.topSev === OVERLAY_CRITICAL_SEVERITY)
+                                      .filter(m => !OVERLAY_ONLY_CRITICAL || m.topSev === OVERLAY_CRITICAL_SEVERITY)
                                       .map((m) => {
                                       const isSel  = pipSelectedLine === m.text;
                                       const sc     = m.topSev ? (PIP_SEV_COLOR[m.topSev] || PIP_SEV_COLOR.info) : null;
@@ -14998,9 +15174,12 @@ const PIDVerificationV2 = () => {
                     // This mirrors pickBestOcc() in buildOverlayNodes().
                     const _pickPos = (pos) => {
                       if (!pos) return null;
-                      // Case 1: direct position — use as-is
+                      // Case 1: direct position — sanitize before trusting it; drops
+                      // corrupt/off-page coordinates instead of rendering a stray dot.
                       if (!pos.all || pos.all.length === 0) {
-                        return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                        if (pos.x_pct == null || pos.y_pct == null) return null;
+                        const s = sanitizeMarkerPct(pos.x_pct, pos.y_pct);
+                        return s ? { xp: s.xp, yp: s.yp } : null;
                       }
                       // Case 2: occurrences array — filter to drawing content area then pick nearest centroid
                       const inArea = pos.all.filter(o =>
@@ -15015,7 +15194,8 @@ const PIDVerificationV2 = () => {
                         const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
                         if (d < bestD) { bestD = d; best = o; }
                       }
-                      return { xp: best.x_pct, yp: best.y_pct };
+                      const s2 = sanitizeMarkerPct(best.x_pct, best.y_pct);
+                      return s2 ? { xp: s2.xp, yp: s2.yp } : null;
                     };
 
                     // ── Source 1: CMP finding nodes from overlayNodes (already P1–P5 resolved) ──
@@ -15226,11 +15406,11 @@ const PIDVerificationV2 = () => {
                                     )}
 
                                     {/* ── Layer A: Equipment tag circles (from tag_positions) ── */}
-                                    {/* Display-only: when "Critical Only" is on, hide non-critical tag
-                                        circles — allCmpMarkers/topSev matching logic is unchanged. */}
+                                    {/* Display-only: the overlay only ever renders critical-severity
+                                        tag circles — allCmpMarkers/topSev matching logic is unchanged. */}
                                     {allCmpMarkers
                                       .filter(m => !cmpSelectedTag || m.tag === cmpSelectedTag)
-                                      .filter(m => !overlayCriticalOnly || (m.topSev||'').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
+                                      .filter(m => !OVERLAY_ONLY_CRITICAL || (m.topSev||'').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
                                       .map(m => {
                                         const isSel = cmpSelectedTag === m.tag;
                                         const sc    = CMP_SEV_COLOR[(m.topSev||'').toLowerCase()] || null;
@@ -15300,7 +15480,7 @@ const PIDVerificationV2 = () => {
                                     {/* These use the same P1-P5 coordinate resolution as the main
                                         drawing panel — exact OCR-located positions. */}
                                     {cmpNodes
-                                      .filter(n => !overlayCriticalOnly || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
+                                      .filter(n => !OVERLAY_ONLY_CRITICAL || (n.finding?.severity || '').toLowerCase() === OVERLAY_CRITICAL_SEVERITY)
                                       .filter(n => {
                                         if (!cmpSelectedTag) return true;
                                         // When a tag is selected, only show findings mentioning it
@@ -16352,8 +16532,11 @@ const PIDVerificationV2 = () => {
                   // ── Inline pickBestOcc for tag_positions ─────────────────────────
                   const _vlvPickBest = (pos) => {
                     if (!pos) return null;
-                    if (!pos.all || pos.all.length === 0)
-                      return (pos.x_pct != null && pos.y_pct != null) ? { xp: pos.x_pct, yp: pos.y_pct } : null;
+                    if (!pos.all || pos.all.length === 0) {
+                      if (pos.x_pct == null || pos.y_pct == null) return null;
+                      const s = sanitizeMarkerPct(pos.x_pct, pos.y_pct);
+                      return s ? { xp: s.xp, yp: s.yp } : null;
+                    }
                     const inArea = pos.all.filter(o =>
                       o.x_pct != null && o.y_pct != null &&
                       o.x_pct >= 1 && o.x_pct <= 96 &&
@@ -16366,7 +16549,8 @@ const PIDVerificationV2 = () => {
                       const d = (o.x_pct - 50) ** 2 + (o.y_pct - 40) ** 2;
                       if (d < bestD) { bestD = d; best = o; }
                     }
-                    return { xp: best.x_pct, yp: best.y_pct };
+                    const s2 = sanitizeMarkerPct(best.x_pct, best.y_pct);
+                    return s2 ? { xp: s2.xp, yp: s2.yp } : null;
                   };
 
                   // ── VLV rule findings (from AI analysis) ────────────────────────
