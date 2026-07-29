@@ -910,6 +910,34 @@ const ANALYSIS_STAGES = [
   { id: 'report',     label: 'Building findings report',     icon: FileText,   durationMs: 22000 },
 ];
 
+// Soft-coded 3-stage grouping for the Smart Documentation "Quick Start" accordion —
+// mirrors the RADAI AI-Assisted P&ID Verification Workflow diagram (Inputs & Setup /
+// AI Processing / Results & Export). Each group clusters the 9 step keys and drives
+// the colored stage-banner header rendered above its cluster of step cards.
+const WORKFLOW_STAGE_GROUPS = [
+  {
+    id: 'stage1',
+    label: 'STAGE 1 · Inputs & Setup',
+    description: 'Open your project and bring in every source document the AI needs',
+    colorFrom: '#475569', colorTo: '#1e293b',
+    stepKeys: ['step1', 'step2', 'step3', 'step4', 'step5'],
+  },
+  {
+    id: 'stage2',
+    label: 'STAGE 2 · AI Processing',
+    description: 'Kick off the 7-stage AI pipeline and track live progress',
+    colorFrom: '#8b5cf6', colorTo: '#6d28d9',
+    stepKeys: ['step6', 'step7'],
+  },
+  {
+    id: 'stage3',
+    label: 'STAGE 3 · Results & Export',
+    description: 'Review findings and export in the format your stakeholders need',
+    colorFrom: '#10b981', colorTo: '#047857',
+    stepKeys: ['step8', 'step9'],
+  },
+];
+
 const PID_FACTS = [
   'A typical offshore P&ID can contain 2,000+ instrument tags across 80+ drawings.',
   'ISA 5.1 defines the standard symbols for instruments used in P&IDs worldwide.',
@@ -1475,11 +1503,15 @@ const PIDVerificationV2 = () => {
 
   // Documentation accordion state - track expanded steps
   const [expandedSteps, setExpandedSteps] = useState({
-    step1: true,  // Create Project - expanded by default
-    step2: false, // Upload P&ID
-    step3: false, // AI Analysis
-    step4: false, // Review Results
-    step5: false  // Export Report
+    step1: true,   // Open Project - expanded by default
+    step2: false,  // Upload P&ID
+    step3: false,  // Upload Legend
+    step4: false,  // Reference Files (Optional)
+    step5: false,  // Wrench DMS (Optional)
+    step6: false,  // Run Verification
+    step7: false,  // AI Analysis (7 stages)
+    step8: false,  // Review Results
+    step9: false   // Export
   });
 
   // Toggle individual step
@@ -1493,22 +1525,16 @@ const PIDVerificationV2 = () => {
   // Expand all steps
   const expandAllSteps = () => {
     setExpandedSteps({
-      step1: true,
-      step2: true,
-      step3: true,
-      step4: true,
-      step5: true
+      step1: true, step2: true, step3: true, step4: true, step5: true,
+      step6: true, step7: true, step8: true, step9: true
     });
   };
 
   // Collapse all steps
   const collapseAllSteps = () => {
     setExpandedSteps({
-      step1: false,
-      step2: false,
-      step3: false,
-      step4: false,
-      step5: false
+      step1: false, step2: false, step3: false, step4: false, step5: false,
+      step6: false, step7: false, step8: false, step9: false
     });
   };
 
@@ -3888,8 +3914,8 @@ const PIDVerificationV2 = () => {
                       
                       {/* Actual Image */}
                       <img 
-                        src="/assets/images/PID_Workflow.png" 
-                        alt="P&ID Verification Workflow - 3 Stage Process: Upload Documents, AI Analysis, Quality Report"
+                        src="/assets/images/PID_Workflow_V2.png" 
+                        alt="RADAI AI-Assisted P&ID Verification Workflow - 3 Stages: Inputs & Setup, AI Processing, Results & Export (9 steps)"
                         onLoad={() => { setWorkflowImageLoaded(true); setWorkflowImageError(false); }}
                         onError={() => { setWorkflowImageError(true); setWorkflowImageLoaded(false); }}
                         style={{
@@ -4199,7 +4225,23 @@ const PIDVerificationV2 = () => {
                         </button>
                       </div>
 
-                      {/* Step 1: Create Project - DETAILED */}
+                      {/* ═══ STAGE 1 BANNER: Inputs & Setup ═══ */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                        padding: '10px 14px', marginBottom: '14px',
+                        borderRadius: '10px',
+                        background: `linear-gradient(135deg, ${WORKFLOW_STAGE_GROUPS[0].colorFrom} 0%, ${WORKFLOW_STAGE_GROUPS[0].colorTo} 100%)`,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>
+                          {WORKFLOW_STAGE_GROUPS[0].label}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)' }}>
+                          {WORKFLOW_STAGE_GROUPS[0].description}
+                        </span>
+                      </div>
+
+                      {/* Step 1: Open Project - DETAILED */}
                       <div style={{
                         marginBottom: '20px',
                         border: '2px solid rgba(59,130,246,0.2)',
@@ -4235,7 +4277,7 @@ const PIDVerificationV2 = () => {
                             }}>1</div>
                             <div style={{ flex: 1 }}>
                               <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
-                                Create Project
+                                Open Project
                               </h4>
                               <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
                                 Organize your P&ID verification work
@@ -4334,10 +4376,10 @@ const PIDVerificationV2 = () => {
                             }}>2</div>
                             <div style={{ flex: 1 }}>
                               <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
-                                Upload P&ID Drawings & Legends
+                                Upload P&ID Drawing
                               </h4>
                               <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
-                                Critical step for accurate AI analysis
+                                The primary process diagram the AI will analyze
                               </p>
                             </div>
                             {expandedSteps.step2 ? (
@@ -4357,15 +4399,9 @@ const PIDVerificationV2 = () => {
                             <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
                               <li><strong>Select your project</strong> from the list below (the project card will highlight)</li>
                               <li><strong>Click "Upload P&ID"</strong> or drag files into the upload zone</li>
-                              <li><strong>Select files:</strong>
-                                <ul style={{ marginTop: '4px', paddingLeft: '20px' }}>
-                                  <li><strong>Main P&ID Drawing:</strong> The primary process diagram (PDF/DWG recommended)</li>
-                                  <li><strong>Legend Sheet:</strong> Symbol definitions and abbreviations (CRITICAL for accuracy)</li>
-                                  <li><strong>Additional Sheets:</strong> Any continuation or related drawings</li>
-                                </ul>
-                              </li>
-                              <li><strong>Wait for upload confirmation</strong> - you'll see progress bars for each file</li>
-                              <li><strong>Click "Start Analysis"</strong> when all files are uploaded</li>
+                              <li><strong>Select the file:</strong> The primary process diagram (PDF/DWG recommended)</li>
+                              <li><strong>Wait for upload confirmation</strong> - you'll see a progress bar</li>
+                              <li><strong>Continue to Step 3</strong> to attach a legend sheet (recommended), or skip straight to <strong>Step 6</strong> to run verification</li>
                             </ol>
                           </div>
 
@@ -4402,11 +4438,10 @@ const PIDVerificationV2 = () => {
                           }}>
                             <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>🎯 Upload Best Practices:</strong>
                             <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.6 }}>
-                              <li><strong>Always include legend sheets</strong> - AI accuracy improves by 20-30% with legends</li>
+                              <li><strong>Add a legend in Step 3</strong> - AI accuracy improves by 20-30% once a legend is built</li>
                               <li><strong>High resolution:</strong> Use 300 DPI minimum for scanned images</li>
                               <li><strong>Clear scans:</strong> Avoid shadows, folds, or torn edges</li>
                               <li><strong>Orientation:</strong> Upload in correct orientation (AI can handle rotation but accuracy drops)</li>
-                              <li><strong>Multiple sheets:</strong> Upload all related sheets together (Sheet 1, 2, 3... of the same drawing)</li>
                               <li><strong>File naming:</strong> Use descriptive names like "P16093-PID-001-Rev-A.pdf" not "scan123.pdf"</li>
                             </ul>
                           </div>
@@ -4418,14 +4453,384 @@ const PIDVerificationV2 = () => {
                             border: '1px solid rgba(239,68,68,0.2)'
                           }}>
                             <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
-                              <strong style={{ color: COLOR_ERROR }}>🚫 Common Mistakes:</strong> Uploading only the main drawing without legends, using low-resolution scans (&lt;150 DPI), or mixing unrelated drawings in one project. These reduce AI accuracy significantly.
+                              <strong style={{ color: COLOR_ERROR }}>🚫 Common Mistakes:</strong> Skipping the legend step, using low-resolution scans (&lt;150 DPI), or mixing unrelated drawings in one project. These reduce AI accuracy significantly.
                             </p>
                           </div>
                         </div>
                         )}
                       </div>
 
-                      {/* Step 3: AI Analysis - DEEP DIVE */}
+                      {/* Step 3: Upload Legend - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(20,184,166,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
+                      }}>
+                        <div 
+                          onClick={() => toggleStep('step3')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(20,184,166,0.12) 0%, rgba(13,148,136,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step3 ? '1px solid rgba(20,184,166,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(20,184,166,0.18) 0%, rgba(13,148,136,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(20,184,166,0.12) 0%, rgba(13,148,136,0.08) 100%)'}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #14b8a6, #0d9488)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(20,184,166,0.3)'
+                            }}>3</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Upload Legend
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Teach the AI your symbol library — strongly recommended
+                              </p>
+                            </div>
+                            {expandedSteps.step3 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#14b8a6', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#14b8a6', transition: 'transform 200ms ease' }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedSteps.step3 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>🗝️</span> How to Build Legend Knowledge
+                            </h5>
+                            <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
+                              <li><strong>Open the Legend panel</strong> for your project (next to the upload zone)</li>
+                              <li><strong>Choose your legend sheet</strong> — the PDF/image containing symbol definitions, abbreviations and instrument prefixes</li>
+                              <li><strong>Click "Build Legend Knowledge"</strong> — the AI extracts and indexes every symbol it finds</li>
+                              <li><strong>Review the summary</strong> once built — you'll see the symbol count and build timestamp</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(20,184,166,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(20,184,166,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                              <Lightbulb style={{ width: '16px', height: '16px', color: '#14b8a6', marginTop: '2px', flexShrink: 0 }} />
+                              <div>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>💡 Why it matters:</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.6 }}>
+                                  Once built, this legend is reused automatically for <strong>every drawing you verify in this project</strong> — no need to re-upload it per drawing. AI accuracy on tag and symbol recognition improves significantly once a project-specific legend is in place.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(245,158,11,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(245,158,11,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_WARNING }}>⚠️ Optional but recommended:</strong> Skipping this step still works — the AI falls back to standard ISA-5.1 symbol knowledge. Rebuilding the legend later overwrites the previous knowledge for this project.
+                            </p>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+
+                      {/* Step 4: Reference Files (Optional) - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(236,72,153,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
+                      }}>
+                        <div 
+                          onClick={() => toggleStep('step4')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(236,72,153,0.12) 0%, rgba(219,39,119,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step4 ? '1px solid rgba(236,72,153,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(236,72,153,0.18) 0%, rgba(219,39,119,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(236,72,153,0.12) 0%, rgba(219,39,119,0.08) 100%)'}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #ec4899, #db2777)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(236,72,153,0.3)'
+                            }}>4</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Reference Files (Optional)
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Cross-check tags against your master registers
+                              </p>
+                            </div>
+                            {expandedSteps.step4 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#ec4899', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#ec4899', transition: 'transform 200ms ease' }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedSteps.step4 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>📚</span> Optional Cross-Reference Uploads
+                            </h5>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '0 0 10px', lineHeight: 1.6 }}>
+                              Upload any of these master registers to let the AI cross-check tags found on the drawing against your project's source-of-truth data:
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>📋 Line List</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '4px 0 0', lineHeight: 1.5 }}>Piping line list — cross-checks line numbers, sizes and specs against the drawing</p>
+                              </div>
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(147,51,234,0.06)', border: '1px solid rgba(147,51,234,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>⚙️ Equipment List</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '4px 0 0', lineHeight: 1.5 }}>Equipment register — verifies every equipment tag on the drawing is registered and correctly named</p>
+                              </div>
+                              <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                                <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY }}>🎚️ Instrument Index</strong>
+                                <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '4px 0 0', lineHeight: 1.5 }}>Instrument index — flags instrument tags on the drawing missing from (or mismatched with) the index</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(16,185,129,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(16,185,129,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_SUCCESS }}>✅ Fully optional:</strong> Skip this step for a standalone drawing quality check. Upload any combination of the three registers at any time — you don't need all three, and you can add them later before re-running verification.
+                            </p>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+
+                      {/* Step 5: Wrench DMS (Optional) - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(14,165,233,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
+                      }}>
+                        <div 
+                          onClick={() => toggleStep('step5')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(14,165,233,0.12) 0%, rgba(2,132,199,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step5 ? '1px solid rgba(14,165,233,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(2,132,199,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(14,165,233,0.12) 0%, rgba(2,132,199,0.08) 100%)'}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(14,165,233,0.3)'
+                            }}>5</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Wrench DMS (Optional)
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Let AI find & fetch the right P&ID straight from Wrench
+                              </p>
+                            </div>
+                            {expandedSteps.step5 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#0ea5e9', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#0ea5e9', transition: 'transform 200ms ease' }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedSteps.step5 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>🗂️</span> AI Document Assist (Wrench)
+                            </h5>
+                            <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
+                              <li><strong>Enable "AI Document Assist"</strong> in the upload panel (off by default)</li>
+                              <li><strong>Pick or search the linked Wrench project</strong> from the dropdown</li>
+                              <li><strong>Review the ranked recommendations</strong> — RAD AI scores candidate P&ID PDFs from that Wrench transmittal</li>
+                              <li><strong>Click a recommendation</strong> to download it straight from Wrench and load it into the upload zone, ready to verify</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(245,158,11,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(245,158,11,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_WARNING }}>⚠️ Requires setup:</strong> This panel only appears when Wrench integration is configured for your organization (Admin → Wrench). If it isn't configured, simply upload your P&ID file manually in Step 2.
+                            </p>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+
+                      {/* ═══ STAGE 2 BANNER: AI Processing ═══ */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                        padding: '10px 14px', marginBottom: '14px',
+                        borderRadius: '10px',
+                        background: `linear-gradient(135deg, ${WORKFLOW_STAGE_GROUPS[1].colorFrom} 0%, ${WORKFLOW_STAGE_GROUPS[1].colorTo} 100%)`,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>
+                          {WORKFLOW_STAGE_GROUPS[1].label}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)' }}>
+                          {WORKFLOW_STAGE_GROUPS[1].description}
+                        </span>
+                      </div>
+
+                      {/* Step 6: Run Verification - DETAILED */}
+                      <div style={{
+                        marginBottom: '20px',
+                        border: '2px solid rgba(239,68,68,0.2)',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        transition: 'all 300ms ease'
+                      }}>
+                        <div 
+                          onClick={() => toggleStep('step6')}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.08) 100%)',
+                            padding: '14px 16px',
+                            borderBottom: expandedSteps.step6 ? '1px solid rgba(239,68,68,0.2)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 200ms ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(220,38,38,0.14) 100%)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.08) 100%)'}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 700,
+                              color: 'white',
+                              boxShadow: '0 4px 12px rgba(239,68,68,0.3)'
+                            }}>6</div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
+                                Run Verification
+                              </h4>
+                              <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
+                                Kick off analysis and track live progress
+                              </p>
+                            </div>
+                            {expandedSteps.step6 ? (
+                              <ChevronUp style={{ width: '20px', height: '20px', color: '#ef4444', transition: 'transform 200ms ease' }} />
+                            ) : (
+                              <ChevronDown style={{ width: '20px', height: '20px', color: '#ef4444', transition: 'transform 200ms ease' }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedSteps.step6 && (
+                          <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
+                          <div style={{ marginBottom: '14px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '1rem' }}>▶️</span> Starting the Analysis
+                            </h5>
+                            <ol style={{ margin: 0, paddingLeft: '24px', fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, lineHeight: 1.8 }}>
+                              <li><strong>Click "Start Analysis"</strong> once your P&ID (and any optional legend / reference files) are ready</li>
+                              <li><strong>The file uploads</strong> and the document is queued on the server for processing</li>
+                              <li><strong>Live status updates</strong> automatically — the page polls the server every few seconds and shows elapsed time</li>
+                              <li><strong>Feel free to navigate away</strong> — processing continues server-side; check the History panel to pick up where you left off</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ 
+                            padding: '12px', 
+                            background: 'rgba(239,68,68,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(239,68,68,0.2)',
+                            marginBottom: '12px'
+                          }}>
+                            <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '6px' }}>🔁 If something goes wrong:</strong>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.6 }}>
+                              A failed or stuck document doesn't require starting over. Open <strong>History</strong> and click <strong>"Re-check"</strong> on that document — it re-queues the same uploaded file for processing without repeating Steps 1-5.
+                            </p>
+                          </div>
+
+                          <div style={{ 
+                            padding: '10px 12px', 
+                            background: 'rgba(59,130,246,0.06)', 
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59,130,246,0.2)'
+                          }}>
+                            <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
+                              <strong style={{ color: COLOR_PRIMARY }}>ℹ️ Typical duration:</strong> A few minutes depending on drawing size and complexity. Very large or multi-sheet drawings may take longer — the status will always keep updating.
+                            </p>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+
+                      {/* Step 7: AI Analysis - 7-STAGE PIPELINE */}
                       <div style={{
                         marginBottom: '20px',
                         border: '2px solid rgba(245,158,11,0.2)',
@@ -4434,11 +4839,11 @@ const PIDVerificationV2 = () => {
                         transition: 'all 300ms ease'
                       }}>
                         <div 
-                          onClick={() => toggleStep('step3')}
+                          onClick={() => toggleStep('step7')}
                           style={{
                             background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(234,88,12,0.08) 100%)',
                             padding: '14px 16px',
-                            borderBottom: expandedSteps.step3 ? '1px solid rgba(245,158,11,0.2)' : 'none',
+                            borderBottom: expandedSteps.step7 ? '1px solid rgba(245,158,11,0.2)' : 'none',
                             cursor: 'pointer',
                             transition: 'all 200ms ease'
                           }}
@@ -4458,16 +4863,16 @@ const PIDVerificationV2 = () => {
                               fontWeight: 700,
                               color: 'white',
                               boxShadow: '0 4px 12px rgba(245,158,11,0.3)'
-                            }}>3</div>
+                            }}>7</div>
                             <div style={{ flex: 1 }}>
                               <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
-                                AI Analysis - Deep Quality Check
+                                AI Analysis — 7-Stage Pipeline
                               </h4>
                               <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '2px 0 0' }}>
                                 Automated verification with 20+ engineering rules
                               </p>
                             </div>
-                            {expandedSteps.step3 ? (
+                            {expandedSteps.step7 ? (
                               <ChevronUp style={{ width: '20px', height: '20px', color: '#f59e0b', transition: 'transform 200ms ease' }} />
                             ) : (
                               <ChevronDown style={{ width: '20px', height: '20px', color: '#f59e0b', transition: 'transform 200ms ease' }} />
@@ -4475,46 +4880,51 @@ const PIDVerificationV2 = () => {
                           </div>
                         </div>
                         
-                        {expandedSteps.step3 && (
+                        {expandedSteps.step7 && (
                           <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '1rem' }}>🤖</span> What Happens During Analysis
                             </h5>
                             <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: '0 0 12px', lineHeight: 1.6 }}>
-                              Once you click "Start Analysis", our AI engine performs a comprehensive 5-phase verification process. This typically takes 2-5 minutes depending on drawing complexity. Here's the detailed breakdown:
+                              Once you click "Start Analysis" in Step 6, our AI engine runs a 7-stage verification pipeline. This typically takes a few minutes depending on drawing complexity. Here's the detailed breakdown:
                             </p>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
                               {[
                                 { 
-                                  phase: 'Phase 1: Document Processing',
-                                  desc: 'PDF/DWG parsing, image extraction, coordinate mapping',
-                                  time: '~30 sec',
+                                  phase: 'Stage 1: OCR Text Extraction',
+                                  desc: 'Multi-engine OCR (Tesseract + Google Vision) reads every tag, label and note on the drawing',
                                   color: '#3b82f6'
                                 },
                                 { 
-                                  phase: 'Phase 2: OCR & Text Extraction',
-                                  desc: 'Multi-engine OCR (Tesseract + Google Vision), text recognition, tag identification',
-                                  time: '~1 min',
+                                  phase: 'Stage 2: Tag Pattern Recognition',
+                                  desc: 'Identifies instrument, equipment and line tags using ISA-5.1 and project-specific patterns',
                                   color: '#8b5cf6'
                                 },
                                 { 
-                                  phase: 'Phase 3: Legend Analysis',
-                                  desc: 'Symbol library creation, abbreviation mapping, instrument prefix detection',
-                                  time: '~30 sec',
+                                  phase: 'Stage 3: Connectivity Graph Build',
+                                  desc: 'Maps how lines, valves and equipment connect across the drawing',
+                                  color: '#ec4899'
+                                },
+                                { 
+                                  phase: 'Stage 4: Valve & Equipment Checks',
+                                  desc: 'Validates valve placement, orphaned equipment and symbol correctness',
                                   color: '#f59e0b'
                                 },
                                 { 
-                                  phase: 'Phase 4: Quality Rule Engine',
-                                  desc: '20+ verification rules, connectivity checks, tag validation, compliance scanning',
-                                  time: '~1-2 min',
+                                  phase: 'Stage 5: Line Size Validation',
+                                  desc: 'Checks line sizing consistency, reducers and branch logic',
+                                  color: '#14b8a6'
+                                },
+                                { 
+                                  phase: 'Stage 6: Deterministic Rule Engine',
+                                  desc: 'Runs the 20+ quality verification rules across tags, connectivity, sizing and compliance',
                                   color: '#10b981'
                                 },
                                 { 
-                                  phase: 'Phase 5: Results Compilation',
-                                  desc: 'Findings aggregation, severity classification, marker positioning, report generation',
-                                  time: '~20 sec',
+                                  phase: 'Stage 7: Building Findings Report',
+                                  desc: 'Aggregates findings, classifies severity and positions markers for the results view',
                                   color: '#6366f1'
                                 }
                               ].map((phase, i) => (
@@ -4539,7 +4949,6 @@ const PIDVerificationV2 = () => {
                                       color: phase.color
                                     }}>{i + 1}</div>
                                     <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, flex: 1 }}>{phase.phase}</strong>
-                                    <span style={{ fontSize: '0.7rem', color: COLOR_TEXT_SECONDARY, fontStyle: 'italic' }}>{phase.time}</span>
                                   </div>
                                   <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, paddingLeft: '32px', lineHeight: 1.5 }}>
                                     {phase.desc}
@@ -4612,7 +5021,7 @@ const PIDVerificationV2 = () => {
                               <div>
                                 <strong style={{ fontSize: '0.8rem', color: COLOR_TEXT_PRIMARY, display: 'block', marginBottom: '4px' }}>📊 Real-Time Progress:</strong>
                                 <p style={{ fontSize: '0.75rem', color: COLOR_TEXT_SECONDARY, margin: 0, lineHeight: 1.5 }}>
-                                  Watch the progress bar and phase indicators in real-time. You'll see: <strong>Current phase</strong>, <strong>Percentage complete</strong>, <strong>Estimated time remaining</strong>, and <strong>Items processed</strong>. The browser tab stays active - you can work on other tasks.
+                                  Watch the live stage indicator as it moves through all 7 stages. The browser tab stays active — you can work on other tasks while processing continues in the background.
                                 </p>
                               </div>
                             </div>
@@ -4621,7 +5030,23 @@ const PIDVerificationV2 = () => {
                         )}
                       </div>
 
-                      {/* Step 4: Review Results - DETAILED */}
+                      {/* ═══ STAGE 3 BANNER: Results & Export ═══ */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                        padding: '10px 14px', marginBottom: '14px',
+                        borderRadius: '10px',
+                        background: `linear-gradient(135deg, ${WORKFLOW_STAGE_GROUPS[2].colorFrom} 0%, ${WORKFLOW_STAGE_GROUPS[2].colorTo} 100%)`,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>
+                          {WORKFLOW_STAGE_GROUPS[2].label}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)' }}>
+                          {WORKFLOW_STAGE_GROUPS[2].description}
+                        </span>
+                      </div>
+
+                      {/* Step 8: Review Results - DETAILED */}
                       <div style={{
                         marginBottom: '20px',
                         border: '2px solid rgba(16,185,129,0.2)',
@@ -4630,11 +5055,11 @@ const PIDVerificationV2 = () => {
                         transition: 'all 300ms ease'
                       }}>
                         <div 
-                          onClick={() => toggleStep('step4')}
+                          onClick={() => toggleStep('step8')}
                           style={{
                             background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.08) 100%)',
                             padding: '14px 16px',
-                            borderBottom: expandedSteps.step4 ? '1px solid rgba(16,185,129,0.2)' : 'none',
+                            borderBottom: expandedSteps.step8 ? '1px solid rgba(16,185,129,0.2)' : 'none',
                             cursor: 'pointer',
                             transition: 'all 200ms ease'
                           }}
@@ -4654,7 +5079,7 @@ const PIDVerificationV2 = () => {
                               fontWeight: 700,
                               color: 'white',
                               boxShadow: '0 4px 12px rgba(16,185,129,0.3)'
-                            }}>4</div>
+                            }}>8</div>
                             <div style={{ flex: 1 }}>
                               <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
                                 Review Findings & Results
@@ -4663,7 +5088,7 @@ const PIDVerificationV2 = () => {
                                 Interactive analysis with visual markers
                               </p>
                             </div>
-                            {expandedSteps.step4 ? (
+                            {expandedSteps.step8 ? (
                               <ChevronUp style={{ width: '20px', height: '20px', color: '#10b981', transition: 'transform 200ms ease' }} />
                             ) : (
                               <ChevronDown style={{ width: '20px', height: '20px', color: '#10b981', transition: 'transform 200ms ease' }} />
@@ -4671,7 +5096,7 @@ const PIDVerificationV2 = () => {
                           </div>
                         </div>
                         
-                        {expandedSteps.step4 && (
+                        {expandedSteps.step8 && (
                           <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -4773,7 +5198,7 @@ const PIDVerificationV2 = () => {
                         )}
                       </div>
 
-                      {/* Step 5: Export Report - DETAILED */}
+                      {/* Step 9: Export Report - DETAILED */}
                       <div style={{
                         marginBottom: '8px',
                         border: '2px solid rgba(99,102,241,0.2)',
@@ -4782,11 +5207,11 @@ const PIDVerificationV2 = () => {
                         transition: 'all 300ms ease'
                       }}>
                         <div 
-                          onClick={() => toggleStep('step5')}
+                          onClick={() => toggleStep('step9')}
                           style={{
                             background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(59,130,246,0.08) 100%)',
                             padding: '14px 16px',
-                            borderBottom: expandedSteps.step5 ? '1px solid rgba(99,102,241,0.2)' : 'none',
+                            borderBottom: expandedSteps.step9 ? '1px solid rgba(99,102,241,0.2)' : 'none',
                             cursor: 'pointer',
                             transition: 'all 200ms ease'
                           }}
@@ -4806,7 +5231,7 @@ const PIDVerificationV2 = () => {
                               fontWeight: 700,
                               color: 'white',
                               boxShadow: '0 4px 12px rgba(99,102,241,0.3)'
-                            }}>5</div>
+                            }}>9</div>
                             <div style={{ flex: 1 }}>
                               <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: COLOR_TEXT_PRIMARY, margin: 0 }}>
                                 Export Quality Report
@@ -4815,7 +5240,7 @@ const PIDVerificationV2 = () => {
                                 Professional documentation for your team
                               </p>
                             </div>
-                            {expandedSteps.step5 ? (
+                            {expandedSteps.step9 ? (
                               <ChevronUp style={{ width: '20px', height: '20px', color: '#6366f1', transition: 'transform 200ms ease' }} />
                             ) : (
                               <ChevronDown style={{ width: '20px', height: '20px', color: '#6366f1', transition: 'transform 200ms ease' }} />
@@ -4823,7 +5248,7 @@ const PIDVerificationV2 = () => {
                           </div>
                         </div>
                         
-                        {expandedSteps.step5 && (
+                        {expandedSteps.step9 && (
                           <div style={{ padding: '16px', background: 'white', animation: 'fadeIn 300ms ease' }}>
                           <div style={{ marginBottom: '14px' }}>
                             <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: COLOR_TEXT_PRIMARY, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -18250,8 +18675,8 @@ const PIDVerificationV2 = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <img 
-              src="/assets/images/PID_Workflow.png" 
-              alt="P&ID Verification Workflow - Full Screen"
+              src="/assets/images/PID_Workflow_V2.png" 
+              alt="RADAI AI-Assisted P&ID Verification Workflow - Full Screen"
               style={{
                 width: '100%',
                 height: 'auto',
