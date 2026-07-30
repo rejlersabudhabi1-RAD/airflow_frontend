@@ -293,9 +293,17 @@ export async function equipmentCrossCheck(payload) {
     use_ai: Boolean(payload.useAi),
   }
   if (payload.equipmentListId) body.equipment_list_id = payload.equipmentListId
-  if (payload.useAi) {
+  // Attribute-level cross-check requires BYOK credentials on backend, so
+  // whenever equipmentAttributes are supplied we also forward provider/key.
+  const hasAttrs = payload.equipmentAttributes
+    && typeof payload.equipmentAttributes === 'object'
+    && Object.keys(payload.equipmentAttributes).length > 0
+  if (payload.useAi || hasAttrs) {
     body.vision_provider = payload.provider
     body.vision_api_key = payload.apiKey
+  }
+  if (hasAttrs) {
+    body.equipment_attributes = payload.equipmentAttributes
   }
   const res = await apiClient.post(EQUIPMENT_CROSS_CHECK_ENDPOINT, body, { timeout: REQUEST_TIMEOUT_MS })
   return res.data
@@ -377,9 +385,15 @@ export async function instrumentCrossCheck(payload) {
     use_ai: Boolean(payload.useAi),
   }
   if (payload.instrumentIndexId) body.instrument_index_id = payload.instrumentIndexId
-  if (payload.useAi) {
+  const hasAttrs = payload.instrumentAttributes
+    && typeof payload.instrumentAttributes === 'object'
+    && Object.keys(payload.instrumentAttributes).length > 0
+  if (payload.useAi || hasAttrs) {
     body.vision_provider = payload.provider
     body.vision_api_key = payload.apiKey
+  }
+  if (hasAttrs) {
+    body.instrument_attributes = payload.instrumentAttributes
   }
   const res = await apiClient.post(INSTRUMENT_CROSS_CHECK_ENDPOINT, body, { timeout: REQUEST_TIMEOUT_MS })
   return res.data

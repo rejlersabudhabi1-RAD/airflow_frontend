@@ -46,6 +46,7 @@ const VARIANT_EXTRA_COLUMNS = {
     { key: 'description',       label: 'Description' },
     { key: 'moc',               label: 'MOC' },
     { key: 'phase',             label: 'Phase' },
+    { key: 'severity',          label: 'Overall Severity' },
     { key: 'equipment_list_row', label: 'Excel row' },
   ],
   instrument_index: [
@@ -54,6 +55,7 @@ const VARIANT_EXTRA_COLUMNS = {
     { key: 'pid_no',                label: 'P&ID No.' },
     { key: 'eqpt_no',               label: 'Equipment No.' },
     { key: 'line_no',               label: 'Line No.' },
+    { key: 'severity',              label: 'Overall Severity' },
     { key: 'instrument_index_row',  label: 'Excel row' },
   ],
 }
@@ -70,20 +72,26 @@ const VARIANT_SUMMARY_LABELS = {
     ['Coverage (%)',    'coverage_pct'],
   ],
   equipment_list: [
-    ['P&ID tags',       'pid_total'],
-    ['Equipment List',  'equipment_list_total'],
-    ['Match',           'match'],
-    ['Missing on P&ID', 'missing_on_pid'],
-    ['Extra on P&ID',   'extra_on_pid'],
-    ['Coverage (%)',    'coverage_pct'],
+    ['P&ID tags',           'pid_total'],
+    ['Equipment List',      'equipment_list_total'],
+    ['Match',               'match'],
+    ['Missing on P&ID',     'missing_on_pid'],
+    ['Extra on P&ID',       'extra_on_pid'],
+    ['Attribute mismatches','attribute_mismatches'],
+    ['Attribute critical',  'attribute_critical'],
+    ['Attribute minor',     'attribute_minor'],
+    ['Coverage (%)',        'coverage_pct'],
   ],
   instrument_index: [
-    ['P&ID tags',        'pid_total'],
-    ['Instrument Index', 'instrument_index_total'],
-    ['Match',            'match'],
-    ['Missing on P&ID',  'missing_on_pid'],
-    ['Extra on P&ID',    'extra_on_pid'],
-    ['Coverage (%)',     'coverage_pct'],
+    ['P&ID tags',            'pid_total'],
+    ['Instrument Index',     'instrument_index_total'],
+    ['Match',                'match'],
+    ['Missing on P&ID',      'missing_on_pid'],
+    ['Extra on P&ID',        'extra_on_pid'],
+    ['Attribute mismatches', 'attribute_mismatches'],
+    ['Attribute critical',   'attribute_critical'],
+    ['Attribute minor',      'attribute_minor'],
+    ['Coverage (%)',         'coverage_pct'],
   ],
 }
 
@@ -157,7 +165,54 @@ export function downloadCrossCheckExcel(result, variant, opts = {}) {
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary')
   XLSX.utils.book_append_sheet(wb, findingsSheet, 'Findings')
+
+  // Attribute-comparison sheet (equipment_list + instrument_index)
+  if (variant === 'equipment_list' || variant === 'instrument_index') {
+    const headers = ATTRIBUTE_SHEET_HEADERS[variant]
+    const attrRows = buildAttributeRows(findings, variant)
+    if (attrRows.length > 0) {
+      const attrSheet = XLSX.utils.json_to_sheet(attrRows, { header: headers })
+      attrSheet['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }))
+      XLSX.utils.book_append_sheet(wb, attrSheet, 'Attribute Comparison')
+    }
+  }
+
   XLSX.writeFile(wb, filename)
+}
+
+// Attribute-comparison sheet: header set per variant (label of the
+// master-side column changes to name the correct source).
+const ATTRIBUTE_SHEET_HEADERS = {
+  equipment_list: [
+    'Tag', 'Attribute', 'P&ID Value', 'Equipment List Value',
+    'Status', 'Overall Severity', 'Note',
+  ],
+  instrument_index: [
+    'Tag', 'Attribute', 'P&ID Value', 'Instrument Index Value',
+    'Status', 'Overall Severity', 'Note',
+  ],
+}
+
+function buildAttributeRows(findings, variant) {
+  const excelValueLabel = variant === 'instrument_index'
+    ? 'Instrument Index Value'
+    : 'Equipment List Value'
+  const out = []
+  for (const f of findings) {
+    if (!Array.isArray(f?.attributes) || f.attributes.length === 0) continue
+    for (const a of f.attributes) {
+      out.push({
+        'Tag':               f.tag || '',
+        'Attribute':         a.label || a.key || '',
+        'P&ID Value':        a.pid_value || '',
+        [excelValueLabel]:   a.excel_value || '',
+        'Status':            a.status || '',
+        'Overall Severity':  f.severity || '',
+        'Note':              a.note || '',
+      })
+    }
+  }
+  return out
 }
 
 export const CROSS_CHECK_EXPORT_VARIANTS = Object.keys(VARIANT_SUMMARY_LABELS)

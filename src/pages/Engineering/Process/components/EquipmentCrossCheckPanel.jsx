@@ -24,6 +24,8 @@ const THEME_GRADIENT = `linear-gradient(135deg, ${THEME_PRIMARY} 0%, ${THEME_ACC
 const K_MATCH   = 'match'
 const K_MISSING = 'missing_on_pid'
 const K_EXTRA   = 'extra_on_pid'
+// Pseudo-filter: matches with attribute mismatches
+const K_ATTR_DIFF = 'attribute_mismatch'
 
 const KIND_META = {
   [K_MATCH]:   { label: 'Match',           colour: '#047857', bg: '#ecfdf5', border: '#a7f3d0', Icon: CheckCircle2 },
@@ -31,11 +33,32 @@ const KIND_META = {
   [K_EXTRA]:   { label: 'Extra on P&ID',   colour: '#b45309', bg: '#fffbeb', border: '#fcd34d', Icon: PlusCircle },
 }
 
+// Overall per-tag attribute severity (mirror equipment_cross_check.py)
+const SEV_OK       = 'ok'
+const SEV_MINOR    = 'minor'
+const SEV_CRITICAL = 'critical'
+
+const SEVERITY_META = {
+  [SEV_OK]:       { label: 'All attrs OK',   colour: '#047857', bg: '#ecfdf5', border: '#a7f3d0' },
+  [SEV_MINOR]:    { label: 'Minor diffs',    colour: '#b45309', bg: '#fffbeb', border: '#fcd34d' },
+  [SEV_CRITICAL]: { label: 'Critical diffs', colour: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
+}
+
+// Per-cell attribute status (mirror equipment_cross_check.py)
+const ATTR_STATUS_META = {
+  match:         { label: 'Match',         colour: '#047857', bg: '#ecfdf5' },
+  mismatch:      { label: 'Mismatch',      colour: '#b91c1c', bg: '#fef2f2' },
+  missing_pid:   { label: 'Missing (P&ID)',   colour: '#b45309', bg: '#fffbeb' },
+  missing_excel: { label: 'Missing (Excel)',  colour: '#b45309', bg: '#fffbeb' },
+  both_empty:    { label: '—',             colour: '#94a3b8', bg: '#f8fafc' },
+}
+
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: K_MISSING, label: 'Missing on P&ID' },
   { id: K_EXTRA,   label: 'Extra on P&ID' },
   { id: K_MATCH,   label: 'Match' },
+  { id: K_ATTR_DIFF, label: 'Attribute diffs' },
 ]
 
 /**
@@ -90,6 +113,22 @@ export default function EquipmentCrossCheckPanel({
     return Array.from(set)
   }, [detectedTags, visionExtracted, manualTags])
 
+  // Per-tag attribute dictionary sourced from Vision extraction only.
+  // Backend triggers the deep attribute cross-check whenever this object
+  // is non-empty (and BYOK creds are set).
+  const attributesByTag = useMemo(() => {
+    const map = {}
+    for (const v of visionExtracted) {
+      if (!v?.tag || !v?.attributes || typeof v.attributes !== 'object') continue
+      // Skip if every value is empty — no point sending
+      const anyValue = Object.values(v.attributes).some(x => x && String(x).trim())
+      if (!anyValue) continue
+      map[v.tag] = v.attributes
+    }
+    return map
+  }, [visionExtracted])
+
+  const hasAttributes = Object.keys(attributesByTag).length > 0
   const hasTags = finalTags.length > 0
   const disabled = loading || !activeEquipmentList
   const canExtract = Boolean(pdfFile && canAi) && !extracting && !loading
@@ -112,6 +151,9 @@ export default function EquipmentCrossCheckPanel({
 
   const onRun = useCallback(async () => {
     if (!activeEquipmentList) { toast.warn('Upload and activate an Equipment List first'); return }
+    if (hasAttributes && !canAi) {
+      toast.warn('Attribute cross-check needs a BYOK API key — running tag-only comparison')
+    }
     setLoading(true)
     try {
       const data = await equipmentCrossCheck({
@@ -120,19 +162,23 @@ export default function EquipmentCrossCheckPanel({
         useAi: useAi && canAi,
         provider,
         apiKey,
+        equipmentAttributes: canAi ? attributesByTag : undefined,
       })
       setResult(data)
       const s = data.summary || {}
+      const attrNote = (s.attribute_mismatches || 0)
+        ? ` · ${s.attribute_mismatches} attr diff(s)${s.attribute_critical ? ` (${s.attribute_critical} critical)` : ''}`
+        : ''
       toast.success(
         `Cross-check: ${s.match || 0} match · ${s.missing_on_pid || 0} missing · `
-        + `${s.extra_on_pid || 0} extra`
+        + `${s.extra_on_pid || 0} extra${attrNote}`
       )
     } catch (err) {
       toast.error(err?.response?.data?.error || err.message || 'Cross-check failed')
     } finally {
       setLoading(false)
     }
-  }, [finalTags, activeEquipmentList, useAi, canAi, provider, apiKey])
+  }, [finalTags, activeEquipmentList, useAi, canAi, provider, apiKey, attributesByTag, hasAttributes])
 
   // Reset stale result when the active list changes
   useEffect(() => { setResult(null); setExpanded(null) }, [activeEquipmentList?.equipment_list_id])
@@ -146,6 +192,10 @@ export default function EquipmentCrossCheckPanel({
   const findings = result?.findings || []
   const filtered = useMemo(() => {
     if (filter === 'all') return findings
+    if (filter === K_ATTR_DIFF) {
+      return findings.filter(f => f.kind === K_MATCH
+        && (f.severity === SEV_MINOR || f.severity === SEV_CRITICAL))
+    }
     return findings.filter(f => f.kind === filter)
   }, [findings, filter])
 
@@ -337,6 +387,22 @@ export default function EquipmentCrossCheckPanel({
           <SummaryPill label="Coverage"        value={`${s.coverage_pct ?? 0}%`} tone={
             (s.coverage_pct ?? 0) >= 95 ? 'ok' : (s.coverage_pct ?? 0) >= 75 ? 'warn' : 'err'
           } />
+          {(s.attribute_mismatches ?? 0) > 0 && (
+            <SummaryPill label="Attr diffs" value={s.attribute_mismatches ?? 0}
+              tone={(s.attribute_critical ?? 0) > 0 ? 'err' : 'warn'} />
+          )}
+          {(s.attribute_critical ?? 0) > 0 && (
+            <SummaryPill label="Critical" value={s.attribute_critical} tone="err" />
+          )}
+          {result.ai_attributes_used && (
+            <span style={{
+              padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+              color: '#fff', background: THEME_GRADIENT,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+              <Sparkles size={11} /> AI attribute judge
+            </span>
+          )}
           {result.ai_used && (
             <span style={{
               padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
@@ -410,6 +476,21 @@ export default function EquipmentCrossCheckPanel({
                       }}>
                         {meta.label}
                       </span>
+                      {f.kind === K_MATCH && f.severity && SEVERITY_META[f.severity] && (
+                        <span title={SEVERITY_META[f.severity].label} style={{
+                          padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                          background: SEVERITY_META[f.severity].bg,
+                          color: SEVERITY_META[f.severity].colour,
+                          border: `1px solid ${SEVERITY_META[f.severity].border}`,
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: SEVERITY_META[f.severity].colour, display: 'inline-block',
+                          }} />
+                          {SEVERITY_META[f.severity].label}
+                        </span>
+                      )}
                       {f.description && (
                         <span style={{ color: THEME_MUTED, fontSize: 12 }}>
                           {f.description}
@@ -461,6 +542,9 @@ export default function EquipmentCrossCheckPanel({
                             )}
                           </div>
                         )}
+                        {Array.isArray(f.attributes) && f.attributes.length > 0 && (
+                          <AttributeGrid attributes={f.attributes} />
+                        )}
                       </div>
                     )}
                   </div>
@@ -497,5 +581,63 @@ function SummaryPill({ label, value, tone = 'neutral' }) {
       <span style={{ opacity: 0.75 }}>{label}</span>
       <span>{value}</span>
     </span>
+  )
+}
+
+function AttributeGrid({ attributes }) {
+  return (
+    <div style={{
+      marginTop: 8, borderRadius: 8, border: '1px solid #e2e8f0',
+      background: '#fff', overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1.4fr 1.2fr 1.2fr 0.9fr',
+        fontSize: 11, fontWeight: 600, color: '#64748b',
+        background: '#f8fafc', padding: '6px 10px',
+        borderBottom: '1px solid #e2e8f0',
+        textTransform: 'uppercase', letterSpacing: 0.3,
+      }}>
+        <span>Attribute</span>
+        <span>P&amp;ID Value</span>
+        <span>Equipment List</span>
+        <span>Status</span>
+      </div>
+      {attributes.map((a, i) => {
+        const meta = ATTR_STATUS_META[a.status] || ATTR_STATUS_META.both_empty
+        return (
+          <div key={`${a.key}-${i}`} style={{
+            display: 'grid',
+            gridTemplateColumns: '1.4fr 1.2fr 1.2fr 0.9fr',
+            fontSize: 12, padding: '6px 10px',
+            borderTop: i === 0 ? 'none' : '1px solid #f1f5f9',
+            alignItems: 'center',
+            background: a.status === 'mismatch' ? '#fef2f2'
+              : a.status === 'missing_pid' || a.status === 'missing_excel' ? '#fffbeb'
+              : '#fff',
+          }}>
+            <span style={{ color: '#0f172a', fontWeight: 500 }}>{a.label || a.key}</span>
+            <span style={{ color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              {a.pid_value || <span style={{ color: '#94a3b8' }}>—</span>}
+            </span>
+            <span style={{ color: '#0f172a', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              {a.excel_value || <span style={{ color: '#94a3b8' }}>—</span>}
+            </span>
+            <span>
+              <span title={a.note || ''} style={{
+                padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                background: meta.bg, color: meta.colour,
+                border: `1px solid ${meta.colour}22`,
+              }}>
+                {meta.label}
+              </span>
+              {a.note && (
+                <div style={{ marginTop: 3, color: '#64748b', fontSize: 11 }}>{a.note}</div>
+              )}
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
