@@ -392,6 +392,12 @@ export default function InstrumentCrossCheckPanel({
           {(s.attribute_critical ?? 0) > 0 && (
             <SummaryPill label="Critical" value={s.attribute_critical} tone="err" />
           )}
+          {(s.fuzzy_pairs ?? 0) > 0 && (
+            <SummaryPill label="Fuzzy-paired" value={s.fuzzy_pairs} tone="warn" />
+          )}
+          {(s.ai_promoted_pairs ?? 0) > 0 && (
+            <SummaryPill label="AI-paired" value={s.ai_promoted_pairs} tone="warn" />
+          )}
           {result.ai_attributes_used && (
             <span style={{
               padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
@@ -474,6 +480,22 @@ export default function InstrumentCrossCheckPanel({
                       }}>
                         {meta.label}
                       </span>
+                      {f.fuzzy_match && (
+                        <span title="Paired by deterministic fuzzy match" style={{
+                          padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                          background: '#fffbeb', color: '#b45309',
+                          border: '1px solid #fcd34d',
+                        }}>Fuzzy</span>
+                      )}
+                      {f.ai_probable_match && (
+                        <span title="Paired by AI recommendation" style={{
+                          padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                          color: '#fff', background: THEME_GRADIENT,
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          <Sparkles size={10} /> AI paired
+                        </span>
+                      )}
                       {f.kind === K_MATCH && f.severity && SEVERITY_META[f.severity] && (
                         <span title={SEVERITY_META[f.severity].label} style={{
                           padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,

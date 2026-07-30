@@ -1,12 +1,16 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import {
   Sparkles, CheckCircle2, Save, Download, FileText, Loader2, History as HistoryIcon,
   RefreshCw, Trash2, ShieldCheck, GitCompare, LayoutGrid, AlertCircle, Boxes, Gauge,
-  FileSpreadsheet,
+  FileSpreadsheet, Coins, FileDown,
 } from 'lucide-react'
 
-import { MODE_VISION } from '../../../../services/pidCheckerV2API'
+import {
+  MODE_VISION,
+  getUsageSummary,
+  downloadTokenReport,
+} from '../../../../services/pidCheckerV2API'
 import LegendValidationPanel from './LegendValidationPanel'
 import CrossCheckPanel from './CrossCheckPanel'
 import EquipmentCrossCheckPanel from './EquipmentCrossCheckPanel'
@@ -353,8 +357,78 @@ function OverviewTab({ result, loading, grouped, onExportCsv, onExportJson }) {
 
 // ─── History tab ───────────────────────────────────────────────────
 function HistoryTab({ result, history, historyLoading, refreshHistory, onLoadHistory, onDeleteHistory }) {
+  // Token-usage strip (soft-coded, always visible above the runs list).
+  const [usage, setUsage] = useState(null)
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [reportBusy, setReportBusy] = useState(false)
+
+  const loadUsage = useCallback(async () => {
+    setUsageLoading(true)
+    try {
+      const data = await getUsageSummary()
+      setUsage(data)
+    } catch (err) {
+      console.warn('[PIDCheckerV2] usage summary fetch failed', err)
+      setUsage(null)
+    } finally {
+      setUsageLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadUsage() }, [loadUsage, history?.length])
+
+  const handleReport = useCallback(async (format) => {
+    setReportBusy(true)
+    try {
+      const { filename } = await downloadTokenReport({ format })
+      toast.success(`Downloaded ${filename}`)
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || 'Report generation failed'
+      toast.error(msg)
+    } finally {
+      setReportBusy(false)
+    }
+  }, [])
+
+  const totals = usage?.total || null
+  const fmtCost = (v) => {
+    const n = Number(v || 0)
+    return `$${n.toFixed(6)}`
+  }
+  const fmtInt = (v) => Number(v || 0).toLocaleString()
+
   return (
     <div>
+      {/* Token-cost strip */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr)) auto',
+        gap: 10, marginBottom: 12, padding: 12,
+        borderRadius: 10, background: THEME_GRADIENT, color: '#fff',
+      }}>
+        <StripStat label="Total AI calls"     value={usageLoading ? '…' : fmtInt(totals?.calls)} />
+        <StripStat label="Input tokens"       value={usageLoading ? '…' : fmtInt(totals?.input_tokens)} />
+        <StripStat label="Output tokens"      value={usageLoading ? '…' : fmtInt(totals?.output_tokens)} />
+        <StripStat label="Total cost (USD)"   value={usageLoading ? '…' : fmtCost(totals?.cost_usd)} icon={<Coins size={13} />} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+          <button
+            type="button" onClick={() => handleReport('xlsx')} disabled={reportBusy}
+            style={reportBtnStyle(reportBusy)}
+          >
+            {reportBusy ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <FileSpreadsheet size={11} />}
+            Excel report
+          </button>
+          <button
+            type="button" onClick={() => handleReport('pdf')} disabled={reportBusy}
+            style={reportBtnStyle(reportBusy)}
+          >
+            {reportBusy ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <FileDown size={11} />}
+            PDF report
+          </button>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: THEME_TEXT }}>
           Saved extractions
@@ -364,7 +438,7 @@ function HistoryTab({ result, history, historyLoading, refreshHistory, onLoadHis
           background: THEME_BG_SOFT, color: THEME_MUTED,
         }}>{history.length}</span>
         <button
-          type="button" onClick={refreshHistory} disabled={historyLoading}
+          type="button" onClick={() => { refreshHistory(); loadUsage() }} disabled={historyLoading}
           style={{
             marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
             padding: '5px 10px', borderRadius: 8,
@@ -426,6 +500,31 @@ function HistoryTab({ result, history, historyLoading, refreshHistory, onLoadHis
       }
     </div>
   )
+}
+
+function StripStat({ label, value, icon }) {
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.14)', borderRadius: 8,
+      padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
+    }}>
+      <div style={{
+        fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4,
+        opacity: 0.85, display: 'flex', alignItems: 'center', gap: 4,
+      }}>{icon}{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700 }}>{value ?? '—'}</div>
+    </div>
+  )
+}
+
+function reportBtnStyle(busy) {
+  return {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+    border: '1px solid rgba(255,255,255,0.4)',
+    background: 'rgba(255,255,255,0.14)', color: '#fff',
+    cursor: busy ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+  }
 }
 
 // ─── Shared bits ───────────────────────────────────────────────────

@@ -17,6 +17,9 @@ const INSTRUMENT_INDEXES_ENDPOINT = `${BASE_PATH}/instrument-indexes/`
 const INSTRUMENT_CROSS_CHECK_ENDPOINT = `${BASE_PATH}/instrument-cross-check/`
 const EXTRACT_EQUIPMENT_TAGS_ENDPOINT = `${BASE_PATH}/extract-equipment-tags/`
 const EXTRACT_INSTRUMENT_TAGS_ENDPOINT = `${BASE_PATH}/extract-instrument-tags/`
+const USAGE_LIST_ENDPOINT = `${BASE_PATH}/usage/`
+const USAGE_SUMMARY_ENDPOINT = `${BASE_PATH}/usage/summary/`
+const USAGE_REPORT_ENDPOINT = `${BASE_PATH}/usage/report/`
 const UPLOAD_FIELD = 'file'
 const REQUEST_TIMEOUT_MS = 15 * 60 * 1000   // OCR can take a few minutes
 
@@ -312,9 +315,9 @@ export async function equipmentCrossCheck(payload) {
 // ── Instrument Index ──────────────────────────────────
 // Soft-coded pattern for detecting instrument tags among extracted P&ID tokens.
 // Matches ISA-5.1-style shapes such as: LT-8019 TF, PT-8003ATF, PCV-8004B TF,
-// FE-8001, TT-1023, XV-2001A, SDV-8003TF.  Accepts optional 2-letter site
-// symbol either space-separated or fused to the sequence number.
-export const INSTRUMENT_TAG_REGEX = /^[A-Z]{1,4}-\d{2,4}[A-Z]?(?:\s?[A-Z]{2})?$/
+// FE-8001, TT-1023, XV-2001A, SDV-8003TF — and un-hyphenated variants
+// (SDV8005, FIC8002, PI8003A) which are common on many drawings.
+export const INSTRUMENT_TAG_REGEX = /^[A-Z]{1,4}-?\d{2,4}[A-Z]?(?:\s?[A-Z]{2})?$/
 
 export function filterInstrumentTags(tokens) {
   if (!Array.isArray(tokens)) return []
@@ -322,15 +325,15 @@ export function filterInstrumentTags(tokens) {
   const out = []
   for (const raw of tokens) {
     if (raw == null) continue
-    // canonicalise: uppercase + strip inner whitespace
-    const canonical = String(raw).trim().toUpperCase().replace(/\s+/g, '')
-    if (!canonical) continue
-    // test both the raw upper and the canonical against the regex
     const upper = String(raw).trim().toUpperCase()
+    // canonical dedup key: strip whitespace AND hyphens.
+    const canonical = upper.replace(/[\s-]+/g, '')
+    if (!canonical) continue
     if (!(INSTRUMENT_TAG_REGEX.test(upper) || INSTRUMENT_TAG_REGEX.test(canonical))) continue
     if (seen.has(canonical)) continue
     seen.add(canonical)
-    out.push(canonical)
+    // preserve hyphen if the drawing had one, else keep it fused
+    out.push(upper.replace(/\s+/g, ''))
   }
   return out
 }
@@ -435,6 +438,59 @@ export async function extractInstrumentTagsFromPid(file, { provider, apiKey } = 
   return res.data
 }
 
+// ─── Token usage / cost tracking ─────────────────────────────────────
+/**
+ * List recent token-usage rows for the current user.
+ * @param {{ feature?:string, since?:string, until?:string, pageSize?:number }} [opts]
+ */
+export async function listUsage(opts = {}) {
+  const params = {}
+  if (opts.feature)  params.feature = opts.feature
+  if (opts.since)    params.since = opts.since
+  if (opts.until)    params.until = opts.until
+  if (opts.pageSize) params.page_size = opts.pageSize
+  const res = await apiClient.get(USAGE_LIST_ENDPOINT, { params })
+  return res.data
+}
+
+/** Aggregate usage summary (totals + by feature + by model). */
+export async function getUsageSummary({ since, until } = {}) {
+  const params = {}
+  if (since) params.since = since
+  if (until) params.until = until
+  const res = await apiClient.get(USAGE_SUMMARY_ENDPOINT, { params })
+  return res.data
+}
+
+/**
+ * Download a consolidated token report as Excel or PDF.
+ * Triggers a browser download.
+ */
+export async function downloadTokenReport({ format = 'xlsx', since, until } = {}) {
+  const res = await apiClient.post(
+    USAGE_REPORT_ENDPOINT,
+    { format, since, until },
+    { responseType: 'blob' },
+  )
+  const cd = res.headers['content-disposition'] || ''
+  const m = /filename="?([^"]+)"?/i.exec(cd)
+  const filename = m ? m[1] : `pid_checker_v2_token_report.${format}`
+  const blob = new Blob([res.data], {
+    type: format === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  return { filename }
+}
+
 export default {
   extractLineTags, listExtractions, getExtraction, deleteExtraction,
   listLegends, getLegend, createLegend, updateLegend, deleteLegend,
@@ -447,5 +503,6 @@ export default {
   uploadInstrumentIndex, listInstrumentIndexes, getInstrumentIndex, deleteInstrumentIndex, activateInstrumentIndex,
   instrumentCrossCheck, filterInstrumentTags, INSTRUMENT_TAG_REGEX,
   extractEquipmentTagsFromPid, extractInstrumentTagsFromPid,
+  listUsage, getUsageSummary, downloadTokenReport,
   MODE_OCR, MODE_VISION, VISION_PROVIDERS, LEGEND_SECTIONS,
 }
