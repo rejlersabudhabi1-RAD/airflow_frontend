@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { RefreshCw, BookOpen } from 'lucide-react'
+import { RefreshCw, BookOpen, FileText } from 'lucide-react'
 
 import {
   extractLineTags, listExtractions, getExtraction, deleteExtraction,
@@ -17,6 +18,9 @@ import ResultsTabs from './components/ResultsTabs'
 // ═════════════════════════════════════════════════════════════════════
 const PAGE_TITLE = 'P&ID Checker V2'
 const PAGE_SUBTITLE = 'Extract composite pipeline line tags from any P&ID or Line-List PDF'
+const DOCS_ROUTE = '/engineering/process/pid-checker-v2/docs'
+const DOCS_BUTTON_LABEL = 'Docs & Workflow'
+const DOCS_BUTTON_TITLE = 'Open documentation and recommended workflow'
 const ACCEPTED_EXTENSIONS = '.pdf'
 const MAX_UPLOAD_MB = 25
 
@@ -65,6 +69,7 @@ function downloadBlob(content, filename, type) {
 
 
 export default function PIDCheckerV2() {
+  const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -322,12 +327,28 @@ export default function PIDCheckerV2() {
           </div>
         </div>
 
+        {/* Docs & Workflow — opens standalone documentation page */}
+        <button
+          type="button"
+          onClick={() => navigate(DOCS_ROUTE)}
+          title={DOCS_BUTTON_TITLE}
+          style={{
+            marginLeft: 'auto',
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 10px', borderRadius: 999,
+            border: `1px solid ${THEME_BORDER}`, background: '#fff',
+            fontSize: 11, color: THEME_TEXT, cursor: 'pointer',
+          }}
+        >
+          <FileText size={12} color={THEME_PRIMARY} />
+          <span style={{ color: THEME_TEXT, fontWeight: 600 }}>{DOCS_BUTTON_LABEL}</span>
+        </button>
+
         {/* Legend status pill */}
         <button
           type="button" onClick={() => setLegendModalOpen(true)}
           title="Manage Legend Sheets"
           style={{
-            marginLeft: 'auto',
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '6px 10px', borderRadius: 999,
             border: `1px solid ${activeLegend ? '#a7f3d0' : (effectiveLegend ? '#fcd34d' : THEME_BORDER)}`,

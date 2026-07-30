@@ -121,6 +121,7 @@ import PIDVerification from './pages/Engineering/Process/PIDVerification'
 import PIDVerificationV2 from './pages/Engineering/Process/PIDVerificationV2'
 import PIDVerificationV2Report from './pages/Engineering/Process/PIDVerificationV2Report'
 import PIDCheckerV2 from './pages/Engineering/Process/PIDCheckerV2'
+import PIDCheckerV2Docs from './pages/Engineering/Process/PIDCheckerV2Docs'
 import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
@@ -932,6 +933,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDCheckerV2 />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* P&ID Checker V2 — Documentation & Workflow */}
+        <Route
+          path="engineering/process/pid-checker-v2/docs"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <PIDCheckerV2Docs />
             </ModuleProtectedRoute>
           }
         />

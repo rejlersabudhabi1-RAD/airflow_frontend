@@ -327,7 +327,7 @@ const PlanningPackagePage = () => {
         detected_effective_date_text: intelligencePreview.detected_effective_date_text,
         detected_duration_months: intelligencePreview.detected_duration_months,
         disciplines: Object.fromEntries(
-          Object.entries(intelligencePreview.disciplines || {}).map(([code, info]) => [code, { deliverables: info.deliverables }])
+          Object.entries(intelligencePreview.disciplines || {}).map(([code, info]) => [code, { deliverables: info.deliverables, in_scope: info.in_scope !== false }])
         ),
         hse_studies: intelligencePreview.hse_studies,
       } : undefined;
@@ -339,7 +339,10 @@ const PlanningPackagePage = () => {
       setBanner({ type: 'success', message: `Schedule generated (version ${res.data.version}).` });
       setCurrentStep('schedule');
     } catch (err) {
-      setBanner({ type: 'error', message: 'Schedule generation failed. Check the backend logs.' });
+      setBanner({
+        type: 'error',
+        message: err.response?.data?.error || 'Schedule generation failed. Check the backend logs.',
+      });
     } finally {
       setGenerating(false);
     }
@@ -1175,6 +1178,62 @@ const PlanningPackagePage = () => {
             </div>
           )}
 
+          {data.sow_only_mode && (
+            <div className="rounded-xl p-4 bg-gradient-to-br from-amber-50 via-yellow-50 to-white border border-amber-200">
+              <div className="flex items-center gap-2 text-amber-700 text-sm font-semibold uppercase tracking-wide mb-1">
+                <span>⚡</span> SOW-only mode
+              </div>
+              <p className="text-sm text-slate-700">
+                Only the Scope of Work has been uploaded — no MDR / EDDR / WBS to cross-reference.
+                {data.ai_augmented
+                  ? ' Claude will decide which disciplines and HSE studies are actually in scope; review the AI Scope summary below and tick / untick disciplines as needed before generating.'
+                  : ' Enable BYOK / Claude on this project to let the AI decide which disciplines and HSE studies are actually in scope, or curate the discipline list manually below.'}
+              </p>
+            </div>
+          )}
+
+          {data.ai_scope && (
+            <div className="rounded-xl p-4 bg-gradient-to-br from-indigo-50 via-violet-50 to-white border border-indigo-200">
+              <div className="flex items-center gap-2 text-indigo-700 text-sm font-semibold uppercase tracking-wide mb-1.5">
+                <span>🎯</span> AI Scope Assessment
+                {data.ai_scope.sow_only_authoritative_applied && (
+                  <span className="ml-2 text-sm font-semibold bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 normal-case tracking-normal">
+                    ✨ SOW is source of truth
+                  </span>
+                )}
+              </div>
+              {data.ai_scope.scope_summary && (
+                <p className="text-sm text-slate-700 mb-2">{data.ai_scope.scope_summary}</p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="text-emerald-700 font-semibold text-sm mb-1">✓ In scope ({(data.ai_scope.disciplines_in_scope || []).length})</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(data.ai_scope.disciplines_in_scope || []).length === 0
+                      ? <span className="text-slate-400 text-sm italic">(none flagged — everything stays in by default)</span>
+                      : (data.ai_scope.disciplines_in_scope || []).map(c => (
+                          <span key={c} className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">
+                            {(PLANNING_DISCIPLINE_META[c] || {}).label || c}
+                          </span>
+                        ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-rose-700 font-semibold text-sm mb-1">✗ Out of scope ({(data.ai_scope.disciplines_out_of_scope || []).length})</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(data.ai_scope.disciplines_out_of_scope || []).length === 0
+                      ? <span className="text-slate-400 text-sm italic">(none)</span>
+                      : (data.ai_scope.disciplines_out_of_scope || []).map(c => (
+                          <span key={c} className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-sm line-through">
+                            {(PLANNING_DISCIPLINE_META[c] || {}).label || c}
+                          </span>
+                        ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <h3 className="text-sm font-semibold text-slate-600 mb-2">Disciplines & Deliverables</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -1184,26 +1243,45 @@ const PlanningPackagePage = () => {
                 const mentioned = info.mentioned_in_source.length;
                 const pct = total ? Math.round((mentioned / total) * 100) : 0;
                 const isOpen = expandedDiscipline === disc;
+                const inScope = info.in_scope !== false;
+                const toggleScope = () => setDraftIntelligence(prev => {
+                  const next = { ...prev, disciplines: { ...prev.disciplines } };
+                  next.disciplines[disc] = { ...next.disciplines[disc], in_scope: !inScope };
+                  return next;
+                });
                 return (
                   <div key={disc}
-                    className={`border rounded-xl overflow-hidden transition-all ${isOpen ? 'border-violet-300 shadow-sm sm:col-span-2 xl:col-span-3' : 'border-slate-200 hover:border-violet-200 hover:shadow-sm'}`}>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedDiscipline(isOpen ? null : disc)}
-                      className="w-full flex items-center gap-3 p-3 text-left"
-                    >
-                      <span className={`shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br ${meta.accent} flex items-center justify-center text-base shadow-sm`}>{meta.icon}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold capitalize text-slate-700 truncate">{meta.label}</div>
-                        <div className="text-sm text-slate-500 mt-0.5">
-                          {mentioned}/{total} deliverable(s) mentioned in source · {meta.responsibleRole}
+                    className={`border rounded-xl overflow-hidden transition-all ${!inScope ? 'opacity-60 border-slate-200 bg-slate-50' : isOpen ? 'border-violet-300 shadow-sm sm:col-span-2 xl:col-span-3' : 'border-slate-200 hover:border-violet-200 hover:shadow-sm'}`}>
+                    <div className="w-full flex items-center gap-3 p-3">
+                      {isEditing && (
+                        <label className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-slate-500 select-none cursor-pointer" title="Include this discipline in the WBS and schedule">
+                          <input type="checkbox" checked={inScope} onChange={toggleScope} className="accent-violet-600" />
+                          <span>Scope</span>
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedDiscipline(isOpen ? null : disc)}
+                        className="flex-1 flex items-center gap-3 text-left"
+                      >
+                        <span className={`shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br ${meta.accent} flex items-center justify-center text-base shadow-sm`}>{meta.icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold capitalize text-slate-700 truncate flex items-center gap-2">
+                            <span className={!inScope ? 'line-through text-slate-400' : ''}>{meta.label}</span>
+                            {!inScope && (
+                              <span className="text-sm font-semibold bg-rose-50 text-rose-600 border border-rose-100 rounded-full px-2 py-0.5">Out of scope</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-slate-500 mt-0.5">
+                            {mentioned}/{total} deliverable(s) mentioned in source · {meta.responsibleRole}
+                          </div>
+                          <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                            <div className={`h-full rounded-full bg-gradient-to-r ${meta.accent}`} style={{ width: `${pct}%` }} />
+                          </div>
                         </div>
-                        <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <div className={`h-full rounded-full bg-gradient-to-r ${meta.accent}`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                      <span className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
-                    </button>
+                        <span className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+                      </button>
+                    </div>
                     {isOpen && (
                       <div className="border-t border-slate-100 bg-slate-50/60 p-3.5">
                         <p className="text-sm text-slate-500 mb-2">
@@ -1214,11 +1292,13 @@ const PlanningPackagePage = () => {
                         <ul className="space-y-1.5">
                           {info.deliverables.map((d, dIdx) => {
                             const wasMentioned = info.mentioned_in_source.includes(d);
+                            const aiDiscovered = (info.ai_discovered || []).includes(d);
                             return (
                               <li key={`${d}-${dIdx}`} className="flex items-center gap-2 text-sm">
-                                <span className={wasMentioned ? 'text-emerald-600' : 'text-slate-300'}>{wasMentioned ? '✅' : '⬜'}</span>
-                                <span className={wasMentioned ? 'text-slate-700 font-medium flex-1' : 'text-slate-500 flex-1'}>{d}</span>
-                                {wasMentioned && !isEditing && <span className="ml-auto text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">In source</span>}
+                                <span className={aiDiscovered ? 'text-violet-500' : wasMentioned ? 'text-emerald-600' : 'text-slate-300'}>{aiDiscovered ? '✨' : wasMentioned ? '✅' : '⬜'}</span>
+                                <span className={wasMentioned || aiDiscovered ? 'text-slate-700 font-medium flex-1' : 'text-slate-500 flex-1'}>{d}</span>
+                                {aiDiscovered && !isEditing && <span className="ml-auto text-sm font-semibold text-violet-600 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5">AI-discovered</span>}
+                                {!aiDiscovered && wasMentioned && !isEditing && <span className="ml-auto text-sm font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">In source</span>}
                                 {isEditing && (
                                   <button
                                     onClick={() => setDraftIntelligence(prev => {
@@ -1256,12 +1336,90 @@ const PlanningPackagePage = () => {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-600 mb-2">HSE Studies Detected</h3>
-            <div className="flex flex-wrap gap-2">
-              {(data.hse_studies || []).map(s => (
-                <span key={s} className="px-2.5 py-1 bg-violet-50 text-violet-700 text-sm font-medium rounded-full border border-violet-100">{s}</span>
-              ))}
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-semibold text-slate-600">HSE Studies</h3>
+              <span className="text-sm text-slate-400">
+                Tick every study that applies to this project — the schedule will only include the ones you leave checked.
+              </span>
             </div>
+            {(() => {
+              const selected = new Set(data.hse_studies || []);
+              const catalogue = (data.available_hse_studies && data.available_hse_studies.length)
+                ? data.available_hse_studies
+                : Array.from(new Set([...(data.hse_studies || [])]));
+              // Toggle works whether or not the Edit panel is open: in edit
+              // mode we mutate the draft, otherwise we update the live preview
+              // directly so the planner's choice is remembered without an
+              // Edit/Save round-trip.
+              const applyToggle = (prev, name) => {
+                const cur = new Set(prev.hse_studies || []);
+                if (cur.has(name)) cur.delete(name); else cur.add(name);
+                const ordered = (prev.available_hse_studies || catalogue).filter(s => cur.has(s));
+                return { ...prev, hse_studies: ordered };
+              };
+              const toggleHse = (name) => {
+                if (isEditing) {
+                  setDraftIntelligence(prev => applyToggle(prev, name));
+                } else {
+                  setIntelligencePreview(prev => applyToggle(prev || {}, name));
+                }
+              };
+              const setAll = (all) => {
+                const nextList = all ? [...(data.available_hse_studies || catalogue)] : [];
+                if (isEditing) {
+                  setDraftIntelligence(prev => ({ ...prev, hse_studies: nextList }));
+                } else {
+                  setIntelligencePreview(prev => ({ ...(prev || {}), hse_studies: nextList }));
+                }
+              };
+              if (!catalogue.length) {
+                return <p className="text-sm text-slate-400 italic">No HSE studies catalogued.</p>;
+              }
+              return (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {catalogue.map(s => {
+                      const isChecked = selected.has(s);
+                      return (
+                        <label
+                          key={s}
+                          className={`px-2.5 py-1.5 text-sm font-medium rounded-lg border cursor-pointer transition-colors flex items-center gap-2 ${
+                            isChecked
+                              ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                              : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                          }`}
+                          title={isChecked ? 'Included in the schedule' : 'Will be skipped'}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleHse(s)}
+                            className="accent-violet-600"
+                          />
+                          <span className="truncate">{s}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => setAll(true)}
+                      className="text-violet-600 hover:text-violet-700 font-medium"
+                    >Select all</button>
+                    <span className="text-slate-300">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setAll(false)}
+                      className="text-slate-500 hover:text-rose-600 font-medium"
+                    >Clear all</button>
+                    <span className="ml-auto text-sm text-slate-400">
+                      {(data.hse_studies || []).length} selected
+                    </span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {(data.notes || []).map((n, i) => (
