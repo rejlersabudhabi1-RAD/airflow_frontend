@@ -2908,39 +2908,6 @@ const PIDVerification = () => {
 
               {/* Right: Quick Stats + Version Switcher */}
               <div className="flex items-center gap-6">
-                {/* Version Switcher Button */}
-                <button
-                  onClick={() => navigate('/engineering/process/pid-verification-v2')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '12px 20px',
-                    borderRadius: '12px',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                    color: 'white',
-                    border: 'none',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(99,102,241,0.4)',
-                    transition: 'all 0.2s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.5)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 14px rgba(99,102,241,0.4)';
-                  }}
-                >
-                  <Sparkles style={{ width: '16px', height: '16px' }} />
-                  Try V2 Beta
-                  <ChevronRight style={{ width: '16px', height: '16px' }} />
-                </button>
-
                 {/* P&ID Checker V2 — new scaffold entry point */}
                 <button
                   onClick={() => navigate(PID_CHECKER_V2_ROUTE)}

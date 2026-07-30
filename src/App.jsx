@@ -118,8 +118,6 @@ import ProcessEquipmentDatasheet from './pages/Engineering/Process/ProcessEquipm
 import LineList from './pages/Engineering/Process/LineList'
 import EquipmentList from './pages/Engineering/Process/EquipmentList'
 import PIDVerification from './pages/Engineering/Process/PIDVerification'
-import PIDVerificationV2 from './pages/Engineering/Process/PIDVerificationV2'
-import PIDVerificationV2Report from './pages/Engineering/Process/PIDVerificationV2Report'
 import PIDCheckerV2 from './pages/Engineering/Process/PIDCheckerV2'
 import PIDCheckerV2Docs from './pages/Engineering/Process/PIDCheckerV2Docs'
 import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
@@ -903,26 +901,6 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDVerification />
-            </ModuleProtectedRoute>
-          }
-        />
-
-        {/* P&ID Verification V2 */}
-        <Route
-          path="engineering/process/pid-verification-v2"
-          element={
-            <ModuleProtectedRoute moduleCode="pid_analysis">
-              <PIDVerificationV2 />
-            </ModuleProtectedRoute>
-          }
-        />
-
-        {/* P&ID Verification V2 — Comparison Report */}
-        <Route
-          path="engineering/process/pid-verification-v2/report/:documentId"
-          element={
-            <ModuleProtectedRoute moduleCode="pid_analysis">
-              <PIDVerificationV2Report />
             </ModuleProtectedRoute>
           }
         />
