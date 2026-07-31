@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { RefreshCw, BookOpen, FileText } from 'lucide-react'
+import { RefreshCw, BookOpen, FileText, Maximize2, Eraser } from 'lucide-react'
 
 import {
   extractLineTags, listExtractions, getExtraction, deleteExtraction,
@@ -19,8 +19,12 @@ import ResultsTabs from './components/ResultsTabs'
 const PAGE_TITLE = 'P&ID Checker V2'
 const PAGE_SUBTITLE = 'Extract composite pipeline line tags from any P&ID or Line-List PDF'
 const DOCS_ROUTE = '/engineering/process/pid-checker-v2/docs'
+const LEGENDS_CANVAS_ROUTE = '/engineering/process/pid-checker-v2/legends'
 const DOCS_BUTTON_LABEL = 'Docs & Workflow'
 const DOCS_BUTTON_TITLE = 'Open documentation and recommended workflow'
+const CLEAR_BUTTON_LABEL = 'Clear All'
+const CLEAR_BUTTON_TITLE = 'Clear the uploaded file and current results so you can start over'
+const CLEAR_CONFIRM_MSG = 'Clear the uploaded file and current results? This does not affect saved history or legends.'
 const ACCEPTED_EXTENSIONS = '.pdf'
 const MAX_UPLOAD_MB = 25
 
@@ -235,8 +239,19 @@ export default function PIDCheckerV2() {
     setResult(null)
     setError(null)
     setUploadPct(0)
+    setForceOcr(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }, [])
+
+  const onClearAll = useCallback(() => {
+    if (loading) {
+      toast.info('Extraction is still running — please wait for it to finish.')
+      return
+    }
+    if (!window.confirm(CLEAR_CONFIRM_MSG)) return
+    onReset()
+    toast.success('Inputs cleared — ready for a new upload')
+  }, [loading, onReset])
 
   const onLoadHistory = useCallback(async (extractionId) => {
     try {
@@ -377,6 +392,39 @@ export default function PIDCheckerV2() {
           }}
         >
           <BookOpen size={14} /> Legend Sheets
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate(`${LEGENDS_CANVAS_ROUTE}?section=${LEGEND_SECTION}`)}
+          title="Open the full-page Legend Sheets canvas"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 12px', borderRadius: 8,
+            border: `1px solid ${THEME_BORDER}`, background: '#fff',
+            color: THEME_TEXT, fontWeight: 600, fontSize: 12, cursor: 'pointer',
+          }}
+        >
+          <Maximize2 size={13} color={THEME_PRIMARY} /> Open Canvas
+        </button>
+
+        <button
+          type="button"
+          onClick={onClearAll}
+          disabled={loading}
+          title={CLEAR_BUTTON_TITLE}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 12px', borderRadius: 8,
+            border: `1px solid ${THEME_BORDER}`,
+            background: loading ? '#f1f5f9' : '#fff',
+            color: loading ? THEME_MUTED : '#b91c1c',
+            fontWeight: 600, fontSize: 12,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          <Eraser size={13} /> {CLEAR_BUTTON_LABEL}
         </button>
       </div>
 

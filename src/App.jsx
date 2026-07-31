@@ -120,6 +120,7 @@ import EquipmentList from './pages/Engineering/Process/EquipmentList'
 import PIDVerification from './pages/Engineering/Process/PIDVerification'
 import PIDCheckerV2 from './pages/Engineering/Process/PIDCheckerV2'
 import PIDCheckerV2Docs from './pages/Engineering/Process/PIDCheckerV2Docs'
+import LegendSheetsCanvas from './pages/Engineering/Process/LegendSheetsCanvas'
 import PFDQualityChecker from './pages/Engineering/Process/PFDQualityChecker'
 import CriticalLineList from './pages/Engineering/Piping/CriticalLineList'
 // Electrical Datasheet Components
@@ -921,6 +922,16 @@ function App() {
           element={
             <ModuleProtectedRoute moduleCode="pid_analysis">
               <PIDCheckerV2Docs />
+            </ModuleProtectedRoute>
+          }
+        />
+
+        {/* P&ID Checker V2 — Legend Sheets full-page canvas */}
+        <Route
+          path="engineering/process/pid-checker-v2/legends"
+          element={
+            <ModuleProtectedRoute moduleCode="pid_analysis">
+              <LegendSheetsCanvas />
             </ModuleProtectedRoute>
           }
         />

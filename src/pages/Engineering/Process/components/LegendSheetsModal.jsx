@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
-import { BookOpen, Plus, Save, Trash2, CheckCircle2, X, Download, Upload, Loader2, LayoutList, Braces, GripVertical } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { BookOpen, Plus, Save, Trash2, CheckCircle2, X, Download, Upload, Loader2, LayoutList, Braces, GripVertical, FileSpreadsheet, FileText } from 'lucide-react'
 
 import {
   listLegends, createLegend, updateLegend, deleteLegend,
   activateLegend, getLegendDefaultTemplate, LEGEND_SECTIONS,
 } from '../../../../services/pidCheckerV2API'
+import { emitLegendSync, subscribeLegendSync, LEGEND_SYNC_ACTIONS, LEGEND_SYNC_POLL_MS } from '../../../../config/legendSheetsRules'
+import { parseLegendFile, IMPORT_ACCEPT } from '../../../../config/legendSheetsImport'
 
 // ═════════════════════════════════════════════════════════════════════
 // Soft-coded theme (matches parent page)
@@ -99,16 +102,21 @@ function newBlankField() {
 }
 
 /**
- * LegendSheetsModal — full legend-sheet manager for one section.
+ * LegendSheetsModal — full legend-sheet manager.
  *
  * Props:
  *   open, onClose
- *   section          — section id ('line_list')
+ *   section          — initial section id (user can switch via tabs)
  *   onActiveChange   — callback(activeLegendOrNull) fired whenever the active
- *                      legend for the section changes; parent uses it to
- *                      refresh the "Active Legend" badge.
+ *                      legend for the CURRENT section changes; parent uses it
+ *                      to refresh the "Active Legend" badge.
  */
 export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SECTION, onActiveChange }) {
+  const [activeSection, setActiveSection] = useState(section || DEFAULT_SECTION)
+
+  // Re-sync internal section when the parent re-opens the modal with a new one.
+  useEffect(() => { if (open) setActiveSection(section || DEFAULT_SECTION) }, [open, section])
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [legends, setLegends] = useState([])
@@ -129,10 +137,14 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await listLegends(section)
+      const rows = await listLegends(activeSection)
       setLegends(Array.isArray(rows) ? rows : [])
-      // notify parent about active state
-      if (onActiveChange) {
+      // Clear selection when switching sections so the editor doesn't show a
+      // stale legend belonging to a different section.
+      setSelectedId(null)
+      // notify parent about active state (only when viewing the section the
+      // parent originally opened us with)
+      if (onActiveChange && activeSection === section) {
         const active = (rows || []).find(l => l.is_active) || null
         onActiveChange(active)
       }
@@ -141,9 +153,20 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
     } finally {
       setLoading(false)
     }
-  }, [section, onActiveChange])
+  }, [activeSection, section, onActiveChange])
 
   useEffect(() => { if (open) refresh() }, [open, refresh])
+
+  // Realtime cross-tab sync: refresh when any other window mutates a legend
+  // in the section we're currently viewing. Polling fallback covers browsers
+  // without BroadcastChannel (Safari private mode, older Edge, etc.).
+  useEffect(() => {
+    if (!open) return undefined
+    const handler = (msg) => { if (!msg?.section || msg.section === activeSection) refresh() }
+    const unsub = subscribeLegendSync(handler)
+    const timer = setInterval(refresh, LEGEND_SYNC_POLL_MS)
+    return () => { unsub(); clearInterval(timer) }
+  }, [open, activeSection, refresh])
 
   useEffect(() => {
     if (selected) {
@@ -182,7 +205,7 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
 
   const onNewFromScratch = useCallback(() => {
     setSelectedId(null)
-    setDraftName(`New ${section} legend`)
+    setDraftName(`New ${activeSection} legend`)
     setDraftDesc('')
     setDraftDefinition(prettyJson({
       separator: '-',
@@ -190,22 +213,24 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
         { key: 'field1', label: 'Field 1', regex: '[A-Z0-9]+' },
       ],
     }))
+    setEditorMode(EDITOR_MODE_FORM)
     setJsonError(null)
-  }, [section])
+  }, [activeSection])
 
   const onLoadDefaultTemplate = useCallback(async () => {
     try {
-      const tpl = await getLegendDefaultTemplate(section)
+      const tpl = await getLegendDefaultTemplate(activeSection)
       setSelectedId(null)
-      setDraftName(tpl.name || `${section} — default`)
+      setDraftName(tpl.name || `${activeSection} — default`)
       setDraftDesc(tpl.description || '')
       setDraftDefinition(prettyJson(tpl.definition || {}))
+      setEditorMode(EDITOR_MODE_FORM)
       setJsonError(null)
       toast.info('Default template loaded — edit and Save to create a new legend')
     } catch (err) {
       toast.error('Failed to load default template')
     }
-  }, [section])
+  }, [activeSection])
 
   const onSave = useCallback(async () => {
     if (!draftName.trim()) { toast.warn('Name is required'); return }
@@ -213,7 +238,7 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
     setSaving(true)
     try {
       const payload = {
-        section,
+        section: activeSection,
         name: draftName.trim(),
         description: draftDesc,
         definition: JSON.parse(draftDefinition),
@@ -222,21 +247,32 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
         const updated = await updateLegend(selectedId, payload)
         toast.success('Legend updated')
         setLegends(prev => prev.map(l => l.legend_id === updated.legend_id ? updated : l))
+        emitLegendSync(LEGEND_SYNC_ACTIONS.UPDATED, { legend_id: updated.legend_id, section: updated.section })
       } else {
         const created = await createLegend(payload)
-        toast.success('Legend created')
+        toast.success(`Legend created in ${LEGEND_SECTIONS.find(s => s.id === activeSection)?.label || activeSection}`)
         setLegends(prev => [created, ...prev])
         setSelectedId(created.legend_id)
+        emitLegendSync(LEGEND_SYNC_ACTIONS.CREATED, { legend_id: created.legend_id, section: created.section })
       }
     } catch (err) {
-      const msg = err?.response?.data?.definition?.[0]
-                || err?.response?.data?.error
-                || err?.message || 'Save failed'
+      // Surface backend field-level validation errors (definition/name/section)
+      const data = err?.response?.data || {}
+      let msg = data?.definition?.[0]
+            || data?.name?.[0]
+            || data?.section?.[0]
+            || data?.detail
+            || data?.error
+            || err?.message
+            || 'Save failed'
+      if (typeof msg !== 'string') {
+        try { msg = JSON.stringify(msg) } catch { msg = 'Save failed' }
+      }
       toast.error(String(msg))
     } finally {
       setSaving(false)
     }
-  }, [draftName, draftDesc, draftDefinition, section, selectedId, validateDefinition])
+  }, [draftName, draftDesc, draftDefinition, activeSection, selectedId, validateDefinition])
 
   const onActivate = useCallback(async (legendId) => {
     try {
@@ -247,33 +283,38 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
         ...l,
         is_active: l.legend_id === activated.legend_id ? true : (l.section === activated.section ? false : l.is_active),
       })))
-      if (onActiveChange) onActiveChange(activated)
+      if (onActiveChange && activated.section === section) onActiveChange(activated)
+      emitLegendSync(LEGEND_SYNC_ACTIONS.ACTIVATED, { legend_id: activated.legend_id, section: activated.section })
     } catch (err) {
       toast.error('Failed to activate')
     }
-  }, [onActiveChange])
+  }, [onActiveChange, section])
 
   const onDelete = useCallback(async (legendId) => {
     if (!window.confirm('Delete this legend? This cannot be undone.')) return
     try {
       await deleteLegend(legendId)
+      const wasActive = legends.find(l => l.legend_id === legendId)?.is_active
+      const deletedSection = legends.find(l => l.legend_id === legendId)?.section
       setLegends(prev => prev.filter(l => l.legend_id !== legendId))
       if (selectedId === legendId) setSelectedId(null)
       toast.success('Legend deleted')
-      if (onActiveChange) {
-        // if we deleted the active one, notify parent
-        const wasActive = legends.find(l => l.legend_id === legendId)?.is_active
-        if (wasActive) onActiveChange(null)
-      }
+      if (onActiveChange && wasActive && deletedSection === section) onActiveChange(null)
+      emitLegendSync(LEGEND_SYNC_ACTIONS.DELETED, { legend_id: legendId, section: deletedSection })
     } catch (err) {
       toast.error('Delete failed')
     }
-  }, [selectedId, legends, onActiveChange])
+  }, [selectedId, legends, onActiveChange, section])
+
+  const safeFilenameBase = useCallback(() => {
+    const base = (draftName || activeSection || 'legend').trim().replace(/[^a-zA-Z0-9._-]+/g, '_')
+    return base || activeSection
+  }, [draftName, activeSection])
 
   const onExportJson = useCallback(() => {
     if (!parsedDefinition) { toast.warn('Fix JSON before exporting'); return }
     const payload = {
-      section,
+      section: activeSection,
       name: draftName,
       description: draftDesc,
       definition: parsedDefinition,
@@ -282,30 +323,96 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${section}_legend.json`
+    a.download = `${safeFilenameBase()}.json`
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [parsedDefinition, section, draftName, draftDesc])
+  }, [parsedDefinition, activeSection, draftName, draftDesc, safeFilenameBase])
 
-  const onImportJson = useCallback((e) => {
+  // Build a tabular representation of the current definition — one row per field.
+  // Used by both CSV and Excel exports.
+  const buildTableRows = useCallback(() => {
+    if (!parsedDefinition) return null
+    const separator = parsedDefinition.separator || DEFAULT_SEPARATOR
+    const fields = Array.isArray(parsedDefinition.fields) ? parsedDefinition.fields : []
+    return fields.map((f, i) => ({
+      order: i + 1,
+      key: f?.key || '',
+      label: f?.label || '',
+      regex: f?.regex || '',
+      suffix: f?.suffix || '',
+      optional: f?.optional ? 'yes' : 'no',
+      separator: i === 0 ? '' : separator,
+      notes: f?.notes || '',
+      lookup: (f?.lookup && typeof f.lookup === 'object')
+        ? Object.entries(f.lookup).map(([k, v]) => `${k}=${v}`).join(' | ')
+        : '',
+    }))
+  }, [parsedDefinition])
+
+  const onExportCsv = useCallback(() => {
+    const rows = buildTableRows()
+    if (!rows) { toast.warn('Fix JSON before exporting'); return }
+    if (!rows.length) { toast.warn('Definition has no fields to export'); return }
+    const headers = ['order', 'key', 'label', 'regex', 'suffix', 'optional', 'separator', 'notes', 'lookup']
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const lines = [headers.join(',')]
+    rows.forEach(r => lines.push(headers.map(h => escape(r[h])).join(',')))
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${safeFilenameBase()}.csv`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success('CSV exported')
+  }, [buildTableRows, safeFilenameBase])
+
+  const onExportExcel = useCallback(() => {
+    const rows = buildTableRows()
+    if (!rows) { toast.warn('Fix JSON before exporting'); return }
+    if (!rows.length) { toast.warn('Definition has no fields to export'); return }
+    const wb = XLSX.utils.book_new()
+    // Fields sheet
+    const fieldsSheet = XLSX.utils.json_to_sheet(rows, {
+      header: ['order', 'key', 'label', 'regex', 'suffix', 'optional', 'separator', 'notes', 'lookup'],
+    })
+    XLSX.utils.book_append_sheet(wb, fieldsSheet, 'Fields')
+    // Metadata sheet
+    const meta = [
+      { property: 'Section', value: LEGEND_SECTIONS.find(s => s.id === activeSection)?.label || activeSection },
+      { property: 'Name', value: draftName || '' },
+      { property: 'Description', value: draftDesc || '' },
+      { property: 'Separator', value: parsedDefinition?.separator || DEFAULT_SEPARATOR },
+      { property: 'Field count', value: rows.length },
+      { property: 'Exported at', value: new Date().toISOString() },
+    ]
+    const metaSheet = XLSX.utils.json_to_sheet(meta, { header: ['property', 'value'] })
+    XLSX.utils.book_append_sheet(wb, metaSheet, 'Metadata')
+    XLSX.writeFile(wb, `${safeFilenameBase()}.xlsx`)
+    toast.success('Excel exported')
+  }, [buildTableRows, activeSection, draftName, draftDesc, parsedDefinition, safeFilenameBase])
+
+  const onImportJson = useCallback(async (e) => {
     const f = e.target.files?.[0]
     if (!f) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result))
-        setSelectedId(null)
-        setDraftName(parsed.name || `Imported ${section} legend`)
-        setDraftDesc(parsed.description || '')
-        setDraftDefinition(prettyJson(parsed.definition || parsed))
-        setJsonError(null)
-        toast.success('Legend loaded — edit and Save to create')
-      } catch (err) {
-        toast.error('Invalid JSON file')
-      }
+    try {
+      const items = await parseLegendFile(f, `Imported ${activeSection} legend`)
+      if (!items.length) { toast.error('No legends found in the file'); return }
+      const first = items[0]
+      setSelectedId(null)
+      setDraftName(first.name || `Imported ${activeSection} legend`)
+      setDraftDesc(first.description || '')
+      setDraftDefinition(prettyJson(first.definition || {}))
+      setEditorMode(EDITOR_MODE_FORM)
+      setJsonError(null)
+      toast.success(items.length > 1
+        ? `Loaded first of ${items.length} legends from ${f.name} — edit and Save to create`
+        : `Loaded "${first.name}" from ${f.name} — edit and Save to create`)
+    } catch (err) {
+      toast.error(err?.message || 'Failed to parse file')
+    } finally {
+      e.target.value = ''
     }
-    reader.readAsText(f)
-    e.target.value = ''
   }, [section])
 
   // Switch between Form and JSON tabs. Form → JSON is easy (JSON is source
@@ -348,7 +455,7 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: THEME_TEXT }}>Legend Sheets</div>
             <div style={{ fontSize: 12, color: THEME_MUTED }}>
-              Define custom extraction rules for the {LEGEND_SECTIONS.find(s => s.id === section)?.label || section} section
+              Define custom extraction rules — switch section to view or create legends for {LEGEND_SECTIONS.map(s => s.label).join(', ')}
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -366,10 +473,37 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
             borderRight: `1px solid ${THEME_BORDER}`, padding: 14, overflowY: 'auto',
             display: 'flex', flexDirection: 'column', gap: 8, background: THEME_BG_SOFT,
           }}>
-            <div style={{ display: 'flex', gap: 6 }}>
+            {/* Section switcher — lets user browse and create legends in ANY section */}
+            <div style={{
+              display: 'flex', gap: 4, padding: 3, borderRadius: 8,
+              background: '#fff', border: `1px solid ${THEME_BORDER}`,
+            }}>
+              {LEGEND_SECTIONS.map(s => {
+                const on = s.id === activeSection
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setActiveSection(s.id)}
+                    title={s.label}
+                    style={{
+                      flex: 1, padding: '6px 8px', borderRadius: 6,
+                      border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                      background: on ? THEME_GRADIENT : 'transparent',
+                      color: on ? '#fff' : THEME_TEXT,
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button
                 onClick={onNewFromScratch}
                 style={btnPrimary()}
+                title="Create a new legend in the selected section"
               >
                 <Plus size={14} /> New
               </button>
@@ -380,9 +514,9 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
               >
                 <Download size={14} /> Default
               </button>
-              <label style={{ ...btnGhost(), cursor: 'pointer', display: 'inline-flex' }}>
+              <label style={{ ...btnGhost(), cursor: 'pointer', display: 'inline-flex' }} title="Import JSON, CSV, or Excel (.xlsx / .xls)">
                 <Upload size={14} /> Import
-                <input type="file" accept=".json,application/json" onChange={onImportJson} style={{ display: 'none' }} />
+                <input type="file" accept={IMPORT_ACCEPT} onChange={onImportJson} style={{ display: 'none' }} />
               </label>
             </div>
 
@@ -531,10 +665,16 @@ export default function LegendSheetsModal({ open, onClose, section = DEFAULT_SEC
               </button>
               {selectedId && !selected?.is_active && (
                 <button onClick={() => onActivate(selectedId)} style={btnGreen()}>
-                  <CheckCircle2 size={14} /> Activate for {LEGEND_SECTIONS.find(s => s.id === section)?.label || section}
+                  <CheckCircle2 size={14} /> Activate for {LEGEND_SECTIONS.find(s => s.id === activeSection)?.label || activeSection}
                 </button>
               )}
-              <button onClick={onExportJson} style={btnGhost()}>
+              <button onClick={onExportExcel} style={btnGhost()} title="Export field definitions as Excel (.xlsx)">
+                <FileSpreadsheet size={14} /> Export Excel
+              </button>
+              <button onClick={onExportCsv} style={btnGhost()} title="Export field definitions as CSV">
+                <FileText size={14} /> Export CSV
+              </button>
+              <button onClick={onExportJson} style={btnGhost()} title="Export full legend (metadata + definition) as JSON">
                 <Download size={14} /> Export JSON
               </button>
               {selectedId && (

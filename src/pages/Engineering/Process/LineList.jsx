@@ -36,6 +36,8 @@ import envConfig from '../../../config/environment.config';
 import WrenchAiDocAssist from '../../../components/Engineering/WrenchAiDocAssist';
 import { getApiBaseUrl } from '../../../config/environment.config';
 import { STORAGE_KEYS } from '../../../config/app.config';
+import useActiveLegend from '../../../hooks/useActiveLegend';
+import ActiveLegendBadge from '../../../components/ActiveLegendBadge';
 
 // ---------------------------------------------------------------------------
 // Soft-coded config — all timing values flow from environments.json.
@@ -267,6 +269,9 @@ const getPatienceMsg = (secs) => {
 };
 
 const LineList = () => {
+  // Active Legend Sheet for this section (drives dynamic validation + badge)
+  const { legend: activeLegend, loading: legendLoading } = useActiveLegend('line_list');
+
   // State management
   const [pidDocument, setPidDocument] = useState(null);
   const [legendDocument, setLegendDocument] = useState(null);
@@ -429,6 +434,14 @@ const LineList = () => {
     formData.append('include_area', includeArea);
     if (legendDocument) {
       formData.append('legend_file', legendDocument);
+    }
+    // Pass the active Legend Sheet definition so the backend can honour the
+    // user's own separator/regex rules instead of the built-in format profiles.
+    if (activeLegend?.definition) {
+      try {
+        formData.append('active_legend_id', String(activeLegend.legend_id || ''));
+        formData.append('active_legend_definition', JSON.stringify(activeLegend.definition));
+      } catch { /* ignore serialization errors */ }
     }
 
     // JWT token for Authorization header
@@ -774,6 +787,7 @@ const LineList = () => {
                     <span>{chip.icon}</span>{chip.label}
                   </span>
                 ))}
+                <ActiveLegendBadge section="line_list" legend={activeLegend} loading={legendLoading} />
               </div>
 
               {/* Quick stats strip */}
