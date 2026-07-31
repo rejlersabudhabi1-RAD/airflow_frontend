@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+mport React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PROJECT_CONTROL_SUBFEATURES } from '../config/projectControl.config';
 import apiClient from '../services/api.service';
@@ -53,127 +53,6 @@ const AddDeliverableRow = ({ onAdd }) => {
         className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-violet-50 text-violet-700 border border-violet-100 hover:bg-violet-100 transition-colors shrink-0">
         + Add
       </button>
-    </div>
-  );
-};
-
-// ─── Workflow & Documentation content (soft-coded) ─────────────────────
-const DOCS_MODAL_TITLE = 'Planning Packages — Workflow & Documentation';
-const DOCS_MODAL_SUBTITLE = 'How the AI-assisted planning intelligence engine turns your reference documents into a FEED/DEFINE schedule package.';
-
-const DOCS_OVERVIEW_BULLETS = [
-  'Upload SOW, WBS, MDR, EDDR and schedule-requirement documents for the project.',
-  'A rule-based Document Intelligence pass extracts scope, disciplines, deliverables and key dates.',
-  'The engine builds a WBS, a Level-4 activity schedule, an EDDR register, a manhour estimate, validation checks and a narrative — all reviewable before export.',
-  'Everything is deterministic; no data leaves your tenant unless you enable BYOK Claude for enhanced intelligence.',
-];
-
-const DOCS_TIPS = [
-  { icon: '📄', title: 'Upload complete SOW first', text: 'Statement-of-Work drives scope detection — poor SOW = poor WBS.' },
-  { icon: '🧠', title: 'Review Document Intelligence', text: 'Fix any missed disciplines or deliverables before generating the schedule.' },
-  { icon: '🗂️', title: 'Edit the WBS before generation', text: 'Rename, reorder, or add branches — downstream steps inherit your changes.' },
-  { icon: '🔁', title: 'Regenerate freely', text: 'Each generation is versioned; you can compare or roll back at any time.' },
-  { icon: '⬇️', title: 'Export in your PM tool format', text: 'CSV, Excel, Primavera P6 XER and JSON are all available on the Export tab.' },
-];
-
-const DocsModalPill = ({ children }) => (
-  <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-violet-100">
-    {children}
-  </span>
-);
-
-const WorkflowDocsModal = ({ open, onClose, steps }) => {
-  if (!open) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xl">📘</span>
-                <h2 className="text-lg font-bold tracking-tight truncate">{DOCS_MODAL_TITLE}</h2>
-              </div>
-              <p className="text-xs text-violet-100/90">{DOCS_MODAL_SUBTITLE}</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="shrink-0 rounded-lg bg-white/15 hover:bg-white/25 px-3 py-1 text-sm font-semibold"
-              aria-label="Close documentation"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 overflow-y-auto space-y-6">
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-              <span>🎯</span> Overview
-            </h3>
-            <ul className="space-y-1.5 text-sm text-slate-600 list-disc pl-5">
-              {DOCS_OVERVIEW_BULLETS.map((b, i) => <li key={i}>{b}</li>)}
-            </ul>
-          </section>
-
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <span>🧭</span> End-to-end workflow
-            </h3>
-            <ol className="space-y-2">
-              {(steps || []).map((s, i) => (
-                <li key={s.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/60">
-                  <div className={`shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br ${s.accent} text-white flex items-center justify-center text-lg shadow-sm`}>
-                    {s.icon}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono text-slate-400">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="font-semibold text-slate-800 text-sm">{s.label}</span>
-                      {s.requiresGeneration && <DocsModalPill>needs generation</DocsModalPill>}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{s.description}</div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section>
-            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <span>💡</span> Tips for best results
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {DOCS_TIPS.map((t, i) => (
-                <div key={i} className="flex items-start gap-2 p-3 rounded-lg border border-slate-200 bg-white">
-                  <span className="text-lg shrink-0">{t.icon}</span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-800">{t.title}</div>
-                    <div className="text-xs text-slate-500">{t.text}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
-          <button
-            onClick={onClose}
-            className="rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold px-4 py-1.5"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -257,8 +136,6 @@ const PlanningPackagePage = () => {
     }
   });
   const canvasStyle = CANVAS_MODE_STYLES[canvasMode] || CANVAS_MODE_STYLES[CANVAS_MODES.ORIGINAL];
-
-  const [showDocsModal, setShowDocsModal] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(CANVAS_MODE_STORAGE_KEY, canvasMode); } catch { /* ignore storage errors */ }
@@ -2156,7 +2033,7 @@ const PlanningPackagePage = () => {
           <div className="inline-flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowDocsModal(true)}
+              onClick={() => navigate('/planning-packages/docs')}
               title="Open the workflow guide and documentation"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200/80 text-violet-700 hover:bg-violet-50 hover:border-violet-200 shadow-sm transition-all"
             >
@@ -2220,11 +2097,6 @@ const PlanningPackagePage = () => {
 
         {renderBanner()}
         {renderAiSettingsModal()}
-        <WorkflowDocsModal
-          open={showDocsModal}
-          onClose={() => setShowDocsModal(false)}
-          steps={PLANNING_WORKFLOW_STEPS}
-        />
 
         {loadingProjects ? (
           <div className="bg-white rounded-2xl shadow-lg p-14 text-center text-slate-400">
