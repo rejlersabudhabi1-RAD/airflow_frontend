@@ -17,11 +17,15 @@ const INSTRUMENT_INDEXES_ENDPOINT = `${BASE_PATH}/instrument-indexes/`
 const INSTRUMENT_CROSS_CHECK_ENDPOINT = `${BASE_PATH}/instrument-cross-check/`
 const EXTRACT_EQUIPMENT_TAGS_ENDPOINT = `${BASE_PATH}/extract-equipment-tags/`
 const EXTRACT_INSTRUMENT_TAGS_ENDPOINT = `${BASE_PATH}/extract-instrument-tags/`
+const EXTRACT_INSTRUMENT_TAGS_STATUS_ENDPOINT = `${BASE_PATH}/extract-instrument-tags/status/`
 const USAGE_LIST_ENDPOINT = `${BASE_PATH}/usage/`
 const USAGE_SUMMARY_ENDPOINT = `${BASE_PATH}/usage/summary/`
 const USAGE_REPORT_ENDPOINT = `${BASE_PATH}/usage/report/`
 const UPLOAD_FIELD = 'file'
 const REQUEST_TIMEOUT_MS = 15 * 60 * 1000   // OCR can take a few minutes
+// Instrument extraction now runs async — polling budget for the client.
+const INSTRUMENT_ASYNC_POLL_INTERVAL_MS = 3000
+const INSTRUMENT_ASYNC_MAX_WAIT_MS = 60 * 60 * 1000   // 60 min ceiling
 
 // Legend sections (extend when the backend adds more)
 export const LEGEND_SECTIONS = [
@@ -423,19 +427,62 @@ export async function extractEquipmentTagsFromPid(file, { provider, apiKey } = {
 
 /**
  * BYOK Vision extraction of INSTRUMENT tags directly from the P&ID PDF.
+ *
+ * The backend runs this as an async Celery job (HTTP 202 + poll) so heavy
+ * drawings don't hit the Gunicorn worker timeout. This helper handles the
+ * dispatch + polling transparently and resolves with the final tag payload,
+ * matching the old synchronous contract.
+ *
  * @param {File} file
- * @param {{ provider: 'openai'|'claude', apiKey: string }} opts
+ * @param {{ provider: 'openai'|'claude', apiKey: string, onProgress?: (pct:number, msg:string) => void, signal?: AbortSignal }} opts
  */
-export async function extractInstrumentTagsFromPid(file, { provider, apiKey } = {}) {
+export async function extractInstrumentTagsFromPid(file, { provider, apiKey, onProgress, signal } = {}) {
   const form = new FormData()
   form.append(UPLOAD_FIELD, file)
   form.append('provider', provider || '')
   form.append('api_key', apiKey || '')
-  const res = await apiClient.post(EXTRACT_INSTRUMENT_TAGS_ENDPOINT, form, {
+  const dispatch = await apiClient.post(EXTRACT_INSTRUMENT_TAGS_ENDPOINT, form, {
     timeout: REQUEST_TIMEOUT_MS,
     headers: { 'Content-Type': 'multipart/form-data' },
+    signal,
   })
-  return res.data
+  const data = dispatch.data || {}
+  // Backward-compat: legacy sync response returns tags directly.
+  if (!data.async || !data.job_id) return data
+
+  const jobId = data.job_id
+  const started = Date.now()
+  if (typeof onProgress === 'function') onProgress(1, 'Queued for extraction…')
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (signal && signal.aborted) throw new Error('Cancelled')
+    if (Date.now() - started > INSTRUMENT_ASYNC_MAX_WAIT_MS) {
+      throw new Error('Instrument extraction is still running after 60 min — please retry later.')
+    }
+    await new Promise((r) => setTimeout(r, INSTRUMENT_ASYNC_POLL_INTERVAL_MS))
+    let poll
+    try {
+      poll = await apiClient.get(`${EXTRACT_INSTRUMENT_TAGS_STATUS_ENDPOINT}${jobId}/`, { signal })
+    } catch (err) {
+      // Transient network / gateway blip — keep polling.
+      if (err?.response?.status === 404) {
+        throw new Error('Extraction job expired before completing.')
+      }
+      continue
+    }
+    const body = poll.data || {}
+    if (body.status === 'completed') {
+      if (typeof onProgress === 'function') onProgress(100, 'Complete')
+      return body
+    }
+    if (body.status === 'failed') {
+      throw new Error(body.error || 'vision extraction failed')
+    }
+    if (typeof onProgress === 'function') {
+      onProgress(Number(body.progress) || 0, body.message || 'Working…')
+    }
+  }
 }
 
 // ─── Token usage / cost tracking ─────────────────────────────────────

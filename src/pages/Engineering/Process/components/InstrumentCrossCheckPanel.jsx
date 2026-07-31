@@ -81,6 +81,7 @@ export default function InstrumentCrossCheckPanel({
 }) {
   const [loading, setLoading] = useState(false)
   const [extracting, setExtracting] = useState(false)
+  const [extractStatus, setExtractStatus] = useState('')
   const [visionExtracted, setVisionExtracted] = useState([]) // [{tag, function_code, service}]
   const [result, setResult] = useState(null)
   const [useAi, setUseAi] = useState(true)
@@ -135,8 +136,12 @@ export default function InstrumentCrossCheckPanel({
     if (!pdfFile) { toast.warn('Upload a P&ID PDF on the left first'); return }
     if (!canAi)   { toast.warn('Enter a BYOK API key on the left to enable Vision extraction'); return }
     setExtracting(true)
+    setExtractStatus('Queued for extraction…')
     try {
-      const data = await extractInstrumentTagsFromPid(pdfFile, { provider, apiKey })
+      const data = await extractInstrumentTagsFromPid(pdfFile, {
+        provider, apiKey,
+        onProgress: (pct, msg) => setExtractStatus(`${msg || 'Working…'} (${pct}%)`),
+      })
       const list = Array.isArray(data?.tags) ? data.tags : []
       setVisionExtracted(list)
       toast.success(`Vision extracted ${list.length} instrument tag(s) from the P&ID`)
@@ -144,6 +149,7 @@ export default function InstrumentCrossCheckPanel({
       toast.error(err?.response?.data?.error || err.message || 'Vision extraction failed')
     } finally {
       setExtracting(false)
+      setExtractStatus('')
     }
   }, [pdfFile, canAi, provider, apiKey])
 
@@ -321,6 +327,16 @@ export default function InstrumentCrossCheckPanel({
               : <><Wand2 size={12} /> {visionExtracted.length ? 'Re-extract' : 'Extract from P&ID'}</>}
           </button>
         </div>
+
+        {extracting && extractStatus && (
+          <div style={{
+            marginBottom: 10, padding: '6px 10px', borderRadius: 6,
+            background: '#fef3c7', border: '1px solid #fde68a',
+            color: '#92400e', fontSize: 11,
+          }}>
+            {extractStatus}
+          </div>
+        )}
 
         {visionExtracted.length > 0 && (
           <div style={{
